@@ -266,6 +266,18 @@ export function longLunchInput(fixedDate: string | null = '2026-10-29') {
   return rome;
 }
 
+/** The preview's Rome: light Wednesday, long lunch Thursday, Pincio (2 h) pinned to Friday. */
+export function pinnedFridayInput() {
+  const rome = longLunchInput();
+  rome.trip.dayLoads = { '2026-10-28': 'light' };
+  const pincio = rome.wishes.find((w) => w.id === 'pincio');
+  if (pincio) {
+    pincio.fixedDate = '2026-10-30';
+    pincio.durationSec = 120 * 60;
+  }
+  return rome;
+}
+
 /** v2.1: day loads and meal-replacing wishes. */
 export function buildV21CaseInputs(): CaseInput[] {
   const cases: CaseInput[] = [
@@ -275,6 +287,13 @@ export function buildV21CaseInputs(): CaseInput[] {
         'Wednesday 28 Oct marked light: it ends 90 min earlier, takes about 60% of a normal day, and nothing is moved onto it.',
       fn: 'solveTrip',
       input: lightWednesdayInput(),
+    },
+    {
+      name: 'solve-pinned-friday',
+      description:
+        "Light Wednesday + the long Thursday lunch + a two-hour sunset at the Pincio terrace pinned to Friday: Friday overflows, so an unpinned nice (Campo de' Fiori market) goes and the pinned Pincio stays.",
+      fn: 'solveTrip',
+      input: pinnedFridayInput(),
     },
     {
       name: 'solve-long-lunch-thursday',

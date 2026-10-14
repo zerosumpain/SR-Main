@@ -39,7 +39,7 @@ import { chooseLeg, legFromPosition, makeContext, type SolverContext } from './m
 import { orderDay } from './order';
 import {
   COST,
-  byLowestValue,
+  byDropOrder,
   droppable,
   freshStart,
   simulate,
@@ -182,7 +182,7 @@ export function repair(
       const late = sim.issues.some((x) => x.itemId === item.id && x.kind === 'late-for-slot');
       const between = current.slice(prevLocked + 1, k).filter((i) => !i.locked);
       if (late && between.length) {
-        const nice = dropFirst ? between.filter(droppable).sort(byLowestValue)[0] : undefined;
+        const nice = dropFirst ? between.filter(droppable).sort(byDropOrder)[0] : undefined;
         if (nice) {
           current = current.filter((i) => i !== nice);
           dropped.push(nice);
@@ -316,8 +316,9 @@ export function settle(
     if (!candidates.length) break;
     const closed = candidates
       .filter((c) => sim.issues.some((x) => x.itemId === c.id && x.kind === 'closed'))
-      .sort(byLowestValue);
-    const victim = closed[0] ?? [...candidates].sort(byLowestValue)[0];
+      .sort(byDropOrder);
+    // Unpinned nices go before nices pinned to today.
+    const victim = closed.find((c) => !c.pinned) ?? [...candidates].sort(byDropOrder)[0];
     const next = repair(
       ctx,
       frame,

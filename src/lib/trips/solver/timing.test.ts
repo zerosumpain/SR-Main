@@ -159,16 +159,27 @@ describe('fitting the day', () => {
     expect(plan.days[0].warnings.some((w) => w.startsWith('Back at the stay'))).toBe(true);
   });
 
-  it('moves a dropped nice to another day with room', () => {
+  it('puts an unpinned nice on a day with room', () => {
+    const wishes = [
+      makeWish('m1', 'M1', near(1), { minutes: 360, sortHint: 1, fixedDate: '2026-10-27' }),
+      makeWish('m2', 'M2', near(2), { minutes: 240, sortHint: 2, fixedDate: '2026-10-28' }),
+      makeWish('n1', 'N1', near(3), { minutes: 180, priority: 'nice', sortHint: 3 }),
+    ];
+    const plan = solveTrip(input(wishes, [], {}, '2026-10-28'));
+    expect(plan.dropped).toEqual([]);
+    expect(stopOf(plan.days[1], 'n1')).toBeDefined();
+  });
+
+  it('never moves a nice off the day it is pinned to (it is dropped there instead)', () => {
     const wishes = [
       makeWish('m1', 'M1', near(1), { minutes: 360, sortHint: 1, fixedDate: '2026-10-27' }),
       makeWish('m2', 'M2', near(2), { minutes: 240, sortHint: 2, fixedDate: '2026-10-28' }),
       makeWish('n1', 'N1', near(3), { minutes: 180, priority: 'nice', sortHint: 3, fixedDate: '2026-10-27' }),
     ];
-    // n1 is pinned to the full day, so it is dropped there, then retried elsewhere.
     const plan = solveTrip(input(wishes, [], {}, '2026-10-28'));
-    expect(plan.dropped).toEqual([]);
-    expect(stopOf(plan.days[1], 'n1')).toBeDefined();
+    expect(plan.dropped.map((d) => d.wishId)).toEqual(['n1']);
+    expect(plan.dropped[0].reason).toMatch(/^No time on Tue 27 Oct/);
+    expect(stopOf(plan.days[1], 'n1')).toBeUndefined();
   });
 });
 

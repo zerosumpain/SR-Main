@@ -40,7 +40,7 @@ import { freshSpec, holdItem, solveFrames, solveTrip, type FrameSpec } from './p
 import { MISSED_SLOT_GRACE_MIN, replanDay, settle, situation, type Situation } from './replan';
 import {
   COST,
-  byLowestValue,
+  byDropOrder,
   droppable,
   fitDay,
   toPlannedDay,
@@ -382,7 +382,7 @@ export function replanTrip(input: TripReplanInput): TripReplanOption[] {
           .filter(
             (i) => droppable(i) && !without.includes(i.wishId ?? '') && sim.stops.some((x) => x.id === i.id),
           )
-          .sort(byLowestValue)[0];
+          .sort(byDropOrder)[0];
         if (!nice) break;
         const trialBase = new Map(base);
         const r = rehome([nice], trialBase);

@@ -350,6 +350,14 @@ export function byLowestValue(a: Item, b: Item): number {
   return b.sortHint - a.sortHint || cmp(b.id, a.id);
 }
 
+/**
+ * Drop order: unpinned before pinned (a wish pinned to the day — fixed date,
+ * fixed time or booked — outranks unpinned ones), then lowest value.
+ */
+export function byDropOrder(a: Item, b: Item): number {
+  return (a.pinned ? 1 : 0) - (b.pinned ? 1 : 0) || byLowestValue(a, b);
+}
+
 export function droppable(item: Item): boolean {
   return item.kind === 'wish' && item.priority === 'nice' && !item.locked && item.fixedStartMin === null;
 }
@@ -363,9 +371,10 @@ export interface FitResult {
 }
 
 /**
- * Order a day, slot meals, and drop nices until it fits: first any nice that
- * would be closed when reached, then the lowest-value nice while the day runs
- * past its end. Musts are never dropped.
+ * Order a day, slot meals, and drop nices until it fits (no nice closed when
+ * reached, no booked slot missed, back by the day's end). Unpinned nices go
+ * first — closed-on-arrival ones, then lowest value; a nice pinned to the day
+ * is only dropped when no unpinned nice is left. Musts are never dropped.
  */
 export function fitDay(
   ctx: SolverContext,
@@ -386,18 +395,31 @@ export function fitDay(
     const { sim } = withMeals(ctx, frame, start, ordered, meals);
     const closedNices = remaining
       .filter((i) => droppable(i) && sim.issues.some((x) => x.itemId === i.id && x.kind === 'closed'))
-      .sort(byLowestValue);
+      .sort(byDropOrder);
+    const lateSlot = sim.issues.some((x) => x.kind === 'late-for-slot');
     let victim: Item | undefined;
     let reason = '';
-    if (closedNices.length) {
-      victim = closedNices[0];
-      reason =
-        victim.windows?.length === 0
-          ? `Closed on ${dayLabel(frame.date)}`
-          : `Closed by the time you'd get there on ${dayLabel(frame.date)}`;
-    } else if (sim.overrunMin > 0) {
-      victim = remaining.filter(droppable).sort(byLowestValue)[0];
-      reason = `No time on ${dayLabel(frame.date)} — the day would end at ${fmtMin(sim.endMin)}, after ${fmtMin(frame.dayEndMin)}`;
+    if (closedNices.length || sim.overrunMin > 0 || lateSlot) {
+      const unpinned = remaining.filter((i) => droppable(i) && !i.pinned).sort(byLowestValue);
+      const closedUnpinned = closedNices.find((i) => !i.pinned);
+      victim =
+        closedNices.find((i) => i.windows?.length === 0) ??
+        closedUnpinned ??
+        (closedNices.length && !unpinned.length ? closedNices[0] : undefined) ??
+        unpinned[0] ??
+        remaining.filter(droppable).sort(byDropOrder)[0];
+      if (victim && closedNices.includes(victim)) {
+        reason =
+          victim.windows?.length === 0
+            ? `Closed on ${dayLabel(frame.date)}`
+            : `Closed by the time you'd get there on ${dayLabel(frame.date)}`;
+      } else if (sim.overrunMin > 0) {
+        reason = `No time on ${dayLabel(frame.date)} — the day would end at ${fmtMin(sim.endMin)}, after ${fmtMin(frame.dayEndMin)}`;
+      } else if (closedNices.length) {
+        reason = `Made room on ${dayLabel(frame.date)} for ${closedNices[0].title}, which is planned for that day`;
+      } else {
+        reason = `No time on ${dayLabel(frame.date)} before a booked slot`;
+      }
     }
     if (!victim) {
       return { day: toPlannedDay(frame, sim), sim, kept: ordered, dropped };
