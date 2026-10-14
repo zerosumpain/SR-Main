@@ -7,7 +7,9 @@
 // zone and, from the phone, what the phone has noticed. Then the last ~30
 // messages. PURE.
 
-import type { Booking, LocalDate, Observation, SolvedPlan, Stay, Trip, TripMessage, Wish } from './model';
+import type { Booking, LocalDate, Observation, SolvedPlan, Stay, TransportSegment, TravellerProfile, Trip, TripMessage, Wish } from './model';
+import { AGENT_GUIDANCE } from './agent';
+import { profileText } from './profile';
 
 export const HISTORY_MESSAGES = 30;
 
@@ -24,6 +26,8 @@ How to work:
 - Re-develop on request ("swap the Vatican to the morning"): change the wishes (priority, day, part of day, lock, skip) and let the solver re-plan. Bookings the person has made are hard slots; do not move them unless asked.
 - "Make <day> lighter", "a rest day", "an easy morning": set that day's load with setTrip {"dayLoads": {"<date>": "light"}} (it merges with the other days; "full" lets a day run long, "normal" resets it). Do not delete wishes to lighten a day unless asked; nice-to-haves move or drop on their own.
 - A meal that IS an activity ("a long lunch in Trastevere on Thursday", "dinner at Roscioli"): add ONE wish with "replacesMeal": "lunch" or "dinner", its "fixedDate", and a duration; the automatic lunch/dinner stop that day is then dropped. Do not also add a separate meal.
+- Use what you already know about them (the profile below) without being asked, and say when you did ("you prefer walking, so…"). When they state a LASTING preference ("we never do early starts", "my partner is vegetarian"), save it with a "remember" op and say in the reply that you will remember it; correct the profile with "updateProfile" when they tell you something in it is wrong. Never remember one-off trip details.
+- Getting there and back: when they mention a flight, train or similar, record it with "addTransport" so the arrival and departure days are framed by it. Times they give are "stated"; times you found are "researched".
 - Never book anything and never claim to have booked. Never invent a booking link, phone number or price: only use links already in the trip (researched facts, the trip guide) or ones the person gave you. If you do not know, say so and offer to research (op "research").
 - Places are looked up on OpenStreetMap from your placeQuery: give a precise query ("Pantheon, Rome", "Via dei Cappellari 10, Rome"), never coordinates.
 - British English. Short, warm and direct: a few sentences, no lists longer than five lines, no headings, no emoji. Times as 24-hour (14:30), dates as "Tue 27 Oct".
@@ -43,6 +47,11 @@ Answer ONLY with one JSON object:
   {"op":"addBooking","booking":{"wishId","title","date","startMin","endMin","reference","url","documentId":null,"status" ("to-book"|"booked"|"cancelled")}}
   {"op":"updateBooking","id","fields":{"status"?,"reference"?,"date"?,"startMin"?,"endMin"?,"url"?}}
   {"op":"research","wishIds":[...],"depth":"brief"|"deep"}
+  {"op":"addTransport","segment":{"kind" ("flight"|"train"|"coach"|"ferry"|"car"),"direction" ("outbound"|"return"|"internal"),"carrier","number","from":{"name","code" (IATA/station code or null),"timeZone"},"to":{"name","code","timeZone"},"departDate","departMin","arriveDate","arriveMin" (each LOCAL to its own end),"confidence" ("stated"|"researched"),"bookingRef","sources":[{"url","title"}] (only URLs you saw this turn)}}
+  {"op":"updateTransport","id","fields":{...any of the segment's fields}}
+  {"op":"removeTransport","id"}
+  {"op":"remember","text": the lasting preference in one sentence,"category" ("preferences"|"people"|"health"|"places")}
+  {"op":"updateProfile","profile":{"travellers"?:[{"name","relation","notes":[]}],"preferences"?:[{"text"}],"constraints"?:[{"text"}],"history"?:[string]}} (arrays given REPLACE the profile's)
   {"op":"suggestNearby","near": a place name or null,"theme": e.g. "food" or null}
 - Use [] for ops when nothing should change (a question, an explanation).`;
 
@@ -128,6 +137,9 @@ export interface PlannerContext {
   surface: 'site' | 'phone';
   observation: Observation | null;
   position: { lat: number; lng: number } | null;
+  /** v3 */
+  transport?: TransportSegment[];
+  profile?: TravellerProfile | null;
 }
 
 /** The trip as it stands, as one user-role context message. */
@@ -138,6 +150,16 @@ export function contextText(c: PlannerContext): string {
     `Now in the trip's zone: ${c.nowText}`,
     `Destination: ${t.destination} | ${day(t.startDate)} to ${day(t.endDate)} (${t.startDate} → ${t.endDate}) | zone ${t.timeZone} | pace ${t.pace} | getting about: ${t.modes.join(', ')}${t.notes ? ` | notes: ${t.notes}` : ''}`,
     `Day loads: ${Object.keys(t.dayLoads ?? {}).length ? Object.entries(t.dayLoads ?? {}).map(([d, l]) => `${day(d)} ${l}`).join(', ') : 'all normal'}`,
+    '',
+    profileText(c.profile ?? null),
+    '',
+    'GETTING THERE AND BACK:',
+    ...((c.transport ?? []).length
+      ? (c.transport ?? []).map(
+          (t) =>
+            `- [${t.id}] ${t.direction} ${t.kind}${t.number ? ` ${t.number}` : ''}: ${t.from.name}${t.from.code ? ` (${t.from.code})` : ''} ${day(t.departDate)} ${hhmm(t.departMin)} → ${t.to.name}${t.to.code ? ` (${t.to.code})` : ''} ${day(t.arriveDate)} ${hhmm(t.arriveMin)} (${t.confidence}${t.delayMin ? `, ${t.delayMin} min late` : ''})`,
+        )
+      : ['- none recorded']),
     '',
     'STAYS:',
     ...(c.stays.length ? c.stays.map((s) => `- [${s.id}] ${s.name}${s.address ? ` (${s.address.split(',').slice(0, 3).join(',')})` : ''}: nights ${day(s.fromDate)} → leaves ${day(s.toDate)}`) : ['- none yet']),
@@ -169,14 +191,14 @@ export function contextText(c: PlannerContext): string {
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
 /** The messages for one planner call: system, the trip context, the recent conversation, the new text. */
-export function plannerMessages(c: PlannerContext, text: string): ChatMessage[] {
+export function plannerMessages(c: PlannerContext, text: string, opts: { agentic?: boolean } = {}): ChatMessage[] {
   const history: ChatMessage[] = c.messages.slice(-HISTORY_MESSAGES).map((m) =>
     m.role === 'assistant'
       ? { role: 'assistant', content: m.text }
       : { role: 'user', content: m.role === 'event' ? `[changed directly on the ${m.surface === 'phone' ? 'phone' : 'page'}] ${m.text}` : m.text },
   );
   return [
-    { role: 'system', content: PLANNER_SYSTEM },
+    { role: 'system', content: opts.agentic ? `${PLANNER_SYSTEM}\n\n${AGENT_GUIDANCE}` : PLANNER_SYSTEM },
     { role: 'user', content: contextText(c) },
     { role: 'assistant', content: '{"reply":"Understood — I have the trip in front of me.","ops":[],"quickReplies":[]}' },
     ...history,

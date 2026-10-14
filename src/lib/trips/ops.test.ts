@@ -233,3 +233,98 @@ describe('v2.1: day loads and meal-replacing wishes', () => {
     expect(r.applied.map((o) => o.op)).toEqual(['addWish', 'updateWish']);
   });
 });
+
+describe('v3: transport, remember and the profile', () => {
+  const flight = {
+    kind: 'flight', direction: 'outbound', carrier: 'Jet2', number: 'ls 1235',
+    from: { name: 'Newcastle', code: 'ncl', timeZone: 'Europe/London', location: { lat: 1, lng: 1 } },
+    to: { name: 'Rome Fiumicino', code: 'FCO', timeZone: 'Europe/Rome' },
+    departDate: '2026-10-27', departMin: 455, arriveDate: '2026-10-27', arriveMin: 665,
+    confidence: 'researched', sources: [{ url: 'https://flights.example/ls1235', title: 'LS1235' }, { url: 'https://made-up.example', title: 'x' }],
+  };
+
+  it('adds a journey: places by OpenStreetMap, never the model’s coordinates; only known links', async () => {
+    const { fx } = fakes({ 'Newcastle NCL airport': { lat: 55.04, lng: -1.69 } });
+    const saved: unknown[] = [];
+    fx.addTransport = async (s) => {
+      saved.push(s);
+      return { id: 'tr1', ...s };
+    };
+    const c = ctx({ knownUrls: new Set(['https://flights.example/ls1235']), transport: [] });
+    const r = await applyOps([{ op: 'addTransport', segment: flight }], c, fx);
+    expect(r.rejected).toEqual([]);
+    expect(saved[0]).toMatchObject({
+      number: 'LS1235',
+      from: { name: 'Newcastle', code: 'NCL', location: { lat: 55.04, lng: -1.69 }, timeZone: 'Europe/London' },
+      to: { name: 'Rome Fiumicino', code: 'FCO', location: null, timeZone: 'Europe/Rome' },
+      confidence: 'researched',
+      sources: [{ url: 'https://flights.example/ls1235', title: 'LS1235' }],
+      status: null,
+    });
+    expect(r.changed).toBe(true);
+    expect(c.transport).toHaveLength(1);
+  });
+
+  it('refuses a bad journey and unknown ids', async () => {
+    const { fx } = fakes();
+    fx.addTransport = async (s) => ({ id: 'x', ...s });
+    const r = await applyOps(
+      [
+        { op: 'addTransport', segment: { ...flight, kind: 'rocket' } },
+        { op: 'addTransport', segment: { ...flight, number: 'not a flight' } },
+        { op: 'addTransport', segment: { ...flight, arriveDate: '2026-10-26' } },
+        { op: 'addTransport', segment: { ...flight, to: { name: 'Rome', timeZone: 'Moon/Base' } } },
+        { op: 'updateTransport', id: 'ghost', fields: { arriveMin: 700 } },
+        { op: 'removeTransport', id: 'ghost' },
+      ],
+      ctx({ transport: [] }),
+      fx,
+    );
+    expect(r.rejected.map((x) => x.reason)).toEqual([
+      'kind is flight, train, coach, ferry or car.',
+      '“NOTAFLIGHT” is not a flight number.',
+      'It arrives before it leaves.',
+      "The to end's time zone is not a time zone.",
+      'No such journey.',
+      'No such journey.',
+    ]);
+  });
+
+  it('remembers only a short, categorised preference, and shows it in the profile', async () => {
+    const { fx } = fakes();
+    const remembered: string[] = [];
+    let saved: unknown = null;
+    fx.remember = async (text, category) => {
+      remembered.push(`${category}:${text}`);
+      return { stored: true };
+    };
+    fx.saveProfile = async (p) => void (saved = p);
+    const r = await applyOps(
+      [
+        { op: 'remember', text: 'ok', category: 'preferences' },
+        { op: 'remember', text: 'We never do early starts', category: 'secrets' },
+        { op: 'remember', text: 'We never do early starts', category: 'preferences' },
+        { op: 'remember', text: 'Ann cannot manage stairs', category: 'health' },
+      ],
+      ctx(),
+      fx,
+    );
+    expect(r.rejected.map((x) => x.reason)).toEqual(['remember needs the preference in a short sentence.', 'remember’s category is preferences, people, health or places.']);
+    expect(remembered).toEqual(['preferences:We never do early starts', 'health:Ann cannot manage stairs']);
+    expect(saved).toMatchObject({ preferences: [{ text: 'We never do early starts', source: 'conversation' }], constraints: [{ text: 'Ann cannot manage stairs' }] });
+    expect(r.changed).toBe(false);
+    // No memory path, no memory write.
+    const none = await applyOps([{ op: 'remember', text: 'We never do early starts', category: 'preferences' }], ctx(), fakes().fx);
+    expect(none.rejected.map((x) => x.reason)).toEqual(['Memory is not available here.']);
+  });
+
+  it('corrects the profile', async () => {
+    const { fx } = fakes();
+    let saved: unknown = null;
+    fx.saveProfile = async (p) => void (saved = p);
+    const r = await applyOps([{ op: 'updateProfile', profile: { constraints: [{ text: 'Not vegetarian after all' }], secret: 'x' } }, { op: 'updateProfile', profile: {} }], ctx(), fx);
+    expect(saved).toMatchObject({ constraints: [{ text: 'Not vegetarian after all', source: 'conversation' }] });
+    expect(r.applied).toEqual([{ op: 'updateProfile', profile: { constraints: [{ text: 'Not vegetarian after all' }] } }]);
+    expect(r.rejected.map((x) => x.reason)).toEqual(['updateProfile changed nothing.']);
+  });
+});

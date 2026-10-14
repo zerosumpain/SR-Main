@@ -16,6 +16,8 @@
 //    model's `placeQuery`, never by coordinates the model writes.
 
 import {
+  type TransportSegment,
+  type TravellerProfile,
   type Booking,
   type BookingStatus,
   type LatLng,
@@ -26,7 +28,8 @@ import {
   type Wish,
   type WishDraft,
 } from './model';
-import { isLocalDate, parseBookingPatch, parseTripInput, parseWishPatch, safeUrl, type BookingPatch, type TripInput, type WishPatch } from './intake';
+import { isLocalDate, isTimeZone, parseBookingPatch, parseTripInput, parseWishPatch, safeUrl, type BookingPatch, type TripInput, type WishPatch } from './intake';
+import { mergeProfile } from './profile';
 
 /** The most ops one turn may apply. */
 export const MAX_OPS = 25;
@@ -44,8 +47,11 @@ export interface OpContext {
   stays: Stay[];
   wishes: Wish[];
   bookings: Booking[];
-  /** Links that may be stored: researched facts, the trip guide, what the person typed. */
+  /** Links that may be stored: researched facts, the trip guide, what the person typed, this turn's research. */
   knownUrls: Set<string>;
+  /** v3 */
+  transport?: TransportSegment[];
+  profile?: TravellerProfile | null;
 }
 
 export interface StayFields {
@@ -82,6 +88,13 @@ export interface OpEffects {
   removeWish(id: string): Promise<void>;
   addBooking(fields: BookingPatch & { title: string; wishId: string | null }): Promise<Booking>;
   updateBooking(id: string, patch: BookingPatch): Promise<void>;
+  /** v3 */
+  addTransport?(s: Omit<TransportSegment, 'id'>): Promise<TransportSegment>;
+  updateTransport?(id: string, fields: Partial<Omit<TransportSegment, 'id'>>): Promise<void>;
+  removeTransport?(id: string): Promise<void>;
+  /** Save a stated, lasting preference to JKAI memory (the one memory write). */
+  remember?(text: string, category: 'preferences' | 'people' | 'health' | 'places'): Promise<{ stored: boolean }>;
+  saveProfile?(profile: TravellerProfile): Promise<void>;
 }
 
 export interface ApplyResult {
@@ -478,11 +491,175 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
         out.applied.push({ op: 'suggestNearby', near, theme });
         break;
       }
+      case 'addTransport':
+      case 'updateTransport': {
+        const adding = raw.op === 'addTransport';
+        const existing = adding ? null : (ctx.transport ?? []).find((t) => t.id === raw.id);
+        if (!adding && !existing) {
+          reject(raw, 'No such journey.');
+          break;
+        }
+        const parsed = parseTransport(adding ? raw.segment : f, ctx, !adding);
+        if (!parsed.ok) {
+          reject(raw, parsed.reason);
+          break;
+        }
+        const seg = parsed.value;
+        // Locate each end by name on OpenStreetMap.
+        for (const end of ['from', 'to'] as const) {
+          const e = seg[end];
+          if (!e) continue;
+          const q = `${e.name}${e.code ? ` ${e.code}` : ''}${(seg.kind ?? existing?.kind) === 'flight' && !/airport/i.test(e.name) ? ' airport' : ''}`;
+          const place = await fx.resolvePlace(q, null);
+          seg[end] = { ...e, location: place?.location ?? null };
+        }
+        if (adding) {
+          if (!fx.addTransport) {
+            reject(raw, 'Journeys cannot be saved here.');
+            break;
+          }
+          const saved = await fx.addTransport(seg as Omit<TransportSegment, 'id'>);
+          ctx.transport = [...(ctx.transport ?? []), saved];
+          out.applied.push({ op: 'addTransport', segment: seg as Omit<TransportSegment, 'id'> });
+        } else {
+          await fx.updateTransport?.(existing!.id, seg);
+          ctx.transport = (ctx.transport ?? []).map((t) => (t.id === existing!.id ? { ...t, ...seg } : t));
+          out.applied.push({ op: 'updateTransport', id: existing!.id, fields: seg });
+        }
+        out.changed = true;
+        break;
+      }
+      case 'removeTransport': {
+        if (!(ctx.transport ?? []).some((t) => t.id === raw.id)) {
+          reject(raw, 'No such journey.');
+          break;
+        }
+        await fx.removeTransport?.(raw.id as string);
+        ctx.transport = (ctx.transport ?? []).filter((t) => t.id !== raw.id);
+        out.applied.push({ op: 'removeTransport', id: raw.id as string });
+        out.changed = true;
+        break;
+      }
+      case 'remember': {
+        const text = str(raw.text, 300);
+        const category = raw.category as 'preferences' | 'people' | 'health' | 'places';
+        if (!text || text.length < 6) {
+          reject(raw, 'remember needs the preference in a short sentence.');
+          break;
+        }
+        if (!['preferences', 'people', 'health', 'places'].includes(category)) {
+          reject(raw, 'remember’s category is preferences, people, health or places.');
+          break;
+        }
+        if (!fx.remember) {
+          reject(raw, 'Memory is not available here.');
+          break;
+        }
+        await fx.remember(text, category);
+        // The profile shows it at once, sourced to this conversation.
+        ctx.profile = mergeProfile(
+          ctx.profile ?? null,
+          category === 'health'
+            ? { constraints: [...(ctx.profile?.constraints ?? []), { text, source: 'conversation', ref: null }] }
+            : { preferences: [...(ctx.profile?.preferences ?? []), { text, source: 'conversation', ref: null }] },
+          new Date().toISOString(),
+        );
+        await fx.saveProfile?.(ctx.profile);
+        out.applied.push({ op: 'remember', text, category });
+        break;
+      }
+      case 'updateProfile': {
+        if (!isObj(raw.profile)) {
+          reject(raw, 'updateProfile needs a profile object.');
+          break;
+        }
+        const allowed = ['travellers', 'preferences', 'constraints', 'history'];
+        const patch = Object.fromEntries(Object.entries(raw.profile).filter(([k]) => allowed.includes(k)));
+        if (!Object.keys(patch).length) {
+          reject(raw, 'updateProfile changed nothing.');
+          break;
+        }
+        ctx.profile = mergeProfile(ctx.profile ?? null, patch, new Date().toISOString());
+        await fx.saveProfile?.(ctx.profile);
+        out.applied.push({ op: 'updateProfile', profile: patch });
+        break;
+      }
       default:
         reject(raw, `Unknown operation “${String(raw.op).slice(0, 40)}”.`);
     }
   }
   return out;
+}
+
+const KINDS: TransportSegment['kind'][] = ['flight', 'train', 'coach', 'ferry', 'car'];
+const DIRECTIONS: TransportSegment['direction'][] = ['outbound', 'return', 'internal'];
+
+/**
+ * A transport segment from the model or a form: places by name (located later
+ * by OpenStreetMap, never by coordinates the model writes), times local to
+ * each end, links only when known. `partial` validates an update.
+ */
+export function parseTransport(
+  raw: unknown,
+  ctx: { trip: Trip; knownUrls: Set<string> },
+  partial = false,
+): { ok: true; value: Partial<Omit<TransportSegment, 'id'>> } | { ok: false; reason: string } {
+  if (!isObj(raw)) return { ok: false, reason: 'A transport segment is an object.' };
+  const out: Partial<Omit<TransportSegment, 'id'>> = {};
+  const need = (k: string) => !partial || k in raw;
+  if (need('kind')) {
+    if (!KINDS.includes(raw.kind as TransportSegment['kind'])) return { ok: false, reason: 'kind is flight, train, coach, ferry or car.' };
+    out.kind = raw.kind as TransportSegment['kind'];
+  }
+  if (need('direction')) {
+    if (!DIRECTIONS.includes(raw.direction as TransportSegment['direction'])) return { ok: false, reason: 'direction is outbound, return or internal.' };
+    out.direction = raw.direction as TransportSegment['direction'];
+  }
+  if ('carrier' in raw) out.carrier = str(raw.carrier, 60);
+  if ('number' in raw) {
+    const n = str(raw.number, 12)?.replace(/\s+/g, '').toUpperCase() ?? null;
+    if (n && !/^[A-Z0-9]{2,3}\d{1,5}[A-Z]?$/.test(n) && out.kind === 'flight') return { ok: false, reason: `“${n}” is not a flight number.` };
+    out.number = n;
+  }
+  for (const end of ['from', 'to'] as const) {
+    if (!need(end)) continue;
+    const e = isObj(raw[end]) ? (raw[end] as Obj) : null;
+    const name = str(e?.name, 120);
+    if (!name) return { ok: false, reason: `The ${end} end needs a name.` };
+    const code = str(e?.code, 4)?.toUpperCase() ?? null;
+    const tz = e?.timeZone === undefined || e?.timeZone === null ? ctx.trip.timeZone : e.timeZone;
+    if (!isTimeZone(tz)) return { ok: false, reason: `The ${end} end's time zone is not a time zone.` };
+    out[end] = { name, code: code && /^[A-Z]{3,4}$/.test(code) ? code : null, location: null, timeZone: tz as string };
+  }
+  for (const k of ['departDate', 'arriveDate'] as const) {
+    if (!need(k)) continue;
+    if (!isLocalDate(raw[k])) return { ok: false, reason: `${k} is not a date.` };
+    out[k] = raw[k] as string;
+  }
+  for (const k of ['departMin', 'arriveMin'] as const) {
+    if (!need(k)) continue;
+    const m = minutes(raw[k]);
+    if (m === undefined || m === null) return { ok: false, reason: `${k} must be minutes after midnight.` };
+    out[k] = m;
+  }
+  if (out.departDate && out.arriveDate && out.arriveDate < out.departDate) return { ok: false, reason: 'It arrives before it leaves.' };
+  if ('confidence' in raw || !partial) out.confidence = raw.confidence === 'researched' ? 'researched' : 'stated';
+  if ('bookingRef' in raw) out.bookingRef = str(raw.bookingRef, 40);
+  if ('sources' in raw || !partial) {
+    out.sources = (Array.isArray(raw.sources) ? raw.sources : [])
+      .map((x) => (isObj(x) ? { url: knownUrlOrNull(x.url, ctx.knownUrls), title: str(x.title, 120) } : null))
+      .filter((x): x is { url: string; title: string | null } => !!x?.url)
+      .slice(0, 5);
+  }
+  if (!partial) {
+    out.carrier ??= null;
+    out.number ??= null;
+    out.status = null;
+    out.delayMin = null;
+    out.bookingRef ??= null;
+    out.checkedAt = out.confidence === 'researched' ? new Date().toISOString() : null;
+  }
+  return { ok: true, value: out };
 }
 
 /** One line per op, for an `event` message logging a form edit. */
@@ -514,5 +691,15 @@ export function describeOp(op: TripOp, titles: Record<string, string> = {}): str
       return `Research asked for ${op.wishIds.length} wish${op.wishIds.length === 1 ? '' : 'es'}.`;
     case 'suggestNearby':
       return 'Nearby suggestions asked for.';
+    case 'addTransport':
+      return `Journey added: ${op.segment.number ?? op.segment.kind} ${op.segment.from.name} → ${op.segment.to.name}.`;
+    case 'updateTransport':
+      return 'A journey was changed.';
+    case 'removeTransport':
+      return 'A journey was removed.';
+    case 'remember':
+      return `Remembered: ${op.text}`;
+    case 'updateProfile':
+      return 'What I know about you was updated.';
   }
 }

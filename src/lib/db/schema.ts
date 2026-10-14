@@ -7369,6 +7369,8 @@ export const trip = pgTable(
     research: jsonb('research').$type<Record<string, unknown>>(),
     /** v2: TripGuide — city know-how (getting around, taxis, tickets), model-written once. */
     guide: jsonb('guide').$type<Record<string, unknown>>(),
+    /** v3: TravellerProfile — what the planner already knows (owner's memory, knowledge, family), with sources. */
+    profile: jsonb('profile').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -7482,9 +7484,44 @@ export const tripMessage = pgTable(
     planVersion: integer('plan_version'),
     /** 'site' | 'phone' */
     surface: text('surface').notNull().default('site'),
+    /** v3: ResearchStep[] — what the planner looked up during this turn. */
+    research: jsonb('research').$type<unknown[]>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('trip_message_trip_idx').on(t.tripId, t.createdAt)],
+);
+
+// v3: getting there and back — flights, trains and the like. The solver frames
+// the arrival and departure days with them; times are local to each end.
+export const tripTransport = pgTable(
+  'trip_transport',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    /** 'flight' | 'train' | 'coach' | 'ferry' | 'car' */
+    kind: text('kind').notNull(),
+    /** 'outbound' | 'return' | 'internal' */
+    direction: text('direction').notNull(),
+    carrier: text('carrier'),
+    number: text('number'),
+    /** { name, code, location, timeZone } — location from OpenStreetMap, never the model. */
+    fromPlace: jsonb('from_place').$type<Record<string, unknown>>().notNull(),
+    toPlace: jsonb('to_place').$type<Record<string, unknown>>().notNull(),
+    departDate: date('depart_date', { mode: 'string' }).notNull(),
+    departMin: integer('depart_min').notNull(),
+    arriveDate: date('arrive_date', { mode: 'string' }).notNull(),
+    arriveMin: integer('arrive_min').notNull(),
+    /** 'stated' | 'researched' | 'live' */
+    confidence: text('confidence').notNull().default('stated'),
+    status: text('status'),
+    delayMin: integer('delay_min'),
+    bookingRef: text('booking_ref'),
+    sources: jsonb('sources').$type<Array<{ url: string; title: string | null }>>().notNull().default([]),
+    checkedAt: timestamp('checked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_transport_trip_idx').on(t.tripId)],
 );
 
 // What happened on the day, from the phone. Idempotent on the phone's clientId.

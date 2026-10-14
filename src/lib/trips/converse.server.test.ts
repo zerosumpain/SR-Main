@@ -11,8 +11,30 @@ const h = vi.hoisted(() => ({
   model: null as null | ((messages: Array<{ role: string; content: string }>) => unknown),
   seen: [] as Array<Array<{ role: string; content: string }>>,
   solved: [] as unknown[],
+  research2: [] as Array<{ tool: string; summary: string; sources: unknown[] }>,
+  gathered: 0,
+  remembered: [] as unknown[],
 }));
 
+// The agentic first call is the same fake planner; its reply is the JSON text.
+vi.mock('./agent.server', () => ({
+  agentTurn: async (messages: Array<{ role: string; content: string }>) => {
+    h.seen.push(messages);
+    if (!h.model) throw new Error('no key');
+    return { reply: JSON.stringify(h.model(messages)), research: h.research2, seenUrls: [], toolCalls: h.research2.length };
+  },
+}));
+vi.mock('./profile.server', () => ({
+  gatherProfile: async () => {
+    h.gathered++;
+    return null;
+  },
+  rememberStated: async (i: unknown) => {
+    h.remembered.push(i);
+    return { id: 'mem1', stored: true };
+  },
+  saveProfile: async () => {},
+}));
 vi.mock('./llm.server', () => ({
   jsonCall: async (_w: string, messages: Array<{ role: string; content: string }>) => {
     h.seen.push(messages);
@@ -42,7 +64,8 @@ vi.mock('./plan.server', () => ({
 const TRIP = {
   id: 't1', ownerEmail: 'o@example.test', title: 'Rome', destination: 'Rome, Italy', timeZone: 'Europe/Rome', startDate: '2026-10-27',
   endDate: '2026-10-30', pace: 'normal', modes: ['walk'], status: 'planned', notes: null, research: null, guide: null, updatedAt: 'x',
-} as Trip & { research: null; guide: null; updatedAt: string };
+  profile: { travellers: [{ name: 'You', relation: 'the owner', notes: [] }], preferences: [{ text: 'Prefers walking to taxis', source: 'memory', ref: 'm1' }], constraints: [], history: [], gatheredAt: 'x' },
+} as Trip & { research: null; guide: null; updatedAt: string; profile: import('./model').TravellerProfile | null };
 vi.mock('./store.server', () => ({
   loadState: async () => ({ stays: [], wishes: h.wishes, bookings: [] }),
   latestPlan: async () => ({ version: 4, plan: BEFORE }),
@@ -61,6 +84,10 @@ vi.mock('./store.server', () => ({
   updateWish: async () => null,
   deleteWish: async () => true,
   saveBooking: async () => null,
+  listTransport: async () => [],
+  addTransport: async (_t: string, seg: object) => ({ id: 'tr1', ...seg }),
+  updateTransport: async () => {},
+  deleteTransport: async () => true,
 }));
 
 const { converse, NO_PLANNER } = await import('./converse.server');
@@ -73,6 +100,9 @@ beforeEach(() => {
   h.model = null;
   h.seen = [];
   h.solved = [BEFORE];
+  h.research2 = [];
+  h.gathered = 0;
+  h.remembered = [];
 });
 
 /** A fake planner: the first call answers the person, a second one is the check. */
@@ -182,5 +212,33 @@ describe('check and correct (v2.1)', () => {
     h.model = () => ({ reply: 'Which day?', ops: [], quickReplies: [] });
     await converse(TRIP, { text: 'Make it lighter', surface: 'site' });
     expect(h.seen).toHaveLength(1);
+  });
+});
+
+describe('v3: profile, research and memory', () => {
+  it('puts the profile in the prompt as fenced data and returns the turn’s research', async () => {
+    h.research2 = [{ tool: 'flight_lookup', summary: 'Looked up flight LS1235 on 2026-10-27: 6 search results', sources: [] }];
+    h.model = () => ({ reply: 'You land at 11:05.', ops: [], quickReplies: [] });
+    const r = await converse(TRIP, { text: 'Our flight is LS1235 on the 27th', surface: 'site' });
+    expect(h.seen[0][0].content).toContain('You may research on your own with tools');
+    expect(h.seen[0][1].content).toContain('<<<PROFILE');
+    expect(h.seen[0][1].content).toContain('Preferences: Prefers walking to taxis');
+    expect(r.research).toEqual(h.research2);
+    expect(h.messages[1]).toMatchObject({ role: 'assistant', research: h.research2 });
+    expect(h.gathered).toBe(0); // already gathered
+  });
+
+  it('gathers the profile on the first turn of a trip without one', async () => {
+    h.model = () => ({ reply: 'Hello.', ops: [], quickReplies: [] });
+    await converse({ ...TRIP, profile: null }, { text: 'Hi', surface: 'site' });
+    expect(h.gathered).toBe(1);
+  });
+
+  it('remembers a stated preference against the message it came from', async () => {
+    h.model = (m) => (isCheck(m) ? { ok: true, reply: 'ok', ops: [] } : { reply: 'I’ll remember that.', ops: [{ op: 'remember', text: 'We never do early starts', category: 'preferences' }], quickReplies: [] });
+    const r = await converse(TRIP, { text: 'We never do early starts', surface: 'site' });
+    expect(h.remembered).toEqual([{ text: 'We never do early starts', category: 'preferences', messageId: 'm1', ownerEmail: 'o@example.test' }]);
+    expect(r.applied).toEqual([{ op: 'remember', text: 'We never do early starts', category: 'preferences' }]);
+    expect(h.replans).toEqual([]); // remembering is not a plan change
   });
 });

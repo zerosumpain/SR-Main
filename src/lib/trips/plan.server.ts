@@ -21,6 +21,7 @@ import {
   appendPlan,
   latestPhonePlan,
   latestPlan,
+  listTransport,
   loadState,
   recentMessages,
   recordEvents,
@@ -199,7 +200,7 @@ export async function applyEvents(trip: TripRecord, events: TripEvent[]): Promis
  * it, so a new message or new guidance changes it.
  */
 export async function tripBundle(trip: TripRecord): Promise<TripBundle> {
-  const [state, latest, messages] = await Promise.all([loadState(trip.id), latestPlan(trip.id), recentMessages(trip.id, 50)]);
+  const [state, latest, messages, transport] = await Promise.all([loadState(trip.id), latestPlan(trip.id), recentMessages(trip.id, 50), listTransport(trip.id)]);
   const plan = latest ? await withGuidance(trip.id, latest.plan) : null;
   const body: Omit<TripBundle, 'etag'> = {
     trip: tripOnly(trip),
@@ -211,6 +212,7 @@ export async function tripBundle(trip: TripRecord): Promise<TripBundle> {
     tripMatrix: latest?.matrix ?? null,
     messages,
     guide: trip.guide,
+    transport,
   };
   return { ...body, etag: bundleEtag(body) };
 }

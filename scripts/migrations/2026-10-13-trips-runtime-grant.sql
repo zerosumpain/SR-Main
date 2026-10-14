@@ -27,6 +27,11 @@ DO $$ BEGIN
     IF to_regclass('public.trip_event') IS NOT NULL THEN
       GRANT SELECT, INSERT, UPDATE, DELETE ON public.trip_event TO sr_main_runtime;
     END IF;
+    -- v3 (2026-10-14): getting there and back. trip.profile and
+    -- trip_message.research are columns, covered by the table grants.
+    IF to_regclass('public.trip_transport') IS NOT NULL THEN
+      GRANT SELECT, INSERT, UPDATE, DELETE ON public.trip_transport TO sr_main_runtime;
+    END IF;
     -- v2.1 (2026-10-14) adds columns only (trip.day_loads, trip_wish.replaces_meal):
     -- table grants cover new columns, so nothing more is needed for them.
     -- v2 (2026-10-14): the planning conversation.

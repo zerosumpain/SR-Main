@@ -12,7 +12,10 @@
 
 import { diffPlans } from './changes';
 import { CHECK_SYSTEM, checkPrompt, readCheck, turnDiff } from './check';
-import type { ConverseResult, LatLng, Observation, SolvedPlan, TripMessage, TripOp } from './model';
+import type { ConverseResult, LatLng, Observation, ResearchStep, SolvedPlan, TripMessage, TripOp } from './model';
+import { agentTurn } from './agent.server';
+import { gatherProfile, rememberStated, saveProfile } from './profile.server';
+import { parseLooseJson } from './research';
 import { jsonCall } from './llm.server';
 import { applyOps, knownUrlsOf, readPlannerAnswer, urlsIn, type ApplyResult, type OpEffects } from './ops';
 import { replan } from './plan.server';
@@ -21,6 +24,10 @@ import { findPlace, startResearch, suggestNearby } from './research.server';
 import {
   addMessage,
   addStay,
+  addTransport,
+  deleteTransport,
+  listTransport,
+  updateTransport,
   addWishes,
   deleteStay,
   deleteWish,
@@ -53,9 +60,17 @@ function nowText(timeZone: string, now = new Date()): string {
   return now.toLocaleString('en-GB', { timeZone, weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-/** The effects the ops may have, bound to one trip. */
-function effectsFor(trip: TripRecord): OpEffects {
+/** The effects the ops may have, bound to one trip (and the message that asked, for `remember`). */
+function effectsFor(trip: TripRecord, messageId: string | null = null): OpEffects {
   return {
+    addTransport: (seg) => addTransport(trip.id, seg),
+    updateTransport: (id, fields) => updateTransport(trip.id, id, fields),
+    removeTransport: async (id) => void (await deleteTransport(trip.id, id)),
+    remember: async (text, category) => {
+      if (!messageId) throw new Error('remember needs the message it came from');
+      return rememberStated({ text, category, messageId, ownerEmail: trip.ownerEmail });
+    },
+    saveProfile: (profile) => saveProfile(trip.id, profile),
     resolvePlace: async (query, near) => {
       const q = /,/.test(query) || !trip.destination ? query : `${query}, ${trip.destination}`;
       const p = await findPlace(q, near);
@@ -83,7 +98,9 @@ function effectsFor(trip: TripRecord): OpEffects {
 
 export async function converse(trip: TripRecord, input: ConverseInput): Promise<ConverseTurn> {
   const text = input.text.trim().slice(0, 4000);
-  const [state, latest, history] = await Promise.all([loadState(trip.id), latestPlan(trip.id), recentMessages(trip.id, 30)]);
+  const [state, latest, history, transport] = await Promise.all([loadState(trip.id), latestPlan(trip.id), recentMessages(trip.id, 30), listTransport(trip.id)]);
+  // What the planner already knows (v3): gathered once, on the first turn.
+  const profile = trip.profile ?? (await gatherProfile(trip).catch(() => null));
   const userAt = new Date();
   const userMessage = await addMessage(trip.id, { role: 'user', text, ops: [], planVersion: null, surface: input.surface, at: userAt });
 
@@ -99,26 +116,41 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     surface: input.surface,
     observation: input.observation ?? null,
     position: input.position ?? null,
+    transport,
+    profile,
   };
 
+  // The agentic turn (v3): the planner may look things up first, within its budget.
   let answer: ReturnType<typeof readPlannerAnswer> | null = null;
+  let lookups: ResearchStep[] = [];
+  let seenUrls: string[] = [];
   try {
-    answer = readPlannerAnswer(await jsonCall('trips-planner', plannerMessages(ctx, text), { maxTokens: 4000, timeoutMs: 120_000 }));
+    const turn = await agentTurn(plannerMessages(ctx, text, { agentic: true }) as Array<Record<string, unknown>>, { trip, stays: state.stays, wishes: state.wishes });
+    lookups = turn.research;
+    seenUrls = turn.seenUrls;
+    const parsed = parseLooseJson(turn.reply);
+    if (parsed && typeof parsed === 'object') answer = readPlannerAnswer(parsed);
+    else if (turn.reply.trim()) answer = readPlannerAnswer(turn.reply.trim());
   } catch (err) {
     console.warn('[trips/converse] planner unavailable:', (err as Error)?.message);
   }
 
   if (!answer) {
-    const reply = await addMessage(trip.id, { role: 'assistant', text: NO_PLANNER, ops: [], planVersion: null, surface: input.surface, at: new Date(userAt.getTime() + 1) });
-    return { reply: NO_PLANNER, applied: [], rejected: [], quickReplies: [], planVersion: latest?.version ?? null, changes: [], messages: [userMessage, reply] };
+    const reply = await addMessage(trip.id, { role: 'assistant', text: NO_PLANNER, ops: [], planVersion: null, surface: input.surface, at: new Date(userAt.getTime() + 1), research: lookups });
+    return { reply: NO_PLANNER, applied: [], rejected: [], quickReplies: [], planVersion: latest?.version ?? null, changes: [], research: lookups, messages: [userMessage, reply] };
   }
 
   const known = knownUrlsOf(state.wishes, [
     ...(trip.guide?.taxi?.links ?? []).map((l) => l.url),
     ...urlsIn(text),
     ...history.filter((m) => m.role === 'user').flatMap((m) => urlsIn(m.text)),
+    ...seenUrls,
   ]);
-  const result = await applyOps(answer.ops, { trip, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: known }, effectsFor(trip));
+  const result = await applyOps(
+    answer.ops,
+    { trip, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: known, transport, profile },
+    effectsFor(trip, userMessage.id),
+  );
   const before: SolvedPlan | null = latest?.plan ?? null;
   const source = input.surface === 'phone' ? 'phone' : 'site';
   // A change asked for on the phone is the phone's own version of today: it is
@@ -150,7 +182,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
       planVersion = solved.version;
       finalPlan = solved.plan;
       // Check and correct (v2.1): the second and last model call of the turn.
-      const correction = await checkAndCorrect(trip, text, answer.reply, result, before, solved.plan, known);
+      const correction = await checkAndCorrect(trip, text, answer.reply, result, before, solved.plan, known, userMessage.id);
       if (correction) {
         if (correction.reply) replyText = correction.reply;
         if (correction.result) {
@@ -208,6 +240,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     planVersion: changed ? planVersion : null,
     surface: input.surface,
     at: new Date(userAt.getTime() + 1),
+    research: lookups,
   });
   return {
     reply: reply.text,
@@ -216,6 +249,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     quickReplies: answer.quickReplies,
     planVersion,
     changes,
+    research: lookups,
     messages: [userMessage, reply],
   };
 }
@@ -241,6 +275,7 @@ async function checkAndCorrect(
   before: SolvedPlan | null,
   after: SolvedPlan,
   known: Set<string>,
+  messageId: string,
 ): Promise<{ reply: string | null; result: ApplyResult | null } | null> {
   const state = await loadState(trip.id);
   const titles = Object.fromEntries(state.wishes.map((w) => [w.id, w.title]));
@@ -262,7 +297,11 @@ async function checkAndCorrect(
   }
   if (!check.ops.length) return { reply: check.reply, result: null };
   const fresh = (await getTrip(trip.ownerEmail, trip.id)) ?? trip;
-  const result = await applyOps(check.ops, { trip: fresh, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: known }, effectsFor(fresh));
+  const result = await applyOps(
+    check.ops,
+    { trip: fresh, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: known, transport: await listTransport(trip.id), profile: fresh.profile },
+    effectsFor(fresh, messageId),
+  );
   return { reply: check.reply, result };
 }
 

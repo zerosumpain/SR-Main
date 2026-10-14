@@ -11,6 +11,7 @@ import type {
   LocalDate,
   TripGuide,
   TripMessage,
+  TransportSegment,
   PlannedDay,
   SolvedPlan,
   Stay,
@@ -53,6 +54,8 @@ export interface TripBundle {
   messages: TripMessage[];
   /** v2: the city guide. */
   guide: TripGuide | null;
+  /** v3: getting there and back — the first and last stage cards. */
+  transport: TransportSegment[];
   etag: string;
 }
 

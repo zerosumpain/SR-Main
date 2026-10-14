@@ -234,6 +234,36 @@ export const CREDENTIAL_REQUEST_SPECS: Record<string, CredentialRequestSpec> = {
     },
   },
 
+  // Flight status for the trip planner's flight_lookup (v3): AeroDataBox on
+  // RapidAPI, whose Basic plan is free for a few hundred lookups a month.
+  // DORMANT until registered — the planner falls back to a web search and
+  // marks the times 'researched'. Read-only, one host, one path prefix.
+  aerodatabox: {
+    provider: 'aerodatabox',
+    title: 'AeroDataBox (flight status for the trip planner)',
+    helpUrl: 'https://rapidapi.com/aedbx-aedbx/api/aerodatabox',
+    assemble: 'single',
+    fields: [
+      {
+        key: 'value',
+        label: 'RapidAPI key',
+        type: 'password',
+        required: true,
+        placeholder: 'your X-RapidAPI-Key',
+        help: 'Subscribe to AeroDataBox on RapidAPI (the Basic plan is free), then copy the X-RapidAPI-Key shown on its endpoints page.',
+      },
+    ],
+    binding: {
+      handle: 'aerodatabox',
+      source: 'vault',
+      injection: { kind: 'header', name: 'X-RapidAPI-Key' },
+      allowedHosts: ['aerodatabox.p.rapidapi.com'],
+      allowedMethods: ['GET', 'HEAD'],
+      allowedPathPrefixes: ['/flights/'],
+      notes: 'Scheduled times and terminals for flights the trip planner looks up. Never sent to a browser.',
+    },
+  },
+
   // National Rail Darwin, via the Rail Data Marketplace (raildata.org.uk). The
   // old self-service portal at realtime.nationalrail.co.uk was retired in early
   // 2026; everything is now issued as an RDM product subscription.

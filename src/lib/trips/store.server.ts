@@ -8,7 +8,7 @@
 
 import { and, asc, desc, eq, inArray, max, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { trip, tripBooking, tripEvent, tripMessage, tripPlan, tripStay, tripWish } from '$lib/db/schema';
+import { trip, tripBooking, tripEvent, tripMessage, tripPlan, tripStay, tripTransport, tripWish } from '$lib/db/schema';
 import type {
   Booking,
   Facts,
@@ -25,6 +25,9 @@ import type {
   TripGuide,
   TripMessage,
   TripOp,
+  TransportSegment,
+  TravellerProfile,
+  ResearchStep,
   TripStatus,
   Wish,
 } from './model';
@@ -54,6 +57,7 @@ export interface ResearchState {
 export interface TripRecord extends Trip {
   research: ResearchState | null;
   guide: TripGuide | null;
+  profile: TravellerProfile | null;
   updatedAt: string;
 }
 
@@ -73,13 +77,14 @@ export function toTrip(r: TripRow): TripRecord {
     dayLoads: (r.dayLoads as Trip['dayLoads']) ?? {},
     research: (r.research as ResearchState | null) ?? null,
     guide: (r.guide as unknown as TripGuide | null) ?? null,
+    profile: (r.profile as unknown as TravellerProfile | null) ?? null,
     updatedAt: r.updatedAt.toISOString(),
   };
 }
 
 /** The wire shape of a trip: model fields only. */
 export function tripOnly(t: TripRecord): Trip {
-  const { research: _r, updatedAt: _u, guide: _g, ...rest } = t;
+  const { research: _r, updatedAt: _u, guide: _g, profile: _p, ...rest } = t;
   return rest;
 }
 
@@ -199,6 +204,7 @@ export async function deleteTrip(id: string): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.delete(tripEvent).where(eq(tripEvent.tripId, id));
     await tx.delete(tripMessage).where(eq(tripMessage.tripId, id));
+    await tx.delete(tripTransport).where(eq(tripTransport.tripId, id));
     await tx.delete(tripPlan).where(eq(tripPlan.tripId, id));
     await tx.delete(tripBooking).where(eq(tripBooking.tripId, id));
     await tx.delete(tripWish).where(eq(tripWish.tripId, id));
@@ -493,6 +499,7 @@ function toMessage(r: typeof tripMessage.$inferSelect): TripMessage {
     planVersion: r.planVersion,
     surface: r.surface as TripMessage['surface'],
     createdAt: r.createdAt.toISOString(),
+    ...(r.research && (r.research as unknown[]).length ? { research: r.research as ResearchStep[] } : {}),
   };
 }
 
@@ -509,7 +516,7 @@ export async function recentMessages(tripId: string, limit = 50): Promise<TripMe
 
 export async function addMessage(
   tripId: string,
-  m: Pick<TripMessage, 'role' | 'text' | 'ops' | 'planVersion' | 'surface'> & { at?: Date },
+  m: Pick<TripMessage, 'role' | 'text' | 'ops' | 'planVersion' | 'surface'> & { at?: Date; research?: ResearchStep[] },
 ): Promise<TripMessage> {
   const [row] = await db
     .insert(tripMessage)
@@ -520,8 +527,80 @@ export async function addMessage(
       ops: m.ops as unknown[],
       planVersion: m.planVersion,
       surface: m.surface,
+      research: m.research?.length ? (m.research as unknown[]) : null,
       ...(m.at ? { createdAt: m.at } : {}),
     })
     .returning();
   return toMessage(row);
+}
+
+// ── v3: getting there and back ─────────────────────────────────────────────
+
+type TransportRow = typeof tripTransport.$inferSelect;
+
+function toTransport(r: TransportRow): TransportSegment {
+  return {
+    id: r.id,
+    kind: r.kind as TransportSegment['kind'],
+    direction: r.direction as TransportSegment['direction'],
+    carrier: r.carrier,
+    number: r.number,
+    from: r.fromPlace as unknown as TransportSegment['from'],
+    to: r.toPlace as unknown as TransportSegment['to'],
+    departDate: r.departDate,
+    departMin: r.departMin,
+    arriveDate: r.arriveDate,
+    arriveMin: r.arriveMin,
+    confidence: r.confidence as TransportSegment['confidence'],
+    status: (r.status as TransportSegment['status']) ?? null,
+    delayMin: r.delayMin,
+    bookingRef: r.bookingRef,
+    sources: r.sources ?? [],
+    checkedAt: r.checkedAt ? r.checkedAt.toISOString() : null,
+  };
+}
+
+function transportValues(s: Partial<Omit<TransportSegment, 'id'>>) {
+  return {
+    ...(s.kind !== undefined ? { kind: s.kind } : {}),
+    ...(s.direction !== undefined ? { direction: s.direction } : {}),
+    ...(s.carrier !== undefined ? { carrier: s.carrier } : {}),
+    ...(s.number !== undefined ? { number: s.number } : {}),
+    ...(s.from !== undefined ? { fromPlace: s.from as unknown as Record<string, unknown> } : {}),
+    ...(s.to !== undefined ? { toPlace: s.to as unknown as Record<string, unknown> } : {}),
+    ...(s.departDate !== undefined ? { departDate: s.departDate } : {}),
+    ...(s.departMin !== undefined ? { departMin: s.departMin } : {}),
+    ...(s.arriveDate !== undefined ? { arriveDate: s.arriveDate } : {}),
+    ...(s.arriveMin !== undefined ? { arriveMin: s.arriveMin } : {}),
+    ...(s.confidence !== undefined ? { confidence: s.confidence } : {}),
+    ...(s.status !== undefined ? { status: s.status } : {}),
+    ...(s.delayMin !== undefined ? { delayMin: s.delayMin } : {}),
+    ...(s.bookingRef !== undefined ? { bookingRef: s.bookingRef } : {}),
+    ...(s.sources !== undefined ? { sources: s.sources } : {}),
+    ...(s.checkedAt !== undefined ? { checkedAt: s.checkedAt ? new Date(s.checkedAt) : null } : {}),
+  };
+}
+
+export async function listTransport(tripId: string): Promise<TransportSegment[]> {
+  const rows = await db.select().from(tripTransport).where(eq(tripTransport.tripId, tripId)).orderBy(asc(tripTransport.departDate), asc(tripTransport.departMin), asc(tripTransport.id));
+  return rows.map(toTransport);
+}
+
+export async function addTransport(tripId: string, s: Omit<TransportSegment, 'id'>): Promise<TransportSegment> {
+  const [row] = await db
+    .insert(tripTransport)
+    .values({ tripId, ...(transportValues(s) as Required<ReturnType<typeof transportValues>>) } as typeof tripTransport.$inferInsert)
+    .returning();
+  return toTransport(row);
+}
+
+export async function updateTransport(tripId: string, id: string, fields: Partial<Omit<TransportSegment, 'id'>>): Promise<void> {
+  if (!isUuid(id)) return;
+  await db.update(tripTransport).set({ ...transportValues(fields), updatedAt: new Date() }).where(and(eq(tripTransport.tripId, tripId), eq(tripTransport.id, id)));
+}
+
+export async function deleteTransport(tripId: string, id: string): Promise<boolean> {
+  if (!isUuid(id)) return false;
+  const gone = await db.delete(tripTransport).where(and(eq(tripTransport.tripId, tripId), eq(tripTransport.id, id))).returning({ id: tripTransport.id });
+  return gone.length > 0;
 }
