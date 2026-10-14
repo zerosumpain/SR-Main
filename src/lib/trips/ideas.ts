@@ -127,7 +127,7 @@ Find up to 3 ideas that genuinely FIT this slot:
 - with travel IN (from the stop before) plus the visit plus travel OUT (to the stop after) fitting inside the free minutes — check with travel_time for the likely ones, and say the numbers;
 - a place to eat when it is a meal slot (honour dietary needs in the profile);
 - not something already planned on another day, and not something they dropped.
-Use your tools sparingly (find_place, travel_time, opening_hours, web_search). Never invent links, prices or opening times.
+Use your tools sparingly (find_place, travel_time, opening_hours, web_search). For travel_time, name the ends by place name, "stay", or the coordinates given for the stop before and after. Never invent links, prices or opening times.
 
 Answer ONLY with JSON:
 {"ideas":[{"title": string,"placeQuery": a precise place to look up ("Sant'Ignazio, Rome"),"durationMin": number,"why": one line,"fit": one line with the travel and spare minutes ("12 min walk from the Pantheon, 45 min there, 15 min on to Trevi — leaves 10 min spare")}],"note": string|null}
