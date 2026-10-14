@@ -52,6 +52,8 @@ export interface Item {
   sortHint: number;
   /** v2.1: this wish is that day's lunch/dinner (no automatic meal stop). */
   replacesMeal: MealKind | null;
+  /** Pinned to this day (fixed date, fixed time or booked): outranks unpinned wishes. */
+  pinned: boolean;
 }
 
 export interface DayFrame {
@@ -199,6 +201,7 @@ export function wishItem(
     baseWarnings: wishWarnings(wish, bookings, wish.replacesMeal ? windowsOn(wish.facts, date) : windows),
     sortHint: wish.sortHint,
     replacesMeal: wish.replacesMeal ?? null,
+    pinned: fixedStartMin !== null || wish.fixedDate === date || booking?.date === date,
   };
 }
 
@@ -228,6 +231,7 @@ export function mealItem(date: LocalDate, kind: MealKind, rules: PaceRules): Ite
     baseWarnings: [],
     sortHint: 0,
     replacesMeal: null,
+    pinned: false,
   };
 }
 
@@ -279,6 +283,7 @@ export function itemFromStop(
       baseWarnings: [],
       sortHint: 0,
       replacesMeal: null,
+      pinned: stop.locked,
     };
   }
   const wish = stop.wishId ? wishes.get(stop.wishId) : undefined;
@@ -304,5 +309,9 @@ export function itemFromStop(
       : [],
     sortHint: wish?.sortHint ?? 0,
     replacesMeal: wish?.replacesMeal ?? null,
+    pinned:
+      stop.locked ||
+      wish?.fixedDate === date ||
+      (stop.wishId !== null && bookedSlot(stop.wishId, bookings)?.date === date),
   };
 }

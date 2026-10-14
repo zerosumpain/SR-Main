@@ -133,7 +133,10 @@ export function solveFrames(
     .filter((w): w is Wish => w !== undefined)
     .sort((a, b) => a.sortHint - b.sortHint || cmp(a.id, b.id));
   for (const wish of retry) {
-    if (tryOn(wish, dropReasons.get(wish.id)?.date, false)) dropReasons.delete(wish.id);
+    // A wish pinned to a day is never moved off it.
+    const from = dropReasons.get(wish.id)?.date;
+    if (from && (wish.fixedDate === from || pinnedDate(wish, bookings) === from)) continue;
+    if (tryOn(wish, from, false)) dropReasons.delete(wish.id);
   }
 
   // A must that no longer works on its day (closed by the time we'd get
@@ -174,6 +177,8 @@ export function solveFrames(
         const list = [...(items.get(d) ?? []), itemFor(spec, wish)];
         const trial = fit(spec, list);
         if (mustIssues(trial) > mustIssues(before) || trial.sim.overrunMin > before.sim.overrunMin) continue;
+        // Never push out a wish pinned to that day.
+        if (trial.dropped.some((x) => list.some((i) => i.wishId === x.wishId && i.pinned))) continue;
         const harm = trial.dropped.length * COST.droppedNice + (trial.sim.cost - before.sim.cost);
         if (!best || harm < best.harm) best = { spec, trial, list, harm };
       }
