@@ -174,7 +174,7 @@ export interface Wish {
    * v2.1: this wish IS that day's lunch/dinner — the solver drops the automatic
    * meal stop and places this wish inside the meal window.
    */
-  replacesMeal?: 'lunch' | 'dinner' | null;
+  replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null;
   /** v2: what to know when you're there (model-written from facts). */
   guide?: StopGuide | null;
 }
@@ -216,6 +216,8 @@ export interface PlannedStop {
   locked: boolean;
   bookingId: string | null;
   warnings: string[];
+  /** v4: which part of the day this stop belongs to. Set by the solver. */
+  stage?: DayStage;
 }
 
 export interface PlannedLeg {
@@ -402,7 +404,7 @@ export interface WishDraft {
   fixedDate: LocalDate | null;
   fixedStartMin: number | null;
   note: string | null;
-  replacesMeal?: 'lunch' | 'dinner' | null;
+  replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null;
 }
 
 /**
@@ -540,3 +542,20 @@ export interface ResearchStep {
   summary: string;
   sources: Array<{ url: string; title: string | null }>;
 }
+
+// ── v4: the day in stages (studio view) ─────────────────────────────────────
+
+/**
+ * Every day is shown as four stages, each with its own look:
+ * breakfast & morning, lunch, afternoon, dinner & evening. The solver sets
+ * `PlannedStop.stage`; both the site studio and the phone group by it.
+ * Travel (transport, transfers, bag drops) belongs to the stage it falls in.
+ */
+export type DayStage = 'morning' | 'lunch' | 'afternoon' | 'evening';
+export const DAY_STAGES: readonly DayStage[] = ['morning', 'lunch', 'afternoon', 'evening'];
+export const DAY_STAGE_LABEL: Record<DayStage, string> = {
+  morning: 'Breakfast & morning',
+  lunch: 'Lunch',
+  afternoon: 'Afternoon',
+  evening: 'Dinner & evening',
+};
