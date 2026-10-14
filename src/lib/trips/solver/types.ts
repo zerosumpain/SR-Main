@@ -6,7 +6,8 @@
 import type { Booking, LatLng, PlannedDay, Stay, TravelMatrix, Trip, Wish } from '../model';
 
 export interface SolverInput {
-  trip: Pick<Trip, 'id' | 'timeZone' | 'startDate' | 'endDate' | 'pace' | 'modes'>;
+  trip: Pick<Trip, 'id' | 'timeZone' | 'startDate' | 'endDate' | 'pace' | 'modes'> &
+    Partial<Pick<Trip, 'dayLoads'>>;
   stays: Stay[];
   /** Suggested and skipped wishes are ignored. */
   wishes: Wish[];

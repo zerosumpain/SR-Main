@@ -7,6 +7,7 @@
 import type {
   Booking,
   DayHours,
+  DayLoad,
   LocalDate,
   PaceRules,
   PartOfDay,
@@ -49,6 +50,8 @@ export interface Item {
   baseWarnings: string[];
   /** Lower = more valued (the person's own order). */
   sortHint: number;
+  /** v2.1: this wish is that day's lunch/dinner (no automatic meal stop). */
+  replacesMeal: MealKind | null;
 }
 
 export interface DayFrame {
@@ -56,6 +59,63 @@ export interface DayFrame {
   stay: Stay | null;
   dayStartMin: number;
   dayEndMin: number;
+  /** v2.1: how full the day should be (light ends earlier and takes less). */
+  load?: DayLoad;
+}
+
+/** A light day ends this much earlier than the pace's day end. */
+export const LIGHT_DAY_EARLIER_MIN = 90;
+/** A light day takes about this share of the pace's active time. */
+export const LIGHT_DAY_SHARE = 0.6;
+/** A full day takes this share (it may run right up to the day's end). */
+export const FULL_DAY_SHARE = 1.2;
+
+/** The frame for a date under the pace and that date's load. */
+export function dayFrame(
+  rules: PaceRules,
+  dayLoads: Partial<Record<LocalDate, DayLoad>>,
+  date: LocalDate,
+  stay: Stay | null,
+): DayFrame {
+  const load = dayLoads[date] ?? 'normal';
+  return {
+    date,
+    stay,
+    dayStartMin: rules.dayStartMin,
+    dayEndMin: load === 'light' ? rules.dayEndMin - LIGHT_DAY_EARLIER_MIN : rules.dayEndMin,
+    load,
+  };
+}
+
+/** Dinner window for a wish that replaces dinner when the pace plans none. */
+const FALLBACK_DINNER = { fromMin: 19 * 60, toMin: 21 * 60, durationSec: 75 * 60 };
+
+/** The meal window a meal-replacing wish must start in: [fromMin, latest start]. */
+export function replacedMealWindow(
+  rules: PaceRules,
+  kind: MealKind,
+): { fromMin: number; latestStartMin: number } {
+  const w = (kind === 'lunch' ? rules.lunch : rules.dinner) ?? FALLBACK_DINNER;
+  return { fromMin: w.fromMin, latestStartMin: w.toMin - Math.round(w.durationSec / 60) };
+}
+
+/**
+ * Opening windows for a wish on a date. A meal-replacing wish is narrowed to
+ * start inside its meal window (it may run on past the window's end).
+ */
+export function wishWindows(wish: Wish, date: LocalDate, rules: PaceRules | null): DayHours | null {
+  const windows = windowsOn(wish.facts, date);
+  if (!wish.replacesMeal || !rules) return windows;
+  const meal = replacedMealWindow(rules, wish.replacesMeal);
+  const dur = visitMin(wish, null);
+  const slot = { openMin: meal.fromMin, closeMin: meal.latestStartMin + dur };
+  if (windows === null) return [slot];
+  return windows
+    .map((w) => ({
+      openMin: Math.max(w.openMin, slot.openMin),
+      closeMin: Math.min(w.closeMin, slot.closeMin),
+    }))
+    .filter((w) => w.closeMin > w.openMin);
 }
 
 /** The booked booking for a wish, if any (earliest date/time, then id). */
@@ -104,9 +164,14 @@ export function wishWarnings(wish: Wish, bookings: Booking[], windows: DayHours 
   return out;
 }
 
-export function wishItem(wish: Wish, date: LocalDate, bookings: Booking[]): Item {
+export function wishItem(
+  wish: Wish,
+  date: LocalDate,
+  bookings: Booking[],
+  rules: PaceRules | null = null,
+): Item {
   const booking = bookedSlot(wish.id, bookings);
-  const windows = windowsOn(wish.facts, date);
+  const windows = wishWindows(wish, date, rules);
   let fixedStartMin: number | null = null;
   let bookingId: string | null = null;
   if (booking && booking.date === date) {
@@ -129,10 +194,11 @@ export function wishItem(wish: Wish, date: LocalDate, bookings: Booking[]): Item
     locked: fixedStartMin !== null || wish.locked,
     bookingId,
     priority: wish.priority,
-    partOfDay: wish.partOfDay,
+    partOfDay: wish.replacesMeal ? 'any' : wish.partOfDay,
     windows,
-    baseWarnings: wishWarnings(wish, bookings, windows),
+    baseWarnings: wishWarnings(wish, bookings, wish.replacesMeal ? windowsOn(wish.facts, date) : windows),
     sortHint: wish.sortHint,
+    replacesMeal: wish.replacesMeal ?? null,
   };
 }
 
@@ -161,6 +227,7 @@ export function mealItem(date: LocalDate, kind: MealKind, rules: PaceRules): Ite
     windows: [{ openMin: w.fromMin, closeMin: w.toMin }],
     baseWarnings: [],
     sortHint: 0,
+    replacesMeal: null,
   };
 }
 
@@ -211,10 +278,11 @@ export function itemFromStop(
       windows: meal?.windows ?? null,
       baseWarnings: [],
       sortHint: 0,
+      replacesMeal: null,
     };
   }
   const wish = stop.wishId ? wishes.get(stop.wishId) : undefined;
-  const windows = wish ? windowsOn(wish.facts, date) : null;
+  const windows = wish ? wishWindows(wish, date, rules) : null;
   return {
     id: stop.id,
     kind: 'wish',
@@ -229,9 +297,12 @@ export function itemFromStop(
     locked: stop.locked,
     bookingId: stop.bookingId,
     priority: wish?.priority ?? null,
-    partOfDay: wish?.partOfDay ?? 'any',
+    partOfDay: wish?.replacesMeal ? 'any' : (wish?.partOfDay ?? 'any'),
     windows,
-    baseWarnings: wish ? wishWarnings(wish, bookings, windows) : [],
+    baseWarnings: wish
+      ? wishWarnings(wish, bookings, wish.replacesMeal ? windowsOn(wish.facts, date) : windows)
+      : [],
     sortHint: wish?.sortHint ?? 0,
+    replacesMeal: wish?.replacesMeal ?? null,
   };
 }

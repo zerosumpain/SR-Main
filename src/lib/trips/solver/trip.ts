@@ -35,7 +35,7 @@ import type {
 import { cmp, dayLabel, fmtMin } from './calendar';
 import { estimateLeg } from './estimate';
 import { windowsOn } from './hours';
-import { pinnedDate, wishItem, type DayFrame, type Item } from './items';
+import { dayFrame, pinnedDate, wishItem, type DayFrame, type Item } from './items';
 import { freshSpec, holdItem, solveFrames, solveTrip, type FrameSpec } from './plan';
 import { MISSED_SLOT_GRACE_MIN, replanDay, settle, situation, type Situation } from './replan';
 import {
@@ -158,7 +158,7 @@ export function pullForwardDay(
     .filter((id) => !already.some((i) => i.wishId === id))
     .map((id) => byId.get(id))
     .filter((w): w is Wish => w !== undefined)
-    .map((w) => wishItem(w, sit.frame.date, input.bookings));
+    .map((w) => wishItem(w, sit.frame.date, input.bookings, sit.ctx.rules));
   const rest = sit.items.filter(
     (i) => !already.includes(i) && i.kind !== 'meal' && !without.includes(i.wishId ?? ''),
   );
@@ -183,17 +183,18 @@ export function replanTrip(input: TripReplanInput): TripReplanOption[] {
   const earlier = new Set(planDays.filter((d) => d.date < today).flatMap(wishIdsOf));
   const oldDate = new Map<string, LocalDate>();
   for (const d of [input.day, ...laterOld]) for (const id of wishIdsOf(d)) oldDate.set(id, d.date);
-  const laterFrame = (date: LocalDate): DayFrame => ({
-    date,
-    stay: input.stays.find((s) => s.id === laterOld.find((d) => d.date === date)?.stayId) ?? null,
-    dayStartMin: ctx.rules.dayStartMin,
-    dayEndMin: ctx.rules.dayEndMin,
-  });
+  const laterFrame = (date: LocalDate): DayFrame =>
+    dayFrame(
+      ctx.rules,
+      ctx.dayLoads,
+      date,
+      input.stays.find((s) => s.id === laterOld.find((d) => d.date === date)?.stayId) ?? null,
+    );
   const itemsOfDay = (day: PlannedDay, held: Map<string, PlannedStop>): Item[] =>
     wishIdsOf(day)
       .map((id) => byId.get(id))
       .filter((w): w is Wish => w !== undefined)
-      .map((w) => holdItem(wishItem(w, day.date, input.bookings), held.get(w.id)));
+      .map((w) => holdItem(wishItem(w, day.date, input.bookings, ctx.rules), held.get(w.id)));
 
   // Where they are: what the phone saw, else its position. Never guessed
   // from the plan — pull-forward and stay-here need a real place.
@@ -225,8 +226,9 @@ export function replanTrip(input: TripReplanInput): TripReplanOption[] {
           const w = windowsOn(wish.facts, date);
           if (w !== null && w.length === 0) continue;
           const frame = laterFrame(date);
+          if (frame.load === 'light') continue; // never pile onto a light day
           const before = entry.fit ?? fitDay(ctx, frame, entry.items);
-          const list = [...entry.items, wishItem(wish, date, input.bookings)];
+          const list = [...entry.items, wishItem(wish, date, input.bookings, ctx.rules)];
           const trial = fitDay(ctx, frame, list);
           if (
             trial.dropped.length === 0 &&

@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { replanDay, replanTrip, retimeDay } from './index';
+import { replanDay, replanTrip, retimeDay, solveTrip } from './index';
 import { buildCaseInputs, type SolverCase } from './fixtures/cases/build';
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'cases');
@@ -18,6 +18,7 @@ function run(c: Omit<SolverCase, 'expected'> & { fn: SolverCase['fn'] }): unknow
     >['input'];
     return retimeDay(day, fromIndex, startMin, rest);
   }
+  if (c.fn === 'solveTrip') return solveTrip(c.input as Extract<SolverCase, { fn: 'solveTrip' }>['input']);
   if (c.fn === 'replanTrip') return replanTrip(c.input as Extract<SolverCase, { fn: 'replanTrip' }>['input']);
   return replanDay(c.input as Extract<SolverCase, { fn: 'replanDay' }>['input']);
 }

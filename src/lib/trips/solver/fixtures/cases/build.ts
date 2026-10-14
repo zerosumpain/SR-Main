@@ -7,9 +7,23 @@
 // src/lib/trips/solver/cases.test.ts` — only when a behaviour change is
 // intended, and port it to Swift too.
 
-import type { LatLng, Observation, PlannedDay, ReplanOption, TripReplanOption } from '../../../model';
+import type {
+  LatLng,
+  Observation,
+  PlannedDay,
+  ReplanOption,
+  SolvedPlan,
+  TripReplanOption,
+} from '../../../model';
 import { estimateMatrix } from '../../estimate';
-import { solveTrip, type ReplanInput, type RetimeInput, type TripReplanInput } from '../../index';
+import {
+  solveTrip,
+  type ReplanInput,
+  type RetimeInput,
+  type SolverInput,
+  type TripReplanInput,
+} from '../../index';
+import { makeWish } from '../build';
 import { sliceMatrix, stayPoint } from '../../matrix';
 import { romeInput, romePoints } from '../rome';
 
@@ -22,6 +36,7 @@ export interface RetimeCaseInput extends RetimeInput {
 export type SolverCase =
   | { name: string; description: string; fn: 'retimeDay'; input: RetimeCaseInput; expected: PlannedDay }
   | { name: string; description: string; fn: 'replanDay'; input: ReplanInput; expected: ReplanOption[] }
+  | { name: string; description: string; fn: 'solveTrip'; input: SolverInput; expected: SolvedPlan }
   | {
       name: string;
       description: string;
@@ -33,7 +48,8 @@ export type SolverCase =
 export type CaseInput =
   | Omit<Extract<SolverCase, { fn: 'retimeDay' }>, 'expected'>
   | Omit<Extract<SolverCase, { fn: 'replanDay' }>, 'expected'>
-  | Omit<Extract<SolverCase, { fn: 'replanTrip' }>, 'expected'>;
+  | Omit<Extract<SolverCase, { fn: 'replanTrip' }>, 'expected'>
+  | Omit<Extract<SolverCase, { fn: 'solveTrip' }>, 'expected'>;
 
 /** The day's own slice of the Rome input: its wishes, its stay, its matrix. */
 function dayInput(date: string, edit?: (input: ReturnType<typeof romeInput>) => void) {
@@ -217,7 +233,103 @@ export function buildCaseInputs(): CaseInput[] {
       },
     });
   }
-  cases.push(...buildTripCaseInputs());
+  cases.push(...buildTripCaseInputs(), ...buildV21CaseInputs());
+  return cases;
+}
+
+/** Rome with Wednesday 28 Oct marked light. */
+export function lightWednesdayInput() {
+  const rome = romeInput();
+  rome.trip.dayLoads = { '2026-10-28': 'light' };
+  return rome;
+}
+
+/** Rome plus a two-hour lunch in Trastevere on Thursday that IS lunch. */
+export function longLunchInput(fixedDate: string | null = '2026-10-29') {
+  const rome = romeInput();
+  rome.wishes.push(
+    makeWish(
+      'trastevere-lunch',
+      'Long lunch in Trastevere',
+      { lat: 41.889, lng: 12.4693 },
+      {
+        priority: 'must',
+        minutes: 120,
+        hours: 'Mo-Su 12:00-15:30',
+        fixedDate,
+        replacesMeal: 'lunch',
+        sortHint: 15,
+      },
+    ),
+  );
+  rome.matrix = estimateMatrix(romePoints(rome.wishes, rome.stays), rome.trip.modes);
+  return rome;
+}
+
+/** v2.1: day loads and meal-replacing wishes. */
+export function buildV21CaseInputs(): CaseInput[] {
+  const cases: CaseInput[] = [
+    {
+      name: 'solve-light-wednesday',
+      description:
+        'Wednesday 28 Oct marked light: it ends 90 min earlier, takes about 60% of a normal day, and nothing is moved onto it.',
+      fn: 'solveTrip',
+      input: lightWednesdayInput(),
+    },
+    {
+      name: 'solve-long-lunch-thursday',
+      description:
+        'A two-hour lunch in Trastevere on Thursday replaces lunch: one lunch-time stop, no automatic lunch that day.',
+      fn: 'solveTrip',
+      input: longLunchInput(),
+    },
+  ];
+  {
+    // The day was planned normal; Wednesday is then marked light mid-trip.
+    const base = romeInput();
+    const day = solveTrip(base).days.find((d) => d.date === '2026-10-28') as PlannedDay;
+    const wishIds = new Set(day.stops.map((s) => s.wishId).filter((id): id is string => id !== null));
+    cases.push({
+      name: 'replan-light-day',
+      description:
+        'Wednesday marked light after it was planned: at the Colosseum on time, the evening in Trastevere now runs past the earlier end (17:30), so dropping it is offered.',
+      fn: 'replanDay',
+      input: {
+        trip: { ...base.trip, dayLoads: { '2026-10-28': 'light' } },
+        stays: base.stays,
+        wishes: base.wishes.filter((w) => wishIds.has(w.id)),
+        bookings: base.bookings.filter((b) => b.wishId !== null && wishIds.has(b.wishId)),
+        matrix: sliceMatrix(base.matrix, [...wishIds, ...base.stays.map((s) => stayPoint(s.id))]),
+        day,
+        nowMin: day.stops.find((s) => s.id === 'colosseum')!.departMin,
+        position: null,
+        atStopId: 'colosseum',
+        doneStopIds: [],
+      },
+    });
+  }
+  {
+    const rome = longLunchInput();
+    const day = solveTrip(rome).days.find((d) => d.date === '2026-10-29') as PlannedDay;
+    const wishIds = new Set(day.stops.map((s) => s.wishId).filter((id): id is string => id !== null));
+    const i = day.stops.findIndex((s) => s.id === 'trastevere-lunch');
+    cases.push({
+      name: 'retime-long-lunch-late',
+      description:
+        'Thursday: leaving the Vatican 45 minutes late, the long lunch (which replaces lunch) starts after 13:30 and warns as a late lunch.',
+      fn: 'retimeDay',
+      input: {
+        trip: rome.trip,
+        stays: rome.stays,
+        wishes: rome.wishes.filter((w) => wishIds.has(w.id)),
+        bookings: rome.bookings.filter((b) => b.wishId !== null && wishIds.has(b.wishId)),
+        matrix: sliceMatrix(rome.matrix, [...wishIds, ...rome.stays.map((s) => stayPoint(s.id))]),
+        day,
+        fromIndex: i,
+        startMin: day.stops[i - 1].departMin + 10 + 45,
+      },
+    });
+  }
   return cases;
 }
 

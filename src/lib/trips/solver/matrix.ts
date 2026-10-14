@@ -9,7 +9,9 @@ import {
   PACE_RULES,
   TAXI_PICKUP_SEC,
   TRAVEL_MODES,
+  type DayLoad,
   type LatLng,
+  type LocalDate,
   type PaceRules,
   type Stay,
   type TravelMatrix,
@@ -35,12 +37,14 @@ export interface SolverContext {
   /** Matrix point key → coordinates, for estimated fallbacks. */
   locations: Map<string, LatLng>;
   cache: Map<string, LegChoice>;
+  /** v2.1: per-date load ('light' | 'normal' | 'full'); missing = normal. */
+  dayLoads: Partial<Record<LocalDate, DayLoad>>;
 }
 
 export const stayPoint = (stayId: string): string => `stay:${stayId}`;
 
 export function makeContext(
-  trip: Pick<Trip, 'pace' | 'modes'>,
+  trip: Pick<Trip, 'pace' | 'modes'> & Partial<Pick<Trip, 'dayLoads'>>,
   stays: Stay[],
   wishes: Wish[],
   matrix: TravelMatrix,
@@ -59,6 +63,7 @@ export function makeContext(
     index,
     locations,
     cache: new Map(),
+    dayLoads: trip.dayLoads ?? {},
   };
 }
 
