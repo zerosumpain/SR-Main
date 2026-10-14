@@ -50,3 +50,11 @@ describe('etag', () => {
     expect(etagMatches(null, '"abc"')).toBe(false);
   });
 });
+
+describe('v3: transport points in a day matrix', () => {
+  it('includes the airport the day arrives at', () => {
+    const m: TravelMatrix = { points: ['stay:s1', 'a', 'transport:t1:to'], seconds: { walk: [[0, 1, 2], [3, 0, 4], [5, 6, 0]] }, metres: {}, estimated: {} };
+    const d: PlannedDay = { ...day, stops: [{ ...day.stops[1], id: 'transport:t1:arrive', kind: 'transport', wishId: null }, day.stops[2]] };
+    expect(daySubMatrix(m, d).points).toEqual(['stay:s1', 'transport:t1:to', 'a']);
+  });
+});

@@ -388,6 +388,8 @@ export interface TripMessage {
   /** Where it was said. */
   surface: 'site' | 'phone';
   createdAt: string;
+  /** v3: what the planner looked up for this reply (assistant messages). */
+  research?: ResearchStep[];
 }
 
 export interface WishDraft {

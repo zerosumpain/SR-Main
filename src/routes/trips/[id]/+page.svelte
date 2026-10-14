@@ -328,6 +328,16 @@
           {:else}
             <div class="msg {m.role}">
               <p>{m.text}</p>
+              {#if m.research?.length}
+                <details class="lookups">
+                  <summary class="small">Looked up {m.research.length} thing{m.research.length === 1 ? '' : 's'}</summary>
+                  <ul>
+                    {#each m.research as r, ri (ri)}
+                      <li>{r.summary}{#each r.sources as src, si (src.url)}{si ? ', ' : ' — '}<a href={src.url} target="_blank" rel="noopener noreferrer">{src.title ?? new URL(src.url).hostname}</a>{/each}</li>
+                    {/each}
+                  </ul>
+                </details>
+              {/if}
               <span class="meta mono small">{m.role === 'user' ? (m.surface === 'phone' ? 'you, on the phone' : 'you') : 'planner'} · {timeOf(m.createdAt)}{m.ops.length ? ` · ${m.ops.length} change${m.ops.length === 1 ? '' : 's'}` : ''}{m.planVersion ? ` · plan v${m.planVersion}` : ''}</span>
             </div>
           {/if}
@@ -382,7 +392,7 @@
                     <li class="stop stop-{s.kind}">
                       <span class="time mono">{hhmm(s.arriveMin)}{s.departMin !== s.arriveMin ? `–${hhmm(s.departMin)}` : ''}</span>
                       <span class="s-body">
-                        <strong>{s.title}</strong>{s.locked ? ' · locked' : ''}{s.bookingId ? ' · booked' : ''}
+                        {#if s.kind === 'transport'}<span class="mono small stage">{s.id.endsWith(':arrive') ? 'Arrive' : 'Leave'}</span> {/if}<strong>{s.title}</strong>{s.locked && s.kind !== 'transport' ? ' · locked' : ''}{s.bookingId ? ' · booked' : ''}
                         {#if s.waitSec >= 60}<span class="muted"> · {waitText(s.waitSec)}</span>{/if}
                         {#each s.warnings as wn, wi (wi)}<span class="warn block">{wn}</span>{/each}
                         {#if s.kind === 'wish' && s.wishId}
@@ -455,6 +465,43 @@
   </div>
 
   <h2 class="details-hd">The details <span class="muted small">— what the conversation has set; edit directly if you like</span></h2>
+
+  <details class="nm-sec" open={!!data.profile && !data.messages.length}>
+    <summary class="nm-sec-hd"><span class="sr-label-tight">What I know about you</span><span class="nm-sec-meta">from your JKAI memory, notes and family roster{data.profile ? ` · ${checked(data.profile.gatheredAt)}` : ''}</span></summary>
+    {#if !data.profile}
+      <p class="muted">Not gathered yet — it will be on your first message.</p>
+    {:else}
+      <p class="muted small">The planner uses this without being asked. Tell it in the conversation if anything is wrong; lasting preferences you state can be saved to memory.</p>
+      <dl class="profile">
+        <dt>Travelling</dt><dd>{data.profile.travellers.map((t) => `${t.name}${t.relation ? ` (${t.relation})` : ''}${t.notes.length ? ` — ${t.notes.join('; ')}` : ''}`).join(', ')}</dd>
+        <dt>Needs</dt><dd>{#if data.profile.constraints.length}<ul>{#each data.profile.constraints as c, ci (ci)}<li>{c.text} <span class="mono small src">{c.source}</span></li>{/each}</ul>{:else}none known{/if}</dd>
+        <dt>Likes</dt><dd>{#if data.profile.preferences.length}<ul>{#each data.profile.preferences as c, ci (ci)}<li>{c.text} <span class="mono small src">{c.source}</span></li>{/each}</ul>{:else}none known{/if}</dd>
+        {#if data.profile.history.length}<dt>Before</dt><dd><ul>{#each data.profile.history as h, hi (hi)}<li>{h}</li>{/each}</ul></dd>{/if}
+      </dl>
+    {/if}
+    <button class="nm-btn-ghost" type="button" disabled={busy} onclick={() => call('POST', `${base}/profile`, undefined, 'Gathered again.')}>Gather again</button>
+  </details>
+
+  <section class="nm-sec">
+    <div class="nm-sec-hd"><span class="sr-label-tight">Getting there and back</span><span class="nm-sec-meta">frames the first and last day</span></div>
+    {#if !data.transport.length}
+      <p class="muted">No journey yet — tell the planner your flight or train (“we fly from Newcastle at 07:35 on the 27th”).</p>
+    {:else}
+      <ul class="plain">
+        {#each data.transport as t (t.id)}
+          <li class="line">
+            <span>
+              <strong>{t.direction === 'outbound' ? 'Out' : t.direction === 'return' ? 'Back' : 'Between'}: {t.kind}{t.number ? ` ${t.number}` : ''}{t.carrier ? ` (${t.carrier})` : ''}</strong>
+              — {t.from.name}{t.from.code ? ` ${t.from.code}` : ''} {dayLabel(t.departDate)} {hhmm(t.departMin)} → {t.to.name}{t.to.code ? ` ${t.to.code}` : ''} {dayLabel(t.arriveDate)} {hhmm(t.arriveMin)}
+              <span class="mono small src">{t.confidence}{t.delayMin ? ` · ${t.delayMin} min late` : ''}</span>
+              {#each t.sources as src, si (src.url)}{si ? ', ' : ' · '}<a href={src.url} target="_blank" rel="noopener noreferrer">{src.title ?? 'source'}</a>{/each}
+            </span>
+            <button class="nm-rowact danger" type="button" disabled={busy} onclick={() => call('DELETE', `${base}/transport/${t.id}`, undefined, 'Journey removed.')}>Remove</button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
 
   <!-- ── Intake ─────────────────────────────────────────── -->
   <details class="nm-sec" open={!data.plan}>
@@ -1056,6 +1103,51 @@
     font-family: var(--font-display);
     font-size: 1.2rem;
     margin: 1.5rem 0 0.8rem;
+  }
+  .lookups {
+    margin-top: 6px;
+    font-size: var(--fs-label-xs);
+    color: var(--text-secondary);
+  }
+  .lookups summary {
+    cursor: pointer;
+  }
+  .lookups ul {
+    margin: 4px 0 0;
+    padding-left: 16px;
+  }
+  .lookups a,
+  .line a {
+    color: var(--accent-ink);
+  }
+  .stage {
+    text-transform: uppercase;
+    color: var(--accent-ink);
+  }
+  .stop-transport strong {
+    color: var(--accent-ink);
+  }
+  .profile {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 14px;
+    margin: 8px 0;
+  }
+  .profile dt {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .profile dd {
+    margin: 0;
+  }
+  .profile ul {
+    margin: 0;
+    padding-left: 16px;
+  }
+  .src {
+    color: var(--text-ghost);
   }
   .guide {
     margin-top: 4px;

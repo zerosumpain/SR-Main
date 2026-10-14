@@ -59,6 +59,7 @@ vi.mock('./store.server', () => ({
   },
   tripOnly: (t: unknown) => t,
   recentMessages: async () => h.messages,
+  listTransport: async () => [],
 }));
 
 vi.mock('./routing.server', async () => {

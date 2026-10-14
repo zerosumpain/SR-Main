@@ -4,7 +4,8 @@ import { requireTripOwner } from '$lib/trips/access.server';
 import { bookingChecklist } from '$lib/trips/booking';
 import { localDateIn } from '$lib/trips/routing';
 import { startGuidance, withGuidance } from '$lib/trips/guidance.server';
-import { getTrip, latestPlan, loadState, planVersions, recentEvents, recentMessages } from '$lib/trips/store.server';
+import { gatherProfile } from '$lib/trips/profile.server';
+import { getTrip, latestPlan, listTransport, loadState, planVersions, recentEvents, recentMessages } from '$lib/trips/store.server';
 
 // One trip: the planning conversation (v2), the latest solved plan with its
 // guidance and what changed, and the constraints the conversation set (intake,
@@ -16,12 +17,15 @@ export const load: PageServerLoad = async (event) => {
   const trip = await getTrip(owner, event.params.id);
   if (!trip) error(404, 'No such trip.');
   event.setHeaders({ 'cache-control': 'private, no-store' });
-  const [state, latest, versions, events, messages] = await Promise.all([
+  // What I know about you (v3): gathered in the background the first time, never awaited here.
+  if (!trip.profile) void gatherProfile(trip).catch(() => {});
+  const [state, latest, versions, events, messages, transport] = await Promise.all([
     loadState(trip.id),
     latestPlan(trip.id),
     planVersions(trip.id, 12),
     recentEvents(trip.id, 20),
     recentMessages(trip.id, 50),
+    listTransport(trip.id),
   ]);
   // Guidance for every day is made lazily, on page view, in the background.
   if (latest) startGuidance(owner, trip.id, 'all');
@@ -47,6 +51,8 @@ export const load: PageServerLoad = async (event) => {
     checklist: bookingChecklist({ wishes: state.wishes, bookings: state.bookings, plan: latest?.plan ?? null, tripStart: trip.startDate, today }),
     events,
     messages,
+    transport,
+    profile: trip.profile,
     guide: trip.guide,
     today,
   };

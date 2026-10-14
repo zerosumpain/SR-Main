@@ -42,13 +42,18 @@ function titlesOf(wishes: Array<{ id: string; title: string }>): Record<string, 
 
 /** The solver's input for a trip as it stands, plus the wishes left out for want of a place. */
 async function solverInput(trip: TripRecord, previous: StoredPlan | null, opts: { reuseMatrix?: boolean } = {}) {
-  const state = await loadState(trip.id);
+  const [state, transport] = await Promise.all([loadState(trip.id), listTransport(trip.id)]);
   // Wishes with no place yet have no matrix point; the solver drops them with
   // a reason (a must with a warning), and the page says "needs a place".
   const placed = state.wishes.filter((w) => !w.suggested && !w.skipped && w.place);
   const points: RoutePoint[] = [
     ...state.stays.map((s) => ({ id: stayPoint(s.id), location: s.location })),
     ...placed.map((w) => ({ id: w.id, location: w.place!.location })),
+    // v3: the airport or station at each end, so transfers are routed like any leg.
+    ...transport.flatMap((t) => [
+      ...(t.from.location ? [{ id: `transport:${t.id}:from`, location: t.from.location }] : []),
+      ...(t.to.location ? [{ id: `transport:${t.id}:to`, location: t.to.location }] : []),
+    ]),
   ];
   const samePoints =
     previous?.matrix && previous.matrix.points.length === points.length && previous.matrix.points.every((p, i) => p === points[i].id);
@@ -62,6 +67,7 @@ async function solverInput(trip: TripRecord, previous: StoredPlan | null, opts: 
     wishes: state.wishes,
     bookings: state.bookings,
     matrix: built.matrix,
+    transport,
   };
   return { input, state, routingNotes: built.notes };
 }

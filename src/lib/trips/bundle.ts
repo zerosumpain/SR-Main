@@ -70,7 +70,15 @@ export const stayPoint = (stayId: string) => `stay:${stayId}`;
 export function daySubMatrix(matrix: TravelMatrix, day: PlannedDay): TravelMatrix {
   const wanted: string[] = [];
   if (day.stayId) wanted.push(stayPoint(day.stayId));
-  for (const s of day.stops) if (s.kind === 'wish' && s.wishId && !wanted.includes(s.wishId)) wanted.push(s.wishId);
+  for (const s of day.stops) {
+    if (s.kind === 'wish' && s.wishId && !wanted.includes(s.wishId)) wanted.push(s.wishId);
+    // v3: an arrival stop is the airport/station it lands at, a departure the one it leaves from.
+    const t = s.kind === 'transport' ? /^transport:(.+):(arrive|depart)$/.exec(s.id) : null;
+    if (t) {
+      const point = `transport:${t[1]}:${t[2] === 'arrive' ? 'to' : 'from'}`;
+      if (!wanted.includes(point)) wanted.push(point);
+    }
+  }
   return sliceMatrix(matrix, wanted);
 }
 

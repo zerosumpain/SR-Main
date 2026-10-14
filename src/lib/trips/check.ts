@@ -37,13 +37,14 @@ export interface TurnDiff {
 }
 
 export function daySnapshot(day: PlannedDay): DaySnapshot {
-  const visits = day.stops.filter((s) => s.kind !== 'stay');
+  // Arriving and leaving (v3 transport stops) frame the day; they are not activity.
+  const visits = day.stops.filter((s) => s.kind !== 'stay' && s.kind !== 'transport');
   const visitMin = visits.reduce((sum, s) => sum + Math.max(0, s.departMin - s.arriveMin - Math.round(s.waitSec / 60)), 0);
   const travelMin = day.legs.reduce((sum, l) => sum + Math.round(l.durationSec / 60), 0);
   const last = day.stops.at(-1);
   return {
     activeMin: visitMin + travelMin,
-    endMin: last ? (last.kind === 'stay' ? last.arriveMin : last.departMin) : null,
+    endMin: last ? (last.kind === 'stay' || last.kind === 'transport' ? last.arriveMin : last.departMin) : null,
     stops: visits.map((s) => s.title),
   };
 }
