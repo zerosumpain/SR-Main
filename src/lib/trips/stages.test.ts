@@ -23,7 +23,7 @@ describe('stages', () => {
     s('stay:2026-10-28:end', 'stay', 1335, 1335),
   ]);
 
-  it('derives stages from meals and times when the plan has none', () => {
+  it('applies the solver’s stage rule to an old plan with no stages', () => {
     expect(d.stops.map((x) => stageOf(x, d))).toEqual(['morning', 'morning', 'morning', 'lunch', 'afternoon', 'evening', 'evening', 'evening']);
   });
 

@@ -1,39 +1,23 @@
 // src/lib/trips/stages.ts
 //
 // A day in four stages (v4): breakfast & morning, lunch, afternoon, dinner &
-// evening. The solver sets `PlannedStop.stage`; until a plan carries it (an
-// older stored version), the stage is derived here from the stop's kind and
-// time — a fallback only. PURE: the studio and its tests share it.
+// evening. The solver sets `PlannedStop.stage` on every stop. A plan STORED
+// before it did (older versions) has none; for those the solver's own rule
+// (`withStages` + `mealOfStop`) assigns them here, so the studio and the
+// solver never disagree. PURE.
 
+import { mealOfStop, withStages } from '$lib/trips/solver';
 import { DAY_STAGES, type DayStage, type PlannedDay, type PlannedLeg, type PlannedStop } from './model';
 
-/** Lunch begins the lunch stage, dinner (or 18:00) the evening, when a plan has no stages. */
-const AFTERNOON_FROM = 14 * 60 + 30;
-const EVENING_FROM = 18 * 60;
-
-function mealTimes(day: PlannedDay): { lunch: number | null; dinner: number | null } {
-  const at = (kind: string) => day.stops.find((s) => s.kind === 'meal' && s.id.endsWith(`:${kind}`))?.arriveMin ?? null;
-  return { lunch: at('lunch'), dinner: at('dinner') };
+/** The day's stops, each with a stage: the solver's, or (old plans) the solver's rule applied now. */
+export function stagedStops(day: PlannedDay): PlannedStop[] {
+  return day.stops.every((s) => s.stage) ? day.stops : withStages(day.stops, (s) => mealOfStop(s));
 }
 
-/** The stage a stop belongs to: the solver's, else derived from its kind and time. */
+/** The stage a stop belongs to within its day. */
 export function stageOf(stop: PlannedStop, day: PlannedDay): DayStage {
   if (stop.stage) return stop.stage;
-  if (stop.kind === 'meal') {
-    if (stop.id.endsWith(':breakfast')) return 'morning';
-    if (stop.id.endsWith(':lunch')) return 'lunch';
-    if (stop.id.endsWith(':dinner')) return 'evening';
-  }
-  const { lunch, dinner } = mealTimes(day);
-  const t = stop.arriveMin;
-  if (dinner !== null ? t >= dinner : t >= EVENING_FROM) return 'evening';
-  if (lunch !== null) {
-    const lunchStop = day.stops.find((s) => s.kind === 'meal' && s.id.endsWith(':lunch'))!;
-    if (t < lunch) return 'morning';
-    if (t < lunchStop.departMin) return 'lunch';
-    return 'afternoon';
-  }
-  return t < 12 * 60 ? 'morning' : t < AFTERNOON_FROM ? 'lunch' : 'afternoon';
+  return stagedStops(day).find((s) => s.id === stop.id)?.stage ?? 'morning';
 }
 
 export interface StageItem {
@@ -56,8 +40,8 @@ export interface StageGroup {
 export function groupDay(day: PlannedDay): StageGroup[] {
   const groups = new Map<DayStage, StageItem[]>(DAY_STAGES.map((s) => [s, []]));
   let floor = 0;
-  day.stops.forEach((stop, index) => {
-    const raw = DAY_STAGES.indexOf(stageOf(stop, day));
+  stagedStops(day).forEach((stop, index) => {
+    const raw = DAY_STAGES.indexOf(stop.stage ?? 'morning');
     // The day's closing stay belongs to the stage it closes, not before it.
     const at = Math.max(raw, stop.kind === 'stay' && index === day.stops.length - 1 ? floor : 0, floor);
     floor = at;
