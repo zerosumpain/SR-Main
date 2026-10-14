@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dietaryHints, gapCentre, metresFromLine, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM } from './nearby-ideas';
+import { dietaryHints, elementsFromNominatim, gapCentre, metresFromLine, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM, nominatimTerms, viewboxAround } from './nearby-ideas';
 import type { Gap } from './ideas';
 
 // v6: the deterministic fallback around a gap (pure half).
@@ -54,5 +54,18 @@ describe('the nearby fallback', () => {
   it('measures distance from a segment, not just its ends', () => {
     expect(metresFromLine({ lat: 41.8986, lng: 12.474 }, PANTHEON, { lat: 41.8986, lng: 12.47 })).toBeLessThan(1);
     expect(metresFromLine({ lat: 41.9, lng: 12.474 }, PANTHEON, { lat: 41.8986, lng: 12.47 })).toBeGreaterThan(100);
+  });
+
+  it('reads Nominatim rows as Overpass elements, with a box around the centre', () => {
+    expect(elementsFromNominatim([{ osm_type: 'way', osm_id: 7, lat: '41.9', lon: '12.47', category: 'tourism', type: 'museum', name: 'Museo', extratags: { wikidata: 'Q1' } }, { name: 'no position' }])).toEqual([
+      { type: 'way', id: 7, lat: 41.9, lon: 12.47, tags: { wikidata: 'Q1', name: 'Museo', tourism: 'museum' } },
+    ]);
+    const [l, t, r, b] = viewboxAround(PANTHEON, 1000).split(',').map(Number);
+    expect(l).toBeLessThan(PANTHEON.lng);
+    expect(r).toBeGreaterThan(PANTHEON.lng);
+    expect(t).toBeGreaterThan(PANTHEON.lat);
+    expect(b).toBeLessThan(PANTHEON.lat);
+    expect(nominatimTerms(lunch)).toEqual(['restaurant', 'cafe']);
+    expect(nominatimTerms({ ...lunch, meal: null })).toEqual(['museum', 'attraction', 'park']);
   });
 });

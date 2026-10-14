@@ -21,11 +21,11 @@ import { logEdit } from './converse.server';
 import { computeGap, ideaDraft, IDEAS_SYSTEM, ideasPrompt, readIdeas, verifyIdea, type Gap, type IdeaDraft, type Verdict } from './ideas';
 import { jsonCall } from './llm.server';
 import { DAY_STAGE_LABEL, type DayStage, type ResearchStep, type Stay, type Wish, type WishDraft } from './model';
-import { dietaryHints, gapCentre, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM, type NearbyCandidate } from './nearby-ideas';
+import { dietaryHints, elementsFromNominatim, gapCentre, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM, nominatimTerms, viewboxAround, type NearbyCandidate } from './nearby-ideas';
 import { solverInput } from './plan.server';
 import { profileText, travellersOnly } from './profile';
 import { parseLooseJson } from './research';
-import { findPlaceLoosely, overpass } from './research.server';
+import { findPlaceLoosely, nominatimAround, overpass } from './research.server';
 import { latestPlan, listTransport, type TripRecord } from './store.server';
 
 export interface Idea {
@@ -48,6 +48,7 @@ export interface IdeasDeps {
   /** v6 test seams: the JSON repair call, the Overpass call, the planner deadline. */
   repair?: (reply: string) => Promise<unknown>;
   overpass?: (query: string) => Promise<unknown>;
+  nominatim?: (term: string, viewbox: string) => Promise<unknown[]>;
   plannerMs?: number;
 }
 
@@ -263,13 +264,24 @@ async function nearbyIdeas(
 ): Promise<{ candidates: NearbyCandidate[]; note: string | null }> {
   const centre = gapCentre(gap);
   if (!centre) return { candidates: [], note: 'the slot has no position to search around' };
-  const query = nearbyIdeasQuery(gap, centre, nearbyRadiusM(gap));
-  const answer = await Promise.resolve()
-    .then(() => (deps.overpass ? deps.overpass(query) : overpass(query, { attempts: 2, timeoutMs: 15_000 })))
+  const radius = nearbyRadiusM(gap);
+  const query = nearbyIdeasQuery(gap, centre, radius);
+  let answer = await Promise.resolve()
+    .then(() => (deps.overpass ? deps.overpass(query) : overpass(query, { attempts: 1, timeoutMs: 12_000 })))
     .catch((err) => {
-      console.warn('[trips/ideas] nearby search failed:', (err as Error)?.message);
+      console.warn('[trips/ideas] Overpass failed:', (err as Error)?.message);
       return null;
     });
+  if (!answer) {
+    // The public Overpass is often busy (504): Nominatim's bounded search, a few paced terms.
+    console.warn('[trips/ideas] Overpass unavailable; trying Nominatim');
+    const box = viewboxAround(centre, radius);
+    const rows: unknown[] = [];
+    for (const term of nominatimTerms(gap)) {
+      rows.push(...(await Promise.resolve().then(() => (deps.nominatim ?? nominatimAround)(term, box)).catch(() => [])));
+    }
+    answer = rows.length ? { elements: elementsFromNominatim(rows) } : null;
+  }
   if (!answer) {
     console.warn('[trips/ideas] nearby search unavailable');
     return { candidates: [], note: 'OpenStreetMap did not answer' };

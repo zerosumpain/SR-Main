@@ -19,7 +19,7 @@ vi.mock('./plan.server', () => ({
   solverInput: async () => ({ input: h.fx.input, state: { stays: h.fx.input.stays, wishes: h.fx.input.wishes, bookings: h.fx.input.bookings } }),
 }));
 vi.mock('./converse.server', () => ({ logEdit: async (_t: string, text: string) => void h.logged.push(text) }));
-vi.mock('./research.server', () => ({ findPlaceLoosely: async () => null, overpass: async () => null }));
+vi.mock('./research.server', () => ({ findPlaceLoosely: async () => null, overpass: async () => null, nominatimAround: async () => [] }));
 vi.mock('./llm.server', () => ({ jsonCall: async () => { throw new Error('no key'); } }));
 vi.mock('./agent.server', () => ({ agentTurn: async () => ({ reply: '{}', research: [], seenUrls: [], toolCalls: 0 }) }));
 
@@ -177,6 +177,21 @@ describe('v6: the Rome lunch gap that came back empty', () => {
     });
     expect(r.ideas[0].source).toBe('nearby');
     expect(h.logged[0]).toMatch(/Planner error: unreadable\./);
+  });
+
+  it('when Overpass is busy, Nominatim’s bounded search stands in', async () => {
+    h.fx = romeLunch();
+    const terms: string[] = [];
+    const r = await findIdeas(trip, LUNCH_ASK, 'phone', {
+      agent: (async () => ({ reply: '{"ideas":[]}', research: [], seenUrls: [], toolCalls: 0 })) as never,
+      overpass: async () => null,
+      nominatim: async (term) => {
+        terms.push(term);
+        return term === 'restaurant' ? [{ osm_type: 'node', osm_id: 1, lat: '41.8989', lon: '12.4757', category: 'amenity', type: 'restaurant', name: 'Armando al Pantheon', extratags: {} }] : [];
+      },
+    });
+    expect(terms).toEqual(['restaurant', 'cafe']);
+    expect(r.ideas[0]).toMatchObject({ source: 'nearby', title: 'Armando al Pantheon', wish: { place: { osmId: 'node/1' } } });
   });
 
   it('says plainly, and logs, when neither the planner nor the map has anything', async () => {

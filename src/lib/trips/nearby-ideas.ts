@@ -79,6 +79,33 @@ export function nearbyIdeasQuery(gap: Gap, centre: LatLng, radiusM: number): str
   return `[out:json][timeout:15];(\n${lines.join('\n')}\n);out center tags 80;`;
 }
 
+/** Nominatim's `viewbox` (left,top,right,bottom) for a circle of `radiusM` around `at`. */
+export function viewboxAround(at: LatLng, radiusM: number): string {
+  const dLat = radiusM / 110_540;
+  const dLng = radiusM / (111_320 * Math.cos((at.lat * Math.PI) / 180));
+  return [at.lng - dLng, at.lat + dLat, at.lng + dLng, at.lat - dLat].map((n) => n.toFixed(5)).join(',');
+}
+
+/** The Nominatim search terms for the gap (each one paced request), when Overpass is unavailable. */
+export function nominatimTerms(gap: Gap): string[] {
+  if (gap.meal === 'breakfast') return ['cafe', 'bakery'];
+  if (gap.meal) return ['restaurant', 'cafe'];
+  return ['museum', 'attraction', 'park'];
+}
+
+/** Nominatim jsonv2 rows as Overpass-style elements, so one ranking serves both. */
+export function elementsFromNominatim(rows: unknown[]): Array<{ type: string; id: number; lat: number; lon: number; tags: Record<string, string> }> {
+  const out: Array<{ type: string; id: number; lat: number; lon: number; tags: Record<string, string> }> = [];
+  for (const raw of rows) {
+    const r = (raw ?? {}) as { osm_type?: string; osm_id?: number; lat?: string; lon?: string; category?: string; type?: string; name?: string; extratags?: Record<string, string> | null };
+    const lat = Number(r.lat);
+    const lon = Number(r.lon);
+    if (!r.osm_type || r.osm_id == null || !r.name || !r.category || !r.type || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    out.push({ type: r.osm_type, id: r.osm_id, lat, lon, tags: { ...(r.extratags ?? {}), name: r.name, [r.category]: r.type } });
+  }
+  return out;
+}
+
 /** Soft dietary hints from the profile ("vegetarian", "vegan", "gluten"…): a ranking nudge, never a filter. */
 export function dietaryHints(profile: Pick<TravellerProfile, 'constraints' | 'preferences'> | null): string[] {
   const text = [...(profile?.constraints ?? []), ...(profile?.preferences ?? [])].map((x) => x.text.toLowerCase()).join(' ');
