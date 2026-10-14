@@ -179,7 +179,7 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
     const arrive = t + legMin;
     let begin = arrive;
     const warnings = [...item.baseWarnings];
-    const what = item.kind === 'meal' ? item.title.toLowerCase() : null;
+    const what = item.kind === 'meal' ? item.title.toLowerCase() : item.replacesMeal;
     if (item.fixedStartMin !== null) {
       if (arrive <= item.fixedStartMin) begin = item.fixedStartMin;
       else {
@@ -377,7 +377,10 @@ export function fitDay(
   let remaining = [...items];
   const dropped: DroppedWish[] = [];
   for (;;) {
-    const meals = remaining.length ? mealsFor(frame, ctx, skipMeals) : [];
+    // A wish that replaces a meal takes that meal's place.
+    const skip = new Set(skipMeals);
+    for (const i of remaining) if (i.replacesMeal) skip.add(`meal:${frame.date}:${i.replacesMeal}`);
+    const meals = remaining.length ? mealsFor(frame, ctx, skip) : [];
     const cost = (seq: Item[]) => withMeals(ctx, frame, start, seq, meals).sim.cost;
     const ordered = orderDay(remaining, cost);
     const { sim } = withMeals(ctx, frame, start, ordered, meals);

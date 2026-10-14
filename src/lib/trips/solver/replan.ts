@@ -34,7 +34,7 @@
 
 import type { Booking, PlannedDay, PlannedStop, ReplanOption, Stay, Wish } from '../model';
 import { fmtMin, cmp } from './calendar';
-import { itemFromStop, pointOfStop, type DayFrame, type Item } from './items';
+import { dayFrame, itemFromStop, pointOfStop, type DayFrame, type Item } from './items';
 import { chooseLeg, legFromPosition, makeContext, type SolverContext } from './matrix';
 import { orderDay } from './order';
 import {
@@ -51,12 +51,7 @@ import {
 import type { ReplanInput, RetimeInput } from './types';
 
 function frameFor(ctx: SolverContext, day: PlannedDay, stays: Stay[]): DayFrame {
-  return {
-    date: day.date,
-    stay: stays.find((s) => s.id === day.stayId) ?? null,
-    dayStartMin: ctx.rules.dayStartMin,
-    dayEndMin: ctx.rules.dayEndMin,
-  };
+  return dayFrame(ctx.rules, ctx.dayLoads, day.date, stays.find((s) => s.id === day.stayId) ?? null);
 }
 
 const isEndStay = (s: PlannedStop) => s.kind === 'stay' && s.id.endsWith(':end');
