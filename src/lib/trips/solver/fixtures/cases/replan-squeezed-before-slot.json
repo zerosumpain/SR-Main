@@ -980,7 +980,9 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": ["Closed by the time you arrive — closes 14:00, you arrive 17:37"]
+            "warnings": [
+              "Closed by the time you arrive — closes 14:00, you arrive 17:37"
+            ]
           },
           {
             "id": "castel",

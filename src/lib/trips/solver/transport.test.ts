@@ -67,6 +67,15 @@ describe('arrival and departure days', () => {
     expect(leave.warnings).toEqual([]);
   });
 
+  it('makes travel days light unless dayLoads says otherwise', () => {
+    const active = (d: PlannedDay) => d.stops.filter((s) => s.kind === 'wish').length;
+    expect(arrive.stops[arrive.stops.length - 1].arriveMin).toBeLessThanOrEqual(19 * 60 - 90);
+    const input = romeTransportInput();
+    input.trip.dayLoads = { '2026-10-27': 'normal' };
+    const normal = solveTrip(input).days[0];
+    expect(active(normal)).toBeGreaterThan(active(arrive));
+  });
+
   it('a check-in stop replaces the bag drop when arriving after check-in', () => {
     const input = romeTransportInput();
     input.stays[0].checkInMin = 12 * 60;

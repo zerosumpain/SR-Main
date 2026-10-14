@@ -2016,48 +2016,16 @@
             "warnings": ["Check-in from 15:00 — any time this evening"]
           },
           {
-            "id": "campo-market",
-            "kind": "wish",
-            "wishId": "campo-market",
-            "title": "Campo de' Fiori market",
-            "location": {
-              "lat": 41.8956,
-              "lng": 12.4722
-            },
-            "arriveMin": 782,
-            "departMin": 812,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
             "id": "meal:2026-10-27:lunch",
             "kind": "meal",
             "wishId": null,
             "title": "Lunch",
             "location": {
-              "lat": 41.8956,
-              "lng": 12.4722
+              "lat": 41.8952,
+              "lng": 12.4716
             },
-            "arriveMin": 822,
-            "departMin": 882,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": ["Late lunch — starts 13:42"]
-          },
-          {
-            "id": "navona",
-            "kind": "wish",
-            "wishId": "navona",
-            "title": "Piazza Navona",
-            "location": {
-              "lat": 41.8992,
-              "lng": 12.4731
-            },
-            "arriveMin": 889,
-            "departMin": 919,
+            "arriveMin": 780,
+            "departMin": 840,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
@@ -2072,24 +2040,8 @@
               "lat": 41.9058,
               "lng": 12.4823
             },
-            "arriveMin": 947,
-            "departMin": 977,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "trevi",
-            "kind": "wish",
-            "wishId": "trevi",
-            "title": "Trevi Fountain",
-            "location": {
-              "lat": 41.9009,
-              "lng": 12.4833
-            },
-            "arriveMin": 996,
-            "departMin": 1016,
+            "arriveMin": 864,
+            "departMin": 894,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
@@ -2104,8 +2056,8 @@
               "lat": 41.8986,
               "lng": 12.4769
             },
-            "arriveMin": 1036,
-            "departMin": 1081,
+            "arriveMin": 919,
+            "departMin": 964,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
@@ -2120,8 +2072,8 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 1101,
-            "departMin": 1101,
+            "arriveMin": 984,
+            "departMin": 984,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
@@ -2140,15 +2092,6 @@
           },
           {
             "fromStopId": "stay:2026-10-27:bags",
-            "toStopId": "campo-market",
-            "mode": "walk",
-            "durationSec": 65,
-            "distanceM": 87,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "campo-market",
             "toStopId": "meal:2026-10-27:lunch",
             "mode": "walk",
             "durationSec": 0,
@@ -2158,37 +2101,19 @@
           },
           {
             "fromStopId": "meal:2026-10-27:lunch",
-            "toStopId": "navona",
-            "mode": "walk",
-            "durationSec": 397,
-            "distanceM": 529,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "navona",
             "toStopId": "spanish-steps",
             "mode": "walk",
-            "durationSec": 1031,
-            "distanceM": 1375,
+            "durationSec": 1438,
+            "distanceM": 1917,
             "estimated": true,
             "line": null
           },
           {
             "fromStopId": "spanish-steps",
-            "toStopId": "trevi",
-            "mode": "walk",
-            "durationSec": 537,
-            "distanceM": 716,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "trevi",
             "toStopId": "pantheon",
             "mode": "walk",
-            "durationSec": 574,
-            "distanceM": 765,
+            "durationSec": 894,
+            "distanceM": 1192,
             "estimated": true,
             "line": null
           },
@@ -2273,17 +2198,33 @@
             "warnings": []
           },
           {
-            "id": "trastevere",
+            "id": "trevi",
             "kind": "wish",
-            "wishId": "trastevere",
-            "title": "Trastevere in the evening",
+            "wishId": "trevi",
+            "title": "Trevi Fountain",
             "location": {
-              "lat": 41.8894,
-              "lng": 12.47
+              "lat": 41.9009,
+              "lng": 12.4833
             },
-            "arriveMin": 983,
-            "departMin": 1110,
-            "waitSec": 2220,
+            "arriveMin": 979,
+            "departMin": 999,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "navona",
+            "kind": "wish",
+            "wishId": "navona",
+            "title": "Piazza Navona",
+            "location": {
+              "lat": 41.8992,
+              "lng": 12.4731
+            },
+            "arriveMin": 1024,
+            "departMin": 1054,
+            "waitSec": 0,
             "locked": false,
             "bookingId": null,
             "warnings": []
@@ -2297,8 +2238,8 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 1131,
-            "departMin": 1131,
+            "arriveMin": 1072,
+            "departMin": 1072,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
@@ -2335,19 +2276,28 @@
           },
           {
             "fromStopId": "capitoline",
-            "toStopId": "trastevere",
+            "toStopId": "trevi",
             "mode": "walk",
-            "durationSec": 1104,
-            "distanceM": 1472,
+            "durationSec": 857,
+            "distanceM": 1143,
             "estimated": true,
             "line": null
           },
           {
-            "fromStopId": "trastevere",
+            "fromStopId": "trevi",
+            "toStopId": "navona",
+            "mode": "walk",
+            "durationSec": 844,
+            "distanceM": 1125,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "navona",
             "toStopId": "stay:2026-10-28:end",
             "mode": "walk",
-            "durationSec": 642,
-            "distanceM": 856,
+            "durationSec": 450,
+            "distanceM": 600,
             "estimated": true,
             "line": null
           }
@@ -2582,32 +2532,32 @@
             "warnings": []
           },
           {
-            "id": "meal:2026-10-30:lunch",
-            "kind": "meal",
-            "wishId": null,
-            "title": "Lunch",
+            "id": "campo-market",
+            "kind": "wish",
+            "wishId": "campo-market",
+            "title": "Campo de' Fiori market",
             "location": {
-              "lat": 41.9142,
-              "lng": 12.4921
+              "lat": 41.8956,
+              "lng": 12.4722
             },
-            "arriveMin": 730,
-            "departMin": 790,
+            "arriveMin": 757,
+            "departMin": 787,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
             "warnings": []
           },
           {
-            "id": "pincio",
-            "kind": "wish",
-            "wishId": "pincio",
-            "title": "Pincio terrace, Villa Borghese",
+            "id": "meal:2026-10-30:lunch",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Lunch",
             "location": {
-              "lat": 41.9113,
-              "lng": 12.4797
+              "lat": 41.8956,
+              "lng": 12.4722
             },
-            "arriveMin": 808,
-            "departMin": 853,
+            "arriveMin": 797,
+            "departMin": 857,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
@@ -2622,7 +2572,7 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 887,
+            "arriveMin": 859,
             "departMin": 940,
             "waitSec": 0,
             "locked": false,
@@ -2667,6 +2617,15 @@
           },
           {
             "fromStopId": "borghese",
+            "toStopId": "campo-market",
+            "mode": "transit",
+            "durationSec": 1587,
+            "distanceM": 3437,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "campo-market",
             "toStopId": "meal:2026-10-30:lunch",
             "mode": "walk",
             "durationSec": 0,
@@ -2676,19 +2635,10 @@
           },
           {
             "fromStopId": "meal:2026-10-30:lunch",
-            "toStopId": "pincio",
-            "mode": "walk",
-            "durationSec": 1049,
-            "distanceM": 1398,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "pincio",
             "toStopId": "stay:2026-10-30:end",
-            "mode": "transit",
-            "durationSec": 1397,
-            "distanceM": 2485,
+            "mode": "walk",
+            "durationSec": 65,
+            "distanceM": 87,
             "estimated": true,
             "line": null
           },
@@ -2705,8 +2655,17 @@
         "warnings": []
       }
     ],
-    "dropped": [],
+    "dropped": [
+      {
+        "wishId": "trastevere",
+        "reason": "No time on Wed 28 Oct — the day would end at 19:54, after 19:00; no other day had room"
+      },
+      {
+        "wishId": "pincio",
+        "reason": "No time on Fri 30 Oct — the day would end at 16:00, after 15:25; no other day had room"
+      }
+    ],
     "warnings": [],
-    "score": 338
+    "score": 469
   }
 }

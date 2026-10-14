@@ -527,7 +527,15 @@
     ],
     "bookings": [],
     "matrix": {
-      "points": ["navona", "pantheon", "spanish-steps", "trevi", "capitoline", "ghetto", "stay:campo"],
+      "points": [
+        "navona",
+        "pantheon",
+        "spanish-steps",
+        "trevi",
+        "capitoline",
+        "ghetto",
+        "stay:campo"
+      ],
       "seconds": {
         "walk": [
           [0, 314, 1031, 844, 1032, 816, 450],
@@ -801,7 +809,13 @@
     "nowMin": 1098,
     "position": null,
     "atStopId": "capitoline",
-    "doneStopIds": ["navona", "pantheon", "spanish-steps", "trevi", "meal:2026-10-27:lunch"]
+    "doneStopIds": [
+      "navona",
+      "pantheon",
+      "spanish-steps",
+      "trevi",
+      "meal:2026-10-27:lunch"
+    ]
   },
   "expected": [
     {

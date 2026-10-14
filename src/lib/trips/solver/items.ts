@@ -88,7 +88,11 @@ export const FULL_DAY_SHARE = 1.2;
 /** The frame for a date under the pace and that date's load. */
 export function dayFrame(ctx: SolverContext, date: LocalDate, stay: Stay | null): DayFrame {
   const rules = ctx.rules;
-  const load = ctx.dayLoads[date] ?? 'normal';
+  // v3: a flight/train landing or leaving this day frames it, and makes it a
+  // light day unless dayLoads says otherwise.
+  const arrives = stay ? arrivalOn(ctx, date) : null;
+  const leaves = stay ? departureOn(ctx, date) : null;
+  const load = ctx.dayLoads[date] ?? (arrives || leaves ? 'light' : 'normal');
   const frame: DayFrame = {
     date,
     stay,
@@ -96,13 +100,10 @@ export function dayFrame(ctx: SolverContext, date: LocalDate, stay: Stay | null)
     dayEndMin: load === 'light' ? rules.dayEndMin - LIGHT_DAY_EARLIER_MIN : rules.dayEndMin,
     load,
   };
-  // v3: a flight/train landing or leaving this day frames it.
-  const arrives = stay ? arrivalOn(ctx, date) : null;
   if (arrives && stay) {
     frame.arrival = arrivalFrame(ctx, arrives, stay, date);
     frame.dayStartMin = Math.max(rules.dayStartMin, frame.arrival.stayStop.departMin);
   }
-  const leaves = stay ? departureOn(ctx, date) : null;
   if (leaves && stay) {
     frame.departure = departureFrame(ctx, leaves, stay);
     frame.dayEndMin = Math.min(frame.dayEndMin, frame.departure.leaveMin - STAY_HANDLING_MIN);
