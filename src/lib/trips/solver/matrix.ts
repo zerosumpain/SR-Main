@@ -7,6 +7,7 @@
 
 import {
   PACE_RULES,
+  TAXI_PICKUP_SEC,
   TRAVEL_MODES,
   type LatLng,
   type PaceRules,
@@ -71,6 +72,31 @@ function cell(
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+/** Taxi time from a drive time: the drive plus the typical wait for pick-up. */
+export function taxiSec(driveSec: number): number {
+  return driveSec + TAXI_PICKUP_SEC;
+}
+
+/**
+ * Seconds and metres for one mode between matrix indices. Taxi is derived
+ * from the drive row (a matrix never has taxi rows); null = no route.
+ */
+export function modeSeconds(
+  matrix: TravelMatrix,
+  mode: TravelMode,
+  i: number,
+  j: number,
+): { seconds: number; metres: number | null; estimated: boolean } | null {
+  const row: TravelMode = mode === 'taxi' ? 'drive' : mode;
+  const sec = cell(matrix.seconds, row, i, j);
+  if (sec === null) return null;
+  return {
+    seconds: mode === 'taxi' ? taxiSec(sec) : sec,
+    metres: cell(matrix.metres, row, i, j),
+    estimated: matrix.estimated[row] ?? false,
+  };
+}
+
 /** Choose the leg between two matrix points by the pace's mode rule. */
 export function chooseLeg(ctx: SolverContext, from: string, to: string): LegChoice {
   if (from === to) return { mode: 'walk', durationSec: 0, distanceM: 0, estimated: false };
@@ -82,14 +108,8 @@ export function chooseLeg(ctx: SolverContext, from: string, to: string): LegChoi
   let choice: LegChoice | null = null;
   if (i !== undefined && j !== undefined) {
     const of = (mode: TravelMode): LegChoice | null => {
-      const sec = cell(ctx.matrix.seconds, mode, i, j);
-      if (sec === null) return null;
-      return {
-        mode,
-        durationSec: sec,
-        distanceM: cell(ctx.matrix.metres, mode, i, j),
-        estimated: ctx.matrix.estimated[mode] ?? false,
-      };
+      const m = modeSeconds(ctx.matrix, mode, i, j);
+      return m ? { mode, durationSec: m.seconds, distanceM: m.metres, estimated: m.estimated } : null;
     };
     const walk = of('walk');
     if (walk && walk.durationSec <= ctx.rules.walkLimitSec) choice = walk;

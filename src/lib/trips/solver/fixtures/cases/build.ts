@@ -7,10 +7,11 @@
 // src/lib/trips/solver/cases.test.ts` — only when a behaviour change is
 // intended, and port it to Swift too.
 
-import type { LatLng, PlannedDay, ReplanOption } from '../../../model';
-import { solveTrip, type ReplanInput, type RetimeInput } from '../../index';
+import type { LatLng, Observation, PlannedDay, ReplanOption, TripReplanOption } from '../../../model';
+import { estimateMatrix } from '../../estimate';
+import { solveTrip, type ReplanInput, type RetimeInput, type TripReplanInput } from '../../index';
 import { sliceMatrix, stayPoint } from '../../matrix';
-import { romeInput } from '../rome';
+import { romeInput, romePoints } from '../rome';
 
 export interface RetimeCaseInput extends RetimeInput {
   day: PlannedDay;
@@ -20,11 +21,19 @@ export interface RetimeCaseInput extends RetimeInput {
 
 export type SolverCase =
   | { name: string; description: string; fn: 'retimeDay'; input: RetimeCaseInput; expected: PlannedDay }
-  | { name: string; description: string; fn: 'replanDay'; input: ReplanInput; expected: ReplanOption[] };
+  | { name: string; description: string; fn: 'replanDay'; input: ReplanInput; expected: ReplanOption[] }
+  | {
+      name: string;
+      description: string;
+      fn: 'replanTrip';
+      input: TripReplanInput;
+      expected: TripReplanOption[];
+    };
 
 export type CaseInput =
   | Omit<Extract<SolverCase, { fn: 'retimeDay' }>, 'expected'>
-  | Omit<Extract<SolverCase, { fn: 'replanDay' }>, 'expected'>;
+  | Omit<Extract<SolverCase, { fn: 'replanDay' }>, 'expected'>
+  | Omit<Extract<SolverCase, { fn: 'replanTrip' }>, 'expected'>;
 
 /** The day's own slice of the Rome input: its wishes, its stay, its matrix. */
 function dayInput(date: string, edit?: (input: ReturnType<typeof romeInput>) => void) {
@@ -208,5 +217,118 @@ export function buildCaseInputs(): CaseInput[] {
       },
     });
   }
+  cases.push(...buildTripCaseInputs());
   return cases;
+}
+
+/**
+ * Whole-trip cases: the full Rome input, the current plan's days and an
+ * observation. Self-contained — the phone never needs solveTrip to replay.
+ */
+function tripInput(
+  date: string,
+  rest: Omit<TripReplanInput, 'trip' | 'stays' | 'wishes' | 'bookings' | 'matrix' | 'day' | 'plannedDays'>,
+  edit?: (input: ReturnType<typeof romeInput>) => void,
+): TripReplanInput {
+  const rome = romeInput();
+  edit?.(rome);
+  const plan = solveTrip(rome);
+  const day = plan.days.find((d) => d.date === date);
+  if (!day) throw new Error(`No planned day ${date}`);
+  return { ...rome, day, plannedDays: plan.days, ...rest };
+}
+
+function observe(
+  kind: Observation['kind'],
+  sinceMin: number,
+  place: Observation['place'],
+  stopId: string | null = null,
+): Observation {
+  return { kind, place, sinceMin, motion: 'stationary', stopId };
+}
+
+const NEAR_CASTEL: LatLng = { lat: 41.9019, lng: 12.4672 };
+const NEAR_PINCIO: LatLng = { lat: 41.9095, lng: 12.4778 };
+const AT_TREVI: LatLng = { lat: 41.9008, lng: 12.4832 };
+
+export function buildTripCaseInputs(): CaseInput[] {
+  return [
+    {
+      name: 'trip-unplanned-stop-pull-forward',
+      description:
+        "Tue 27 Oct, 11:00: sitting at a café by the Tiber since 10:40, a few minutes from Castel Sant'Angelo (planned for Fri 30 Oct). Pull it forward to now.",
+      fn: 'replanTrip',
+      input: tripInput('2026-10-27', {
+        nowMin: 11 * 60,
+        position: NEAR_CASTEL,
+        atStopId: null,
+        doneStopIds: ['navona', 'pantheon'],
+        observation: observe('unplanned-stop', 10 * 60 + 40, {
+          name: 'Caffè sul Tevere',
+          location: NEAR_CASTEL,
+        }),
+      }),
+    },
+    {
+      name: 'trip-missed-slot-resolve-rest',
+      description:
+        'Wed 28 Oct, 14:30, nothing done: the 09:30 Colosseum slot is missed and it can no longer fit today. Re-planning the rest of the trip moves it to a later day.',
+      fn: 'replanTrip',
+      input: tripInput('2026-10-28', {
+        nowMin: 14 * 60 + 30,
+        position: null,
+        atStopId: null,
+        doneStopIds: [],
+        observation: observe('behind', 9 * 60 + 40, null),
+      }),
+    },
+    {
+      name: 'trip-out-of-order',
+      description:
+        'Tue 27 Oct, 10:00: after Piazza Navona they walked straight to the Trevi Fountain, a later stop of today. Do it now and carry on.',
+      fn: 'replanTrip',
+      input: tripInput('2026-10-27', {
+        nowMin: 10 * 60,
+        position: AT_TREVI,
+        atStopId: null,
+        doneStopIds: ['navona'],
+        observation: observe(
+          'out-of-order',
+          9 * 60 + 55,
+          { name: 'Trevi Fountain', location: AT_TREVI },
+          'trevi',
+        ),
+      }),
+    },
+    {
+      name: 'trip-taxi-vs-transit',
+      description:
+        'Taxi allowed: Thu 29 Oct, 08:40, still at the flat. The Vatican leg is too far to walk; a taxi (drive + 8 min pick-up) beats transit (15 min overhead).',
+      fn: 'replanTrip',
+      input: tripInput(
+        '2026-10-29',
+        { nowMin: 8 * 60 + 40, position: null, atStopId: null, doneStopIds: [], observation: null },
+        (rome) => {
+          rome.trip.modes = ['walk', 'transit', 'taxi'];
+          rome.matrix = estimateMatrix(romePoints(rome.wishes, rome.stays), rome.trip.modes);
+        },
+      ),
+    },
+    {
+      name: 'trip-stay-here-no-slack',
+      description:
+        "Fri 30 Oct, 11:00: after the Pincio they sat down at a bar since 10:20. Staying until 11:30 leaves no room before the 15:00 Borghese slot, so a nice goes (it's the last day).",
+      fn: 'replanTrip',
+      input: tripInput('2026-10-30', {
+        nowMin: 11 * 60,
+        position: NEAR_PINCIO,
+        atStopId: null,
+        doneStopIds: ['pincio'],
+        observation: observe('unplanned-stop', 10 * 60 + 20, {
+          name: 'Bar on the Pincio',
+          location: NEAR_PINCIO,
+        }),
+      }),
+    },
+  ];
 }

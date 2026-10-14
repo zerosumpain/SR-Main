@@ -100,10 +100,16 @@ export function assignDays(
     else free.push(wish);
   }
 
+  // Open that day, with a window still long enough after the day starts
+  // (matters when re-planning from the middle of today).
   const openDays = (wish: Wish) =>
     frames.filter((f) => {
       const w = windowsOn(wish.facts, f.date);
-      return w === null || w.length > 0;
+      const need = visitMin(wish, null);
+      return (
+        w === null ||
+        w.some((x) => Math.min(x.closeMin, f.dayEndMin) - Math.max(x.openMin, f.dayStartMin) >= need)
+      );
     });
   free.sort((a, b) => {
     const pa = a.priority === 'must' ? 0 : 1;

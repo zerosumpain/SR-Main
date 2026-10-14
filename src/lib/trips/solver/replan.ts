@@ -128,7 +128,7 @@ export function retimeDay(
 }
 
 /** Problems dropping a nice can fix (lateness for a slot is `repair`'s job). */
-function hasProblems(sim: Simulation): boolean {
+export function hasProblems(sim: Simulation): boolean {
   return sim.overrunMin > 0 || sim.issues.some((x) => x.kind !== 'late-for-slot');
 }
 
@@ -167,7 +167,7 @@ interface Repaired {
  * nothing before it to remove stays, with its "Booked for" warning — only
  * possible within the missed-slot grace period.
  */
-function repair(
+export function repair(
   ctx: SolverContext,
   frame: DayFrame,
   start: SimStart,
@@ -211,7 +211,30 @@ function repair(
   return { seq: current, sim: simulate(ctx, frame, start, current), dropped, moved };
 }
 
-export function replanDay(input: ReplanInput): ReplanOption[] {
+/** Where the person is in today's plan, as the re-planners see it. */
+export interface Situation {
+  ctx: SolverContext;
+  frame: DayFrame;
+  done: Set<string>;
+  /** Stops already behind us (kept as they are), ending with where we are. */
+  prefix: PlannedStop[];
+  /** Today's stops still to do (no stays), as planned. */
+  pending: PlannedStop[];
+  /** Index of `atStopId` in the day (without the end stay), or -1. */
+  at: number;
+  leave: number;
+  start: SimStart;
+  /** Pending stops as items: missed slots removed, locked stops held. */
+  items: Item[];
+  missed: Item[];
+  missedWarnings: string[];
+  missedIds: string[];
+  /** Earliest arrival at an item going straight there from `start`. */
+  direct: (item: Item) => number;
+  oldEnd: number;
+}
+
+export function situation(input: ReplanInput): Situation {
   const { day } = input;
   const ctx = makeContext(input.trip, input.stays, input.wishes, input.matrix);
   const frame = frameFor(ctx, day, input.stays);
@@ -238,7 +261,7 @@ export function replanDay(input: ReplanInput): ReplanOption[] {
 
   const start = startAfter(prefix, day, leave);
   if (input.position && at < 0) start.fromPosition = input.position;
-  let items = toItems(pending, day, input.wishes, input.bookings, ctx);
+  const all = toItems(pending, day, input.wishes, input.bookings, ctx);
 
   // Missed slots: a locked stop we cannot reach within the grace period
   // even going straight there. It leaves today's plan, is listed in every
@@ -250,19 +273,77 @@ export function replanDay(input: ReplanInput): ReplanOption[] {
     if (start.fromPoint === null) return leave;
     return leave + Math.ceil(chooseLeg(ctx, start.fromPoint, item.point).durationSec / 60);
   };
-  const missed = items.filter(
+  const missed = all.filter(
     (i) => i.locked && i.fixedStartMin !== null && direct(i) > i.fixedStartMin + MISSED_SLOT_GRACE_MIN,
   );
-  items = items
+  const items = all
     .filter((i) => !missed.includes(i))
     .map((i) => {
       const planned = i.locked ? pending.find((p) => p.id === i.id) : undefined;
       return planned ? { ...i, heldArriveMin: planned.arriveMin } : i;
     });
-  const missedWarnings = missed.map(
-    (m) => `Missed your ${fmtMin(m.fixedStartMin as number)} ${m.title} slot`,
-  );
-  const missedIds = missed.map((m) => m.wishId ?? m.id);
+  return {
+    ctx,
+    frame,
+    done,
+    prefix,
+    pending,
+    at,
+    leave,
+    start,
+    items,
+    missed,
+    missedWarnings: missed.map((m) => `Missed your ${fmtMin(m.fixedStartMin as number)} ${m.title} slot`),
+    missedIds: missed.map((m) => m.wishId ?? m.id),
+    direct,
+    oldEnd,
+  };
+}
+
+/**
+ * Make a sequence work without reordering it: drop the nices squeezing a
+ * locked slot, then any closed on arrival, then the lowest value, until the
+ * day has no problems; unlocked stops a slot still can't absorb move after it.
+ */
+export function settle(
+  ctx: SolverContext,
+  frame: DayFrame,
+  start: SimStart,
+  seq: Item[],
+): { seq: Item[]; sim: Simulation; gone: Item[]; moved: Array<[Item, Item]> } {
+  const first = repair(ctx, frame, start, seq, true);
+  let current = first.seq;
+  let sim = first.sim;
+  const gone: Item[] = [...first.dropped];
+  let moved = first.moved;
+  while (hasProblems(sim)) {
+    const candidates = current.filter(droppable);
+    if (!candidates.length) break;
+    const closed = candidates
+      .filter((c) => sim.issues.some((x) => x.itemId === c.id && x.kind === 'closed'))
+      .sort(byLowestValue);
+    const victim = closed[0] ?? [...candidates].sort(byLowestValue)[0];
+    const next = repair(
+      ctx,
+      frame,
+      start,
+      current.filter((c) => c !== victim),
+      true,
+    );
+    // Only drop when it buys more than the nice is worth.
+    if (next.sim.cost + COST.droppedNice * (next.dropped.length + 1) >= sim.cost) break;
+    gone.push(victim);
+    current = next.seq;
+    sim = next.sim;
+    gone.push(...next.dropped);
+    moved = next.moved;
+  }
+  return { seq: current, sim, gone, moved };
+}
+
+export function replanDay(input: ReplanInput): ReplanOption[] {
+  const { ctx, frame, pending, start, items, missed, missedWarnings, missedIds, direct, oldEnd } =
+    situation(input);
 
   const options: Array<ReplanOption & { score: number }> = [];
   const make = (
@@ -317,28 +398,7 @@ export function replanDay(input: ReplanInput): ReplanOption[] {
   // 2. Drop nices until the day works: first those squeezing a slot, then
   // any that would be closed on arrival, then the lowest value.
   if (hasProblems(shift.sim) || shift.moved.length) {
-    const first = repairSeq(items, true);
-    let current = first.seq;
-    let sim = first.sim;
-    const gone: Item[] = [...first.dropped];
-    let moved = first.moved;
-    while (hasProblems(sim)) {
-      const candidates = current.filter(droppable);
-      if (!candidates.length) break;
-      const closed = candidates
-        .filter((c) => sim.issues.some((x) => x.itemId === c.id && x.kind === 'closed'))
-        .sort(byLowestValue);
-      const victim = closed[0] ?? [...candidates].sort(byLowestValue)[0];
-      gone.push(victim);
-      const next = repairSeq(
-        current.filter((c) => c !== victim),
-        true,
-      );
-      current = next.seq;
-      sim = next.sim;
-      gone.push(...next.dropped);
-      moved = next.moved;
-    }
+    const { sim, gone, moved } = settle(ctx, frame, start, items);
     if (gone.length) {
       const names = gone.map((g) => g.title);
       make(

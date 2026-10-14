@@ -164,7 +164,8 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
     if (prevStopId === null) return 0;
     let c: LegChoice;
     if (first && start.fromPosition && to !== null) c = legFromPosition(ctx, start.fromPosition, to);
-    else if (point === null || to === null) c = ZERO_LEG;
+    else if (to === null) c = ZERO_LEG;
+    else if (point === null) c = prevLocation ? legFromPosition(ctx, prevLocation, to) : ZERO_LEG;
     else c = chooseLeg(ctx, point, to);
     first = false;
     legs.push(legOf(prevStopId, toStopId, c));
@@ -371,11 +372,12 @@ export function fitDay(
   frame: DayFrame,
   items: Item[],
   start = freshStart(frame),
+  skipMeals: Set<string> = new Set(),
 ): FitResult {
   let remaining = [...items];
   const dropped: DroppedWish[] = [];
   for (;;) {
-    const meals = remaining.length ? mealsFor(frame, ctx) : [];
+    const meals = remaining.length ? mealsFor(frame, ctx, skipMeals) : [];
     const cost = (seq: Item[]) => withMeals(ctx, frame, start, seq, meals).sim.cost;
     const ordered = orderDay(remaining, cost);
     const { sim } = withMeals(ctx, frame, start, ordered, meals);

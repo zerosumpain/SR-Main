@@ -1,10 +1,11 @@
 // Replays the shared solver cases (fixtures/cases/*.json). The iPhone app
-// replays the same files against its Swift port of retimeDay/replanDay.
+// replays the retimeDay/replanDay files against its Swift port (replanTrip
+// cases are server-side; the phone may use them to check offline pull-forward).
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { replanDay, retimeDay } from './index';
+import { replanDay, replanTrip, retimeDay } from './index';
 import { buildCaseInputs, type SolverCase } from './fixtures/cases/build';
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'cases');
@@ -17,6 +18,7 @@ function run(c: Omit<SolverCase, 'expected'> & { fn: SolverCase['fn'] }): unknow
     >['input'];
     return retimeDay(day, fromIndex, startMin, rest);
   }
+  if (c.fn === 'replanTrip') return replanTrip(c.input as Extract<SolverCase, { fn: 'replanTrip' }>['input']);
   return replanDay(c.input as Extract<SolverCase, { fn: 'replanDay' }>['input']);
 }
 
