@@ -56,7 +56,7 @@ async function solverInput(trip: TripRecord, previous: StoredPlan | null, opts: 
       ? { matrix: previous.matrix, notes: [] }
       : await buildStoredMatrix(points, trip);
   const input: SolverInput = {
-    trip: { id: trip.id, timeZone: trip.timeZone, startDate: trip.startDate, endDate: trip.endDate, pace: trip.pace, modes: trip.modes },
+    trip: { id: trip.id, timeZone: trip.timeZone, startDate: trip.startDate, endDate: trip.endDate, pace: trip.pace, modes: trip.modes, dayLoads: trip.dayLoads ?? {} },
     stays: state.stays,
     wishes: state.wishes,
     bookings: state.bookings,
