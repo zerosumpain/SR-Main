@@ -25,7 +25,8 @@ describe.skipIf(!process.env.DATABASE_URL)('trip store', () => {
     const versions = await Promise.all([1, 2, 3].map(() => appendPlan(t.id, { source: 'site', inputHash: 'h', plan, matrix: null, changes: [] })));
     expect(versions.map((v) => v.version).sort()).toEqual([1, 2, 3]);
     expect((await latestPlan(t.id))?.version).toBe(3);
-    expect((await listTrips(OWNER))[0]).toMatchObject({ id: t.id, planVersion: 3, status: 'planned' });
+    // v5: every trip is listed (open to the family), so find this one.
+    expect((await listTrips(OWNER)).find((x) => x.id === t.id)).toMatchObject({ id: t.id, planVersion: 3, status: 'planned' });
   });
 
   it('records each clientId once', async () => {
