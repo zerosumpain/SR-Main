@@ -42,7 +42,7 @@ import {
 const CACHE_TTL_MS = 30 * 86_400_000;
 const CACHE_MAX = 6000;
 const ORS_BASE = 'https://api.openrouteservice.org';
-const ORS_PROFILE: Partial<Record<TravelMode, string>> = { walk: 'foot-walking', cycle: 'cycling-regular', drive: 'driving-car' };
+const ORS_PROFILE: Partial<Record<TravelMode, string>> = { walk: 'foot-walking', cycle: 'cycling-regular', drive: 'driving-car', taxi: 'driving-car' };
 /** ORS free plan: 3,500 matrix elements per request; stay well under it. */
 const ORS_MAX_POINTS = 50;
 const TRANSITOUS = 'https://api.transitous.org/api/v1/plan';

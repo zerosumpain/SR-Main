@@ -11,6 +11,20 @@ const h = vi.hoisted(() => ({
   stays: [] as Stay[],
   added: [] as unknown[],
   status: 'planned',
+  messages: [] as unknown[],
+  guidanceRuns: 0,
+  model: null as null | ((messages: unknown[]) => unknown),
+}));
+
+vi.mock('./guidance.server', () => ({
+  startGuidance: () => void h.guidanceRuns++,
+  withGuidance: async (_t: string, plan: unknown) => plan,
+}));
+vi.mock('./llm.server', () => ({
+  jsonCall: async (_w: string, messages: unknown[]) => {
+    if (!h.model) throw new Error('no model');
+    return h.model(messages);
+  },
 }));
 
 vi.mock('./store.server', () => ({
@@ -44,6 +58,7 @@ vi.mock('./store.server', () => ({
     if (p.status) h.status = p.status;
   },
   tripOnly: (t: unknown) => t,
+  recentMessages: async () => h.messages,
 }));
 
 vi.mock('./routing.server', async () => {
@@ -57,7 +72,7 @@ vi.mock('./routing.server', async () => {
   };
 });
 
-const { applyEvents, replan, storePhoneDay, tripBundle } = await import('./plan.server');
+const { applyEvents, fallbackNarrative, replan, storePhoneDay, storePhoneDays, tripBundle, tripReplan } = await import('./plan.server');
 
 function trip() {
   const t = romeInput().trip;
@@ -72,6 +87,9 @@ beforeEach(() => {
   h.stays = input.stays;
   h.added = [];
   h.status = 'planned';
+  h.messages = [];
+  h.guidanceRuns = 0;
+  h.model = null;
 });
 
 describe('replan', () => {
@@ -131,5 +149,58 @@ describe('the phone', () => {
     expect(m.points[0]).toBe('stay:campo');
     expect(m.points.slice(1).sort()).toEqual(day.stops.filter((s) => s.kind === 'wish').map((s) => s.wishId).sort());
     expect(m.seconds.walk).toHaveLength(m.points.length);
+    // v2: the whole-trip matrix, messages and guide travel too, under the ETag.
+    expect(a.tripMatrix?.points.length).toBeGreaterThan(m.points.length);
+    expect(a.messages).toEqual([]);
+    h.messages = [{ id: 'm1', role: 'user', text: 'hi', ops: [], planVersion: null, surface: 'phone', createdAt: '2026-10-14T09:00:00Z' }];
+    const c = await tripBundle(trip());
+    expect(c.messages).toHaveLength(1);
+    expect(c.etag).not.toBe(a.etag);
+  });
+
+  it('applies a whole-trip option (detail.days) as one phone version', async () => {
+    await replan(trip());
+    const before = h.plans[0].plan as SolvedPlan;
+    const days = [
+      { ...before.days[2], warnings: ['moved'] },
+      { ...before.days[3], warnings: ['moved'], stops: [...before.days[3].stops, { ...before.days[3].stops[0], id: 'here:2026-10-30:700', wishId: null, kind: 'wish' as const, title: 'Bar del Fico' }] },
+    ];
+    const r = await applyEvents(trip(), [{ clientId: 't1', kind: 'option-applied', stopId: null, wishId: null, at: '2026-10-29T12:00:00Z', detail: { option: 'resolve-rest', days } }]);
+    expect(r.planVersion).toBe(2);
+    const stored = h.plans[1].plan as SolvedPlan;
+    expect(stored.days.map((d) => d.warnings.includes('moved'))).toEqual([false, false, true, true]);
+    expect(stored.days[3].stops.some((s) => s.id === 'here:2026-10-30:700')).toBe(true);
+    expect(h.guidanceRuns).toBe(2);
+    expect(await storePhoneDays(trip(), [])).toBeNull();
+  });
+});
+
+describe('off the plan (v2)', () => {
+  const body = {
+    date: '2026-10-28', nowMin: 13 * 60, position: { lat: 41.8892, lng: 12.4703 }, atStopId: null, doneStopIds: [], scope: 'trip' as const,
+    observation: { kind: 'unplanned-stop' as const, place: { name: 'Bar del Fico', location: { lat: 41.8892, lng: 12.4703 } }, sinceMin: 12 * 60 + 40, motion: 'stationary' as const, stopId: null },
+  };
+
+  it('offers whole-trip options and a plain narrative without a model', async () => {
+    await replan(trip());
+    const r = await tripReplan(trip(), body);
+    expect(r.tripOptions.length).toBeGreaterThan(0);
+    expect(r.tripOptions.length).toBeLessThanOrEqual(3);
+    expect(r.narrative).toBe(fallbackNarrative(body.observation, r.tripOptions));
+    expect(r.narrative).toMatch(/^You have stopped somewhere that is not on the plan\./);
+    expect(r.quickReplies).toEqual([]);
+    expect(h.plans).toHaveLength(1); // nothing stored until applied
+  });
+
+  it('uses the planner for the narrative and its quick replies', async () => {
+    await replan(trip());
+    h.model = () => ({ narrative: 'You have found a bar in Trastevere. I would stay a little and drop the Spanish Steps.', quickReplies: ['Find me lunch near here', 'x'.repeat(200)] });
+    const r = await tripReplan(trip(), body);
+    expect(r.narrative).toMatch(/Trastevere/);
+    expect(r.quickReplies).toEqual(['Find me lunch near here', 'x'.repeat(80)]);
+  });
+
+  it('says so when there is no plan', async () => {
+    expect(await tripReplan(trip(), body)).toEqual({ tripOptions: [], narrative: 'There is no plan yet to re-plan.', quickReplies: [] });
   });
 });

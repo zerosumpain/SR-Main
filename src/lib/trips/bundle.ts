@@ -9,6 +9,8 @@ import { sliceMatrix } from '$lib/trips/solver';
 import type {
   Booking,
   LocalDate,
+  TripGuide,
+  TripMessage,
   PlannedDay,
   SolvedPlan,
   Stay,
@@ -45,6 +47,12 @@ export interface TripBundle {
   bookings: Booking[];
   plan: BundlePlan | null;
   matrices: Record<LocalDate, TravelMatrix>;
+  /** v2: every point, for a simple offline pull-forward on the phone. */
+  tripMatrix: TravelMatrix | null;
+  /** v2: the planning conversation, last 50, oldest first. */
+  messages: TripMessage[];
+  /** v2: the city guide. */
+  guide: TripGuide | null;
   etag: string;
 }
 

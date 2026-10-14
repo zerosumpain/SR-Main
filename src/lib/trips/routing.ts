@@ -92,9 +92,16 @@ export function assembleMode(
   return { seconds, metres, estimatedCells };
 }
 
-/** Modes the matrix carries for a trip: walk always, then the ones chosen, in canonical order. */
+/**
+ * Modes the matrix is ROUTED for: walk always, then the ones chosen, in
+ * canonical order. Taxi is never routed or stored as a row: the solver takes
+ * it from the drive row plus the pickup wait (`taxiSec`), so choosing taxi
+ * routes drive.
+ */
 export function matrixModes(modes: TravelMode[]): TravelMode[] {
-  return (['walk', 'cycle', 'drive', 'transit'] as TravelMode[]).filter((m) => m === 'walk' || modes.includes(m));
+  const wanted = new Set<TravelMode>(['walk', ...modes]);
+  if (wanted.has('taxi')) wanted.add('drive');
+  return (['walk', 'cycle', 'drive', 'transit'] as TravelMode[]).filter((m) => wanted.has(m));
 }
 
 /** An empty matrix over the given points (no modes yet). */
