@@ -991,6 +991,26 @@
     display: grid;
     gap: 10px;
   }
+  @media (max-width: 900px) {
+    .ov-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 640px) {
+    .studio-wrap {
+      padding: 1rem 16px 3rem;
+    }
+    .panel {
+      padding: 12px;
+    }
+    .dc-stage {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+    .day-num {
+      font-size: 2.2rem;
+    }
+  }
   .talk {
     position: sticky;
     top: calc(var(--site-nav-height, 48px) + 8px);
