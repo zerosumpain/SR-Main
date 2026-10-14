@@ -16,8 +16,14 @@ export interface LatLng {
   lng: number;
 }
 
-export type TravelMode = 'walk' | 'cycle' | 'drive' | 'transit';
-export const TRAVEL_MODES: readonly TravelMode[] = ['walk', 'cycle', 'drive', 'transit'];
+/**
+ * `taxi` (v2) is a drive leg the person does not drive: drive-matrix time plus
+ * TAXI_PICKUP_SEC, and its guidance says how to get one in that city.
+ */
+export type TravelMode = 'walk' | 'cycle' | 'drive' | 'transit' | 'taxi';
+export const TRAVEL_MODES: readonly TravelMode[] = ['walk', 'cycle', 'drive', 'transit', 'taxi'];
+/** Typical wait for a taxi to arrive, added to the drive time. */
+export const TAXI_PICKUP_SEC = 8 * 60;
 
 export type Pace = 'relaxed' | 'normal' | 'packed';
 
@@ -157,6 +163,8 @@ export interface Wish {
   facts: Facts | null;
   note: string | null;
   sortHint: number;
+  /** v2: what to know when you're there (model-written from facts). */
+  guide?: StopGuide | null;
 }
 
 export type BookingStatus = 'to-book' | 'booked' | 'cancelled';
@@ -207,6 +215,8 @@ export interface PlannedLeg {
   estimated: boolean;
   /** Simplified line for drawing, ≤ 300 points. Null until routed. */
   line: LatLng[] | null;
+  /** v2: how to actually do this leg. Null until guidance has been generated. */
+  guidance?: LegGuidance | null;
 }
 
 export interface PlannedDay {
@@ -294,4 +304,147 @@ export interface ReplanOption {
   dropped: string[];
   /** Minutes later the day ends than planned (negative = earlier). */
   endsLaterMin: number;
+}
+
+// ── v2: guidance, the planning conversation, going off-plan ─────────────────
+
+/** A link the phone can open (URL, `tel:`, or an app's universal link). */
+export interface GuideLink {
+  label: string;
+  url: string;
+}
+
+/**
+ * How to do one leg, written for someone standing at the start of it.
+ * Walking: `steps` are short directions; the route is the leg's `line`.
+ * Transit: `transit` names the lines and stops. Taxi: `booking` says how to
+ * get one (rank, app, phone) with links. Model-written from routed data and
+ * the trip's `TripGuide`; `source` says which.
+ */
+export interface LegGuidance {
+  /** "12 min walk via Via del Corso" / "Bus 64 from Largo Argentina, 4 stops". */
+  summary: string;
+  steps: string[];
+  transit: Array<{
+    line: string;
+    vehicle: 'bus' | 'tram' | 'metro' | 'train' | 'ferry' | 'other';
+    fromStop: string;
+    toStop: string;
+    stops: number | null;
+    /** Local minutes of the next few departures, when known. */
+    departuresMin: number[];
+  }> | null;
+  booking: { how: string; links: GuideLink[]; phone: string | null } | null;
+  /** "Buy a BIT ticket at a tabacchi before boarding", "Validate on board". */
+  tips: string[];
+  costText: string | null;
+  source: 'router' | 'model' | 'mixed';
+  generatedAt: string;
+}
+
+/** What to know at a stop: entry, tickets, dress code, what not to miss. */
+export interface StopGuide {
+  summary: string;
+  tips: string[];
+  links: GuideLink[];
+  generatedAt: string;
+}
+
+/** City-level know-how, made once per trip and reused by every leg's guidance. */
+export interface TripGuide {
+  gettingAround: string;
+  taxi: { how: string; links: GuideLink[]; phone: string | null } | null;
+  transitTickets: string | null;
+  tips: string[];
+  generatedAt: string;
+}
+
+/**
+ * The planning conversation. The trip is developed by talking to a model; the
+ * forms are a VIEW of the constraints the conversation sets. A form edit is
+ * also logged here (role 'event') so the model always sees what changed.
+ */
+export interface TripMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'event';
+  text: string;
+  /** Operations the assistant applied (or a form edit recorded as ops). */
+  ops: TripOp[];
+  /** Plan version after this message, if it changed the plan. */
+  planVersion: number | null;
+  /** Where it was said. */
+  surface: 'site' | 'phone';
+  createdAt: string;
+}
+
+export interface WishDraft {
+  title: string;
+  /** A place name to resolve (OSM). */
+  placeQuery: string | null;
+  priority: Priority;
+  durationMin: number | null;
+  partOfDay: PartOfDay;
+  fixedDate: LocalDate | null;
+  fixedStartMin: number | null;
+  note: string | null;
+}
+
+/**
+ * The only way the model changes a trip. Applied server-side in order,
+ * validated, then the trip re-solves once. Ids refer to existing rows.
+ */
+export type TripOp =
+  | { op: 'setTrip'; fields: Partial<Pick<Trip, 'title' | 'destination' | 'timeZone' | 'startDate' | 'endDate' | 'pace' | 'modes' | 'notes'>> }
+  | { op: 'addStay'; name: string; placeQuery: string; fromDate: LocalDate; toDate: LocalDate; checkInMin: number | null; checkOutMin: number | null }
+  | { op: 'updateStay'; id: string; fields: Partial<Pick<Stay, 'name' | 'fromDate' | 'toDate' | 'checkInMin' | 'checkOutMin'>> & { placeQuery?: string } }
+  | { op: 'removeStay'; id: string }
+  | { op: 'addWish'; wish: WishDraft }
+  | { op: 'updateWish'; id: string; fields: Partial<WishDraft> & { locked?: boolean; skipped?: boolean; suggested?: boolean } }
+  | { op: 'removeWish'; id: string }
+  | { op: 'addBooking'; booking: Omit<Booking, 'id'> }
+  | { op: 'updateBooking'; id: string; fields: Partial<Omit<Booking, 'id'>> }
+  | { op: 'research'; wishIds: string[]; depth: 'brief' | 'deep' }
+  | { op: 'suggestNearby'; near: string | null; theme: string | null };
+
+/** One turn's answer from the planner. */
+export interface ConverseResult {
+  reply: string;
+  applied: TripOp[];
+  /** Ops the model proposed that were rejected, with why. */
+  rejected: Array<{ op: TripOp; reason: string }>;
+  /** Short follow-up questions the UI can offer as buttons. */
+  quickReplies: string[];
+  planVersion: number | null;
+  changes: string[];
+}
+
+/** What the phone saw that made it think the person is off the plan. */
+export type OffPlanKind = 'behind' | 'off-route' | 'unplanned-stop' | 'out-of-order' | 'idle';
+
+export interface Observation {
+  kind: OffPlanKind;
+  /** Where they are dwelling, if somewhere (reverse-geocoded on the phone). */
+  place: { name: string | null; location: LatLng } | null;
+  /** Local minute the condition started. */
+  sinceMin: number;
+  motion: 'walking' | 'cycling' | 'automotive' | 'stationary' | 'unknown';
+  /** A later stop they reached early (out-of-order). */
+  stopId: string | null;
+}
+
+/**
+ * A whole-trip re-plan from now. `days` are today and every later day; earlier
+ * days are unchanged. Server-only (needs solveTrip); the phone falls back to
+ * replanDay offline.
+ */
+export interface TripReplanOption {
+  id: string;
+  label: string;
+  kind: 'carry-on' | 'resolve-rest' | 'pull-forward' | 'stay-here';
+  days: PlannedDay[];
+  dropped: string[];
+  /** Wishes moved to a different day than before, with where to. */
+  moved: Array<{ wishId: string; from: LocalDate | null; to: LocalDate }>;
+  /** One or two plain sentences: why this option. Model-written when online. */
+  explanation: string;
 }
