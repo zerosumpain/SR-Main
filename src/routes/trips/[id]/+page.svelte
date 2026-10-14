@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { postAsJob } from '$lib/trips/job-client';
   import { invalidateAll, replaceState } from '$app/navigation';
   import { tick, untrack } from 'svelte';
   import StageBand from '$lib/components/trips/StageBand.svelte';
@@ -126,9 +127,9 @@
     quick = [];
     problem = null;
     try {
-      const res = await fetch(`${base}/converse`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: t }) });
-      const out = (await res.json().catch(() => ({}))) as { quickReplies?: string[]; error?: string; changes?: string[]; planVersion?: number | null };
-      if (!res.ok) {
+      // v6: as a job, polled, so a long turn is not cut off by a proxy timeout.
+      const { ok, body: out } = await postAsJob<{ quickReplies?: string[]; changes?: string[]; planVersion?: number | null }>(`${base}/converse`, { text: t });
+      if (!ok) {
         problem = out.error ?? 'The planner did not answer.';
         draft = t;
       } else {

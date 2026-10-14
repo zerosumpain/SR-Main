@@ -16,7 +16,7 @@ import { getLLMClient } from '$lib/llm/client';
 import { runToolLoop, type ToolLoopCall } from '$lib/llm/tool-loop';
 import { getWorkload } from '$lib/models/workloads';
 import { resolveWorkloadModel } from '$lib/server/models/workload-settings';
-import { newBudget, PLANNER_TOOLS, readAeroDataBox, researchStep, spend } from './agent';
+import { BUDGET, newBudget, PLANNER_TOOLS, readAeroDataBox, researchStep, spend, type BudgetLimits } from './agent';
 import { localDateIn, localToIso, timetableDate } from './routing';
 import type { LatLng, ResearchStep, Stay, TravelMode, Wish } from './model';
 import { estimateLeg, windowsOn } from '$lib/trips/solver';
@@ -206,7 +206,7 @@ export const LIVE_TOOLS: AgentTools = {
 export async function agentTurn(
   messages: Array<Record<string, unknown>>,
   ctx: AgentContext,
-  opts: { tools?: AgentTools; client?: { client: OpenAI; model: string }; timeoutMs?: number; finalPrompt?: string } = {},
+  opts: { tools?: AgentTools; client?: { client: OpenAI; model: string }; timeoutMs?: number; finalPrompt?: string; budget?: BudgetLimits } = {},
 ): Promise<AgentResult> {
   let llm = opts.client;
   if (!llm) {
@@ -223,15 +223,15 @@ export async function agentTurn(
     model: llm.model,
     messages,
     tools: PLANNER_TOOLS,
-    // Six lookups at most, so seven rounds is enough; a forced final answers.
-    maxRounds: 7,
+    // N lookups at most, so N+1 rounds is enough; a forced final answers.
+    maxRounds: (opts.budget ?? BUDGET).calls + 1,
     forceFinal: { prompt: opts.finalPrompt ?? 'Answer now with the JSON object only (reply, ops, quickReplies) — no more lookups.' },
     temperature: 0.2,
     maxTokens: 4000,
     activity: 'trips-planner',
     timeoutMs: opts.timeoutMs ?? 180_000,
     execute: async (call) => {
-      const allowed = spend(budget, call.name);
+      const allowed = spend(budget, call.name, opts.budget ?? BUDGET);
       if (!allowed.ok) return allowed.reason;
       try {
         const out = await tools.run(call, ctx);

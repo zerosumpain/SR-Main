@@ -10,6 +10,14 @@ import type { ResearchStep } from './model';
 
 export const BUDGET = { calls: 6, searches: 4 } as const;
 
+/** v6: the "Make a suggestion" turn is smaller, so it answers in time. */
+export const IDEAS_BUDGET = { calls: 4, searches: 2 } as const;
+
+export interface BudgetLimits {
+  calls: number;
+  searches: number;
+}
+
 /** Tools that spend a web search from the budget. */
 const SEARCHING = new Set(['web_search', 'flight_lookup']);
 
@@ -26,10 +34,10 @@ export function newBudget(): Budget {
  * May this call run? Counts it when it may. A refused call is answered with
  * the reason, so the model learns to stop and answer instead.
  */
-export function spend(budget: Budget, tool: string): { ok: true } | { ok: false; reason: string } {
-  if (budget.calls >= BUDGET.calls) return { ok: false, reason: `Research budget used (${BUDGET.calls} lookups this turn). Answer now with what you have.` };
-  if (SEARCHING.has(tool) && budget.searches >= BUDGET.searches) {
-    return { ok: false, reason: `Web search budget used (${BUDGET.searches} searches this turn). Use what you have, or a non-search tool.` };
+export function spend(budget: Budget, tool: string, limits: BudgetLimits = BUDGET): { ok: true } | { ok: false; reason: string } {
+  if (budget.calls >= limits.calls) return { ok: false, reason: `Research budget used (${limits.calls} lookups this turn). Answer now with what you have.` };
+  if (SEARCHING.has(tool) && budget.searches >= limits.searches) {
+    return { ok: false, reason: `Web search budget used (${limits.searches} searches this turn). Use what you have, or a non-search tool.` };
   }
   budget.calls++;
   if (SEARCHING.has(tool)) budget.searches++;

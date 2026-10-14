@@ -125,6 +125,7 @@ const ideas = await import('./[id]/ideas/+server');
 const route = await import('./[id]/route/+server');
 const suggestions = await import('./[id]/suggestions/+server');
 const decide = await import('./[id]/suggestions/[sid]/+server');
+const jobs = await import('./jobs/[jobId]/+server');
 
 function ev(params: Record<string, string> = {}, init: RequestInit = {}, query = '') {
   return { params, locals: {}, request: new Request(`http://x/api/native/trips${query}`, init), url: new URL(`http://x/api/native/trips${query}`) } as never;
@@ -272,5 +273,56 @@ describe('the bundle', () => {
     // Access differs per caller, so the tag does too.
     as(KID);
     expect((await one.GET(ev({ id: TRIP_ID }))).headers.get('etag')).not.toBe(tag);
+  });
+});
+
+describe('v6: async model-backed calls', () => {
+  const poll = async (id: string) => jobs.GET(ev({ jobId: id }));
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it('without "async" the calls answer exactly as before', async () => {
+    as(KID);
+    const sync = await ideas.POST(ev({ id: TRIP_ID }, post({ date: '2026-10-28', stage: 'afternoon' })));
+    expect(sync.status).toBe(200);
+    expect(await sync.json()).toMatchObject({ ask: { date: '2026-10-28', stage: 'afternoon' }, surface: 'phone' });
+    expect((await list.POST(ev({}, post({ text: 'Legoland in May!' })))).status).toBe(201);
+  });
+
+  it('ideas with "async": true → 202 { job }, polled by the caller to the same result; anyone else 404', async () => {
+    as(KID);
+    const started = await ideas.POST(ev({ id: TRIP_ID }, post({ date: '2026-10-28', stage: 'afternoon', async: true })));
+    expect(started.status).toBe(202);
+    const { job } = await started.json();
+    expect(job).toMatchObject({ kind: 'ideas', status: 'running', finishedAt: null, result: null, error: null });
+    await settle();
+    const done = await (await poll(job.id)).json();
+    expect(done.job).toMatchObject({ id: job.id, status: 'done', error: null, result: { ask: { date: '2026-10-28', stage: 'afternoon' }, surface: 'phone' } });
+    as(PARENT);
+    expect((await poll(job.id)).status).toBe(404);
+    as('stranger@example.test');
+    h.family = false;
+    expect((await poll(job.id)).status).toBe(403);
+  });
+
+  it('converse, create and a whole-trip re-plan run as jobs too; a day re-plan stays synchronous', async () => {
+    as(OWNER);
+    const c = await (await talk.POST(ev({ id: TRIP_ID }, post({ text: 'Add gelato', async: true })))).json();
+    expect(c.job.kind).toBe('converse');
+    const n = await (await list.POST(ev({}, post({ text: 'Paris at Easter', async: true })))).json();
+    expect(n.job.kind).toBe('create');
+    const r = await replan.POST(ev({ id: TRIP_ID }, post({ date: '2026-10-28', nowMin: 600, doneStopIds: [], scope: 'trip', async: true })));
+    expect(r.status).toBe(202);
+    const day = await replan.POST(ev({ id: TRIP_ID }, post({ date: '2026-10-28', nowMin: 600, doneStopIds: [], async: true })));
+    expect(day.status).toBe(200);
+    expect(await day.json()).toEqual({ options: [{ id: 'o1' }] });
+    await settle();
+    expect((await (await poll(c.job.id)).json()).job).toMatchObject({ status: 'done', result: { reply: 'ok' } });
+    expect((await (await poll(n.job.id)).json()).job.result).toMatchObject({ id: 'new-trip', reply: 'ok' });
+    expect((await (await poll((await r.json()).job.id)).json()).job.result).toEqual({ options: [{ id: 'o1' }], tripOptions: [], narrative: 'n', quickReplies: [] });
+  });
+
+  it('a bad body is still a 400 at once, not a job', async () => {
+    as(KID);
+    expect((await ideas.POST(ev({ id: TRIP_ID }, post({ date: '2026-10-28', stage: 'brunch', async: true })))).status).toBe(400);
   });
 });

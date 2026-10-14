@@ -95,6 +95,15 @@ async function nominatim(path: string, params: Record<string, string>): Promise<
   });
 }
 
+/**
+ * v6: places of one kind ("restaurant", "museum") inside a box around a
+ * point — Nominatim's bounded search, the fallback when Overpass is busy.
+ * Raw jsonv2 rows (with extratags); [] on any failure.
+ */
+export async function nominatimAround(term: string, viewbox: string, limit = 15): Promise<unknown[]> {
+  return nominatim('/search', { q: term, viewbox, bounded: '1', limit: String(limit) });
+}
+
 /** Try `placeQueries` in turn until one is found (each one Nominatim request, paced). */
 export async function findPlaceLoosely(query: string, destination: string | null, near: LatLng | null): Promise<OsmPlace | null> {
   for (const q of placeQueries(query, destination)) {
@@ -125,20 +134,21 @@ async function lookupPlace(osmId: string): Promise<OsmPlace | null> {
 }
 
 /** Overpass, with one retry: the public instance answers 504 when busy. */
-async function overpass(query: string): Promise<unknown> {
-  for (let attempt = 1; attempt <= 2; attempt++) {
+export async function overpass(query: string, opts: { attempts?: number; timeoutMs?: number } = {}): Promise<unknown> {
+  const attempts = opts.attempts ?? 2;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const res = await fetch('https://overpass-api.de/api/interpreter', {
         method: 'POST',
         headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ data: query }),
-        signal: AbortSignal.timeout(25_000),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 25_000),
       });
       if (res.ok) return await res.json();
     } catch {
       /* retry once */
     }
-    if (attempt === 1) await new Promise((r) => setTimeout(r, 3_000));
+    if (attempt < attempts) await new Promise((r) => setTimeout(r, 3_000));
   }
   return null;
 }

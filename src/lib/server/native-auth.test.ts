@@ -167,6 +167,7 @@ describe('every native route gates itself', () => {
         '/trips/[id]/route/+server.ts',
         '/trips/[id]/suggestions/+server.ts',
         '/trips/[id]/suggestions/[sid]/+server.ts',
+        '/trips/jobs/[jobId]/+server.ts',
       ].sort(),
     );
     // And none of them keeps an owner-only handler beside it by accident.

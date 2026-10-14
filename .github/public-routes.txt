@@ -112,6 +112,7 @@
 /api/native/trips/[id]/route
 /api/native/trips/[id]/suggestions
 /api/native/trips/[id]/suggestions/[sid]
+/api/native/trips/jobs/[jobId]
 /api/native/wildmind
 /api/native/wildmind/chronicle
 /api/native/wildmind/inventions
