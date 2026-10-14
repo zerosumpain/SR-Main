@@ -45,6 +45,9 @@ vi.mock('$lib/trips/plan.server', async () => {
     tripReplan: async () => ({ tripOptions: [{ id: 't1', label: 'Re-plan the rest of the trip' }], narrative: 'You stopped for lunch.', quickReplies: ['Find gelato near here'] }),
   };
 });
+vi.mock('$lib/trips/ideas.server', () => ({
+  findIdeas: async (_trip: unknown, ask: unknown, surface: string) => ({ gap: null, ideas: [], rejected: [], note: `asked on the ${surface}`, research: [], ask }),
+}));
 vi.mock('$lib/trips/converse.server', () => ({
   converse: async (_trip: unknown, input: { text: string; surface: string; position: unknown }) => ({
     reply: `heard ${input.text} on the ${input.surface}`, applied: [], rejected: [], quickReplies: [], planVersion: 3, changes: [], messages: [], position: input.position,
@@ -56,6 +59,7 @@ const one = await import('./[id]/+server');
 const events = await import('./[id]/events/+server');
 const replan = await import('./[id]/replan/+server');
 const talk = await import('./[id]/converse/+server');
+const ideas = await import('./[id]/ideas/+server');
 
 function ev(params: Record<string, string> = {}, init: RequestInit = {}) {
   return { params, request: new Request('http://x/api/native/trips', init), url: new URL('http://x/api/native/trips') } as never;
@@ -75,6 +79,7 @@ describe('owner only (D2)', () => {
     ['events', () => events.POST(ev({ id: TRIP.id }, post({ events: [], basePlanVersion: 0 })))],
     ['replan', () => replan.POST(ev({ id: TRIP.id }, post({ date: '2026-10-27', nowMin: 600, doneStopIds: [] })))],
     ['converse', () => talk.POST(ev({ id: TRIP.id }, post({ text: 'hi' })))],
+    ['ideas', () => ideas.POST(ev({ id: TRIP.id }, post({ date: '2026-10-28', stage: 'afternoon' })))],
   ])('refuses a member on %s with 403', async (_name, call) => {
     h.role = 'member';
     const res = await call();
@@ -158,5 +163,13 @@ describe('v2: the conversation and whole-trip re-planning', () => {
       narrative: 'You stopped for lunch.',
       quickReplies: ['Find gelato near here'],
     });
+  });
+});
+
+describe('ideas for a slot', () => {
+  it('passes the slot through for the owner and 400s a bad one', async () => {
+    const res = await ideas.POST(ev({ id: TRIP.id }, post({ date: '2026-10-28', stage: 'afternoon', afterStopId: 'a' })));
+    expect(await res.json()).toMatchObject({ note: 'asked on the phone', ask: { date: '2026-10-28', stage: 'afternoon', afterStopId: 'a', beforeStopId: null } });
+    expect((await ideas.POST(ev({ id: TRIP.id }, post({ date: '2026-10-28', stage: 'brunch' })))).status).toBe(400);
   });
 });

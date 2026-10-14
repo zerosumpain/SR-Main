@@ -55,13 +55,27 @@ async function webSearch(query: string, purpose: string) {
   return (found.results ?? []).map((r) => ({ title: r.title, url: r.url, content: clip(r.content ?? '', 600) }));
 }
 
-/** Where a tool argument names a place: "stay", a wish id, or a name to look up. */
+/** Coordinates written into a place argument ("41.89020, 12.49220 (Lunch)"). */
+export function coordsIn(text: string): LatLng | null {
+  const m = /(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/.exec(text);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
+}
+
+/** Where a tool argument names a place: coordinates, "stay", a wish id, or a name to look up near the trip. */
 async function locate(name: string, ctx: AgentContext): Promise<{ name: string; location: LatLng } | null> {
   const n = name.trim();
+  const at = coordsIn(n);
+  if (at) return { name: n.replace(/^[-\d.,\s]+/, '').replace(/[()]/g, '').trim() || 'there', location: at };
   if (/^stay$/i.test(n) && ctx.stays[0]) return { name: ctx.stays[0].name, location: ctx.stays[0].location };
   const w = ctx.wishes.find((x) => x.id === n || x.title.toLowerCase() === n.toLowerCase());
   if (w?.place) return { name: w.place.name, location: w.place.location };
-  const p = await findPlaceLoosely(n, ctx.trip.destination, ctx.stays[0]?.location ?? null);
+  const near = ctx.stays[0]?.location ?? null;
+  const p = await findPlaceLoosely(n, ctx.trip.destination, near);
+  // A namesake on another continent is not the place: refuse anything over 100 km from the stay.
+  if (p && near && estimateLeg(near, p.location, 'walk').metres / 1.3 > 100_000) return null;
   return p ? { name: p.name, location: p.location } : null;
 }
 
@@ -192,7 +206,7 @@ export const LIVE_TOOLS: AgentTools = {
 export async function agentTurn(
   messages: Array<Record<string, unknown>>,
   ctx: AgentContext,
-  opts: { tools?: AgentTools; client?: { client: OpenAI; model: string }; timeoutMs?: number } = {},
+  opts: { tools?: AgentTools; client?: { client: OpenAI; model: string }; timeoutMs?: number; finalPrompt?: string } = {},
 ): Promise<AgentResult> {
   let llm = opts.client;
   if (!llm) {
@@ -211,7 +225,7 @@ export async function agentTurn(
     tools: PLANNER_TOOLS,
     // Six lookups at most, so seven rounds is enough; a forced final answers.
     maxRounds: 7,
-    forceFinal: { prompt: 'Answer now with the JSON object only (reply, ops, quickReplies) — no more lookups.' },
+    forceFinal: { prompt: opts.finalPrompt ?? 'Answer now with the JSON object only (reply, ops, quickReplies) — no more lookups.' },
     temperature: 0.2,
     maxTokens: 4000,
     activity: 'trips-planner',

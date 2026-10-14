@@ -11,6 +11,7 @@
    */
   import { DAY_STAGE_LABEL, type DayStage, type TravelMode, type Wish } from '$lib/trips/model';
   import type { StageItem } from '$lib/trips/stages';
+  import IdeaTray from './IdeaTray.svelte';
 
   let {
     stage,
@@ -25,6 +26,9 @@
     onAsk,
     onPatch,
     dateLabel,
+    base,
+    dayStopIds = [],
+    onAdded = async () => {},
   }: {
     stage: DayStage;
     items: StageItem[];
@@ -38,7 +42,24 @@
     onAsk: (text: string) => void;
     onPatch: (w: Wish, patch: Record<string, unknown>, done?: string) => void;
     dateLabel: (d: string) => string;
+    /** The trip's API base, for the idea tray. */
+    base: string;
+    /** Every stop id of the day in order, so a gap can name the stops either side. */
+    dayStopIds?: string[];
+    /** After an idea is added: reload, and highlight what moved. */
+    onAdded?: () => Promise<void>;
   } = $props();
+
+  /** The open idea tray: the whole stage, or the gap between two stops. */
+  let tray = $state<{ afterStopId: string | null; beforeStopId: string | null } | null>(null);
+  const around = (id: string) => {
+    const i = dayStopIds.indexOf(id);
+    return { afterStopId: i > 0 ? dayStopIds[i - 1] : null, beforeStopId: i >= 0 && i + 1 < dayStopIds.length ? dayStopIds[i + 1] : null };
+  };
+  /** Free time at the stay mid-day, or a long wait before a stop, is a gap worth filling. */
+  const isGap = (item: StageItem) =>
+    (item.stop.kind === 'stay' && item.index > 0 && item.index < dayStopIds.length - 1 && item.stop.departMin - item.stop.arriveMin >= 45) ||
+    (item.stop.kind !== 'stay' && item.stop.waitSec >= 45 * 60);
 
   const MODE: Record<TravelMode, string> = { walk: 'Walk', cycle: 'Cycle', drive: 'Drive', transit: 'Public transport', taxi: 'Taxi' };
   const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.round(m) % 60).padStart(2, '0')}`;
@@ -69,7 +90,12 @@
   </header>
 
   {#if !items.some((i) => i.stop.kind !== 'stay' || i.stop.id.endsWith(':rest'))}
-    <p class="free">Free — nothing planned. <button class="link" type="button" onclick={() => onAsk(`Something for ${dayName}, ${ASK[stage]}?`)}>Ask for an idea</button></p>
+    <p class="free">Free — nothing planned. <button class="link" type="button" aria-expanded={!!tray} onclick={() => (tray = { afterStopId: null, beforeStopId: null })}>Ask for an idea</button></p>
+  {:else if !tray}
+    <p class="free"><button class="link" type="button" onclick={() => (tray = { afterStopId: null, beforeStopId: null })}>Find an idea for this stage</button></p>
+  {/if}
+  {#if tray}
+    <IdeaTray {base} {date} {stage} {dayName} afterStopId={tray.afterStopId} beforeStopId={tray.beforeStopId} {onAdded} onClose={() => (tray = null)} />
   {/if}
 
   <ol class="stops">
@@ -111,6 +137,9 @@
           <strong class="title">{s.title}</strong>
           {#if s.bookingId}<span class="tag mono">booked</span>{/if}
           {#if s.waitSec >= 60}<span class="note"> · {waitText(s.waitSec)}</span>{/if}
+          {#if isGap(item) && !tray}
+            <button class="link gap" type="button" onclick={() => (tray = s.kind === 'stay' ? around(s.id) : { afterStopId: around(s.id).afterStopId, beforeStopId: s.id })}>Ideas for this gap</button>
+          {/if}
           {#each s.warnings as wn, wi (wi)}<span class="warn">{wn}</span>{/each}
           {#if s.kind === 'wish' && s.wishId}
             {@const w = wishOf(s.wishId)}
@@ -247,6 +276,11 @@
     text-decoration: underline;
     cursor: pointer;
     font: inherit;
+  }
+  .gap {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: var(--fs-label-xs);
   }
   .stops {
     list-style: none;

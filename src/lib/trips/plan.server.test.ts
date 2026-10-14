@@ -107,6 +107,19 @@ describe('replan', () => {
   });
 });
 
+describe('stable re-plans', () => {
+  it('passes the stored plan as previous, so a removed wish leaves the other days alone', async () => {
+    await replan(trip());
+    const dayOf = (p: SolvedPlan) => new Map(p.days.flatMap((d) => d.stops.filter((s) => s.wishId).map((s) => [s.wishId, d.date])));
+    const first = dayOf(h.plans[0].plan as SolvedPlan);
+    h.wishes = h.wishes.filter((w) => w.id !== 'spanish-steps');
+    await replan(trip());
+    const second = dayOf(h.plans[1].plan as SolvedPlan);
+    const moved = [...second].filter(([id, date]) => first.get(id) !== date);
+    expect(moved).toEqual([]);
+  });
+});
+
 describe('the phone', () => {
   it('applies each event once, whatever the retries', async () => {
     await replan(trip());

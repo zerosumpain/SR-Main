@@ -170,6 +170,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/trips': phone('app/api', 'The trips I have planned on the site'),
   '/api/native/trips/[id]': phone('app/api', 'One trip, its plan and each day’s travel times, to carry offline'),
   '/api/native/trips/[id]/converse': phone('app/api', 'Edit plan: talk the trip over with the planner, which changes it'),
+  '/api/native/trips/[id]/ideas': phone('app/api', 'Ideas for an open slot, each checked against the day before it is offered'),
   '/api/native/trips/[id]/events': phone('app/api', 'What happened on the day: arrived, skipped, a new plan for today'),
   '/api/native/trips/[id]/replan': phone('app/api', 'Running late: up to three ways to re-plan the rest of the day'),
   '/api/native/games': phone('app/surfaces', 'The games lobby: who to invite and what I’m in'),

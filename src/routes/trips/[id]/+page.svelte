@@ -3,8 +3,8 @@
   import { tick, untrack } from 'svelte';
   import StageBand from '$lib/components/trips/StageBand.svelte';
   import TripDetails from '$lib/components/trips/TripDetails.svelte';
-  import { changedStops, dayBrief, groupDay } from '$lib/trips/stages';
-  import { DAY_STAGES, DAY_STAGE_LABEL } from '$lib/trips/model';
+  import DayCards from '$lib/components/trips/DayCards.svelte';
+  import { changedStops, groupDay } from '$lib/trips/stages';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TripMap, { type MapDay } from '$lib/components/trips/TripMap.svelte';
   import { dayLabel } from '$lib/trips/changes';
@@ -108,6 +108,14 @@
     });
   }
 
+  /** Reload the page's data and briefly highlight what the change moved. */
+  async function reloadAndHighlight(before = data.plan?.plan ?? null) {
+    await invalidateAll();
+    if (!data.plan) return;
+    highlight = changedStops(before, data.plan.plan);
+    setTimeout(() => (highlight = new Set()), 4000);
+  }
+
   async function send(text: string) {
     const t = text.trim();
     if (!t || sending) return;
@@ -127,11 +135,7 @@
         quick = out.quickReplies ?? [];
         if (out.changes?.length) notice = `Re-planned as version ${out.planVersion}.`;
       }
-      await invalidateAll();
-      if (data.plan) {
-        highlight = changedStops(before, data.plan.plan);
-        setTimeout(() => (highlight = new Set()), 4000);
-      }
+      await reloadAndHighlight(before);
     } catch {
       problem = 'The site did not answer. Try again.';
       draft = t;
@@ -285,19 +289,7 @@
               <TripMap days={mapDays} suggestions={mapSuggestions} focus={null} />
               {#if estimatedModes.length}<p class="muted small">Some travel times are estimated from distance ({estimatedModes.join(', ')}).</p>{/if}
             </div>
-            <ol class="day-cards">
-              {#each plan.days as d, di (d.date)}
-                {@const brief = dayBrief(d)}
-                <li>
-                  <button class="day-card" type="button" onclick={() => selectTab(d.date, true)} aria-label="Open {dayLabel(d.date)}">
-                    <span class="dc-hd"><span class="dc-num">{di + 1}</span><span class="dc-date">{dayLabel(d.date)}</span>{#if loadOf(d.date) !== 'normal'}<span class="tab-load">{loadOf(d.date)}</span>{/if}</span>
-                    {#each DAY_STAGES as st (st)}
-                      <span class="dc-stage dcs-{st}"><span class="dcs-label">{DAY_STAGE_LABEL[st]}</span><span class="dcs-what">{brief[st].join(' · ') || 'free'}</span></span>
-                    {/each}
-                  </button>
-                </li>
-              {/each}
-            </ol>
+            <DayCards days={plan.days} {loadOf} onOpen={(d) => selectTab(d, true)} />
           </div>
           {#each plan.warnings as wn, wi (wi)}<p class="warn">{wn}</p>{/each}
           {#if plan.dropped.length}
@@ -421,6 +413,9 @@
                     onAsk={ask}
                     onPatch={(w, patch, done) => patchWish(w, patch, done)}
                     dateLabel={dayLabel}
+                    {base}
+                    dayStopIds={day.stops.map((x) => x.id)}
+                    onAdded={() => reloadAndHighlight()}
                   />
                 {/each}
               </div>
@@ -611,80 +606,6 @@
     gap: 16px;
     align-items: start;
   }
-  .day-cards {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 10px;
-  }
-  .day-card {
-    display: grid;
-    gap: 3px;
-    width: 100%;
-    text-align: left;
-    padding: 10px 12px;
-    border: 1px solid var(--line-strong);
-    border-radius: 2px;
-    background: var(--bg);
-    color: var(--text-primary);
-    cursor: pointer;
-    font: inherit;
-  }
-  .day-card:hover,
-  .day-card:focus-visible {
-    border-color: var(--accent-ink);
-    outline: none;
-  }
-  .dc-hd {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-  .dc-num {
-    font-family: var(--font-display);
-    font-size: 1.4rem;
-    color: var(--accent);
-  }
-  .dc-date {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-  }
-  .dc-stage {
-    display: grid;
-    grid-template-columns: 9.5rem minmax(0, 1fr);
-    gap: 8px;
-    padding: 3px 8px;
-    font-size: var(--fs-label);
-    border-radius: 2px;
-  }
-  .dcs-label {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-  }
-  .dcs-what {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .dcs-morning {
-    background: var(--accent-ink-tint-06);
-    color: var(--accent-ink);
-  }
-  .dcs-lunch {
-    background: var(--accent-tint-08);
-  }
-  .dcs-afternoon {
-    background-color: var(--surface-rail);
-    background-image: repeating-linear-gradient(135deg, var(--surface-overlay) 0 2px, transparent 2px 9px);
-  }
-  .dcs-evening {
-    background: var(--chrome-bg);
-    color: var(--chrome-ink);
-  }
   .ov-block {
     margin-top: 18px;
   }
@@ -726,10 +647,6 @@
     }
     .panel {
       padding: 12px;
-    }
-    .dc-stage {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0;
     }
     .day-num {
       font-size: 2.2rem;

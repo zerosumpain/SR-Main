@@ -103,3 +103,11 @@ describe('flight times', () => {
     expect(researchStep('recall', { query: 'food' }, { summary: '2 things I know' }).summary).toBe('Checked what I know about “food”: 2 things I know');
   });
 });
+
+describe('places in tool arguments', () => {
+  it('reads coordinates the prompt gave for a stop', async () => {
+    const { coordsIn } = await import('./agent.server');
+    expect(coordsIn('41.89020, 12.49220 (Lunch, near Colosseum)')).toEqual({ lat: 41.8902, lng: 12.4922 });
+    expect(coordsIn('Pantheon, Rome')).toBeNull();
+  });
+});

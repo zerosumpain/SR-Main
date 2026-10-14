@@ -15,6 +15,7 @@ import type {
   ReplanOption,
   SolvedPlan,
   TripReplanOption,
+  Wish,
 } from '../../../model';
 import { estimateMatrix } from '../../estimate';
 import { fmtMin } from '../../calendar';
@@ -248,7 +249,12 @@ export function buildCaseInputs(): CaseInput[] {
       input: { ...input, day, nowMin: first.departMin, position: null, atStopId: first.id, doneStopIds: [] },
     });
   }
-  cases.push(...buildTripCaseInputs(), ...buildV21CaseInputs(), ...buildV3CaseInputs());
+  cases.push(
+    ...buildTripCaseInputs(),
+    ...buildV21CaseInputs(),
+    ...buildV3CaseInputs(),
+    ...buildStableCaseInputs(),
+  );
   return cases;
 }
 
@@ -526,6 +532,71 @@ export function buildV3CaseInputs(): CaseInput[] {
         atStopId: null,
         doneStopIds: [],
         observation: { kind: 'behind', place: null, sinceMin: 11 * 60 + 5, motion: 'unknown', stopId: null },
+      },
+    },
+  ];
+}
+
+/** Rome plus one extra wish, with the matrix extended to reach it. */
+export function romeWith(...extra: Wish[]) {
+  const rome = romeInput();
+  rome.wishes.push(...extra);
+  rome.matrix = estimateMatrix(romePoints(rome.wishes, rome.stays), rome.trip.modes);
+  return rome;
+}
+
+export const GELATO_IDEA = (fixedDate: string | null = '2026-10-28') =>
+  makeWish(
+    'gelato',
+    'Gelato at Giolitti',
+    { lat: 41.9009, lng: 12.4768 },
+    {
+      priority: 'nice',
+      minutes: 40,
+      partOfDay: 'afternoon',
+      fixedDate,
+      sortHint: 20,
+    },
+  );
+
+/** Stability: re-plans given the current plan change as little as possible. */
+export function buildStableCaseInputs(): CaseInput[] {
+  const previous = solveTrip(romeInput());
+  return [
+    {
+      name: 'solve-stable-small-idea',
+      description:
+        'The Rome plan plus a 40-minute gelato idea pinned to Wednesday afternoon, re-planned with the current plan: no other wish changes day.',
+      fn: 'solveTrip',
+      input: { ...romeWith(GELATO_IDEA()), previous },
+    },
+    {
+      name: 'solve-stable-long-lunch',
+      description:
+        "The Rome plan plus the long Thursday lunch in Trastevere, re-planned with the current plan: St Peter's stays with the Vatican on Thursday.",
+      fn: 'solveTrip',
+      input: { ...longLunchInput(), previous },
+    },
+    {
+      name: 'solve-stable-overloaded-day',
+      description:
+        'The Rome plan plus a three-hour must pinned to Tuesday: Tuesday can no longer hold everything, so only its least valuable unpinned nice moves to another day.',
+      fn: 'solveTrip',
+      input: {
+        ...romeWith(
+          makeWish(
+            'doria',
+            'Galleria Doria Pamphilj',
+            { lat: 41.8979, lng: 12.4815 },
+            {
+              priority: 'must',
+              minutes: 180,
+              fixedDate: '2026-10-27',
+              sortHint: 16,
+            },
+          ),
+        ),
+        previous,
       },
     },
   ];
