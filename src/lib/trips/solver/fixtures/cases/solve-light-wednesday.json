@@ -1493,12 +1493,30 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 540,
+            "arriveMin": 510,
+            "departMin": 510,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "meal:2026-10-27:breakfast",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Breakfast",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 510,
             "departMin": 540,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "campo-market",
@@ -1514,7 +1532,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "navona",
@@ -1530,7 +1549,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "pantheon",
@@ -1546,39 +1566,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "trevi",
-            "kind": "wish",
-            "wishId": "trevi",
-            "title": "Trevi Fountain",
-            "location": {
-              "lat": 41.9009,
-              "lng": 12.4833
-            },
-            "arriveMin": 700,
-            "departMin": 720,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "meal:2026-10-27:lunch",
-            "kind": "meal",
-            "wishId": null,
-            "title": "Lunch",
-            "location": {
-              "lat": 41.9009,
-              "lng": 12.4833
-            },
-            "arriveMin": 730,
-            "departMin": 790,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "spanish-steps",
@@ -1589,28 +1578,47 @@
               "lat": 41.9058,
               "lng": 12.4823
             },
-            "arriveMin": 799,
-            "departMin": 829,
+            "arriveMin": 705,
+            "departMin": 735,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
-            "id": "pincio",
-            "kind": "wish",
-            "wishId": "pincio",
-            "title": "Pincio terrace, Villa Borghese",
+            "id": "meal:2026-10-27:lunch",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Lunch",
             "location": {
-              "lat": 41.9113,
-              "lng": 12.4797
+              "lat": 41.9058,
+              "lng": 12.4823
             },
-            "arriveMin": 850,
-            "departMin": 895,
+            "arriveMin": 745,
+            "departMin": 805,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "lunch"
+          },
+          {
+            "id": "trevi",
+            "kind": "wish",
+            "wishId": "trevi",
+            "title": "Trevi Fountain",
+            "location": {
+              "lat": 41.9009,
+              "lng": 12.4833
+            },
+            "arriveMin": 814,
+            "departMin": 834,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "afternoon"
           },
           {
             "id": "capitoline",
@@ -1621,12 +1629,13 @@
               "lat": 41.893,
               "lng": 12.4828
             },
-            "arriveMin": 929,
-            "departMin": 1049,
+            "arriveMin": 859,
+            "departMin": 979,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
           },
           {
             "id": "ghetto",
@@ -1637,12 +1646,47 @@
               "lat": 41.8925,
               "lng": 12.4777
             },
-            "arriveMin": 1066,
-            "departMin": 1111,
+            "arriveMin": 996,
+            "departMin": 1041,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "stay:2026-10-27:rest",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Free time at Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1061,
+            "departMin": 1140,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "meal:2026-10-27:dinner",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Dinner",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1140,
+            "departMin": 1215,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
           },
           {
             "id": "stay:2026-10-27:end",
@@ -1653,17 +1697,27 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 1131,
-            "departMin": 1131,
+            "arriveMin": 1215,
+            "departMin": 1215,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "evening"
           }
         ],
         "legs": [
           {
             "fromStopId": "stay:2026-10-27:start",
+            "toStopId": "meal:2026-10-27:breakfast",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-27:breakfast",
             "toStopId": "campo-market",
             "mode": "walk",
             "durationSec": 65,
@@ -1691,15 +1745,15 @@
           },
           {
             "fromStopId": "pantheon",
-            "toStopId": "trevi",
+            "toStopId": "spanish-steps",
             "mode": "walk",
-            "durationSec": 574,
-            "distanceM": 765,
+            "durationSec": 894,
+            "distanceM": 1192,
             "estimated": true,
             "line": null
           },
           {
-            "fromStopId": "trevi",
+            "fromStopId": "spanish-steps",
             "toStopId": "meal:2026-10-27:lunch",
             "mode": "walk",
             "durationSec": 0,
@@ -1709,7 +1763,7 @@
           },
           {
             "fromStopId": "meal:2026-10-27:lunch",
-            "toStopId": "spanish-steps",
+            "toStopId": "trevi",
             "mode": "walk",
             "durationSec": 537,
             "distanceM": 716,
@@ -1717,20 +1771,11 @@
             "line": null
           },
           {
-            "fromStopId": "spanish-steps",
-            "toStopId": "pincio",
-            "mode": "walk",
-            "durationSec": 632,
-            "distanceM": 843,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "pincio",
+            "fromStopId": "trevi",
             "toStopId": "capitoline",
-            "mode": "transit",
-            "durationSec": 1433,
-            "distanceM": 2666,
+            "mode": "walk",
+            "durationSec": 857,
+            "distanceM": 1143,
             "estimated": true,
             "line": null
           },
@@ -1745,11 +1790,29 @@
           },
           {
             "fromStopId": "ghetto",
-            "toStopId": "stay:2026-10-27:end",
+            "toStopId": "stay:2026-10-27:rest",
             "mode": "walk",
             "durationSec": 573,
             "distanceM": 764,
             "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "stay:2026-10-27:rest",
+            "toStopId": "meal:2026-10-27:dinner",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-27:dinner",
+            "toStopId": "stay:2026-10-27:end",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
             "line": null
           }
         ],
@@ -1768,12 +1831,30 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 540,
+            "arriveMin": 510,
+            "departMin": 510,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "meal:2026-10-28:breakfast",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Breakfast",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 510,
             "departMin": 540,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "colosseum",
@@ -1789,7 +1870,8 @@
             "waitSec": 420,
             "locked": true,
             "bookingId": "bk-colosseum",
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "meal:2026-10-28:lunch",
@@ -1805,7 +1887,42 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "lunch"
+          },
+          {
+            "id": "stay:2026-10-28:rest",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Free time at Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 843,
+            "departMin": 1140,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "meal:2026-10-28:dinner",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Dinner",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1140,
+            "departMin": 1215,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
           },
           {
             "id": "stay:2026-10-28:end",
@@ -1816,17 +1933,27 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 843,
-            "departMin": 843,
+            "arriveMin": 1215,
+            "departMin": 1215,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "evening"
           }
         ],
         "legs": [
           {
             "fromStopId": "stay:2026-10-28:start",
+            "toStopId": "meal:2026-10-28:breakfast",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-28:breakfast",
             "toStopId": "colosseum",
             "mode": "transit",
             "durationSec": 1366,
@@ -1845,11 +1972,29 @@
           },
           {
             "fromStopId": "meal:2026-10-28:lunch",
-            "toStopId": "stay:2026-10-28:end",
+            "toStopId": "stay:2026-10-28:rest",
             "mode": "transit",
             "durationSec": 1366,
             "distanceM": 2332,
             "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "stay:2026-10-28:rest",
+            "toStopId": "meal:2026-10-28:dinner",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-28:dinner",
+            "toStopId": "stay:2026-10-28:end",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
             "line": null
           }
         ],
@@ -1868,12 +2013,30 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 516,
+            "arriveMin": 486,
+            "departMin": 486,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "meal:2026-10-29:breakfast",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Breakfast",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 486,
             "departMin": 516,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "vatican",
@@ -1889,7 +2052,8 @@
             "waitSec": 0,
             "locked": true,
             "bookingId": "bk-vatican",
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "meal:2026-10-29:lunch",
@@ -1905,7 +2069,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "lunch"
           },
           {
             "id": "st-peters",
@@ -1921,23 +2086,42 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
           },
           {
-            "id": "trastevere",
-            "kind": "wish",
-            "wishId": "trastevere",
-            "title": "Trastevere in the evening",
+            "id": "stay:2026-10-29:rest",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Free time at Apartment by Campo de' Fiori",
             "location": {
-              "lat": 41.8894,
-              "lng": 12.47
+              "lat": 41.8952,
+              "lng": 12.4716
             },
-            "arriveMin": 937,
-            "departMin": 1110,
-            "waitSec": 4980,
+            "arriveMin": 936,
+            "departMin": 1140,
+            "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "meal:2026-10-29:dinner",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Dinner",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1140,
+            "departMin": 1215,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
           },
           {
             "id": "stay:2026-10-29:end",
@@ -1948,17 +2132,27 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 1131,
-            "departMin": 1131,
+            "arriveMin": 1215,
+            "departMin": 1215,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "evening"
           }
         ],
         "legs": [
           {
             "fromStopId": "stay:2026-10-29:start",
+            "toStopId": "meal:2026-10-29:breakfast",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-29:breakfast",
             "toStopId": "vatican",
             "mode": "transit",
             "durationSec": 1407,
@@ -1986,20 +2180,29 @@
           },
           {
             "fromStopId": "st-peters",
-            "toStopId": "trastevere",
+            "toStopId": "stay:2026-10-29:rest",
             "mode": "transit",
-            "durationSec": 1407,
-            "distanceM": 2535,
+            "durationSec": 1331,
+            "distanceM": 2157,
             "estimated": true,
             "line": null
           },
           {
-            "fromStopId": "trastevere",
+            "fromStopId": "stay:2026-10-29:rest",
+            "toStopId": "meal:2026-10-29:dinner",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-29:dinner",
             "toStopId": "stay:2026-10-29:end",
             "mode": "walk",
-            "durationSec": 642,
-            "distanceM": 856,
-            "estimated": true,
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
             "line": null
           }
         ],
@@ -2018,12 +2221,47 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 540,
+            "arriveMin": 510,
+            "departMin": 510,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "meal:2026-10-30:breakfast",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Breakfast",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 510,
             "departMin": 540,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "pincio",
+            "kind": "wish",
+            "wishId": "pincio",
+            "title": "Pincio terrace, Villa Borghese",
+            "location": {
+              "lat": 41.9113,
+              "lng": 12.4797
+            },
+            "arriveMin": 564,
+            "departMin": 609,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "castel",
@@ -2034,12 +2272,13 @@
               "lat": 41.9031,
               "lng": 12.4663
             },
-            "arriveMin": 556,
-            "departMin": 646,
+            "arriveMin": 643,
+            "departMin": 733,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "meal:2026-10-30:lunch",
@@ -2050,12 +2289,13 @@
               "lat": 41.9031,
               "lng": 12.4663
             },
-            "arriveMin": 656,
-            "departMin": 780,
-            "waitSec": 3840,
+            "arriveMin": 743,
+            "departMin": 803,
+            "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "lunch"
           },
           {
             "id": "borghese",
@@ -2066,12 +2306,64 @@
               "lat": 41.9142,
               "lng": 12.4921
             },
-            "arriveMin": 806,
+            "arriveMin": 829,
             "departMin": 1020,
-            "waitSec": 5640,
+            "waitSec": 4260,
             "locked": true,
             "bookingId": "bk-borghese",
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "stay:2026-10-30:rest",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Free time at Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1057,
+            "departMin": 1140,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "meal:2026-10-30:dinner",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Dinner",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1140,
+            "departMin": 1215,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
+          },
+          {
+            "id": "trastevere",
+            "kind": "wish",
+            "wishId": "trastevere",
+            "title": "Trastevere in the evening",
+            "location": {
+              "lat": 41.8894,
+              "lng": 12.47
+            },
+            "arriveMin": 1226,
+            "departMin": 1316,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
           },
           {
             "id": "stay:2026-10-30:end",
@@ -2082,21 +2374,40 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 1057,
-            "departMin": 1057,
+            "arriveMin": 1337,
+            "departMin": 1337,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "evening"
           }
         ],
         "legs": [
           {
             "fromStopId": "stay:2026-10-30:start",
+            "toStopId": "meal:2026-10-30:breakfast",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:breakfast",
+            "toStopId": "pincio",
+            "mode": "transit",
+            "durationSec": 1397,
+            "distanceM": 2485,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "pincio",
             "toStopId": "castel",
             "mode": "walk",
-            "durationSec": 957,
-            "distanceM": 1276,
+            "durationSec": 1400,
+            "distanceM": 1866,
             "estimated": true,
             "line": null
           },
@@ -2120,10 +2431,37 @@
           },
           {
             "fromStopId": "borghese",
-            "toStopId": "stay:2026-10-30:end",
+            "toStopId": "stay:2026-10-30:rest",
             "mode": "transit",
             "durationSec": 1604,
             "distanceM": 3522,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "stay:2026-10-30:rest",
+            "toStopId": "meal:2026-10-30:dinner",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:dinner",
+            "toStopId": "trastevere",
+            "mode": "walk",
+            "durationSec": 642,
+            "distanceM": 856,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "trastevere",
+            "toStopId": "stay:2026-10-30:end",
+            "mode": "walk",
+            "durationSec": 642,
+            "distanceM": 856,
             "estimated": true,
             "line": null
           }
@@ -2133,6 +2471,6 @@
     ],
     "dropped": [],
     "warnings": [],
-    "score": 516
+    "score": 373
   }
 }

@@ -40,7 +40,8 @@ describe('arrival and departure days', () => {
     ]);
     expect(arrive.stops[1].title).toBe("Drop bags at Apartment by Campo de' Fiori");
     expect(arrive.legs[0]).toMatchObject({ mode: 'transit', durationSec: 3600 });
-    const lunch = arrive.stops.find((s) => s.kind === 'meal')!;
+    const lunch = arrive.stops.find((s) => s.id === 'meal:2026-10-27:lunch')!;
+    expect(arrive.stops.some((s) => s.id.endsWith(':breakfast'))).toBe(false); // landed too late
     expect(startOf(lunch)).toBeLessThan(15 * 60);
     const sights = arrive.stops.filter((s) => s.kind === 'wish');
     expect(sights.some((s) => startOf(s) < 15 * 60)).toBe(true);
@@ -49,8 +50,12 @@ describe('arrival and departure days', () => {
 
   it('ends the departure day with check-out, bags by ~15:30 and the airport transfer', () => {
     const ids = leave.stops.map((s) => s.id);
-    expect(ids.slice(0, 2)).toEqual(['stay:2026-10-30:start', 'stay:2026-10-30:checkout']);
-    expect(leave.stops[1].departMin).toBeLessThanOrEqual(10 * 60);
+    expect(ids.slice(0, 3)).toEqual([
+      'stay:2026-10-30:start',
+      'meal:2026-10-30:breakfast',
+      'stay:2026-10-30:checkout',
+    ]);
+    expect(leave.stops[2].departMin).toBeLessThanOrEqual(10 * 60);
     const bags = leave.stops[leave.stops.length - 2];
     expect(bags).toMatchObject({
       id: 'stay:2026-10-30:end',
@@ -69,7 +74,7 @@ describe('arrival and departure days', () => {
 
   it('makes travel days light unless dayLoads says otherwise', () => {
     const active = (d: PlannedDay) => d.stops.filter((s) => s.kind === 'wish').length;
-    expect(arrive.stops[arrive.stops.length - 1].arriveMin).toBeLessThanOrEqual(19 * 60 - 90);
+    expect(arrive.stops[arrive.stops.length - 1].arriveMin).toBeLessThanOrEqual(22 * 60 - 90);
     const input = romeTransportInput();
     input.trip.dayLoads = { '2026-10-27': 'normal' };
     const normal = solveTrip(input).days[0];
@@ -99,7 +104,7 @@ describe('arrival and departure days', () => {
     const c = buildCaseInputs().find((x) => x.name === 'replan-arrival-delayed')!.input as ReplanInput;
     for (const o of replanDay(c)) {
       expect(o.day.stops[0]).toMatchObject({ arriveMin: 13 * 60 + 5, departMin: 13 * 60 + 45 });
-      expect(o.day.stops.some((s) => s.kind === 'meal')).toBe(false);
+      expect(o.day.stops.some((s) => s.id.endsWith(':lunch'))).toBe(false);
       expect(o.day.warnings[0]).toBe("No time for lunch — it's past 14:30; grab something on the way");
     }
   });

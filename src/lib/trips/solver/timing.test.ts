@@ -89,7 +89,8 @@ describe('meals', () => {
 
   it('leaves an empty day without meals', () => {
     const day = solveTrip(input([])).days[0];
-    expect(day.stops.map((s) => s.kind)).toEqual(['stay', 'stay']);
+    // Only the at-stay breakfast that opens every day.
+    expect(day.stops.map((s) => s.kind)).toEqual(['stay', 'meal', 'stay']);
   });
 });
 
@@ -128,13 +129,13 @@ describe('fitting the day', () => {
     const wishes = [
       makeWish('m1', 'M1', near(1), { minutes: 180, sortHint: 1 }),
       makeWish('m2', 'M2', near(2), { minutes: 180, sortHint: 2 }),
-      makeWish('n1', 'Nice one', near(3), { minutes: 150, priority: 'nice', sortHint: 3 }),
+      makeWish('n1', 'Nice one', near(3), { minutes: 240, priority: 'nice', sortHint: 3 }),
     ];
     const plan = solveTrip(input(wishes));
     expect(plan.dropped).toHaveLength(1);
     expect(plan.dropped[0].wishId).toBe('n1');
     expect(plan.dropped[0].reason).toMatch(
-      /^No time on Tue 27 Oct — the day would end at \d\d:\d\d, after 19:00$/,
+      /^No time on Tue 27 Oct — sightseeing would run to \d\d:\d\d, after 19:00$/,
     );
     expect(stopOf(plan.days[0], 'n1')).toBeUndefined();
   });

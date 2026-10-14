@@ -23,6 +23,7 @@ import {
   type DayFrame,
 } from './items';
 import { chooseLeg, stayPoint, type SolverContext } from './matrix';
+import { activeMealMin } from './rules';
 
 const BALANCE_WEIGHT = 90;
 const PART_OF_DAY_MISS = 30;
@@ -46,11 +47,11 @@ export interface DayAssignment {
  * than is left before its earlier end); a full day: FULL_DAY_SHARE.
  */
 export function capacityMin(ctx: SolverContext, frame: DayFrame): number {
-  const meals =
-    Math.round(ctx.rules.lunch.durationSec / 60) +
-    (ctx.rules.dinner ? Math.round(ctx.rules.dinner.durationSec / 60) : 0);
-  const left = frame.dayEndMin - frame.dayStartMin - meals;
-  const normal = ctx.rules.dayEndMin - ctx.rules.dayStartMin - meals;
+  // v4: capacity counts active (non-meal) time up to the active end, so the
+  // later dinner and evening don't make days busier.
+  const meals = activeMealMin(ctx.rules);
+  const left = (frame.activeEndMin ?? frame.dayEndMin) - frame.dayStartMin - meals;
+  const normal = ctx.rules.activeEndMin - ctx.rules.dayStartMin - meals;
   if (frame.load === 'light') return Math.max(30, Math.min(left, Math.round(normal * LIGHT_DAY_SHARE)));
   if (frame.load === 'full') return Math.max(60, Math.round(left * FULL_DAY_SHARE));
   return Math.max(60, left);

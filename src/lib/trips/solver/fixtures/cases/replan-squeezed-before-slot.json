@@ -412,12 +412,30 @@
             "lat": 41.8952,
             "lng": 12.4716
           },
-          "arriveMin": 540,
+          "arriveMin": 510,
+          "departMin": 510,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "morning"
+        },
+        {
+          "id": "meal:2026-10-30:breakfast",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Breakfast",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 510,
           "departMin": 540,
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "pincio",
@@ -433,7 +451,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "campo-market",
@@ -449,7 +468,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "castel",
@@ -465,7 +485,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "meal:2026-10-30:lunch",
@@ -481,7 +502,8 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "lunch"
         },
         {
           "id": "borghese",
@@ -497,7 +519,42 @@
           "waitSec": 900,
           "locked": true,
           "bookingId": "bk-borghese",
-          "warnings": []
+          "warnings": [],
+          "stage": "afternoon"
+        },
+        {
+          "id": "stay:2026-10-30:rest",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Free time at Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 1057,
+          "departMin": 1140,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "afternoon"
+        },
+        {
+          "id": "meal:2026-10-30:dinner",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Dinner",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 1140,
+          "departMin": 1215,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "evening"
         },
         {
           "id": "stay:2026-10-30:end",
@@ -508,17 +565,27 @@
             "lat": 41.8952,
             "lng": 12.4716
           },
-          "arriveMin": 1057,
-          "departMin": 1057,
+          "arriveMin": 1215,
+          "departMin": 1215,
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "evening"
         }
       ],
       "legs": [
         {
           "fromStopId": "stay:2026-10-30:start",
+          "toStopId": "meal:2026-10-30:breakfast",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-30:breakfast",
           "toStopId": "pincio",
           "mode": "transit",
           "durationSec": 1397,
@@ -564,11 +631,29 @@
         },
         {
           "fromStopId": "borghese",
-          "toStopId": "stay:2026-10-30:end",
+          "toStopId": "stay:2026-10-30:rest",
           "mode": "transit",
           "durationSec": 1604,
           "distanceM": 3522,
           "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "stay:2026-10-30:rest",
+          "toStopId": "meal:2026-10-30:dinner",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-30:dinner",
+          "toStopId": "stay:2026-10-30:end",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
           "line": null
         }
       ],
@@ -580,138 +665,6 @@
     "doneStopIds": []
   },
   "expected": [
-    {
-      "id": "drop:pincio,campo-market",
-      "label": "Drop Pincio terrace, Villa Borghese and Campo de' Fiori market (nice-to-haves)",
-      "kind": "drop",
-      "day": {
-        "date": "2026-10-30",
-        "stayId": "campo",
-        "stops": [
-          {
-            "id": "stay:2026-10-30:start",
-            "kind": "stay",
-            "wishId": null,
-            "title": "Apartment by Campo de' Fiori",
-            "location": {
-              "lat": 41.8952,
-              "lng": 12.4716
-            },
-            "arriveMin": 540,
-            "departMin": 690,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "castel",
-            "kind": "wish",
-            "wishId": "castel",
-            "title": "Castel Sant'Angelo",
-            "location": {
-              "lat": 41.9031,
-              "lng": 12.4663
-            },
-            "arriveMin": 706,
-            "departMin": 796,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "meal:2026-10-30:lunch",
-            "kind": "meal",
-            "wishId": null,
-            "title": "Lunch",
-            "location": {
-              "lat": 41.9031,
-              "lng": 12.4663
-            },
-            "arriveMin": 806,
-            "departMin": 866,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          },
-          {
-            "id": "borghese",
-            "kind": "wish",
-            "wishId": "borghese",
-            "title": "Borghese Gallery",
-            "location": {
-              "lat": 41.9142,
-              "lng": 12.4921
-            },
-            "arriveMin": 885,
-            "departMin": 1020,
-            "waitSec": 900,
-            "locked": true,
-            "bookingId": "bk-borghese",
-            "warnings": []
-          },
-          {
-            "id": "stay:2026-10-30:end",
-            "kind": "stay",
-            "wishId": null,
-            "title": "Apartment by Campo de' Fiori",
-            "location": {
-              "lat": 41.8952,
-              "lng": 12.4716
-            },
-            "arriveMin": 1057,
-            "departMin": 1057,
-            "waitSec": 0,
-            "locked": false,
-            "bookingId": null,
-            "warnings": []
-          }
-        ],
-        "legs": [
-          {
-            "fromStopId": "stay:2026-10-30:start",
-            "toStopId": "castel",
-            "mode": "walk",
-            "durationSec": 957,
-            "distanceM": 1276,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "castel",
-            "toStopId": "meal:2026-10-30:lunch",
-            "mode": "walk",
-            "durationSec": 0,
-            "distanceM": 0,
-            "estimated": false,
-            "line": null
-          },
-          {
-            "fromStopId": "meal:2026-10-30:lunch",
-            "toStopId": "borghese",
-            "mode": "transit",
-            "durationSec": 1541,
-            "distanceM": 3206,
-            "estimated": true,
-            "line": null
-          },
-          {
-            "fromStopId": "borghese",
-            "toStopId": "stay:2026-10-30:end",
-            "mode": "transit",
-            "durationSec": 1604,
-            "distanceM": 3522,
-            "estimated": true,
-            "line": null
-          }
-        ],
-        "warnings": []
-      },
-      "dropped": ["pincio", "campo-market"],
-      "endsLaterMin": 0
-    },
     {
       "id": "reorder",
       "label": "Reorder the rest of the day",
@@ -729,12 +682,30 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 540,
+            "arriveMin": 510,
+            "departMin": 510,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "meal:2026-10-30:breakfast",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Breakfast",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 510,
             "departMin": 690,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "campo-market",
@@ -750,7 +721,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "meal:2026-10-30:lunch",
@@ -766,7 +738,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "lunch"
           },
           {
             "id": "pincio",
@@ -782,7 +755,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
           },
           {
             "id": "borghese",
@@ -798,7 +772,8 @@
             "waitSec": 900,
             "locked": true,
             "bookingId": "bk-borghese",
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
           },
           {
             "id": "castel",
@@ -814,7 +789,25 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "meal:2026-10-30:dinner",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Dinner",
+            "location": {
+              "lat": 41.9031,
+              "lng": 12.4663
+            },
+            "arriveMin": 1156,
+            "departMin": 1231,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
           },
           {
             "id": "stay:2026-10-30:end",
@@ -825,17 +818,27 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 1172,
-            "departMin": 1172,
+            "arriveMin": 1247,
+            "departMin": 1247,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "evening"
           }
         ],
         "legs": [
           {
             "fromStopId": "stay:2026-10-30:start",
+            "toStopId": "meal:2026-10-30:breakfast",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:breakfast",
             "toStopId": "campo-market",
             "mode": "walk",
             "durationSec": 65,
@@ -881,6 +884,15 @@
           },
           {
             "fromStopId": "castel",
+            "toStopId": "meal:2026-10-30:dinner",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:dinner",
             "toStopId": "stay:2026-10-30:end",
             "mode": "walk",
             "durationSec": 957,
@@ -889,10 +901,225 @@
             "line": null
           }
         ],
-        "warnings": ["Back at the stay 19:32 — later than 19:00"]
+        "warnings": ["Sightseeing runs to 19:06 — later than 19:00"]
       },
       "dropped": [],
-      "endsLaterMin": 115
+      "endsLaterMin": 32
+    },
+    {
+      "id": "drop:pincio,campo-market",
+      "label": "Drop Pincio terrace, Villa Borghese and Campo de' Fiori market (nice-to-haves)",
+      "kind": "drop",
+      "day": {
+        "date": "2026-10-30",
+        "stayId": "campo",
+        "stops": [
+          {
+            "id": "stay:2026-10-30:start",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 510,
+            "departMin": 510,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "meal:2026-10-30:breakfast",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Breakfast",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 510,
+            "departMin": 690,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "castel",
+            "kind": "wish",
+            "wishId": "castel",
+            "title": "Castel Sant'Angelo",
+            "location": {
+              "lat": 41.9031,
+              "lng": 12.4663
+            },
+            "arriveMin": 706,
+            "departMin": 796,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "meal:2026-10-30:lunch",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Lunch",
+            "location": {
+              "lat": 41.9031,
+              "lng": 12.4663
+            },
+            "arriveMin": 806,
+            "departMin": 866,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "lunch"
+          },
+          {
+            "id": "borghese",
+            "kind": "wish",
+            "wishId": "borghese",
+            "title": "Borghese Gallery",
+            "location": {
+              "lat": 41.9142,
+              "lng": 12.4921
+            },
+            "arriveMin": 885,
+            "departMin": 1020,
+            "waitSec": 900,
+            "locked": true,
+            "bookingId": "bk-borghese",
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "stay:2026-10-30:rest",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Free time at Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1057,
+            "departMin": 1140,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "afternoon"
+          },
+          {
+            "id": "meal:2026-10-30:dinner",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Dinner",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1140,
+            "departMin": 1215,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
+          },
+          {
+            "id": "stay:2026-10-30:end",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1215,
+            "departMin": 1215,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
+          }
+        ],
+        "legs": [
+          {
+            "fromStopId": "stay:2026-10-30:start",
+            "toStopId": "meal:2026-10-30:breakfast",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:breakfast",
+            "toStopId": "castel",
+            "mode": "walk",
+            "durationSec": 957,
+            "distanceM": 1276,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "castel",
+            "toStopId": "meal:2026-10-30:lunch",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:lunch",
+            "toStopId": "borghese",
+            "mode": "transit",
+            "durationSec": 1541,
+            "distanceM": 3206,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "borghese",
+            "toStopId": "stay:2026-10-30:rest",
+            "mode": "transit",
+            "durationSec": 1604,
+            "distanceM": 3522,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "stay:2026-10-30:rest",
+            "toStopId": "meal:2026-10-30:dinner",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:dinner",
+            "toStopId": "stay:2026-10-30:end",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          }
+        ],
+        "warnings": []
+      },
+      "dropped": ["pincio", "campo-market"],
+      "endsLaterMin": 0
     },
     {
       "id": "shift",
@@ -911,12 +1138,30 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 540,
+            "arriveMin": 510,
+            "departMin": 510,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "morning"
+          },
+          {
+            "id": "meal:2026-10-30:breakfast",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Breakfast",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 510,
             "departMin": 690,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "pincio",
@@ -932,7 +1177,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "morning"
           },
           {
             "id": "meal:2026-10-30:lunch",
@@ -948,7 +1194,8 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "lunch"
           },
           {
             "id": "borghese",
@@ -964,7 +1211,8 @@
             "waitSec": 900,
             "locked": true,
             "bookingId": "bk-borghese",
-            "warnings": []
+            "warnings": [],
+            "stage": "afternoon"
           },
           {
             "id": "campo-market",
@@ -982,7 +1230,8 @@
             "bookingId": null,
             "warnings": [
               "Closed by the time you arrive — closes 14:00, you arrive 17:37"
-            ]
+            ],
+            "stage": "afternoon"
           },
           {
             "id": "castel",
@@ -998,7 +1247,25 @@
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": ["Closes 19:30 — you arrive 18:33"]
+            "warnings": ["Closes 19:30 — you arrive 18:33"],
+            "stage": "afternoon"
+          },
+          {
+            "id": "meal:2026-10-30:dinner",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Dinner",
+            "location": {
+              "lat": 41.9031,
+              "lng": 12.4663
+            },
+            "arriveMin": 1213,
+            "departMin": 1288,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": [],
+            "stage": "evening"
           },
           {
             "id": "stay:2026-10-30:end",
@@ -1009,17 +1276,27 @@
               "lat": 41.8952,
               "lng": 12.4716
             },
-            "arriveMin": 1229,
-            "departMin": 1229,
+            "arriveMin": 1304,
+            "departMin": 1304,
             "waitSec": 0,
             "locked": false,
             "bookingId": null,
-            "warnings": []
+            "warnings": [],
+            "stage": "evening"
           }
         ],
         "legs": [
           {
             "fromStopId": "stay:2026-10-30:start",
+            "toStopId": "meal:2026-10-30:breakfast",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:breakfast",
             "toStopId": "pincio",
             "mode": "transit",
             "durationSec": 1397,
@@ -1065,6 +1342,15 @@
           },
           {
             "fromStopId": "castel",
+            "toStopId": "meal:2026-10-30:dinner",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:dinner",
             "toStopId": "stay:2026-10-30:end",
             "mode": "walk",
             "durationSec": 957,
@@ -1073,10 +1359,10 @@
             "line": null
           }
         ],
-        "warnings": ["Back at the stay 20:29 — later than 19:00"]
+        "warnings": ["Sightseeing runs to 20:03 — later than 19:00"]
       },
       "dropped": [],
-      "endsLaterMin": 172
+      "endsLaterMin": 89
     }
   ]
 }

@@ -11,11 +11,13 @@ import type {
   LatLng,
   Observation,
   PlannedDay,
+  PlannedStop,
   ReplanOption,
   SolvedPlan,
   TripReplanOption,
 } from '../../../model';
 import { estimateMatrix } from '../../estimate';
+import { fmtMin } from '../../calendar';
 import {
   solveTrip,
   type ReplanInput,
@@ -79,19 +81,33 @@ function stop(day: PlannedDay, stopId: string) {
   return day.stops[indexOf(day, stopId)];
 }
 
-const NEAR_PANTHEON: LatLng = { lat: 41.8991, lng: 12.4765 };
+/** A day's sights (wish stops) in planned order. */
+function sightsOf(day: PlannedDay) {
+  return day.stops.filter((s) => s.kind === 'wish');
+}
 
+/** The next stop that starts after a given one (for "set off towards"). */
+function nextAfter(day: PlannedDay, stopId: string) {
+  return day.stops[indexOf(day, stopId) + 1];
+}
+
+/**
+ * The cases pick their stops from the planned day by position, so they keep
+ * their meaning when the plan changes; descriptions name the actual stops.
+ */
 export function buildCaseInputs(): CaseInput[] {
   const cases: CaseInput[] = [];
+  const BUFFER = 10;
 
   {
     const { input, day } = dayInput('2026-10-27');
-    const i = indexOf(day, 'spanish-steps');
+    const [, second] = sightsOf(day);
+    const next = nextAfter(day, second.id);
     cases.push({
       name: 'retime-running-late',
-      description: 'Leave the Pantheon 25 minutes late; the rest of the day slides back in the same order.',
+      description: `Leave ${second.title} 25 minutes late; the rest of the day slides back in the same order.`,
       fn: 'retimeDay',
-      input: { ...input, day, fromIndex: i, startMin: stop(day, 'pantheon').departMin + 10 + 25 },
+      input: { ...input, day, fromIndex: indexOf(day, next.id), startMin: second.departMin + BUFFER + 25 },
     });
   }
   {
@@ -99,86 +115,88 @@ export function buildCaseInputs(): CaseInput[] {
     cases.push({
       name: 'retime-late-start-booked-slot',
       description:
-        'Leave the stay at 09:30 on Colosseum day: the 09:30 slot is missed, so a warning, not a move.',
+        'Leave the stay at 09:30 on Colosseum day (breakfast just before): the 09:30 slot is missed, so a warning, not a move.',
       fn: 'retimeDay',
       input: { ...input, day, fromIndex: 0, startMin: 9 * 60 + 30 },
     });
   }
   {
     const { input, day } = dayInput('2026-10-30');
+    const slot = stop(day, 'borghese');
+    const before = day.stops[indexOf(day, 'borghese') - 1];
+    const slack = Math.max(1, Math.min(10, Math.round(slot.waitSec / 60) - 1));
     cases.push({
       name: 'retime-locked-slot-absorbs-delay',
-      description: 'Leave the market 10 minutes late; the Borghese slot stays at 15:00 and the wait shrinks.',
+      description: `Leave ${before.title.toLowerCase() === 'lunch' ? 'lunch' : before.title} ${slack} minutes late; the 15:00 Borghese slot stays put and the wait before it shrinks.`,
       fn: 'retimeDay',
       input: {
         ...input,
         day,
-        fromIndex: indexOf(day, 'campo-market') + 1,
-        startMin: stop(day, 'campo-market').departMin + 10 + 10,
+        fromIndex: indexOf(day, 'borghese'),
+        startMin: before.departMin + (before.kind === 'meal' ? 0 : BUFFER) + slack,
       },
     });
   }
   {
     const { input, day } = dayInput('2026-10-27');
+    const [first] = sightsOf(day);
     cases.push({
       name: 'replan-on-time',
-      description: 'At Piazza Navona exactly on time: carry on as planned.',
+      description: `At ${first.title} exactly on time: carry on as planned.`,
       fn: 'replanDay',
-      input: {
-        ...input,
-        day,
-        nowMin: stop(day, 'navona').departMin,
-        position: null,
-        atStopId: 'navona',
-        doneStopIds: [],
-      },
+      input: { ...input, day, nowMin: first.departMin, position: null, atStopId: first.id, doneStopIds: [] },
     });
   }
   {
     const { input, day } = dayInput('2026-10-27');
+    // The first sight, overstayed by 150 minutes.
+    const at = sightsOf(day)[0];
+    const done: PlannedStop[] = [];
     cases.push({
       name: 'replan-running-late',
-      description: 'Still at the Capitoline 150 minutes after leaving was planned: push back or drop a nice.',
+      description: `Still at ${at.title} 150 minutes after leaving was planned: push back or drop a nice.`,
       fn: 'replanDay',
       input: {
         ...input,
         day,
-        nowMin: stop(day, 'capitoline').departMin + 10 + 150,
+        nowMin: at.departMin + BUFFER + 150,
         position: null,
-        atStopId: 'capitoline',
-        doneStopIds: ['navona', 'pantheon', 'spanish-steps', 'trevi', 'meal:2026-10-27:lunch'],
+        atStopId: at.id,
+        doneStopIds: done.map((s) => s.id),
       },
     });
   }
   {
     const { input, day } = dayInput('2026-10-27');
+    const [a, b, c] = sightsOf(day);
+    const near = c.location as LatLng;
     cases.push({
       name: 'replan-skipped-stop',
-      description: 'Skipped Piazza Navona and the Spanish Steps; walking near the Pantheon at 09:20.',
+      description: `Skipped ${a.title} and ${b.title}; walking near ${c.title} at ${fmtMin(a.arriveMin - 4)}.`,
       fn: 'replanDay',
       input: {
         ...input,
         day,
-        nowMin: 9 * 60 + 20,
-        position: NEAR_PANTHEON,
+        nowMin: a.arriveMin - 4,
+        position: { lat: near.lat + 0.0005, lng: near.lng - 0.0004 },
         atStopId: null,
-        doneStopIds: ['navona', 'spanish-steps'],
+        doneStopIds: [a.id, b.id],
       },
     });
   }
   {
     const { input, day } = dayInput('2026-10-30');
+    const [first] = sightsOf(day);
     cases.push({
       name: 'replan-locked-slot',
-      description:
-        'Still at the Pincio 40 minutes late: whatever the option, the 15:00 Borghese slot stays at 15:00.',
+      description: `Still at ${first.title} 40 minutes late: whatever the option, the 15:00 Borghese slot stays at 15:00.`,
       fn: 'replanDay',
       input: {
         ...input,
         day,
-        nowMin: stop(day, 'pincio').departMin + 10 + 40,
+        nowMin: first.departMin + BUFFER + 40,
         position: null,
-        atStopId: 'pincio',
+        atStopId: first.id,
         doneStopIds: [],
       },
     });
@@ -214,23 +232,20 @@ export function buildCaseInputs(): CaseInput[] {
     });
   }
   {
+    // Close today the first nice still ahead after the first sight.
+    const base = dayInput('2026-10-27');
+    const [first, ...rest] = sightsOf(base.day);
+    const wishes = new Map(base.input.wishes.map((w) => [w.id, w]));
+    const shut = rest.find((s) => wishes.get(s.wishId as string)?.priority === 'nice') as PlannedStop;
     const { input, day } = dayInput('2026-10-27', (inp) => {
-      const capitoline = inp.wishes.find((w) => w.id === 'capitoline');
-      if (capitoline?.facts) capitoline.facts.closedDates = ['2026-10-27'];
+      const w = inp.wishes.find((x) => x.id === shut.wishId);
+      if (w?.facts) w.facts.closedDates = ['2026-10-27'];
     });
     cases.push({
       name: 'replan-closed-today',
-      description:
-        'The Capitoline turns out to be closed today (strike): drop it rather than walk to a shut door.',
+      description: `${shut.title} turns out to be closed today (strike): drop it rather than walk to a shut door.`,
       fn: 'replanDay',
-      input: {
-        ...input,
-        day,
-        nowMin: stop(day, 'trevi').departMin,
-        position: null,
-        atStopId: 'trevi',
-        doneStopIds: ['navona', 'pantheon', 'spanish-steps'],
-      },
+      input: { ...input, day, nowMin: first.departMin, position: null, atStopId: first.id, doneStopIds: [] },
     });
   }
   cases.push(...buildTripCaseInputs(), ...buildV21CaseInputs(), ...buildV3CaseInputs());
@@ -311,7 +326,7 @@ export function buildV21CaseInputs(): CaseInput[] {
     cases.push({
       name: 'replan-light-day',
       description:
-        'Wednesday marked light after it was planned: at the Colosseum on time, the evening in Trastevere now runs past the earlier end (17:30), so dropping it is offered.',
+        'Wednesday marked light after it was planned, at the Colosseum on time: sightseeing must end by 17:30 and the day by 20:30, and the evening in Trastevere (an evening wish) still fits before dinner — carry on.',
       fn: 'replanDay',
       input: {
         trip: { ...base.trip, dayLoads: { '2026-10-28': 'light' } },
@@ -380,20 +395,33 @@ function observe(
 
 const NEAR_CASTEL: LatLng = { lat: 41.9019, lng: 12.4672 };
 const NEAR_PINCIO: LatLng = { lat: 41.9095, lng: 12.4778 };
-const AT_TREVI: LatLng = { lat: 41.9008, lng: 12.4832 };
 
 export function buildTripCaseInputs(): CaseInput[] {
+  const plan = solveTrip(romeInput());
+  const day = (date: string) => plan.days.find((d) => d.date === date) as PlannedDay;
+  const doneBy = (d: PlannedDay, min: number) =>
+    d.stops
+      .filter((s) => (s.kind === 'wish' || s.id.endsWith(':lunch')) && s.departMin <= min)
+      .map((s) => s.id);
+  const names = (d: PlannedDay, ids: string[]) =>
+    ids.map((id) => d.stops.find((s) => s.id === id)?.title ?? id).join(' and ') || 'breakfast';
+
+  const tue = day('2026-10-27');
+  const [a, b, c] = sightsOf(tue);
+  const tueDone = doneBy(tue, 10 * 60 + 40);
+  const fri = day('2026-10-30');
+  const friDone = doneBy(fri, 10 * 60 + 20);
+  const atC = c.location as LatLng;
   return [
     {
       name: 'trip-unplanned-stop-pull-forward',
-      description:
-        "Tue 27 Oct, 11:00: sitting at a café by the Tiber since 10:40, a few minutes from Castel Sant'Angelo (planned for Fri 30 Oct). Pull it forward to now.",
+      description: `Tue 27 Oct, 11:00: after ${names(tue, tueDone)}, sitting at a café by the Tiber since 10:40, a few minutes from Castel Sant'Angelo (planned for Fri 30 Oct). Pull it forward to now.`,
       fn: 'replanTrip',
       input: tripInput('2026-10-27', {
         nowMin: 11 * 60,
         position: NEAR_CASTEL,
         atStopId: null,
-        doneStopIds: ['navona', 'pantheon'],
+        doneStopIds: tueDone,
         observation: observe('unplanned-stop', 10 * 60 + 40, {
           name: 'Caffè sul Tevere',
           location: NEAR_CASTEL,
@@ -415,20 +443,14 @@ export function buildTripCaseInputs(): CaseInput[] {
     },
     {
       name: 'trip-out-of-order',
-      description:
-        'Tue 27 Oct, 10:00: after Piazza Navona they walked straight to the Trevi Fountain, a later stop of today. Do it now and carry on.',
+      description: `Tue 27 Oct, ${fmtMin(b.arriveMin)}: after ${a.title} they went straight to ${c.title}, a later stop of today. Do it now and carry on.`,
       fn: 'replanTrip',
       input: tripInput('2026-10-27', {
-        nowMin: 10 * 60,
-        position: AT_TREVI,
+        nowMin: b.arriveMin,
+        position: atC,
         atStopId: null,
-        doneStopIds: ['navona'],
-        observation: observe(
-          'out-of-order',
-          9 * 60 + 55,
-          { name: 'Trevi Fountain', location: AT_TREVI },
-          'trevi',
-        ),
+        doneStopIds: [a.id],
+        observation: observe('out-of-order', b.arriveMin - 5, { name: c.title, location: atC }, c.id),
       }),
     },
     {
@@ -447,14 +469,13 @@ export function buildTripCaseInputs(): CaseInput[] {
     },
     {
       name: 'trip-stay-here-no-slack',
-      description:
-        "Fri 30 Oct, 11:00: after the Pincio they sat down at a bar since 10:20. Staying until 11:30 leaves no room before the 15:00 Borghese slot, so a nice goes (it's the last day).",
+      description: `Fri 30 Oct, 11:00: after ${names(fri, friDone)} they sat down at a bar near the Pincio at 10:20. Staying until 11:30 leaves too little room before the 15:00 Borghese slot, so a nice goes (it's the last day).`,
       fn: 'replanTrip',
       input: tripInput('2026-10-30', {
         nowMin: 11 * 60,
         position: NEAR_PINCIO,
         atStopId: null,
-        doneStopIds: ['pincio'],
+        doneStopIds: friDone,
         observation: observe('unplanned-stop', 10 * 60 + 20, {
           name: 'Bar on the Pincio',
           location: NEAR_PINCIO,

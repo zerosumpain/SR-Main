@@ -6,13 +6,11 @@
 // with no route at all, an estimated walk from the two coordinates.
 
 import {
-  PACE_RULES,
   TAXI_PICKUP_SEC,
   TRAVEL_MODES,
   type DayLoad,
   type LatLng,
   type LocalDate,
-  type PaceRules,
   type Stay,
   type TravelMatrix,
   type TravelMode,
@@ -21,6 +19,7 @@ import {
   type Wish,
 } from '../model';
 import { estimateLeg } from './estimate';
+import { solverRules, type SolverRules } from './rules';
 
 export interface LegChoice {
   mode: TravelMode;
@@ -30,7 +29,7 @@ export interface LegChoice {
 }
 
 export interface SolverContext {
-  rules: PaceRules;
+  rules: SolverRules;
   /** Allowed modes, walk always included, canonical order. */
   modes: TravelMode[];
   matrix: TravelMatrix;
@@ -38,6 +37,8 @@ export interface SolverContext {
   /** Matrix point key → coordinates, for estimated fallbacks. */
   locations: Map<string, LatLng>;
   cache: Map<string, LegChoice>;
+  /** v4: wishes that replace a meal, by wish id. */
+  replaces: Map<string, 'breakfast' | 'lunch' | 'dinner'>;
   /** v3: flights/trains that frame the arrival and departure days. */
   transport: TransportSegment[];
   /** v2.1: per-date load ('light' | 'normal' | 'full'); missing = normal. */
@@ -65,7 +66,12 @@ export function makeContext(
     if (t.to.location) locations.set(`transport:${t.id}:to`, t.to.location);
   }
   return {
-    rules: PACE_RULES[trip.pace] ?? PACE_RULES.normal,
+    rules: solverRules(trip.pace),
+    replaces: new Map(
+      wishes
+        .filter((w) => w.replacesMeal)
+        .map((w) => [w.id, w.replacesMeal as 'breakfast' | 'lunch' | 'dinner']),
+    ),
     modes: TRAVEL_MODES.filter((m) => m === 'walk' || trip.modes.includes(m)),
     matrix,
     index,

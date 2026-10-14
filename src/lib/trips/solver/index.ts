@@ -12,6 +12,8 @@ import type { ReplanInput, RetimeInput, SolverInput } from './types';
 
 export type { SolverInput, ReplanInput, RetimeInput } from './types';
 export { stayFor } from './plan';
+export { stageOf, mealOfStop, withStages, STAGE_TIMES } from './stages';
+export { solverRules, BREAKFAST } from './rules';
 export type { TripReplanInput } from './trip';
 export { pullForwardCandidates, pullForwardDay, PULL_FORWARD_WALK_SEC } from './trip';
 export { taxiSec, modeSeconds, chooseLeg, legFromPosition, makeContext } from './matrix';

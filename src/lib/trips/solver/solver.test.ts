@@ -3,6 +3,7 @@ import { PACE_RULES } from '../model';
 import { romeInput, ROME_BOOKINGS, ROME_WISHES } from './fixtures/rome';
 import { isoWeekday } from './calendar';
 import { solveTrip } from './index';
+import { solverRules } from './rules';
 
 const startOf = (s: { arriveMin: number; waitSec: number }) => s.arriveMin + s.waitSec / 60;
 
@@ -16,7 +17,14 @@ describe('solveTrip on the Rome trip', () => {
       expect(day.stayId).toBe('campo');
       expect(day.stops[0].id).toBe(`stay:${day.date}:start`);
       expect(day.stops[day.stops.length - 1].id).toBe(`stay:${day.date}:end`);
-      expect(day.stops[day.stops.length - 1].arriveMin).toBeLessThanOrEqual(PACE_RULES.normal.dayEndMin);
+      // v4: back after dinner by the day's end; sightseeing by the pace's old day end.
+      expect(day.stops[day.stops.length - 1].arriveMin).toBeLessThanOrEqual(solverRules('normal').dayEndMin);
+      for (const s of day.stops.filter((x) => x.kind === 'wish' && x.wishId !== 'trastevere')) {
+        expect(s.departMin, s.id).toBeLessThanOrEqual(PACE_RULES.normal.dayEndMin);
+      }
+      for (const meal of ['breakfast', 'dinner']) {
+        expect(day.stops.some((s) => s.id === `meal:${day.date}:${meal}`)).toBe(true);
+      }
       expect(day.warnings).toEqual([]);
       expect(day.stops.some((s) => s.id === `meal:${day.date}:lunch`)).toBe(true);
       for (let i = 1; i < day.stops.length; i++) {

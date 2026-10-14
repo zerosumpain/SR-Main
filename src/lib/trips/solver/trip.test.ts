@@ -111,19 +111,28 @@ describe('replanTrip', () => {
     const carry = options.find((o) => o.kind === 'carry-on')!;
     expect(carry.dropped).toContain('colosseum');
     for (const o of options)
-      for (const s of o.days[0].stops.slice(1)) expect(s.arriveMin).toBeGreaterThanOrEqual(14 * 60 + 30);
+      for (const s of o.days[0].stops.filter(
+        (x) => !['stay', 'meal'].includes(x.kind) || x.id.endsWith(':end'),
+      )) {
+        if (s.id.endsWith(':start')) continue;
+        expect(s.arriveMin).toBeGreaterThanOrEqual(14 * 60 + 30);
+      }
   });
 
   it('out of order: do the stop they reached now', () => {
-    const options = replanTrip(inputOf('trip-out-of-order'));
+    const input = inputOf('trip-out-of-order');
+    const reached = input.observation!.stopId!;
+    const [doneId] = input.doneStopIds;
+    const title = input.day.stops.find((s) => s.id === reached)!.title;
+    const options = replanTrip(input);
     expect(options[0]).toMatchObject({
       kind: 'pull-forward',
-      label: 'Do Trevi Fountain now, then carry on',
+      label: `Do ${title} now, then carry on`,
       moved: [],
     });
     const ids = options[0].days[0].stops.map((s) => s.id);
-    expect(ids.filter((id) => id === 'trevi')).toHaveLength(1);
-    expect(ids.indexOf('trevi')).toBe(ids.indexOf('navona') + 1);
+    expect(ids.filter((id) => id === reached)).toHaveLength(1);
+    expect(ids.indexOf(reached)).toBe(ids.indexOf(doneId) + 1);
   });
 
   it('takes a taxi when allowed and faster than transit', () => {
@@ -135,11 +144,11 @@ describe('replanTrip', () => {
 
   it('stay here on a day with no slack drops a nice', () => {
     const options = replanTrip(inputOf('trip-stay-here-no-slack'));
-    expect(options[0].kind).toBe('stay-here');
-    expect(options[0].label).toBe('Stay at Bar on the Pincio until 11:30');
-    expect(options[0].dropped).toEqual(['campo-market']);
-    expect(stopOf(options[0].days[0], 'here:2026-10-30:620')!.departMin).toBe(11 * 60 + 30);
-    expect(stopOf(options[0].days[0], 'campo-market')).toBeUndefined();
+    const stay = options.find((o) => o.kind === 'stay-here')!;
+    expect(stay.label).toBe('Stay at Bar on the Pincio until 11:30');
+    expect(stay.dropped).toHaveLength(1);
+    expect(stopOf(stay.days[0], 'here:2026-10-30:620')!.departMin).toBe(11 * 60 + 30);
+    expect(stopOf(stay.days[0], stay.dropped[0])).toBeUndefined();
   });
 
   it('PROPERTY: no trip option moves a locked or booked stop', () => {

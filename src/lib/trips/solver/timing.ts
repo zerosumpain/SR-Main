@@ -13,6 +13,8 @@ import type { DroppedWish, LatLng, PlannedDay, PlannedLeg, PlannedStop } from '.
 import { dayLabel, fmtMin, cmp } from './calendar';
 import { mealItem, type DayFrame, type Item, type MealKind } from './items';
 import { STAY_HANDLING_MIN } from './transport';
+import { BREAKFAST } from './rules';
+import { mealOfStop, withStages } from './stages';
 import { chooseLeg, legFromPosition, stayPoint, type LegChoice, type SolverContext } from './matrix';
 import { orderDay } from './order';
 
@@ -48,6 +50,8 @@ export interface Simulation {
   overrunMin: number;
   /** Time back at the stay (or leaving the last stop when there is no stay). */
   endMin: number;
+  /** v4: when the last sightseeing stop (not a meal or evening wish) ends. */
+  lastActiveMin: number;
   issues: Issue[];
   cost: number;
 }
@@ -97,6 +101,22 @@ export function stayStartStop(frame: DayFrame, atMin: number): PlannedStop | nul
  * bag drop or check-in, then set off at `frame.dayStartMin` (or `atMin` if
  * later). On a departure day a "Check out" stop follows the stay start.
  */
+function breakfastWarnings(atMin: number): string[] {
+  return atMin < BREAKFAST.fromMin ? [`Early breakfast at ${fmtMin(atMin)}`] : [];
+}
+
+/** A start without the at-stay breakfast (a café wish replaces it); leaving time unchanged. */
+export function withoutBreakfast(start: SimStart): SimStart {
+  const i = start.prefixStops.findIndex((s) => s.kind === 'meal' && s.id.endsWith(':breakfast'));
+  if (i < 0) return start;
+  const prefixStops = start.prefixStops.filter((_, k) => k !== i);
+  const prefixLegs = start.prefixLegs
+    .filter((l) => l.toStopId !== start.prefixStops[i].id)
+    .map((l) => (l.fromStopId === start.prefixStops[i].id ? { ...l, fromStopId: prefixStops[i - 1].id } : l));
+  const last = prefixStops[prefixStops.length - 1];
+  return { ...start, prefixStops, prefixLegs, fromStopId: last ? last.id : null };
+}
+
 export function freshStart(frame: DayFrame, atMin = frame.dayStartMin, leaveEarlyForSlot = true): SimStart {
   if (frame.arrival && frame.stay) {
     const a = frame.arrival;
@@ -111,28 +131,50 @@ export function freshStart(frame: DayFrame, atMin = frame.dayStartMin, leaveEarl
       departMin: Math.max(atMin, frame.dayStartMin),
     };
   }
-  const start = stayStartStop(frame, atMin);
-  if (start && frame.stay && frame.departure?.checkOut) {
-    const by = frame.stay.checkOutMin as number;
-    const checkOut: PlannedStop = {
-      id: `stay:${frame.date}:checkout`,
-      kind: 'stay',
+  // v4: breakfast at the stay just before setting off at `atMin`.
+  const bf = Math.round(BREAKFAST.durationSec / 60);
+  const start = stayStartStop(frame, frame.stay ? atMin - bf : atMin);
+  if (start && frame.stay) {
+    const breakfast: PlannedStop = {
+      id: `meal:${frame.date}:breakfast`,
+      kind: 'meal',
       wishId: null,
-      title: `Check out of ${frame.stay.name}`,
+      title: 'Breakfast',
       location: { ...frame.stay.location },
-      arriveMin: atMin,
-      departMin: atMin + STAY_HANDLING_MIN,
+      arriveMin: atMin - bf,
+      departMin: atMin,
       waitSec: 0,
       locked: false,
       bookingId: null,
-      warnings: atMin + STAY_HANDLING_MIN > by ? [`Check-out is by ${fmtMin(by)}`] : [],
+      warnings: breakfastWarnings(atMin - bf),
     };
+    const prefixStops: PlannedStop[] = [start, breakfast];
+    const prefixLegs: PlannedLeg[] = [legOf(start.id, breakfast.id, ZERO_LEG)];
+    if (frame.departure?.checkOut) {
+      const by = frame.stay.checkOutMin as number;
+      const checkOut: PlannedStop = {
+        id: `stay:${frame.date}:checkout`,
+        kind: 'stay',
+        wishId: null,
+        title: `Check out of ${frame.stay.name}`,
+        location: { ...frame.stay.location },
+        arriveMin: atMin,
+        departMin: atMin + STAY_HANDLING_MIN,
+        waitSec: 0,
+        locked: false,
+        bookingId: null,
+        warnings: atMin + STAY_HANDLING_MIN > by ? [`Check-out is by ${fmtMin(by)}`] : [],
+      };
+      prefixLegs.push(legOf(breakfast.id, checkOut.id, ZERO_LEG));
+      prefixStops.push(checkOut);
+    }
+    const last = prefixStops[prefixStops.length - 1];
     return {
-      prefixStops: [start, checkOut],
-      prefixLegs: [legOf(start.id, checkOut.id, ZERO_LEG)],
+      prefixStops,
+      prefixLegs,
       fromPoint: stayPoint(frame.stay.id),
-      fromStopId: checkOut.id,
-      departMin: checkOut.departMin,
+      fromStopId: last.id,
+      departMin: last.departMin,
       leaveEarlyForSlot,
     };
   }
@@ -158,6 +200,9 @@ function legOf(from: string, to: string, c: LegChoice): PlannedLeg {
   };
 }
 
+/** Dinner moves near the stay when it would otherwise mean waiting longer than this. */
+export const DINNER_NEAR_STAY_AFTER_MIN = 60;
+
 const ZERO_LEG: LegChoice = {
   mode: 'walk',
   durationSec: 0,
@@ -179,28 +224,33 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
   let t = start.departMin;
   let travelMin = 0;
   let waitMin = 0;
+  let restMin = 0;
   let cost = 0;
   const bufferMin = Math.round(ctx.rules.bufferSec / 60);
   let first = true;
 
-  // A booked first stop we would miss from the normal start: leave earlier.
+  // A booked first stop we would miss from the normal start: leave earlier
+  // (the whole opening — stay start, breakfast, check-out — moves with it).
   const head = items[0];
-  const startStop = stops[stops.length - 1];
   if (
     start.leaveEarlyForSlot &&
     head &&
     head.fixedStartMin !== null &&
     head.point !== null &&
     point !== null &&
-    startStop?.kind === 'stay' &&
-    startStop.id.endsWith(':start')
+    stops[0]?.kind === 'stay' &&
+    stops[0].id.endsWith(':start')
   ) {
     const legMin = Math.ceil(chooseLeg(ctx, point, head.point).durationSec / 60);
     const latest = head.fixedStartMin - legMin;
     if (latest < t) {
+      const shift = latest - t;
       t = latest;
-      startStop.arriveMin = latest;
-      startStop.departMin = latest;
+      for (const s of stops) {
+        s.arriveMin += shift;
+        s.departMin += shift;
+        if (s.kind === 'meal' && s.id.endsWith(':breakfast')) s.warnings = breakfastWarnings(s.arriveMin);
+      }
     }
   }
 
@@ -217,10 +267,46 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
   };
 
   for (const item of items) {
-    const target = item.point ?? point;
-    const legMin = travel(target, item.id);
-    travelMin += legMin;
-    const arrive = t + legMin;
+    // v4: with a long gap before dinner, have it near the stay (go back,
+    // rest, eat nearby) rather than wait where the last sight was.
+    const dinnerAtStay =
+      item.kind === 'meal' &&
+      item.id.endsWith(':dinner') &&
+      frame.stay !== null &&
+      item.windows !== null &&
+      item.windows.length > 0 &&
+      item.windows[0].openMin - t > DINNER_NEAR_STAY_AFTER_MIN;
+    const target = dinnerAtStay && frame.stay ? stayPoint(frame.stay.id) : (item.point ?? point);
+    let arrive: number;
+    if (dinnerAtStay && frame.stay && item.windows) {
+      // Back to the stay for free time, then dinner nearby when it opens.
+      const restId = `stay:${frame.date}:rest`;
+      const legMin = travel(target, restId);
+      travelMin += legMin;
+      const atStay = t + legMin;
+      const open = item.windows[0].openMin;
+      stops.push({
+        id: restId,
+        kind: 'stay',
+        wishId: null,
+        title: `Free time at ${frame.stay.name}`,
+        location: { ...frame.stay.location },
+        arriveMin: atStay,
+        departMin: Math.max(atStay, open),
+        waitSec: 0,
+        locked: false,
+        bookingId: null,
+        warnings: [],
+      });
+      restMin += Math.max(0, open - atStay);
+      legs.push(legOf(restId, item.id, ZERO_LEG));
+      prevStopId = restId;
+      arrive = Math.max(atStay, open);
+    } else {
+      const legMin = travel(target, item.id);
+      travelMin += legMin;
+      arrive = t + legMin;
+    }
     let begin = arrive;
     const warnings = [...item.baseWarnings];
     const what = item.kind === 'meal' ? item.title.toLowerCase() : item.replacesMeal;
@@ -277,6 +363,8 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
       if (miss > 0) cost += COST.partOfDayMiss + Math.min(miss, COST.partOfDayMaxMin) * COST.partOfDayPerMin;
     }
     waitMin += Math.max(0, begin - arrive);
+    // Free time before dinner is the evening's rest, not a wasted wait.
+    if (item.kind === 'meal' && item.id.endsWith(':dinner')) restMin += Math.max(0, begin - arrive);
     // Re-planning holds a locked stop's planned times: the slot never moves,
     // and lateness shows only as the "Booked for … — you arrive …" warning.
     const held = item.heldArriveMin !== null && item.fixedStartMin !== null;
@@ -284,7 +372,7 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
     const shownArrive = held ? (item.heldArriveMin as number) : arrive;
     // A locked stop being re-timed keeps its planned end, even when late.
     const depart = item.fixedEndMin !== null ? Math.max(item.fixedEndMin, begin) : begin + item.durationMin;
-    const location = item.location ?? prevLocation;
+    const location = dinnerAtStay && frame.stay ? frame.stay.location : (item.location ?? prevLocation);
     stops.push({
       id: item.id,
       kind: item.kind,
@@ -344,23 +432,37 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
     }
   }
   if (!frame.stay) warnings.push('No stay booked for this night');
-  const overrunMin = Math.max(0, endMin - frame.dayEndMin);
-  if (overrunMin > 0) {
+  const endOverrun = Math.max(0, endMin - frame.dayEndMin);
+  if (endOverrun > 0) {
     warnings.push(
       frame.stay
         ? `Back at the stay ${fmtMin(endMin)} — later than ${fmtMin(frame.dayEndMin)}`
         : `Runs to ${fmtMin(endMin)} — later than ${fmtMin(frame.dayEndMin)}`,
     );
   }
-  cost += travelMin * COST.travelPerMin + waitMin * COST.waitPerMin + overrunMin * COST.overrunPerMin;
+  // v4: sightseeing (not meals, not evening wishes) should end by the
+  // active end; dinner and the evening run on to the day's end.
+  const activeIds = new Set(
+    items.filter((i) => i.kind === 'wish' && i.partOfDay !== 'evening' && !i.replacesMeal).map((i) => i.id),
+  );
+  const lastActive = stops.reduce((m, s) => (activeIds.has(s.id) ? Math.max(m, s.departMin) : m), 0);
+  const activeEnd = frame.activeEndMin ?? frame.dayEndMin;
+  const activeOverrun = Math.max(0, lastActive - activeEnd);
+  if (activeOverrun > 0 && endOverrun === 0) {
+    warnings.push(`Sightseeing runs to ${fmtMin(lastActive)} — later than ${fmtMin(activeEnd)}`);
+  }
+  const overrunMin = Math.max(endOverrun, activeOverrun);
+  cost +=
+    travelMin * COST.travelPerMin + (waitMin - restMin) * COST.waitPerMin + overrunMin * COST.overrunPerMin;
   return {
-    stops,
+    stops: withStages(stops, (s) => mealOfStop(s, ctx.replaces)),
     legs,
     warnings,
     travelMin,
     waitMin,
     overrunMin,
     endMin,
+    lastActiveMin: lastActive,
     issues,
     cost,
   };
@@ -400,11 +502,23 @@ export function withMeals(
   return { seq: current, sim: simulate(ctx, frame, start, current) };
 }
 
+/**
+ * The meals to slot into a day. Breakfast is normally part of the day's
+ * opening at the stay; on an arrival day it is a meal to slot only when the
+ * day starts (bags dropped) early enough to still start it in its window.
+ * A meal whose window ends before the day starts, or starts after the day
+ * ends (a departure day), is left out.
+ */
 export function mealsFor(frame: DayFrame, ctx: SolverContext, skip: Set<string> = new Set()): Item[] {
-  const kinds: MealKind[] = ['lunch', 'dinner'];
+  const kinds: MealKind[] = frame.arrival ? ['breakfast', 'lunch', 'dinner'] : ['lunch', 'dinner'];
   return kinds
     .map((k) => mealItem(frame.date, k, ctx.rules))
-    .filter((m): m is Item => m !== null && !skip.has(m.id));
+    .filter((m): m is Item => {
+      if (m === null || skip.has(m.id)) return false;
+      const w = m.windows?.[0];
+      if (!w) return true;
+      return w.closeMin - m.durationMin >= frame.dayStartMin && w.openMin < frame.dayEndMin;
+    });
 }
 
 /** Lowest value first: the person's later-listed nices go first, then id. */
@@ -452,9 +566,11 @@ export function fitDay(
     const skip = new Set(skipMeals);
     for (const i of remaining) if (i.replacesMeal) skip.add(`meal:${frame.date}:${i.replacesMeal}`);
     const meals = remaining.length ? mealsFor(frame, ctx, skip) : [];
-    const cost = (seq: Item[]) => withMeals(ctx, frame, start, seq, meals).sim.cost;
+    // A café wish that replaces breakfast: no breakfast at the stay.
+    const dayStart = remaining.some((i) => i.replacesMeal === 'breakfast') ? withoutBreakfast(start) : start;
+    const cost = (seq: Item[]) => withMeals(ctx, frame, dayStart, seq, meals).sim.cost;
     const ordered = orderDay(remaining, cost);
-    const { sim } = withMeals(ctx, frame, start, ordered, meals);
+    const { sim } = withMeals(ctx, frame, dayStart, ordered, meals);
     const closedNices = remaining
       .filter((i) => droppable(i) && sim.issues.some((x) => x.itemId === i.id && x.kind === 'closed'))
       .sort(byDropOrder);
@@ -476,7 +592,10 @@ export function fitDay(
             ? `Closed on ${dayLabel(frame.date)}`
             : `Closed by the time you'd get there on ${dayLabel(frame.date)}`;
       } else if (sim.overrunMin > 0) {
-        reason = `No time on ${dayLabel(frame.date)} — the day would end at ${fmtMin(sim.endMin)}, after ${fmtMin(frame.dayEndMin)}`;
+        reason =
+          sim.endMin > frame.dayEndMin
+            ? `No time on ${dayLabel(frame.date)} — the day would end at ${fmtMin(sim.endMin)}, after ${fmtMin(frame.dayEndMin)}`
+            : `No time on ${dayLabel(frame.date)} — sightseeing would run to ${fmtMin(sim.lastActiveMin)}, after ${fmtMin(frame.activeEndMin ?? frame.dayEndMin)}`;
       } else if (closedNices.length) {
         reason = `Made room on ${dayLabel(frame.date)} for ${closedNices[0].title}, which is planned for that day`;
       } else {

@@ -337,12 +337,30 @@
             "lat": 41.8952,
             "lng": 12.4716
           },
-          "arriveMin": 516,
+          "arriveMin": 486,
+          "departMin": 486,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "morning"
+        },
+        {
+          "id": "meal:2026-10-29:breakfast",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Breakfast",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 486,
           "departMin": 516,
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "vatican",
@@ -358,7 +376,8 @@
           "waitSec": 0,
           "locked": true,
           "bookingId": "bk-vatican",
-          "warnings": []
+          "warnings": [],
+          "stage": "morning"
         },
         {
           "id": "trastevere-lunch",
@@ -374,7 +393,42 @@
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "lunch"
+        },
+        {
+          "id": "stay:2026-10-29:rest",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Free time at Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 928,
+          "departMin": 1140,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "afternoon"
+        },
+        {
+          "id": "meal:2026-10-29:dinner",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Dinner",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 1140,
+          "departMin": 1215,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": [],
+          "stage": "evening"
         },
         {
           "id": "trastevere",
@@ -385,12 +439,13 @@
             "lat": 41.8894,
             "lng": 12.47
           },
-          "arriveMin": 918,
-          "departMin": 1110,
-          "waitSec": 6120,
+          "arriveMin": 1226,
+          "departMin": 1316,
+          "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "evening"
         },
         {
           "id": "stay:2026-10-29:end",
@@ -401,17 +456,27 @@
             "lat": 41.8952,
             "lng": 12.4716
           },
-          "arriveMin": 1131,
-          "departMin": 1131,
+          "arriveMin": 1337,
+          "departMin": 1337,
           "waitSec": 0,
           "locked": false,
           "bookingId": null,
-          "warnings": []
+          "warnings": [],
+          "stage": "evening"
         }
       ],
       "legs": [
         {
           "fromStopId": "stay:2026-10-29:start",
+          "toStopId": "meal:2026-10-29:breakfast",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-29:breakfast",
           "toStopId": "vatican",
           "mode": "transit",
           "durationSec": 1407,
@@ -430,10 +495,28 @@
         },
         {
           "fromStopId": "trastevere-lunch",
+          "toStopId": "stay:2026-10-29:rest",
+          "mode": "walk",
+          "durationSec": 698,
+          "distanceM": 930,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "stay:2026-10-29:rest",
+          "toStopId": "meal:2026-10-29:dinner",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-29:dinner",
           "toStopId": "trastevere",
           "mode": "walk",
-          "durationSec": 71,
-          "distanceM": 95,
+          "durationSec": 642,
+          "distanceM": 856,
           "estimated": true,
           "line": null
         },
@@ -449,7 +532,7 @@
       ],
       "warnings": []
     },
-    "fromIndex": 2,
+    "fromIndex": 3,
     "startMin": 805
   },
   "expected": {
@@ -465,12 +548,30 @@
           "lat": 41.8952,
           "lng": 12.4716
         },
-        "arriveMin": 516,
+        "arriveMin": 486,
+        "departMin": 486,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "morning"
+      },
+      {
+        "id": "meal:2026-10-29:breakfast",
+        "kind": "meal",
+        "wishId": null,
+        "title": "Breakfast",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 486,
         "departMin": 516,
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "morning"
       },
       {
         "id": "vatican",
@@ -486,7 +587,8 @@
         "waitSec": 0,
         "locked": true,
         "bookingId": "bk-vatican",
-        "warnings": []
+        "warnings": [],
+        "stage": "morning"
       },
       {
         "id": "trastevere-lunch",
@@ -502,7 +604,42 @@
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": ["Late lunch — starts 13:51"]
+        "warnings": ["Late lunch — starts 13:51"],
+        "stage": "lunch"
+      },
+      {
+        "id": "stay:2026-10-29:rest",
+        "kind": "stay",
+        "wishId": null,
+        "title": "Free time at Apartment by Campo de' Fiori",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 973,
+        "departMin": 1140,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "afternoon"
+      },
+      {
+        "id": "meal:2026-10-29:dinner",
+        "kind": "meal",
+        "wishId": null,
+        "title": "Dinner",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "arriveMin": 1140,
+        "departMin": 1215,
+        "waitSec": 0,
+        "locked": false,
+        "bookingId": null,
+        "warnings": [],
+        "stage": "evening"
       },
       {
         "id": "trastevere",
@@ -513,12 +650,13 @@
           "lat": 41.8894,
           "lng": 12.47
         },
-        "arriveMin": 963,
-        "departMin": 1110,
-        "waitSec": 3420,
+        "arriveMin": 1226,
+        "departMin": 1316,
+        "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "evening"
       },
       {
         "id": "stay:2026-10-29:end",
@@ -529,17 +667,27 @@
           "lat": 41.8952,
           "lng": 12.4716
         },
-        "arriveMin": 1131,
-        "departMin": 1131,
+        "arriveMin": 1337,
+        "departMin": 1337,
         "waitSec": 0,
         "locked": false,
         "bookingId": null,
-        "warnings": []
+        "warnings": [],
+        "stage": "evening"
       }
     ],
     "legs": [
       {
         "fromStopId": "stay:2026-10-29:start",
+        "toStopId": "meal:2026-10-29:breakfast",
+        "mode": "walk",
+        "durationSec": 0,
+        "distanceM": 0,
+        "estimated": false,
+        "line": null
+      },
+      {
+        "fromStopId": "meal:2026-10-29:breakfast",
         "toStopId": "vatican",
         "mode": "transit",
         "durationSec": 1407,
@@ -558,10 +706,28 @@
       },
       {
         "fromStopId": "trastevere-lunch",
+        "toStopId": "stay:2026-10-29:rest",
+        "mode": "walk",
+        "durationSec": 698,
+        "distanceM": 930,
+        "estimated": true,
+        "line": null
+      },
+      {
+        "fromStopId": "stay:2026-10-29:rest",
+        "toStopId": "meal:2026-10-29:dinner",
+        "mode": "walk",
+        "durationSec": 0,
+        "distanceM": 0,
+        "estimated": false,
+        "line": null
+      },
+      {
+        "fromStopId": "meal:2026-10-29:dinner",
         "toStopId": "trastevere",
         "mode": "walk",
-        "durationSec": 71,
-        "distanceM": 95,
+        "durationSec": 642,
+        "distanceM": 856,
         "estimated": true,
         "line": null
       },
