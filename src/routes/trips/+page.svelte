@@ -19,6 +19,26 @@
   let modes = $state<TravelMode[]>(['walk', 'transit']);
   let busy = $state(false);
   let message = $state<string | null>(null);
+  let opening = $state('');
+
+  // v2: a trip starts as a conversation — the opening message is the planner's first turn.
+  async function start(e: SubmitEvent) {
+    e.preventDefault();
+    if (!opening.trim()) return;
+    busy = true;
+    message = null;
+    try {
+      const res = await fetch('/api/trips', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: opening }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        message = body.error ?? body.message ?? 'Could not start the trip.';
+        return;
+      }
+      await goto(`/trips/${body.id}`);
+    } finally {
+      busy = false;
+    }
+  }
 
   function toggleMode(m: TravelMode) {
     if (m === 'walk') return;
@@ -84,7 +104,16 @@
   </section>
 
   <section class="nm-sec">
-    <div class="nm-sec-hd"><span class="sr-label-tight">New trip</span></div>
+    <div class="nm-sec-hd"><span class="sr-label-tight">New trip</span><span class="nm-sec-meta">start by telling the planner about it</span></div>
+    <form class="opening" onsubmit={start}>
+      <textarea class="nm-text-input" rows="3" bind:value={opening} aria-label="Tell the planner about the trip" placeholder="Rome, 27–30 October, two of us, staying near Campo de’ Fiori. We want the Vatican, the Colosseum and good food."></textarea>
+      <div class="actions">
+        <button class="nm-save-btn" type="submit" disabled={busy || !opening.trim()}>{busy ? 'Starting…' : 'Start planning'}</button>
+        {#if message}<span class="error" role="alert">{message}</span>{/if}
+      </div>
+    </form>
+    <details class="manual">
+      <summary>Or fill in the details yourself</summary>
     <form class="grid" onsubmit={create}>
       <label>Destination<input class="nm-text-input" bind:value={destination} required placeholder="Rome, Italy" /></label>
       <label>Name <span class="opt">(optional)</span><input class="nm-text-input" bind:value={title} placeholder="Rome in October" /></label>
@@ -110,9 +139,9 @@
       </fieldset>
       <div class="actions">
         <button class="nm-save-btn" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create trip'}</button>
-        {#if message}<span class="error" role="alert">{message}</span>{/if}
       </div>
     </form>
+    </details>
   </section>
 </PageWrap>
 
@@ -217,6 +246,23 @@
     display: flex;
     gap: 12px;
     align-items: center;
+  }
+  .opening textarea {
+    width: 100%;
+    resize: vertical;
+  }
+  .opening .actions {
+    margin-top: 8px;
+  }
+  .manual {
+    margin-top: 14px;
+  }
+  .manual summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent-ink);
+    margin-bottom: 10px;
   }
   .error {
     color: var(--error);

@@ -26,7 +26,7 @@ export const POST: RequestHandler = async (event) => {
     const existing = wishId ? bookings.find((b) => b.wishId === wishId) : null;
     if (existing) {
       const booking = await saveBooking(trip.id, { bookingId: existing.id, wishId, title: existing.title }, parsed.value);
-      return replanned(trip, { booking });
+      return replanned(trip, { booking }, 200, [{ op: 'updateBooking', id: existing.id, fields: parsed.value }]);
     }
     title = title || wish?.title || '';
     if (!title) return json({ error: 'Name the booking.' }, { status: 400 });
@@ -35,5 +35,6 @@ export const POST: RequestHandler = async (event) => {
   }
   const booking = await saveBooking(trip.id, { bookingId, wishId, title }, parsed.value);
   if (!booking) return json({ error: 'No such booking.' }, { status: 404 });
-  return replanned(trip, { booking });
+  const { id, ...rest } = booking;
+  return replanned(trip, { booking }, 200, [bookingId ? { op: 'updateBooking', id, fields: parsed.value } : { op: 'addBooking', booking: rest }]);
 };

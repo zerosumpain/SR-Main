@@ -10,5 +10,8 @@ export const POST: RequestHandler = async (event) => {
   const parsed = parseStayInput(await readJson(event), trip);
   if (!parsed.ok) return json({ error: parsed.error }, { status: 400 });
   const stay = await addStay(trip.id, parsed.value);
-  return replanned(trip, { stay }, 201);
+  const s = parsed.value;
+  return replanned(trip, { stay }, 201, [
+    { op: 'addStay', name: s.name, placeQuery: s.address ?? s.name, fromDate: s.fromDate, toDate: s.toDate, checkInMin: s.checkInMin, checkOutMin: s.checkOutMin },
+  ]);
 };

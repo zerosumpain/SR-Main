@@ -160,6 +160,7 @@ describe('every native route gates itself', () => {
         // refuses every member with 403 in each handler.
         '/trips/+server.ts',
         '/trips/[id]/+server.ts',
+        '/trips/[id]/converse/+server.ts',
         '/trips/[id]/events/+server.ts',
         '/trips/[id]/replan/+server.ts',
       ].sort(),

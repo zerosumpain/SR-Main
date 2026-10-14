@@ -42,13 +42,20 @@ vi.mock('$lib/trips/plan.server', async () => {
       return { accepted: events.map((e) => e.clientId), planVersion: 7 };
     },
     replanOptions: async () => [{ id: 'o1', label: 'Push everything back 20 min' }],
+    tripReplan: async () => ({ tripOptions: [{ id: 't1', label: 'Re-plan the rest of the trip' }], narrative: 'You stopped for lunch.', quickReplies: ['Find gelato near here'] }),
   };
 });
+vi.mock('$lib/trips/converse.server', () => ({
+  converse: async (_trip: unknown, input: { text: string; surface: string; position: unknown }) => ({
+    reply: `heard ${input.text} on the ${input.surface}`, applied: [], rejected: [], quickReplies: [], planVersion: 3, changes: [], messages: [], position: input.position,
+  }),
+}));
 
 const list = await import('./+server');
 const one = await import('./[id]/+server');
 const events = await import('./[id]/events/+server');
 const replan = await import('./[id]/replan/+server');
+const talk = await import('./[id]/converse/+server');
 
 function ev(params: Record<string, string> = {}, init: RequestInit = {}) {
   return { params, request: new Request('http://x/api/native/trips', init), url: new URL('http://x/api/native/trips') } as never;
@@ -67,6 +74,7 @@ describe('owner only (D2)', () => {
     ['bundle', () => one.GET(ev({ id: TRIP.id }))],
     ['events', () => events.POST(ev({ id: TRIP.id }, post({ events: [], basePlanVersion: 0 })))],
     ['replan', () => replan.POST(ev({ id: TRIP.id }, post({ date: '2026-10-27', nowMin: 600, doneStopIds: [] })))],
+    ['converse', () => talk.POST(ev({ id: TRIP.id }, post({ text: 'hi' })))],
   ])('refuses a member on %s with 403', async (_name, call) => {
     h.role = 'member';
     const res = await call();
@@ -125,5 +133,30 @@ describe('replan', () => {
   it('returns the options', async () => {
     const res = await replan.POST(ev({ id: TRIP.id }, post({ date: '2026-10-27', nowMin: 600, position: null, atStopId: null, doneStopIds: [] })));
     expect(await res.json()).toEqual({ options: [{ id: 'o1', label: 'Push everything back 20 min' }] });
+  });
+});
+
+describe('v2: the conversation and whole-trip re-planning', () => {
+  it('converses as the phone, with its position', async () => {
+    const res = await talk.POST(ev({ id: TRIP.id }, post({ text: 'Make today lighter', position: { lat: 41.9, lng: 12.47 } })));
+    expect(await res.json()).toMatchObject({ reply: 'heard Make today lighter on the phone', position: { lat: 41.9, lng: 12.47 } });
+    expect((await talk.POST(ev({ id: TRIP.id }, post({ text: ' ' })))).status).toBe(400);
+    expect((await talk.POST(ev({ id: TRIP.id }, post({ text: 'x', observation: { kind: 'lost' } })))).status).toBe(400);
+  });
+
+  it('adds trip options and a narrative only for scope trip', async () => {
+    const day = await (await replan.POST(ev({ id: TRIP.id }, post({ date: '2026-10-27', nowMin: 600, doneStopIds: [] })))).json();
+    expect(Object.keys(day)).toEqual(['options']);
+    const trip = await (
+      await replan.POST(
+        ev({ id: TRIP.id }, post({ date: '2026-10-27', nowMin: 760, doneStopIds: [], scope: 'trip', observation: { kind: 'idle', sinceMin: 740, motion: 'stationary', place: null, stopId: 's' } })),
+      )
+    ).json();
+    expect(trip).toEqual({
+      options: [{ id: 'o1', label: 'Push everything back 20 min' }],
+      tripOptions: [{ id: 't1', label: 'Re-plan the rest of the trip' }],
+      narrative: 'You stopped for lunch.',
+      quickReplies: ['Find gelato near here'],
+    });
   });
 });

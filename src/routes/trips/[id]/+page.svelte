@@ -62,7 +62,7 @@
     return m ? Number(m[1]) * 60 + Number(m[2]) : null;
   };
   const checked = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'never');
-  const MODE_LABEL: Record<TravelMode, string> = { walk: 'walk', cycle: 'cycle', drive: 'drive', transit: 'public transport' };
+  const MODE_LABEL: Record<TravelMode, string> = { walk: 'walk', cycle: 'cycle', drive: 'drive', transit: 'public transport', taxi: 'taxi' };
 
   // ── Intake ──
   let intake = $state({ destination: '', title: '', startDate: '', endDate: '', timeZone: '', pace: 'normal', modes: [] as TravelMode[], notes: '' });
@@ -127,24 +127,56 @@
     }
   }
 
-  // ── Free text → wishes ──
-  let freeText = $state('');
-  let drafts = $state<Array<{ title: string; priority: 'must' | 'nice'; durationSec: number | null; partOfDay: string; note: string | null; keep: boolean }>>([]);
-  async function readText() {
-    const out = await call('POST', `${base}/wishes/draft`, { text: freeText });
-    if (out && Array.isArray(out.wishes)) {
-      drafts = (out.wishes as Array<Omit<(typeof drafts)[number], 'keep'>>).map((w) => ({ ...w, keep: true }));
-      notice = drafts.length ? `Read ${drafts.length} wishes — untick any you do not want, then add them.` : 'Nothing to add was found in that.';
+  // ── The conversation (v2): the planner is the editor; the forms below are a view ──
+  type Msg = (typeof data.messages)[number];
+  let draft = $state('');
+  let sending = $state(false);
+  let pending = $state<string | null>(null);
+  let quick = $state<string[]>([]);
+  let talkEl = $state<HTMLDivElement | null>(null);
+  const shown = $derived<Msg[]>(data.messages);
+
+  async function send(text: string) {
+    const t = text.trim();
+    if (!t || sending) return;
+    sending = true;
+    pending = t;
+    draft = '';
+    quick = [];
+    problem = null;
+    try {
+      const res = await fetch(`${base}/converse`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: t }) });
+      const out = (await res.json().catch(() => ({}))) as { quickReplies?: string[]; error?: string; changes?: string[]; planVersion?: number | null };
+      if (!res.ok) {
+        problem = out.error ?? 'The planner did not answer.';
+        draft = t;
+      } else {
+        quick = out.quickReplies ?? [];
+        if (out.changes?.length) notice = `Re-planned as version ${out.planVersion}.`;
+      }
+      await invalidateAll();
+    } catch {
+      problem = 'The site did not answer. Try again.';
+      draft = t;
+    } finally {
+      sending = false;
+      pending = null;
     }
   }
-  async function addDrafts() {
-    const wishes = drafts.filter((d) => d.keep).map(({ keep: _k, ...w }) => w);
-    if (!wishes.length) return;
-    if (await call('POST', `${base}/wishes`, { wishes }, `${wishes.length} wishes added.`)) {
-      drafts = [];
-      freeText = '';
+  function onKey(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void send(draft);
     }
   }
+  $effect(() => {
+    // Keep the newest message in view. Tracked: the message count and the pending line.
+    void shown.length;
+    void pending;
+    if (talkEl) talkEl.scrollTop = talkEl.scrollHeight;
+  });
+  const timeOf = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
   let quickWish = $state('');
   async function addOne(e: SubmitEvent) {
     e.preventDefault();
@@ -281,6 +313,147 @@
   {#if problem}<p class="banner error" role="alert">{problem}</p>{/if}
   {#if notice}<p class="banner" role="status">{notice}</p>{/if}
 
+  <div class="workspace">
+    <section class="nm-sec talk" aria-label="Planning conversation">
+      <div class="nm-sec-hd"><span class="sr-label-tight">Plan it together</span><span class="nm-sec-meta">the planner changes the trip; you can also edit the details below</span></div>
+      <div class="messages" bind:this={talkEl}>
+        {#if !shown.length && !pending}
+          <p class="muted">Tell the planner about the trip — where and when, where you’re staying, who’s going and what you want to do. It will ask for anything missing.</p>
+        {/if}
+        {#each shown as m (m.id)}
+          {#if m.role === 'event'}
+            <p class="msg event"><span class="mono small">{timeOf(m.createdAt)}</span> Changed directly: {m.text}</p>
+          {:else}
+            <div class="msg {m.role}">
+              <p>{m.text}</p>
+              <span class="meta mono small">{m.role === 'user' ? (m.surface === 'phone' ? 'you, on the phone' : 'you') : 'planner'} · {timeOf(m.createdAt)}{m.ops.length ? ` · ${m.ops.length} change${m.ops.length === 1 ? '' : 's'}` : ''}{m.planVersion ? ` · plan v${m.planVersion}` : ''}</span>
+            </div>
+          {/if}
+        {/each}
+        {#if pending}
+          <div class="msg user"><p>{pending}</p></div>
+          <p class="msg event" role="status">The planner is thinking…</p>
+        {/if}
+      </div>
+      {#if quick.length}
+        <div class="quick">
+          {#each quick as q (q)}<button class="nm-btn-ghost" type="button" disabled={sending} onclick={() => send(q)}>{q}</button>{/each}
+        </div>
+      {/if}
+      <form class="composer" onsubmit={(e) => { e.preventDefault(); void send(draft); }}>
+        <textarea class="nm-text-input" rows="2" bind:value={draft} onkeydown={onKey} placeholder="“Make Thursday lighter”, “we’re staying near Campo de’ Fiori”, “add the Borghese”…" aria-label="Message the planner"></textarea>
+        <button class="nm-save-btn" type="submit" disabled={sending || !draft.trim()}>{sending ? 'Sending…' : 'Send'}</button>
+      </form>
+    </section>
+
+    <div class="plan-col">
+  <!-- ── The plan ───────────────────────────────────────── -->
+    <section class="nm-sec">
+      <div class="nm-sec-hd">
+        <span class="sr-label-tight">The plan</span>
+        <span class="nm-sec-meta">{data.plan ? `version ${data.plan.version} · ${data.plan.source} · ${checked(data.plan.createdAt)}` : 'not solved yet'}</span>
+      </div>
+      {#if !plan}
+        <p class="muted">Add a stay and some wishes; the plan appears here.</p>
+      {:else}
+        {#if estimatedModes.length}<p class="muted small">Some travel times are estimated from distance ({estimatedModes.join(', ')}), not routed.</p>{/if}
+        <div class="row-actions">
+          <button class="nm-rowact" type="button" data-active={focus === null} onclick={() => (focus = null)}>All days</button>
+          {#each plan.days as d, i (d.date)}
+            <button class="nm-rowact" type="button" data-active={focus === d.date} onclick={() => (focus = d.date)}>{i + 1} · {dayLabel(d.date)}</button>
+          {/each}
+        </div>
+        <TripMap days={mapDays} suggestions={mapSuggestions} {focus} />
+        {#each plan.warnings as wn, wi (wi)}<p class="warn">{wn}</p>{/each}
+  
+        <div class="days">
+          {#each plan.days as day, di (day.date)}
+            {#if !focus || focus === day.date}
+              <article class="day">
+                <h3><span class="mono">{di + 1}</span> {dayLabel(day.date)}</h3>
+                {#if day.legs.some((l) => l.mode === 'drive')}
+                  <p class="small"><button class="nm-rowact" type="button" onclick={() => liveDrive(day)}>Live drive times</button> <span class="muted">{liveNote[day.date] ?? ''}</span></p>
+                {/if}
+                {#each day.warnings as wn, wi (wi)}<p class="warn">{wn}</p>{/each}
+                <ol class="timeline">
+                  {#each day.stops as s, si (s.id)}
+                    <li class="stop stop-{s.kind}">
+                      <span class="time mono">{hhmm(s.arriveMin)}{s.departMin !== s.arriveMin ? `–${hhmm(s.departMin)}` : ''}</span>
+                      <span class="s-body">
+                        <strong>{s.title}</strong>{s.locked ? ' · locked' : ''}{s.bookingId ? ' · booked' : ''}
+                        {#if s.waitSec >= 60}<span class="muted"> · {waitText(s.waitSec)}</span>{/if}
+                        {#each s.warnings as wn, wi (wi)}<span class="warn block">{wn}</span>{/each}
+                        {#if s.kind === 'wish' && s.wishId}
+                          {@const w = data.wishes.find((x) => x.id === s.wishId)}
+                          {#if w}
+                            <span class="s-edit">
+                              <select class="nm-text-input small" aria-label="Move {s.title} to day" value={w.fixedDate ?? ''} onchange={(e) => patchWish(w, { fixedDate: e.currentTarget.value || null }, 'Moved.')}>
+                                <option value="">any day</option>{#each dates as d (d)}<option value={d}>{dayLabel(d)}</option>{/each}
+                              </select>
+                              <button class="nm-rowact" type="button" onclick={() => patchWish(w, { locked: !w.locked }, w.locked ? 'Unlocked.' : 'Locked to this day and time.')}>{w.locked ? 'Unlock' : 'Lock'}</button>
+                              <button class="nm-rowact" type="button" onclick={() => patchWish(w, { priority: w.priority === 'must' ? 'nice' : 'must' })}>Make {w.priority === 'must' ? 'nice' : 'must'}</button>
+                            </span>
+                            {#if w.guide}
+                              <details class="guide">
+                                <summary>When you get there</summary>
+                                <p>{w.guide.summary}</p>
+                                {#if w.guide.tips.length}<ul>{#each w.guide.tips as t, ti (ti)}<li>{t}</li>{/each}</ul>{/if}
+                                {#if w.guide.links.length}<p class="links">{#each w.guide.links as l, li (l.url)}{li ? ' · ' : ''}<a href={l.url} target="_blank" rel="noopener noreferrer">{l.label}</a>{/each}</p>{/if}
+                              </details>
+                            {/if}
+                          {/if}
+                        {/if}
+                      </span>
+                    </li>
+                    {#if day.legs[si]}
+                      {@const leg = day.legs[si]}
+                      {@const liveMin = live[`${day.date}|${leg.fromStopId}|${leg.toStopId}`]}
+                      <li class="leg muted">
+                        {MODE_LABEL[leg.mode]} {Math.round(leg.durationSec / 60)} min{leg.distanceM ? ` · ${(leg.distanceM / 1000).toFixed(1)} km` : ''}{leg.estimated ? ' · estimated' : ''}{liveMin !== undefined && liveMin !== null ? ` · live ${liveMin} min` : ''}
+                        {#if leg.guidance}
+                          {@const g = leg.guidance}
+                          <details class="guide">
+                            <summary>{g.summary}</summary>
+                            {#if g.transit?.length}
+                              <ul>
+                                {#each g.transit as t, ti (ti)}
+                                  <li>{t.vehicle} {t.line}: {t.fromStop} → {t.toStop}{t.stops ? ` (${t.stops} stops)` : ''}{t.departuresMin.length ? ` · leaves ${t.departuresMin.map((m) => hhmm(m)).join(', ')}` : ''}</li>
+                                {/each}
+                              </ul>
+                            {/if}
+                            {#if g.steps.length}<ol class="steps">{#each g.steps as st, sti (sti)}<li>{st}</li>{/each}</ol>{/if}
+                            {#if g.booking}
+                              <p>{g.booking.how}</p>
+                              {#if g.booking.links.length}<p class="links">{#each g.booking.links as l, li (l.url)}{li ? ' · ' : ''}<a href={l.url} target="_blank" rel="noopener noreferrer">{l.label}</a>{/each}</p>{/if}
+                            {/if}
+                            {#if g.tips.length}<ul>{#each g.tips as t, ti (ti)}<li>{t}</li>{/each}</ul>{/if}
+                            {#if g.costText}<p>{g.costText}</p>{/if}
+                          </details>
+                        {/if}
+                      </li>
+                    {/if}
+                  {/each}
+                </ol>
+              </article>
+            {/if}
+          {/each}
+        </div>
+  
+        {#if plan.dropped.length}
+          <h3 class="sub-hd">Not planned</h3>
+          <ul class="plain">
+            {#each plan.dropped as d (d.wishId)}
+              <li class="line"><span><strong>{titleOf[d.wishId] ?? 'A wish'}</strong> — {d.reason}</span></li>
+            {/each}
+          </ul>
+        {/if}
+      {/if}
+    </section>
+    </div>
+  </div>
+
+  <h2 class="details-hd">The details <span class="muted small">— what the conversation has set; edit directly if you like</span></h2>
+
   <!-- ── Intake ─────────────────────────────────────────── -->
   <details class="nm-sec" open={!data.plan}>
     <summary class="nm-sec-hd"><span class="sr-label-tight">The trip</span><span class="nm-sec-meta">destination, dates, pace, how you get about</span></summary>
@@ -336,33 +509,6 @@
         <button class="nm-save-btn" type="submit" disabled={busy || !stayPlace}>Add stay</button>
       </div>
     </form>
-  </section>
-
-  <!-- ── Free text ──────────────────────────────────────── -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd"><span class="sr-label-tight">What do you want to do?</span><span class="nm-sec-meta">read into wishes; you confirm each</span></div>
-    <textarea class="nm-text-input" rows="3" bind:value={freeText} placeholder="The Colosseum for sure, the Vatican if we can get tickets, a long evening in Trastevere…"></textarea>
-    <div class="row-actions">
-      <button class="nm-btn-ghost" type="button" disabled={busy || freeText.trim().length < 3} onclick={readText}>Read it</button>
-      <form class="inline" onsubmit={addOne}>
-        <input class="nm-text-input" bind:value={quickWish} placeholder="…or add one wish" />
-        <button class="nm-btn-ghost" type="submit" disabled={busy || !quickWish.trim()}>Add</button>
-      </form>
-    </div>
-    {#if drafts.length}
-      <ul class="plain drafts">
-        {#each drafts as d, i (i)}
-          <li class="line">
-            <label class="check"><input type="checkbox" bind:checked={d.keep} /> <strong>{d.title}</strong></label>
-            <span class="muted">{d.priority}{d.partOfDay !== 'any' ? ` · ${d.partOfDay}` : ''}{d.durationSec ? ` · ${Math.round(d.durationSec / 60)} min` : ''}{d.note ? ` · ${d.note}` : ''}</span>
-          </li>
-        {/each}
-      </ul>
-      <div class="row-actions">
-        <button class="nm-save-btn" type="button" disabled={busy} onclick={addDrafts}>Add {drafts.filter((d) => d.keep).length} wishes</button>
-        <button class="nm-rowact" type="button" onclick={() => (drafts = [])}>Discard</button>
-      </div>
-    {/if}
   </section>
 
   <!-- ── Wishes ─────────────────────────────────────────── -->
@@ -494,80 +640,18 @@
     {/if}
   </section>
 
-  <!-- ── The plan ───────────────────────────────────────── -->
-  <section class="nm-sec">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">The plan</span>
-      <span class="nm-sec-meta">{data.plan ? `version ${data.plan.version} · ${data.plan.source} · ${checked(data.plan.createdAt)}` : 'not solved yet'}</span>
-    </div>
-    {#if !plan}
-      <p class="muted">Add a stay and some wishes; the plan appears here.</p>
-    {:else}
-      {#if estimatedModes.length}<p class="muted small">Some travel times are estimated from distance ({estimatedModes.join(', ')}), not routed.</p>{/if}
-      <div class="row-actions">
-        <button class="nm-rowact" type="button" data-active={focus === null} onclick={() => (focus = null)}>All days</button>
-        {#each plan.days as d, i (d.date)}
-          <button class="nm-rowact" type="button" data-active={focus === d.date} onclick={() => (focus = d.date)}>{i + 1} · {dayLabel(d.date)}</button>
-        {/each}
-      </div>
-      <TripMap days={mapDays} suggestions={mapSuggestions} {focus} />
-      {#each plan.warnings as wn, wi (wi)}<p class="warn">{wn}</p>{/each}
-
-      <div class="days">
-        {#each plan.days as day, di (day.date)}
-          {#if !focus || focus === day.date}
-            <article class="day">
-              <h3><span class="mono">{di + 1}</span> {dayLabel(day.date)}</h3>
-              {#if day.legs.some((l) => l.mode === 'drive')}
-                <p class="small"><button class="nm-rowact" type="button" onclick={() => liveDrive(day)}>Live drive times</button> <span class="muted">{liveNote[day.date] ?? ''}</span></p>
-              {/if}
-              {#each day.warnings as wn, wi (wi)}<p class="warn">{wn}</p>{/each}
-              <ol class="timeline">
-                {#each day.stops as s, si (s.id)}
-                  <li class="stop stop-{s.kind}">
-                    <span class="time mono">{hhmm(s.arriveMin)}{s.departMin !== s.arriveMin ? `–${hhmm(s.departMin)}` : ''}</span>
-                    <span class="s-body">
-                      <strong>{s.title}</strong>{s.locked ? ' · locked' : ''}{s.bookingId ? ' · booked' : ''}
-                      {#if s.waitSec >= 60}<span class="muted"> · {waitText(s.waitSec)}</span>{/if}
-                      {#each s.warnings as wn, wi (wi)}<span class="warn block">{wn}</span>{/each}
-                      {#if s.kind === 'wish' && s.wishId}
-                        {@const w = data.wishes.find((x) => x.id === s.wishId)}
-                        {#if w}
-                          <span class="s-edit">
-                            <select class="nm-text-input small" aria-label="Move {s.title} to day" value={w.fixedDate ?? ''} onchange={(e) => patchWish(w, { fixedDate: e.currentTarget.value || null }, 'Moved.')}>
-                              <option value="">any day</option>{#each dates as d (d)}<option value={d}>{dayLabel(d)}</option>{/each}
-                            </select>
-                            <button class="nm-rowact" type="button" onclick={() => patchWish(w, { locked: !w.locked }, w.locked ? 'Unlocked.' : 'Locked to this day and time.')}>{w.locked ? 'Unlock' : 'Lock'}</button>
-                            <button class="nm-rowact" type="button" onclick={() => patchWish(w, { priority: w.priority === 'must' ? 'nice' : 'must' })}>Make {w.priority === 'must' ? 'nice' : 'must'}</button>
-                          </span>
-                        {/if}
-                      {/if}
-                    </span>
-                  </li>
-                  {#if day.legs[si]}
-                    {@const leg = day.legs[si]}
-                    {@const liveMin = live[`${day.date}|${leg.fromStopId}|${leg.toStopId}`]}
-                    <li class="leg muted">
-                      {MODE_LABEL[leg.mode]} {Math.round(leg.durationSec / 60)} min{leg.distanceM ? ` · ${(leg.distanceM / 1000).toFixed(1)} km` : ''}{leg.estimated ? ' · estimated' : ''}{liveMin !== undefined && liveMin !== null ? ` · live ${liveMin} min` : ''}
-                    </li>
-                  {/if}
-                {/each}
-              </ol>
-            </article>
-          {/if}
-        {/each}
-      </div>
-
-      {#if plan.dropped.length}
-        <h3 class="sub-hd">Not planned</h3>
-        <ul class="plain">
-          {#each plan.dropped as d (d.wishId)}
-            <li class="line"><span><strong>{titleOf[d.wishId] ?? 'A wish'}</strong> — {d.reason}</span></li>
-          {/each}
-        </ul>
+  {#if data.guide}
+    <details class="nm-sec">
+      <summary class="nm-sec-hd"><span class="sr-label-tight">Getting around {trip.destination}</span><span class="nm-sec-meta">written {checked(data.guide.generatedAt)}</span></summary>
+      <p>{data.guide.gettingAround}</p>
+      {#if data.guide.transitTickets}<p><strong>Tickets:</strong> {data.guide.transitTickets}</p>{/if}
+      {#if data.guide.taxi}
+        <p><strong>Taxis:</strong> {data.guide.taxi.how}</p>
+        {#if data.guide.taxi.links.length}<p class="links">{#each data.guide.taxi.links as l, li (l.url)}{li ? ' · ' : ''}<a href={l.url} target="_blank" rel="noopener noreferrer">{l.label}</a>{/each}</p>{/if}
       {/if}
-    {/if}
-  </section>
+      {#if data.guide.tips.length}<ul>{#each data.guide.tips as t, ti (ti)}<li>{t}</li>{/each}</ul>{/if}
+    </details>
+  {/if}
 
   <!-- ── What changed ───────────────────────────────────── -->
   {#if data.versions.length}
@@ -881,6 +965,116 @@
   :global(.nm-rowact[data-active='true']) {
     color: var(--accent);
     text-decoration: underline;
+  }
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .talk {
+    position: sticky;
+    top: calc(var(--site-nav-height, 48px) + 8px);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - var(--site-nav-height, 48px) - 24px);
+  }
+  .messages {
+    flex: 1;
+    min-height: 200px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 4px;
+  }
+  .msg {
+    max-width: 92%;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    background: var(--bg);
+  }
+  .msg p {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+  .msg.user {
+    align-self: flex-end;
+    border-color: var(--accent);
+  }
+  .msg.assistant {
+    align-self: flex-start;
+    background: var(--bg-section);
+  }
+  .msg.event {
+    align-self: center;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font-size: var(--fs-label-xs);
+    padding: 0;
+  }
+  .msg .meta {
+    display: block;
+    margin-top: 4px;
+    color: var(--text-ghost);
+  }
+  .quick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .composer {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    margin-top: 8px;
+  }
+  .composer textarea {
+    flex: 1;
+  }
+  .plan-col {
+    min-width: 0;
+  }
+  .details-hd {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    margin: 1.5rem 0 0.8rem;
+  }
+  .guide {
+    margin-top: 4px;
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+  }
+  .guide summary {
+    cursor: pointer;
+    color: var(--accent-ink);
+  }
+  .guide ul,
+  .guide ol {
+    margin: 4px 0;
+    padding-left: 18px;
+  }
+  .guide p {
+    margin: 4px 0;
+  }
+  .links a {
+    color: var(--accent-ink);
+  }
+  @media (max-width: 1000px) {
+    .workspace {
+      grid-template-columns: 1fr;
+    }
+    .talk {
+      position: static;
+      max-height: none;
+    }
+    .messages {
+      max-height: 420px;
+    }
   }
   @media (max-width: 640px) {
     .leg {

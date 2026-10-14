@@ -21,5 +21,13 @@ export const POST: RequestHandler = async (event) => {
     clean.push(parsed.value);
   }
   const wishes = await addWishes(trip.id, clean);
-  return replanned(trip, { wishes }, 201);
+  return replanned(
+    trip,
+    { wishes },
+    201,
+    clean.map((w) => ({
+      op: 'addWish' as const,
+      wish: { title: w.title, placeQuery: null, priority: w.priority, durationMin: w.durationSec ? Math.round(w.durationSec / 60) : null, partOfDay: w.partOfDay, fixedDate: w.fixedDate, fixedStartMin: w.fixedStartMin, note: w.note },
+    })),
+  );
 };

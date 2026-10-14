@@ -105,6 +105,7 @@
 /api/native/today
 /api/native/trips
 /api/native/trips/[id]
+/api/native/trips/[id]/converse
 /api/native/trips/[id]/events
 /api/native/trips/[id]/replan
 /api/native/wildmind
