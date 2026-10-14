@@ -7365,6 +7365,8 @@ export const trip = pgTable(
     notes: text('notes'),
     /** The background research job's progress, for the page to poll. */
     research: jsonb('research').$type<Record<string, unknown>>(),
+    /** v2: TripGuide — city know-how (getting around, taxis, tickets), model-written once. */
+    guide: jsonb('guide').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -7411,6 +7413,8 @@ export const tripWish = pgTable(
     facts: jsonb('facts').$type<Record<string, unknown>>(),
     note: text('note'),
     sortHint: integer('sort_hint').notNull().default(0),
+    /** v2: StopGuide — what to know when you're there, model-written from facts. */
+    guide: jsonb('guide').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -7457,6 +7461,26 @@ export const tripPlan = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique('trip_plan_trip_version_key').on(t.tripId, t.version)],
+);
+
+// v2: the planning conversation. The trip is developed by talking to a model;
+// `ops` are the TripOps it applied (or a form edit recorded as ops, role
+// 'event'), `plan_version` the version that turn produced.
+export const tripMessage = pgTable(
+  'trip_message',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    /** 'user' | 'assistant' | 'event' */
+    role: text('role').notNull(),
+    text: text('text').notNull(),
+    ops: jsonb('ops').$type<unknown[]>().notNull().default([]),
+    planVersion: integer('plan_version'),
+    /** 'site' | 'phone' */
+    surface: text('surface').notNull().default('site'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_message_trip_idx').on(t.tripId, t.createdAt)],
 );
 
 // What happened on the day, from the phone. Idempotent on the phone's clientId.

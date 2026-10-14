@@ -27,5 +27,9 @@ DO $$ BEGIN
     IF to_regclass('public.trip_event') IS NOT NULL THEN
       GRANT SELECT, INSERT, UPDATE, DELETE ON public.trip_event TO sr_main_runtime;
     END IF;
+    -- v2 (2026-10-14): the planning conversation.
+    IF to_regclass('public.trip_message') IS NOT NULL THEN
+      GRANT SELECT, INSERT, UPDATE, DELETE ON public.trip_message TO sr_main_runtime;
+    END IF;
   END IF;
 END $$;
