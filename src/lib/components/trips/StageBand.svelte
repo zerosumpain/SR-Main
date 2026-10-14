@@ -68,7 +68,7 @@
     <button class="ask" type="button" disabled={busy} onclick={() => onAsk(`For ${dayName}, ${ASK[stage]}: `)}>Ask about this stage</button>
   </header>
 
-  {#if !items.some((i) => i.stop.kind !== 'stay')}
+  {#if !items.some((i) => i.stop.kind !== 'stay' || i.stop.id.endsWith(':rest'))}
     <p class="free">Free — nothing planned. <button class="link" type="button" onclick={() => onAsk(`Something for ${dayName}, ${ASK[stage]}?`)}>Ask for an idea</button></p>
   {/if}
 
