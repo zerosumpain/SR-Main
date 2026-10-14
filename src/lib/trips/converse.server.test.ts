@@ -145,7 +145,9 @@ describe('check and correct (v2.1)', () => {
     expect(check).toContain('What they asked: Make Wednesday lighter');
     expect(check).toContain('The schedule did not change.');
     expect(h.replans).toHaveLength(2);
-    expect(r.reply).toBe('Wednesday was not lighter yet, so I have also dropped Castel Sant’Angelo from it.');
+    expect(r.reply).toBe(
+      'Wednesday was not lighter yet, so I have also dropped Castel Sant’Angelo from it.\n\nAfter that change the plan could not fit a wish (No time on a light day).',
+    );
     expect(r.applied.map((o) => o.op)).toEqual(['setTrip', 'setTrip']);
     expect(r.planVersion).toBe(6);
     expect(r.changes).toEqual(['Castel Sant’Angelo is no longer planned — No time on a light day.']);

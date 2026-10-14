@@ -163,6 +163,9 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
             const again = await solve();
             if (again) {
               planVersion = again.version;
+              // The correction is not checked again (two calls per turn), so
+              // what it could not do is stated from the solver, not the model.
+              replyText += correctionNote(solved.plan, again.plan, Object.fromEntries((await loadState(trip.id)).wishes.map((w) => [w.id, w.title])));
               finalPlan = again.plan;
             } else solveFailed = true;
           }
@@ -215,6 +218,14 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     changes,
     messages: [userMessage, reply],
   };
+}
+
+/** What a correction's re-solve newly dropped, in a sentence — '' when nothing. */
+export function correctionNote(first: SolvedPlan, corrected: SolvedPlan, titles: Record<string, string>): string {
+  const was = new Set(first.dropped.map((d) => d.wishId));
+  const lost = corrected.dropped.filter((d) => !was.has(d.wishId));
+  if (!lost.length) return '';
+  return `\n\nAfter that change the plan could not fit ${lost.map((d) => `${titles[d.wishId] ?? 'a wish'} (${d.reason})`).join('; ')}.`;
 }
 
 /**
