@@ -198,7 +198,8 @@ export interface Booking {
 
 // ── The solved plan ─────────────────────────────────────────────────────────
 
-export type StopKind = 'wish' | 'meal' | 'stay';
+/** v3: 'transport' = a flight/train arrival or departure at the start or end of a day. */
+export type StopKind = 'wish' | 'meal' | 'stay' | 'transport';
 
 export interface PlannedStop {
   /** Stable within a plan: the wish id, `meal:<date>:lunch`, `stay:<date>:start|end`. */

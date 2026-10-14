@@ -25,7 +25,7 @@ import {
 } from '../../index';
 import { makeWish } from '../build';
 import { sliceMatrix, stayPoint } from '../../matrix';
-import { romeInput, romePoints } from '../rome';
+import { romeInput, romePoints, romeTransportInput } from '../rome';
 
 export interface RetimeCaseInput extends RetimeInput {
   day: PlannedDay;
@@ -233,7 +233,7 @@ export function buildCaseInputs(): CaseInput[] {
       },
     });
   }
-  cases.push(...buildTripCaseInputs(), ...buildV21CaseInputs());
+  cases.push(...buildTripCaseInputs(), ...buildV21CaseInputs(), ...buildV3CaseInputs());
   return cases;
 }
 
@@ -460,6 +460,52 @@ export function buildTripCaseInputs(): CaseInput[] {
           location: NEAR_PINCIO,
         }),
       }),
+    },
+  ];
+}
+
+/** v3: flights there and back frame the first and last days. */
+export function buildV3CaseInputs(): CaseInput[] {
+  const plan = solveTrip(romeTransportInput());
+  const first = plan.days[0];
+  const delayed = romeTransportInput(120);
+  return [
+    {
+      name: 'solve-flights-rome',
+      description:
+        'LS1235 Newcastle 07:35 → Rome 11:05, check-in 15:00: transfer, drop bags, lunch near the stay and sights before check-in. LS1236 home at 18:40: check out in the morning, back for bags by ~15:30, leave for the airport at 15:40.',
+      fn: 'solveTrip',
+      input: romeTransportInput(),
+    },
+    {
+      name: 'replan-arrival-delayed',
+      description:
+        'The outbound flight is 2 h late (lands 13:05): the arrival day is re-framed from the new landing; lunch is past its window, so it is skipped with a warning.',
+      fn: 'replanDay',
+      input: {
+        ...delayed,
+        day: first,
+        nowMin: 12 * 60 + 30,
+        position: null,
+        atStopId: null,
+        doneStopIds: [],
+      },
+    },
+    {
+      name: 'trip-arrival-delayed',
+      description:
+        'The same 2 h delay, re-planning the whole trip: what no longer fits on the arrival day moves to a later day.',
+      fn: 'replanTrip',
+      input: {
+        ...delayed,
+        day: first,
+        plannedDays: plan.days,
+        nowMin: 12 * 60 + 30,
+        position: null,
+        atStopId: null,
+        doneStopIds: [],
+        observation: { kind: 'behind', place: null, sinceMin: 11 * 60 + 5, motion: 'unknown', stopId: null },
+      },
     },
   ];
 }

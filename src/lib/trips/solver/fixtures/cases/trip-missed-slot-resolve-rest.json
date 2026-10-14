@@ -2265,391 +2265,6 @@
   },
   "expected": [
     {
-      "id": "carry-on",
-      "kind": "carry-on",
-      "label": "Carry on with today: drop Trastevere in the evening (nice-to-have)",
-      "days": [
-        {
-          "date": "2026-10-28",
-          "stayId": "campo",
-          "stops": [
-            {
-              "id": "stay:2026-10-28:start",
-              "kind": "stay",
-              "wishId": null,
-              "title": "Apartment by Campo de' Fiori",
-              "location": {
-                "lat": 41.8952,
-                "lng": 12.4716
-              },
-              "arriveMin": 540,
-              "departMin": 870,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            },
-            {
-              "id": "meal:2026-10-28:lunch",
-              "kind": "meal",
-              "wishId": null,
-              "title": "Lunch",
-              "location": {
-                "lat": 41.8952,
-                "lng": 12.4716
-              },
-              "arriveMin": 870,
-              "departMin": 930,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": ["Late lunch — starts 14:30"]
-            },
-            {
-              "id": "stay:2026-10-28:end",
-              "kind": "stay",
-              "wishId": null,
-              "title": "Apartment by Campo de' Fiori",
-              "location": {
-                "lat": 41.8952,
-                "lng": 12.4716
-              },
-              "arriveMin": 930,
-              "departMin": 930,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            }
-          ],
-          "legs": [
-            {
-              "fromStopId": "stay:2026-10-28:start",
-              "toStopId": "meal:2026-10-28:lunch",
-              "mode": "walk",
-              "durationSec": 0,
-              "distanceM": 0,
-              "estimated": false,
-              "line": null
-            },
-            {
-              "fromStopId": "meal:2026-10-28:lunch",
-              "toStopId": "stay:2026-10-28:end",
-              "mode": "walk",
-              "durationSec": 0,
-              "distanceM": 0,
-              "estimated": false,
-              "line": null
-            }
-          ],
-          "warnings": ["Missed your 09:30 Colosseum and Roman Forum slot"]
-        },
-        {
-          "date": "2026-10-29",
-          "stayId": "campo",
-          "stops": [
-            {
-              "id": "stay:2026-10-29:start",
-              "kind": "stay",
-              "wishId": null,
-              "title": "Apartment by Campo de' Fiori",
-              "location": {
-                "lat": 41.8952,
-                "lng": 12.4716
-              },
-              "arriveMin": 516,
-              "departMin": 516,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            },
-            {
-              "id": "vatican",
-              "kind": "wish",
-              "wishId": "vatican",
-              "title": "Vatican Museums",
-              "location": {
-                "lat": 41.9065,
-                "lng": 12.4536
-              },
-              "arriveMin": 540,
-              "departMin": 750,
-              "waitSec": 0,
-              "locked": true,
-              "bookingId": "bk-vatican",
-              "warnings": []
-            },
-            {
-              "id": "meal:2026-10-29:lunch",
-              "kind": "meal",
-              "wishId": null,
-              "title": "Lunch",
-              "location": {
-                "lat": 41.9065,
-                "lng": 12.4536
-              },
-              "arriveMin": 760,
-              "departMin": 820,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            },
-            {
-              "id": "st-peters",
-              "kind": "wish",
-              "wishId": "st-peters",
-              "title": "St Peter's Basilica",
-              "location": {
-                "lat": 41.9022,
-                "lng": 12.4539
-              },
-              "arriveMin": 828,
-              "departMin": 903,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            },
-            {
-              "id": "stay:2026-10-29:end",
-              "kind": "stay",
-              "wishId": null,
-              "title": "Apartment by Campo de' Fiori",
-              "location": {
-                "lat": 41.8952,
-                "lng": 12.4716
-              },
-              "arriveMin": 936,
-              "departMin": 936,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            }
-          ],
-          "legs": [
-            {
-              "fromStopId": "stay:2026-10-29:start",
-              "toStopId": "vatican",
-              "mode": "transit",
-              "durationSec": 1407,
-              "distanceM": 2534,
-              "estimated": true,
-              "line": null
-            },
-            {
-              "fromStopId": "vatican",
-              "toStopId": "meal:2026-10-29:lunch",
-              "mode": "walk",
-              "durationSec": 0,
-              "distanceM": 0,
-              "estimated": false,
-              "line": null
-            },
-            {
-              "fromStopId": "meal:2026-10-29:lunch",
-              "toStopId": "st-peters",
-              "mode": "walk",
-              "durationSec": 467,
-              "distanceM": 622,
-              "estimated": true,
-              "line": null
-            },
-            {
-              "fromStopId": "st-peters",
-              "toStopId": "stay:2026-10-29:end",
-              "mode": "transit",
-              "durationSec": 1331,
-              "distanceM": 2157,
-              "estimated": true,
-              "line": null
-            }
-          ],
-          "warnings": []
-        },
-        {
-          "date": "2026-10-30",
-          "stayId": "campo",
-          "stops": [
-            {
-              "id": "stay:2026-10-30:start",
-              "kind": "stay",
-              "wishId": null,
-              "title": "Apartment by Campo de' Fiori",
-              "location": {
-                "lat": 41.8952,
-                "lng": 12.4716
-              },
-              "arriveMin": 540,
-              "departMin": 540,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            },
-            {
-              "id": "pincio",
-              "kind": "wish",
-              "wishId": "pincio",
-              "title": "Pincio terrace, Villa Borghese",
-              "location": {
-                "lat": 41.9113,
-                "lng": 12.4797
-              },
-              "arriveMin": 564,
-              "departMin": 609,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            },
-            {
-              "id": "campo-market",
-              "kind": "wish",
-              "wishId": "campo-market",
-              "title": "Campo de' Fiori market",
-              "location": {
-                "lat": 41.8956,
-                "lng": 12.4722
-              },
-              "arriveMin": 643,
-              "departMin": 673,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            },
-            {
-              "id": "castel",
-              "kind": "wish",
-              "wishId": "castel",
-              "title": "Castel Sant'Angelo",
-              "location": {
-                "lat": 41.9031,
-                "lng": 12.4663
-              },
-              "arriveMin": 699,
-              "departMin": 789,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            },
-            {
-              "id": "meal:2026-10-30:lunch",
-              "kind": "meal",
-              "wishId": null,
-              "title": "Lunch",
-              "location": {
-                "lat": 41.9031,
-                "lng": 12.4663
-              },
-              "arriveMin": 799,
-              "departMin": 859,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            },
-            {
-              "id": "borghese",
-              "kind": "wish",
-              "wishId": "borghese",
-              "title": "Borghese Gallery",
-              "location": {
-                "lat": 41.9142,
-                "lng": 12.4921
-              },
-              "arriveMin": 885,
-              "departMin": 1020,
-              "waitSec": 900,
-              "locked": true,
-              "bookingId": "bk-borghese",
-              "warnings": []
-            },
-            {
-              "id": "stay:2026-10-30:end",
-              "kind": "stay",
-              "wishId": null,
-              "title": "Apartment by Campo de' Fiori",
-              "location": {
-                "lat": 41.8952,
-                "lng": 12.4716
-              },
-              "arriveMin": 1057,
-              "departMin": 1057,
-              "waitSec": 0,
-              "locked": false,
-              "bookingId": null,
-              "warnings": []
-            }
-          ],
-          "legs": [
-            {
-              "fromStopId": "stay:2026-10-30:start",
-              "toStopId": "pincio",
-              "mode": "transit",
-              "durationSec": 1397,
-              "distanceM": 2485,
-              "estimated": true,
-              "line": null
-            },
-            {
-              "fromStopId": "pincio",
-              "toStopId": "campo-market",
-              "mode": "transit",
-              "durationSec": 1382,
-              "distanceM": 2409,
-              "estimated": true,
-              "line": null
-            },
-            {
-              "fromStopId": "campo-market",
-              "toStopId": "castel",
-              "mode": "walk",
-              "durationSec": 942,
-              "distanceM": 1256,
-              "estimated": true,
-              "line": null
-            },
-            {
-              "fromStopId": "castel",
-              "toStopId": "meal:2026-10-30:lunch",
-              "mode": "walk",
-              "durationSec": 0,
-              "distanceM": 0,
-              "estimated": false,
-              "line": null
-            },
-            {
-              "fromStopId": "meal:2026-10-30:lunch",
-              "toStopId": "borghese",
-              "mode": "transit",
-              "durationSec": 1541,
-              "distanceM": 3206,
-              "estimated": true,
-              "line": null
-            },
-            {
-              "fromStopId": "borghese",
-              "toStopId": "stay:2026-10-30:end",
-              "mode": "transit",
-              "durationSec": 1604,
-              "distanceM": 3522,
-              "estimated": true,
-              "line": null
-            }
-          ],
-          "warnings": []
-        }
-      ],
-      "dropped": ["colosseum", "trastevere"],
-      "moved": [],
-      "explanation": "Keeps the other days as they are and re-times the rest of today from now, without Colosseum and Roman Forum and Trastevere in the evening."
-    },
-    {
       "id": "resolve-rest",
       "kind": "resolve-rest",
       "label": "Re-plan the rest of the trip",
@@ -2727,7 +2342,10 @@
               "line": null
             }
           ],
-          "warnings": ["Missed your 09:30 Colosseum and Roman Forum slot"]
+          "warnings": [
+            "Missed your 09:30 Colosseum and Roman Forum slot",
+            "No time for lunch — it's past 14:30; grab something on the way"
+          ]
         },
         {
           "date": "2026-10-29",
@@ -3074,6 +2692,394 @@
         }
       ],
       "explanation": "Re-plans the rest of today from where you are, and the days after. You missed the 09:30 Colosseum and Roman Forum slot, so it needs a new booking. Castel Sant'Angelo moves to Wed 28 Oct. Trastevere in the evening moves to Thu 29 Oct. Colosseum and Roman Forum moves to Fri 30 Oct."
+    },
+    {
+      "id": "carry-on",
+      "kind": "carry-on",
+      "label": "Carry on with today: carry on without the missed Colosseum and Roman Forum slot",
+      "days": [
+        {
+          "date": "2026-10-28",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "stay:2026-10-28:start",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 540,
+              "departMin": 870,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "trastevere",
+              "kind": "wish",
+              "wishId": "trastevere",
+              "title": "Trastevere in the evening",
+              "location": {
+                "lat": 41.8894,
+                "lng": 12.47
+              },
+              "arriveMin": 881,
+              "departMin": 1110,
+              "waitSec": 8340,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-28:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 1131,
+              "departMin": 1131,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "stay:2026-10-28:start",
+              "toStopId": "trastevere",
+              "mode": "walk",
+              "durationSec": 642,
+              "distanceM": 856,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "trastevere",
+              "toStopId": "stay:2026-10-28:end",
+              "mode": "walk",
+              "durationSec": 642,
+              "distanceM": 856,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": [
+            "Missed your 09:30 Colosseum and Roman Forum slot",
+            "No time for lunch — it's past 14:30; grab something on the way"
+          ]
+        },
+        {
+          "date": "2026-10-29",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "stay:2026-10-29:start",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 516,
+              "departMin": 516,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "vatican",
+              "kind": "wish",
+              "wishId": "vatican",
+              "title": "Vatican Museums",
+              "location": {
+                "lat": 41.9065,
+                "lng": 12.4536
+              },
+              "arriveMin": 540,
+              "departMin": 750,
+              "waitSec": 0,
+              "locked": true,
+              "bookingId": "bk-vatican",
+              "warnings": []
+            },
+            {
+              "id": "meal:2026-10-29:lunch",
+              "kind": "meal",
+              "wishId": null,
+              "title": "Lunch",
+              "location": {
+                "lat": 41.9065,
+                "lng": 12.4536
+              },
+              "arriveMin": 760,
+              "departMin": 820,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "st-peters",
+              "kind": "wish",
+              "wishId": "st-peters",
+              "title": "St Peter's Basilica",
+              "location": {
+                "lat": 41.9022,
+                "lng": 12.4539
+              },
+              "arriveMin": 828,
+              "departMin": 903,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-29:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 936,
+              "departMin": 936,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "stay:2026-10-29:start",
+              "toStopId": "vatican",
+              "mode": "transit",
+              "durationSec": 1407,
+              "distanceM": 2534,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "vatican",
+              "toStopId": "meal:2026-10-29:lunch",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "meal:2026-10-29:lunch",
+              "toStopId": "st-peters",
+              "mode": "walk",
+              "durationSec": 467,
+              "distanceM": 622,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "st-peters",
+              "toStopId": "stay:2026-10-29:end",
+              "mode": "transit",
+              "durationSec": 1331,
+              "distanceM": 2157,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "date": "2026-10-30",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "stay:2026-10-30:start",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 540,
+              "departMin": 540,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "pincio",
+              "kind": "wish",
+              "wishId": "pincio",
+              "title": "Pincio terrace, Villa Borghese",
+              "location": {
+                "lat": 41.9113,
+                "lng": 12.4797
+              },
+              "arriveMin": 564,
+              "departMin": 609,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "campo-market",
+              "kind": "wish",
+              "wishId": "campo-market",
+              "title": "Campo de' Fiori market",
+              "location": {
+                "lat": 41.8956,
+                "lng": 12.4722
+              },
+              "arriveMin": 643,
+              "departMin": 673,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "castel",
+              "kind": "wish",
+              "wishId": "castel",
+              "title": "Castel Sant'Angelo",
+              "location": {
+                "lat": 41.9031,
+                "lng": 12.4663
+              },
+              "arriveMin": 699,
+              "departMin": 789,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "meal:2026-10-30:lunch",
+              "kind": "meal",
+              "wishId": null,
+              "title": "Lunch",
+              "location": {
+                "lat": 41.9031,
+                "lng": 12.4663
+              },
+              "arriveMin": 799,
+              "departMin": 859,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "borghese",
+              "kind": "wish",
+              "wishId": "borghese",
+              "title": "Borghese Gallery",
+              "location": {
+                "lat": 41.9142,
+                "lng": 12.4921
+              },
+              "arriveMin": 885,
+              "departMin": 1020,
+              "waitSec": 900,
+              "locked": true,
+              "bookingId": "bk-borghese",
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-30:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 1057,
+              "departMin": 1057,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "stay:2026-10-30:start",
+              "toStopId": "pincio",
+              "mode": "transit",
+              "durationSec": 1397,
+              "distanceM": 2485,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "pincio",
+              "toStopId": "campo-market",
+              "mode": "transit",
+              "durationSec": 1382,
+              "distanceM": 2409,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "campo-market",
+              "toStopId": "castel",
+              "mode": "walk",
+              "durationSec": 942,
+              "distanceM": 1256,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "castel",
+              "toStopId": "meal:2026-10-30:lunch",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "meal:2026-10-30:lunch",
+              "toStopId": "borghese",
+              "mode": "transit",
+              "durationSec": 1541,
+              "distanceM": 3206,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "borghese",
+              "toStopId": "stay:2026-10-30:end",
+              "mode": "transit",
+              "durationSec": 1604,
+              "distanceM": 3522,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": []
+        }
+      ],
+      "dropped": ["colosseum"],
+      "moved": [],
+      "explanation": "Keeps the other days as they are and re-times the rest of today from now, without Colosseum and Roman Forum."
     }
   ]
 }

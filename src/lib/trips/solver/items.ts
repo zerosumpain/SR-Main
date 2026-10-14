@@ -18,7 +18,16 @@ import type {
 } from '../model';
 import { cmp } from './calendar';
 import { windowsOn } from './hours';
-import { stayPoint } from './matrix';
+import { stayPoint, type SolverContext } from './matrix';
+import {
+  STAY_HANDLING_MIN,
+  arrivalFrame,
+  arrivalOn,
+  departureFrame,
+  departureOn,
+  type ArrivalFrame,
+  type DepartureFrame,
+} from './transport';
 
 export const DEFAULT_VISIT_MIN = 60;
 
@@ -63,6 +72,10 @@ export interface DayFrame {
   dayEndMin: number;
   /** v2.1: how full the day should be (light ends earlier and takes less). */
   load?: DayLoad;
+  /** v3: the day starts with a landing, transfer and bag drop. */
+  arrival?: ArrivalFrame;
+  /** v3: the day ends by leaving the stay for a flight/train. */
+  departure?: DepartureFrame;
 }
 
 /** A light day ends this much earlier than the pace's day end. */
@@ -73,20 +86,29 @@ export const LIGHT_DAY_SHARE = 0.6;
 export const FULL_DAY_SHARE = 1.2;
 
 /** The frame for a date under the pace and that date's load. */
-export function dayFrame(
-  rules: PaceRules,
-  dayLoads: Partial<Record<LocalDate, DayLoad>>,
-  date: LocalDate,
-  stay: Stay | null,
-): DayFrame {
-  const load = dayLoads[date] ?? 'normal';
-  return {
+export function dayFrame(ctx: SolverContext, date: LocalDate, stay: Stay | null): DayFrame {
+  const rules = ctx.rules;
+  // v3: a flight/train landing or leaving this day frames it, and makes it a
+  // light day unless dayLoads says otherwise.
+  const arrives = stay ? arrivalOn(ctx, date) : null;
+  const leaves = stay ? departureOn(ctx, date) : null;
+  const load = ctx.dayLoads[date] ?? (arrives || leaves ? 'light' : 'normal');
+  const frame: DayFrame = {
     date,
     stay,
     dayStartMin: rules.dayStartMin,
     dayEndMin: load === 'light' ? rules.dayEndMin - LIGHT_DAY_EARLIER_MIN : rules.dayEndMin,
     load,
   };
+  if (arrives && stay) {
+    frame.arrival = arrivalFrame(ctx, arrives, stay, date);
+    frame.dayStartMin = Math.max(rules.dayStartMin, frame.arrival.stayStop.departMin);
+  }
+  if (leaves && stay) {
+    frame.departure = departureFrame(ctx, leaves, stay);
+    frame.dayEndMin = Math.min(frame.dayEndMin, frame.departure.leaveMin - STAY_HANDLING_MIN);
+  }
+  return frame;
 }
 
 /** Dinner window for a wish that replaces dinner when the pace plans none. */
@@ -244,6 +266,10 @@ export function mealKindOf(stopId: string): MealKind | null {
 /** Matrix point of a planned stop (meals inherit, so null). */
 export function pointOfStop(stop: PlannedStop, stayId: string | null): string | null {
   if (stop.kind === 'stay') return stayId ? stayPoint(stayId) : null;
+  if (stop.kind === 'transport') {
+    const m = /^transport:(.+):(arrive|depart)$/.exec(stop.id);
+    return m ? `transport:${m[1]}:${m[2] === 'arrive' ? 'to' : 'from'}` : null;
+  }
   if (stop.kind === 'wish') return stop.wishId ?? stop.id;
   return null;
 }

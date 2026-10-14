@@ -3,7 +3,7 @@
 // The solver's input shapes, exactly as in the build contract
 // (docs/superpowers/specs/2026-10-13-trips.md, "Solver API").
 
-import type { Booking, LatLng, PlannedDay, Stay, TravelMatrix, Trip, Wish } from '../model';
+import type { TransportSegment, Booking, LatLng, PlannedDay, Stay, TravelMatrix, Trip, Wish } from '../model';
 
 export interface SolverInput {
   trip: Pick<Trip, 'id' | 'timeZone' | 'startDate' | 'endDate' | 'pace' | 'modes'> &
@@ -15,6 +15,8 @@ export interface SolverInput {
   bookings: Booking[];
   /** Points are wish ids + `stay:<id>`. */
   matrix: TravelMatrix;
+  /** v3: flights/trains there and back; points `transport:<id>:from|to` may be in the matrix. */
+  transport?: TransportSegment[];
 }
 
 export interface ReplanInput extends SolverInput {

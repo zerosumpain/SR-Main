@@ -186,7 +186,13 @@ export function assignDays(
       frame.load !== 'light' ||
       (load.get(frame.date) ?? 0) + duration + nearest(wish, frame) <= capacityMin(ctx, frame);
     // Never pile onto a light day past its capacity, nor double a replaced meal.
-    const allowed = candidates.filter((f) => fits(f) && !mealTaken(wish, f));
+    // …nor put a part-of-day wish on a day that doesn't reach that part.
+    const reachesPart = (f: DayFrame) => {
+      if (wish.partOfDay === 'any') return true;
+      const [from, to] = PART_RANGES[wish.partOfDay];
+      return Math.min(to, f.dayEndMin) - Math.max(from, f.dayStartMin) >= visitMin(wish, null);
+    };
+    const allowed = candidates.filter((f) => fits(f) && !mealTaken(wish, f) && reachesPart(f));
     if (allowed.length) candidates = allowed;
     for (const frame of candidates) {
       const cap = capacityMin(ctx, frame);

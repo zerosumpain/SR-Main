@@ -527,7 +527,15 @@
     ],
     "bookings": [],
     "matrix": {
-      "points": ["navona", "pantheon", "spanish-steps", "trevi", "capitoline", "ghetto", "stay:campo"],
+      "points": [
+        "navona",
+        "pantheon",
+        "spanish-steps",
+        "trevi",
+        "capitoline",
+        "ghetto",
+        "stay:campo"
+      ],
       "seconds": {
         "walk": [
           [0, 314, 1031, 844, 1032, 816, 450],

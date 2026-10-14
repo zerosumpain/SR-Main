@@ -12,6 +12,7 @@
 import type { DroppedWish, LatLng, PlannedDay, PlannedLeg, PlannedStop } from '../model';
 import { dayLabel, fmtMin, cmp } from './calendar';
 import { mealItem, type DayFrame, type Item, type MealKind } from './items';
+import { STAY_HANDLING_MIN } from './transport';
 import { chooseLeg, legFromPosition, stayPoint, type LegChoice, type SolverContext } from './matrix';
 import { orderDay } from './order';
 
@@ -90,9 +91,51 @@ export function stayStartStop(frame: DayFrame, atMin: number): PlannedStop | nul
   };
 }
 
-/** A fresh-day start: leave the stay at the pace's day start. */
+/**
+ * A fresh-day start: leave the stay at the pace's day start. On an arrival
+ * day (v3) the day starts at the landing instead: transport stop, transfer,
+ * bag drop or check-in, then set off at `frame.dayStartMin` (or `atMin` if
+ * later). On a departure day a "Check out" stop follows the stay start.
+ */
 export function freshStart(frame: DayFrame, atMin = frame.dayStartMin, leaveEarlyForSlot = true): SimStart {
+  if (frame.arrival && frame.stay) {
+    const a = frame.arrival;
+    return {
+      prefixStops: [
+        { ...a.stop, warnings: [...a.stop.warnings] },
+        { ...a.stayStop, warnings: [...a.stayStop.warnings] },
+      ],
+      prefixLegs: [{ ...a.leg }],
+      fromPoint: stayPoint(frame.stay.id),
+      fromStopId: a.stayStop.id,
+      departMin: Math.max(atMin, frame.dayStartMin),
+    };
+  }
   const start = stayStartStop(frame, atMin);
+  if (start && frame.stay && frame.departure?.checkOut) {
+    const by = frame.stay.checkOutMin as number;
+    const checkOut: PlannedStop = {
+      id: `stay:${frame.date}:checkout`,
+      kind: 'stay',
+      wishId: null,
+      title: `Check out of ${frame.stay.name}`,
+      location: { ...frame.stay.location },
+      arriveMin: atMin,
+      departMin: atMin + STAY_HANDLING_MIN,
+      waitSec: 0,
+      locked: false,
+      bookingId: null,
+      warnings: atMin + STAY_HANDLING_MIN > by ? [`Check-out is by ${fmtMin(by)}`] : [],
+    };
+    return {
+      prefixStops: [start, checkOut],
+      prefixLegs: [legOf(start.id, checkOut.id, ZERO_LEG)],
+      fromPoint: stayPoint(frame.stay.id),
+      fromStopId: checkOut.id,
+      departMin: checkOut.departMin,
+      leaveEarlyForSlot,
+    };
+  }
   return {
     prefixStops: start ? [start] : [],
     prefixLegs: [],
@@ -149,7 +192,8 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
     head.fixedStartMin !== null &&
     head.point !== null &&
     point !== null &&
-    startStop?.kind === 'stay'
+    startStop?.kind === 'stay' &&
+    startStop.id.endsWith(':start')
   ) {
     const legMin = Math.ceil(chooseLeg(ctx, point, head.point).durationSec / 60);
     const latest = head.fixedStartMin - legMin;
@@ -266,14 +310,15 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
     const legMin = travel(stayPoint(frame.stay.id), endId);
     travelMin += legMin;
     endMin = t + legMin;
+    const dep = frame.departure;
     stops.push({
       id: endId,
       kind: 'stay',
       wishId: null,
-      title: frame.stay.name,
+      title: dep ? `Collect bags at ${frame.stay.name}` : frame.stay.name,
       location: { ...frame.stay.location },
       arriveMin: endMin,
-      departMin: endMin,
+      departMin: dep ? Math.max(endMin + STAY_HANDLING_MIN, dep.leaveMin) : endMin,
       waitSec: 0,
       locked: false,
       bookingId: null,
@@ -281,6 +326,23 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
     });
   }
   const warnings: string[] = [];
+  if (frame.departure && frame.stay) {
+    // v3: then off to the station/airport.
+    const dep = frame.departure;
+    const from = stops[stops.length - 1];
+    legs.push(legOf(from.id, dep.stop.id, dep.leg));
+    const reach = from.departMin + Math.ceil(dep.leg.durationSec / 60);
+    stops.push({
+      ...dep.stop,
+      arriveMin: reach,
+      warnings: [],
+    });
+    if (reach > dep.stop.arriveMin) {
+      warnings.push(
+        `You'd reach ${dep.stop.title.includes(' from ') ? dep.stop.title.split(' from ')[1].split(' at ')[0] : 'the terminal'} at ${fmtMin(reach)} — later than ${fmtMin(dep.stop.arriveMin)}`,
+      );
+    }
+  }
   if (!frame.stay) warnings.push('No stay booked for this night');
   const overrunMin = Math.max(0, endMin - frame.dayEndMin);
   if (overrunMin > 0) {

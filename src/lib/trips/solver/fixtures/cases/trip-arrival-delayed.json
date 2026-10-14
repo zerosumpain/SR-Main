@@ -1,0 +1,4135 @@
+{
+  "name": "trip-arrival-delayed",
+  "description": "The same 2 h delay, re-planning the whole trip: what no longer fits on the arrival day moves to a later day.",
+  "fn": "replanTrip",
+  "input": {
+    "trip": {
+      "id": "trip-rome",
+      "ownerEmail": "owner@example.com",
+      "title": "Rome in October",
+      "destination": "Rome, Italy",
+      "timeZone": "Europe/Rome",
+      "startDate": "2026-10-27",
+      "endDate": "2026-10-30",
+      "pace": "normal",
+      "modes": ["walk", "transit"],
+      "status": "planned",
+      "notes": null
+    },
+    "stays": [
+      {
+        "id": "campo",
+        "name": "Apartment by Campo de' Fiori",
+        "address": "Via dei Cappellari, Rome (illustrative)",
+        "location": {
+          "lat": 41.8952,
+          "lng": 12.4716
+        },
+        "fromDate": "2026-10-27",
+        "toDate": "2026-10-31",
+        "checkInMin": 900,
+        "checkOutMin": 600
+      }
+    ],
+    "wishes": [
+      {
+        "id": "colosseum",
+        "title": "Colosseum and Roman Forum",
+        "place": {
+          "name": "Colosseum and Roman Forum",
+          "location": {
+            "lat": 41.8902,
+            "lng": 12.4922
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 10800,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Su 08:30-17:00",
+          "hours": {
+            "1": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "2": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "3": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "4": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "5": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "6": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ],
+            "7": [
+              {
+                "openMin": 510,
+                "closeMin": 1020
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": true,
+          "bookAheadDays": 30,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 1
+      },
+      {
+        "id": "vatican",
+        "title": "Vatican Museums",
+        "place": {
+          "name": "Vatican Museums",
+          "location": {
+            "lat": 41.9065,
+            "lng": 12.4536
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 12600,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Sa 08:00-19:00; Su off",
+          "hours": {
+            "1": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "2": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "3": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "4": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "5": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "6": [
+              {
+                "openMin": 480,
+                "closeMin": 1140
+              }
+            ],
+            "7": []
+          },
+          "closedDates": [],
+          "bookingRequired": true,
+          "bookAheadDays": 30,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 2
+      },
+      {
+        "id": "borghese",
+        "title": "Borghese Gallery",
+        "place": {
+          "name": "Borghese Gallery",
+          "location": {
+            "lat": 41.9142,
+            "lng": 12.4921
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 7200,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Tu-Su 09:00-19:00; Mo off",
+          "hours": {
+            "1": [],
+            "2": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "3": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "4": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "5": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "6": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "7": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": true,
+          "bookAheadDays": 30,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 3
+      },
+      {
+        "id": "st-peters",
+        "title": "St Peter's Basilica",
+        "place": {
+          "name": "St Peter's Basilica",
+          "location": {
+            "lat": 41.9022,
+            "lng": 12.4539
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 4500,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Su 07:00-19:00",
+          "hours": {
+            "1": [
+              {
+                "openMin": 420,
+                "closeMin": 1140
+              }
+            ],
+            "2": [
+              {
+                "openMin": 420,
+                "closeMin": 1140
+              }
+            ],
+            "3": [
+              {
+                "openMin": 420,
+                "closeMin": 1140
+              }
+            ],
+            "4": [
+              {
+                "openMin": 420,
+                "closeMin": 1140
+              }
+            ],
+            "5": [
+              {
+                "openMin": 420,
+                "closeMin": 1140
+              }
+            ],
+            "6": [
+              {
+                "openMin": 420,
+                "closeMin": 1140
+              }
+            ],
+            "7": [
+              {
+                "openMin": 420,
+                "closeMin": 1140
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 4
+      },
+      {
+        "id": "pantheon",
+        "title": "Pantheon",
+        "place": {
+          "name": "Pantheon",
+          "location": {
+            "lat": 41.8986,
+            "lng": 12.4769
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 2700,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Su 09:00-19:00",
+          "hours": {
+            "1": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "2": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "3": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "4": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "5": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "6": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ],
+            "7": [
+              {
+                "openMin": 540,
+                "closeMin": 1140
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 5
+      },
+      {
+        "id": "trevi",
+        "title": "Trevi Fountain",
+        "place": {
+          "name": "Trevi Fountain",
+          "location": {
+            "lat": 41.9009,
+            "lng": 12.4833
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 1200,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 6
+      },
+      {
+        "id": "navona",
+        "title": "Piazza Navona",
+        "place": {
+          "name": "Piazza Navona",
+          "location": {
+            "lat": 41.8992,
+            "lng": 12.4731
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "must",
+        "durationSec": 1800,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 7
+      },
+      {
+        "id": "castel",
+        "title": "Castel Sant'Angelo",
+        "place": {
+          "name": "Castel Sant'Angelo",
+          "location": {
+            "lat": 41.9031,
+            "lng": 12.4663
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 5400,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Tu-Su 09:00-19:30; Mo off",
+          "hours": {
+            "1": [],
+            "2": [
+              {
+                "openMin": 540,
+                "closeMin": 1170
+              }
+            ],
+            "3": [
+              {
+                "openMin": 540,
+                "closeMin": 1170
+              }
+            ],
+            "4": [
+              {
+                "openMin": 540,
+                "closeMin": 1170
+              }
+            ],
+            "5": [
+              {
+                "openMin": 540,
+                "closeMin": 1170
+              }
+            ],
+            "6": [
+              {
+                "openMin": 540,
+                "closeMin": 1170
+              }
+            ],
+            "7": [
+              {
+                "openMin": 540,
+                "closeMin": 1170
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 8
+      },
+      {
+        "id": "capitoline",
+        "title": "Capitoline Museums",
+        "place": {
+          "name": "Capitoline Museums",
+          "location": {
+            "lat": 41.893,
+            "lng": 12.4828
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 7200,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Su 09:30-19:30",
+          "hours": {
+            "1": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "2": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "3": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "4": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "5": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "6": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ],
+            "7": [
+              {
+                "openMin": 570,
+                "closeMin": 1170
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 9
+      },
+      {
+        "id": "campo-market",
+        "title": "Campo de' Fiori market",
+        "place": {
+          "name": "Campo de' Fiori market",
+          "location": {
+            "lat": 41.8956,
+            "lng": 12.4722
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 1800,
+        "partOfDay": "morning",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "Mo-Sa 07:00-14:00; Su off",
+          "hours": {
+            "1": [
+              {
+                "openMin": 420,
+                "closeMin": 840
+              }
+            ],
+            "2": [
+              {
+                "openMin": 420,
+                "closeMin": 840
+              }
+            ],
+            "3": [
+              {
+                "openMin": 420,
+                "closeMin": 840
+              }
+            ],
+            "4": [
+              {
+                "openMin": 420,
+                "closeMin": 840
+              }
+            ],
+            "5": [
+              {
+                "openMin": 420,
+                "closeMin": 840
+              }
+            ],
+            "6": [
+              {
+                "openMin": 420,
+                "closeMin": 840
+              }
+            ],
+            "7": []
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 10
+      },
+      {
+        "id": "spanish-steps",
+        "title": "Spanish Steps",
+        "place": {
+          "name": "Spanish Steps",
+          "location": {
+            "lat": 41.9058,
+            "lng": 12.4823
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 1800,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 11
+      },
+      {
+        "id": "trastevere",
+        "title": "Trastevere in the evening",
+        "place": {
+          "name": "Trastevere in the evening",
+          "location": {
+            "lat": 41.8894,
+            "lng": 12.47
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 5400,
+        "partOfDay": "evening",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 12
+      },
+      {
+        "id": "ghetto",
+        "title": "Jewish Ghetto and Portico d'Ottavia",
+        "place": {
+          "name": "Jewish Ghetto and Portico d'Ottavia",
+          "location": {
+            "lat": 41.8925,
+            "lng": 12.4777
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 2700,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 13
+      },
+      {
+        "id": "pincio",
+        "title": "Pincio terrace, Villa Borghese",
+        "place": {
+          "name": "Pincio terrace, Villa Borghese",
+          "location": {
+            "lat": 41.9113,
+            "lng": 12.4797
+          },
+          "osmId": null,
+          "address": null
+        },
+        "priority": "nice",
+        "durationSec": 2700,
+        "partOfDay": "any",
+        "fixedDate": null,
+        "fixedStartMin": null,
+        "locked": false,
+        "suggested": false,
+        "skipped": false,
+        "facts": {
+          "openingHoursText": "24/7",
+          "hours": {
+            "1": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "2": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "3": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "4": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "5": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "6": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ],
+            "7": [
+              {
+                "openMin": 0,
+                "closeMin": 1440
+              }
+            ]
+          },
+          "closedDates": [],
+          "bookingRequired": null,
+          "bookAheadDays": null,
+          "bookingUrl": null,
+          "officialUrl": null,
+          "priceText": null,
+          "typicalVisitSec": null,
+          "summary": null,
+          "sources": [],
+          "checkedAt": null,
+          "depth": "manual",
+          "unknown": []
+        },
+        "note": null,
+        "sortHint": 14
+      }
+    ],
+    "bookings": [
+      {
+        "id": "bk-colosseum",
+        "wishId": "colosseum",
+        "title": "Colosseum, Forum and Palatine — timed entry",
+        "date": "2026-10-28",
+        "startMin": 570,
+        "endMin": null,
+        "reference": "ILLUSTRATIVE-1",
+        "url": null,
+        "documentId": null,
+        "status": "booked"
+      },
+      {
+        "id": "bk-vatican",
+        "wishId": "vatican",
+        "title": "Vatican Museums — timed entry",
+        "date": "2026-10-29",
+        "startMin": 540,
+        "endMin": null,
+        "reference": "ILLUSTRATIVE-2",
+        "url": null,
+        "documentId": null,
+        "status": "booked"
+      },
+      {
+        "id": "bk-borghese",
+        "wishId": "borghese",
+        "title": "Borghese Gallery — two-hour slot",
+        "date": "2026-10-30",
+        "startMin": 600,
+        "endMin": 720,
+        "reference": "ILLUSTRATIVE-3",
+        "url": null,
+        "documentId": null,
+        "status": "booked"
+      }
+    ],
+    "matrix": {
+      "points": [
+        "colosseum",
+        "vatican",
+        "borghese",
+        "st-peters",
+        "pantheon",
+        "trevi",
+        "navona",
+        "castel",
+        "capitoline",
+        "campo-market",
+        "spanish-steps",
+        "trastevere",
+        "ghetto",
+        "pincio",
+        "stay:campo",
+        "transport:out:to",
+        "transport:back:from"
+      ],
+      "seconds": {
+        "walk": [
+          [
+            0,
+            3581,
+            2602,
+            3353,
+            1535,
+            1364,
+            1824,
+            2515,
+            817,
+            1717,
+            1871,
+            1794,
+            1196,
+            2500,
+            1749,
+            null,
+            null
+          ],
+          [
+            3581,
+            0,
+            3217,
+            467,
+            2066,
+            2472,
+            1761,
+            1089,
+            2774,
+            1910,
+            2317,
+            2278,
+            2467,
+            2169,
+            1901,
+            null,
+            null
+          ],
+          [
+            2602,
+            3217,
+            0,
+            3346,
+            2090,
+            1607,
+            2235,
+            2405,
+            2418,
+            2578,
+            1206,
+            3227,
+            2624,
+            1049,
+            2642,
+            null,
+            null
+          ],
+          [
+            3353,
+            467,
+            3346,
+            0,
+            1897,
+            2377,
+            1583,
+            1005,
+            2537,
+            1641,
+            2324,
+            1901,
+            2190,
+            2304,
+            1618,
+            null,
+            null
+          ],
+          [
+            1535,
+            2066,
+            2090,
+            1897,
+            0,
+            574,
+            314,
+            985,
+            772,
+            500,
+            894,
+            1142,
+            665,
+            1395,
+            565,
+            null,
+            null
+          ],
+          [
+            1364,
+            2472,
+            1607,
+            2377,
+            574,
+            0,
+            844,
+            1392,
+            857,
+            1064,
+            537,
+            1646,
+            1017,
+            1164,
+            1129,
+            null,
+            null
+          ],
+          [
+            1824,
+            1761,
+            2235,
+            1583,
+            314,
+            844,
+            0,
+            693,
+            1032,
+            397,
+            1031,
+            1091,
+            816,
+            1416,
+            450,
+            null,
+            null
+          ],
+          [
+            2515,
+            1089,
+            2405,
+            1005,
+            985,
+            1392,
+            693,
+            0,
+            1724,
+            942,
+            1324,
+            1515,
+            1472,
+            1400,
+            957,
+            null,
+            null
+          ],
+          [
+            817,
+            2774,
+            2418,
+            2537,
+            772,
+            857,
+            1032,
+            1724,
+            0,
+            901,
+            1388,
+            1104,
+            416,
+            2000,
+            935,
+            null,
+            null
+          ],
+          [
+            1717,
+            1910,
+            2578,
+            1641,
+            500,
+            1064,
+            397,
+            942,
+            901,
+            0,
+            1374,
+            695,
+            557,
+            1807,
+            65,
+            null,
+            null
+          ],
+          [
+            1871,
+            2317,
+            1206,
+            2324,
+            894,
+            537,
+            1031,
+            1324,
+            1388,
+            1374,
+            0,
+            2036,
+            1489,
+            632,
+            1438,
+            null,
+            null
+          ],
+          [
+            1794,
+            2278,
+            3227,
+            1901,
+            1142,
+            1646,
+            1091,
+            1515,
+            1104,
+            695,
+            2036,
+            0,
+            707,
+            2500,
+            642,
+            null,
+            null
+          ],
+          [
+            1196,
+            2467,
+            2624,
+            2190,
+            665,
+            1017,
+            816,
+            1472,
+            416,
+            557,
+            1489,
+            707,
+            0,
+            2045,
+            573,
+            null,
+            null
+          ],
+          [
+            2500,
+            2169,
+            1049,
+            2304,
+            1395,
+            1164,
+            1416,
+            1400,
+            2000,
+            1807,
+            632,
+            2500,
+            2045,
+            0,
+            1864,
+            null,
+            null
+          ],
+          [
+            1749,
+            1901,
+            2642,
+            1618,
+            565,
+            1129,
+            450,
+            957,
+            935,
+            65,
+            1438,
+            642,
+            573,
+            1864,
+            0,
+            null,
+            null
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            0,
+            0
+          ],
+          [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            0,
+            0
+          ]
+        ],
+        "drive": [
+          [
+            0, 860, 624, 805, 368, 327, 438, 604, 196, 412, 449, 431, 287, 600,
+            420, 3000, 3000
+          ],
+          [
+            860, 0, 772, 112, 496, 593, 423, 261, 666, 458, 556, 547, 592, 521,
+            456, 3000, 3000
+          ],
+          [
+            624, 772, 0, 803, 501, 386, 536, 577, 580, 619, 289, 774, 630, 252,
+            634, 3000, 3000
+          ],
+          [
+            805, 112, 803, 0, 455, 570, 380, 241, 609, 394, 558, 456, 526, 553,
+            388, 3000, 3000
+          ],
+          [
+            368, 496, 501, 455, 0, 138, 75, 236, 185, 120, 215, 274, 159, 335,
+            136, 3000, 3000
+          ],
+          [
+            327, 593, 386, 570, 138, 0, 203, 334, 206, 255, 129, 395, 244, 279,
+            271, 3000, 3000
+          ],
+          [
+            438, 423, 536, 380, 75, 203, 0, 166, 248, 95, 248, 262, 196, 340,
+            108, 3000, 3000
+          ],
+          [
+            604, 261, 577, 241, 236, 334, 166, 0, 414, 226, 318, 364, 353, 336,
+            230, 3000, 3000
+          ],
+          [
+            196, 666, 580, 609, 185, 206, 248, 414, 0, 216, 333, 265, 100, 480,
+            224, 3000, 3000
+          ],
+          [
+            412, 458, 619, 394, 120, 255, 95, 226, 216, 0, 330, 167, 134, 434,
+            16, 3000, 3000
+          ],
+          [
+            449, 556, 289, 558, 215, 129, 248, 318, 333, 330, 0, 489, 357, 152,
+            345, 3000, 3000
+          ],
+          [
+            431, 547, 774, 456, 274, 395, 262, 364, 265, 167, 489, 0, 170, 600,
+            154, 3000, 3000
+          ],
+          [
+            287, 592, 630, 526, 159, 244, 196, 353, 100, 134, 357, 170, 0, 491,
+            138, 3000, 3000
+          ],
+          [
+            600, 521, 252, 553, 335, 279, 340, 336, 480, 434, 152, 600, 491, 0,
+            447, 3000, 3000
+          ],
+          [
+            420, 456, 634, 388, 136, 271, 108, 230, 224, 16, 345, 154, 138, 447,
+            0, 3000, 3000
+          ],
+          [
+            3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000,
+            3000, 3000, 3000, 3000, 0, 0
+          ],
+          [
+            3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000, 3000,
+            3000, 3000, 3000, 3000, 0, 0
+          ]
+        ],
+        "transit": [
+          [
+            0, 1855, 1594, 1794, 1309, 1264, 1386, 1571, 1118, 1358, 1399, 1378,
+            1219, 1567, 1366, 3600, 3600
+          ],
+          [
+            1855, 0, 1758, 1024, 1451, 1559, 1370, 1190, 1640, 1409, 1518, 1507,
+            1558, 1478, 1407, 3600, 3600
+          ],
+          [
+            1594, 1758, 0, 1792, 1457, 1329, 1496, 1541, 1545, 1587, 1222, 1760,
+            1600, 1180, 1604, 3600, 3600
+          ],
+          [
+            1794, 1024, 1792, 0, 1406, 1534, 1322, 1168, 1576, 1338, 1520, 1407,
+            1484, 1514, 1331, 3600, 3600
+          ],
+          [
+            1309, 1451, 1457, 1406, 0, 1053, 984, 1163, 1106, 1033, 1138, 1205,
+            1077, 1272, 1051, 3600, 3600
+          ],
+          [
+            1264, 1559, 1329, 1534, 1053, 0, 1125, 1271, 1129, 1184, 1043, 1339,
+            1171, 1210, 1201, 3600, 3600
+          ],
+          [
+            1386, 1370, 1496, 1322, 984, 1125, 0, 1085, 1175, 1006, 1175, 1191,
+            1118, 1278, 1020, 3600, 3600
+          ],
+          [
+            1571, 1190, 1541, 1168, 1163, 1271, 1085, 0, 1360, 1151, 1253, 1304,
+            1293, 1273, 1155, 3600, 3600
+          ],
+          [
+            1118, 1640, 1545, 1576, 1106, 1129, 1175, 1360, 0, 1140, 1270, 1194,
+            1011, 1433, 1149, 3600, 3600
+          ],
+          [
+            1358, 1409, 1587, 1338, 1033, 1184, 1006, 1151, 1140, 0, 1266, 1085,
+            1048, 1382, 917, 3600, 3600
+          ],
+          [
+            1399, 1518, 1222, 1520, 1138, 1043, 1175, 1253, 1270, 1266, 0, 1443,
+            1297, 1069, 1283, 3600, 3600
+          ],
+          [
+            1378, 1507, 1760, 1407, 1205, 1339, 1191, 1304, 1194, 1085, 1443, 0,
+            1088, 1567, 1071, 3600, 3600
+          ],
+          [
+            1219, 1558, 1600, 1484, 1077, 1171, 1118, 1293, 1011, 1048, 1297,
+            1088, 0, 1445, 1053, 3600, 3600
+          ],
+          [
+            1567, 1478, 1180, 1514, 1272, 1210, 1278, 1273, 1433, 1382, 1069,
+            1567, 1445, 0, 1397, 3600, 3600
+          ],
+          [
+            1366, 1407, 1604, 1331, 1051, 1201, 1020, 1155, 1149, 917, 1283,
+            1071, 1053, 1397, 0, 3600, 3600
+          ],
+          [
+            3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600,
+            3600, 3600, 3600, 3600, 0, 0
+          ],
+          [
+            3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600, 3600,
+            3600, 3600, 3600, 3600, 0, 0
+          ]
+        ]
+      },
+      "metres": {
+        "walk": [
+          [
+            0, 4775, 3469, 4471, 2046, 1819, 2432, 3353, 1089, 2289, 2494, 2392,
+            1595, 3333, 2332, 30214, 30214
+          ],
+          [
+            4775, 0, 4289, 622, 2755, 3296, 2348, 1452, 3698, 2547, 3089, 3037,
+            3289, 2892, 2534, 27750, 27750
+          ],
+          [
+            3469, 4289, 0, 4461, 2786, 2143, 2980, 3206, 3224, 3437, 1608, 4302,
+            3499, 1398, 3522, 31847, 31847
+          ],
+          [
+            4471, 622, 4461, 0, 2529, 3169, 2111, 1340, 3382, 2188, 3099, 2535,
+            2920, 3072, 2157, 27439, 27439
+          ],
+          [
+            2046, 2755, 2786, 2529, 0, 765, 418, 1313, 1029, 666, 1192, 1523,
+            886, 1860, 753, 29303, 29303
+          ],
+          [
+            1819, 3296, 2143, 3169, 765, 0, 1125, 1856, 1143, 1419, 716, 2194,
+            1356, 1552, 1505, 30067, 30067
+          ],
+          [
+            2432, 2348, 2980, 2111, 418, 1125, 0, 924, 1376, 529, 1375, 1455,
+            1088, 1888, 600, 28989, 28989
+          ],
+          [
+            3353, 1452, 3206, 1340, 1313, 1856, 924, 0, 2299, 1256, 1765, 2020,
+            1963, 1866, 1276, 28642, 28642
+          ],
+          [
+            1089, 3698, 3224, 3382, 1029, 1143, 1376, 2299, 0, 1201, 1851, 1472,
+            554, 2666, 1246, 29485, 29485
+          ],
+          [
+            2289, 2547, 3437, 2188, 666, 1419, 529, 1256, 1201, 0, 1832, 927,
+            742, 2409, 87, 28651, 28651
+          ],
+          [
+            2494, 3089, 1608, 3099, 1192, 716, 1375, 1765, 1851, 1832, 0, 2715,
+            1985, 843, 1917, 30322, 30322
+          ],
+          [
+            2392, 3037, 4302, 2535, 1523, 2194, 1455, 2020, 1472, 927, 2715, 0,
+            942, 3333, 856, 28022, 28022
+          ],
+          [
+            1595, 3289, 3499, 2920, 886, 1356, 1088, 1963, 554, 742, 1985, 942,
+            0, 2726, 764, 28963, 28963
+          ],
+          [
+            3333, 2892, 1398, 3072, 1860, 1552, 1888, 1866, 2666, 2409, 843,
+            3333, 2726, 0, 2485, 30490, 30490
+          ],
+          [
+            2332, 2534, 3522, 2157, 753, 1505, 600, 1276, 1246, 87, 1917, 856,
+            764, 2485, 0, 28567, 28567
+          ],
+          [
+            30214, 27750, 31847, 27439, 29303, 30067, 28989, 28642, 29485,
+            28651, 30322, 28022, 28963, 30490, 28567, 0, 0
+          ],
+          [
+            30214, 27750, 31847, 27439, 29303, 30067, 28989, 28642, 29485,
+            28651, 30322, 28022, 28963, 30490, 28567, 0, 0
+          ]
+        ],
+        "drive": [
+          [
+            0, 4775, 3469, 4471, 2046, 1819, 2432, 3353, 1089, 2289, 2494, 2392,
+            1595, 3333, 2332, 30214, 30214
+          ],
+          [
+            4775, 0, 4289, 622, 2755, 3296, 2348, 1452, 3698, 2547, 3089, 3037,
+            3289, 2892, 2534, 27750, 27750
+          ],
+          [
+            3469, 4289, 0, 4461, 2786, 2143, 2980, 3206, 3224, 3437, 1608, 4302,
+            3499, 1398, 3522, 31847, 31847
+          ],
+          [
+            4471, 622, 4461, 0, 2529, 3169, 2111, 1340, 3382, 2188, 3099, 2535,
+            2920, 3072, 2157, 27439, 27439
+          ],
+          [
+            2046, 2755, 2786, 2529, 0, 765, 418, 1313, 1029, 666, 1192, 1523,
+            886, 1860, 753, 29303, 29303
+          ],
+          [
+            1819, 3296, 2143, 3169, 765, 0, 1125, 1856, 1143, 1419, 716, 2194,
+            1356, 1552, 1505, 30067, 30067
+          ],
+          [
+            2432, 2348, 2980, 2111, 418, 1125, 0, 924, 1376, 529, 1375, 1455,
+            1088, 1888, 600, 28989, 28989
+          ],
+          [
+            3353, 1452, 3206, 1340, 1313, 1856, 924, 0, 2299, 1256, 1765, 2020,
+            1963, 1866, 1276, 28642, 28642
+          ],
+          [
+            1089, 3698, 3224, 3382, 1029, 1143, 1376, 2299, 0, 1201, 1851, 1472,
+            554, 2666, 1246, 29485, 29485
+          ],
+          [
+            2289, 2547, 3437, 2188, 666, 1419, 529, 1256, 1201, 0, 1832, 927,
+            742, 2409, 87, 28651, 28651
+          ],
+          [
+            2494, 3089, 1608, 3099, 1192, 716, 1375, 1765, 1851, 1832, 0, 2715,
+            1985, 843, 1917, 30322, 30322
+          ],
+          [
+            2392, 3037, 4302, 2535, 1523, 2194, 1455, 2020, 1472, 927, 2715, 0,
+            942, 3333, 856, 28022, 28022
+          ],
+          [
+            1595, 3289, 3499, 2920, 886, 1356, 1088, 1963, 554, 742, 1985, 942,
+            0, 2726, 764, 28963, 28963
+          ],
+          [
+            3333, 2892, 1398, 3072, 1860, 1552, 1888, 1866, 2666, 2409, 843,
+            3333, 2726, 0, 2485, 30490, 30490
+          ],
+          [
+            2332, 2534, 3522, 2157, 753, 1505, 600, 1276, 1246, 87, 1917, 856,
+            764, 2485, 0, 28567, 28567
+          ],
+          [
+            30214, 27750, 31847, 27439, 29303, 30067, 28989, 28642, 29485,
+            28651, 30322, 28022, 28963, 30490, 28567, 0, 0
+          ],
+          [
+            30214, 27750, 31847, 27439, 29303, 30067, 28989, 28642, 29485,
+            28651, 30322, 28022, 28963, 30490, 28567, 0, 0
+          ]
+        ],
+        "transit": [
+          [
+            0, 4775, 3469, 4471, 2046, 1819, 2432, 3353, 1089, 2289, 2494, 2392,
+            1595, 3333, 2332, 30214, 30214
+          ],
+          [
+            4775, 0, 4289, 622, 2755, 3296, 2348, 1452, 3698, 2547, 3089, 3037,
+            3289, 2892, 2534, 27750, 27750
+          ],
+          [
+            3469, 4289, 0, 4461, 2786, 2143, 2980, 3206, 3224, 3437, 1608, 4302,
+            3499, 1398, 3522, 31847, 31847
+          ],
+          [
+            4471, 622, 4461, 0, 2529, 3169, 2111, 1340, 3382, 2188, 3099, 2535,
+            2920, 3072, 2157, 27439, 27439
+          ],
+          [
+            2046, 2755, 2786, 2529, 0, 765, 418, 1313, 1029, 666, 1192, 1523,
+            886, 1860, 753, 29303, 29303
+          ],
+          [
+            1819, 3296, 2143, 3169, 765, 0, 1125, 1856, 1143, 1419, 716, 2194,
+            1356, 1552, 1505, 30067, 30067
+          ],
+          [
+            2432, 2348, 2980, 2111, 418, 1125, 0, 924, 1376, 529, 1375, 1455,
+            1088, 1888, 600, 28989, 28989
+          ],
+          [
+            3353, 1452, 3206, 1340, 1313, 1856, 924, 0, 2299, 1256, 1765, 2020,
+            1963, 1866, 1276, 28642, 28642
+          ],
+          [
+            1089, 3698, 3224, 3382, 1029, 1143, 1376, 2299, 0, 1201, 1851, 1472,
+            554, 2666, 1246, 29485, 29485
+          ],
+          [
+            2289, 2547, 3437, 2188, 666, 1419, 529, 1256, 1201, 0, 1832, 927,
+            742, 2409, 87, 28651, 28651
+          ],
+          [
+            2494, 3089, 1608, 3099, 1192, 716, 1375, 1765, 1851, 1832, 0, 2715,
+            1985, 843, 1917, 30322, 30322
+          ],
+          [
+            2392, 3037, 4302, 2535, 1523, 2194, 1455, 2020, 1472, 927, 2715, 0,
+            942, 3333, 856, 28022, 28022
+          ],
+          [
+            1595, 3289, 3499, 2920, 886, 1356, 1088, 1963, 554, 742, 1985, 942,
+            0, 2726, 764, 28963, 28963
+          ],
+          [
+            3333, 2892, 1398, 3072, 1860, 1552, 1888, 1866, 2666, 2409, 843,
+            3333, 2726, 0, 2485, 30490, 30490
+          ],
+          [
+            2332, 2534, 3522, 2157, 753, 1505, 600, 1276, 1246, 87, 1917, 856,
+            764, 2485, 0, 28567, 28567
+          ],
+          [
+            30214, 27750, 31847, 27439, 29303, 30067, 28989, 28642, 29485,
+            28651, 30322, 28022, 28963, 30490, 28567, 0, 0
+          ],
+          [
+            30214, 27750, 31847, 27439, 29303, 30067, 28989, 28642, 29485,
+            28651, 30322, 28022, 28963, 30490, 28567, 0, 0
+          ]
+        ]
+      },
+      "estimated": {
+        "walk": true,
+        "drive": true,
+        "transit": true
+      }
+    },
+    "transport": [
+      {
+        "id": "out",
+        "kind": "flight",
+        "direction": "outbound",
+        "carrier": "Jet2",
+        "number": "LS1235",
+        "from": {
+          "name": "Newcastle",
+          "code": "NCL",
+          "location": {
+            "lat": 55.0375,
+            "lng": -1.6917
+          },
+          "timeZone": "Europe/London"
+        },
+        "to": {
+          "name": "Rome Fiumicino",
+          "code": "FCO",
+          "location": {
+            "lat": 41.8003,
+            "lng": 12.2389
+          },
+          "timeZone": "Europe/Rome"
+        },
+        "departDate": "2026-10-27",
+        "departMin": 455,
+        "arriveDate": "2026-10-27",
+        "arriveMin": 665,
+        "confidence": "stated",
+        "status": "delayed",
+        "delayMin": 120,
+        "bookingRef": null,
+        "sources": [],
+        "checkedAt": null
+      },
+      {
+        "id": "back",
+        "kind": "flight",
+        "direction": "return",
+        "carrier": "Jet2",
+        "number": "LS1236",
+        "from": {
+          "name": "Rome Fiumicino",
+          "code": "FCO",
+          "location": {
+            "lat": 41.8003,
+            "lng": 12.2389
+          },
+          "timeZone": "Europe/Rome"
+        },
+        "to": {
+          "name": "Newcastle",
+          "code": "NCL",
+          "location": {
+            "lat": 55.0375,
+            "lng": -1.6917
+          },
+          "timeZone": "Europe/London"
+        },
+        "departDate": "2026-10-30",
+        "departMin": 1120,
+        "arriveDate": "2026-10-30",
+        "arriveMin": 1240,
+        "confidence": "stated",
+        "status": "scheduled",
+        "delayMin": null,
+        "bookingRef": null,
+        "sources": [],
+        "checkedAt": null
+      }
+    ],
+    "day": {
+      "date": "2026-10-27",
+      "stayId": "campo",
+      "stops": [
+        {
+          "id": "transport:out:arrive",
+          "kind": "transport",
+          "wishId": null,
+          "title": "Flight LS1235 lands at Rome Fiumicino",
+          "location": {
+            "lat": 41.8003,
+            "lng": 12.2389
+          },
+          "arriveMin": 665,
+          "departMin": 705,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "stay:2026-10-27:bags",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Drop bags at Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 765,
+          "departMin": 780,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": ["Check-in from 15:00 — any time this evening"]
+        },
+        {
+          "id": "meal:2026-10-27:lunch",
+          "kind": "meal",
+          "wishId": null,
+          "title": "Lunch",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 780,
+          "departMin": 840,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "spanish-steps",
+          "kind": "wish",
+          "wishId": "spanish-steps",
+          "title": "Spanish Steps",
+          "location": {
+            "lat": 41.9058,
+            "lng": 12.4823
+          },
+          "arriveMin": 864,
+          "departMin": 894,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "pantheon",
+          "kind": "wish",
+          "wishId": "pantheon",
+          "title": "Pantheon",
+          "location": {
+            "lat": 41.8986,
+            "lng": 12.4769
+          },
+          "arriveMin": 919,
+          "departMin": 964,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        },
+        {
+          "id": "stay:2026-10-27:end",
+          "kind": "stay",
+          "wishId": null,
+          "title": "Apartment by Campo de' Fiori",
+          "location": {
+            "lat": 41.8952,
+            "lng": 12.4716
+          },
+          "arriveMin": 984,
+          "departMin": 984,
+          "waitSec": 0,
+          "locked": false,
+          "bookingId": null,
+          "warnings": []
+        }
+      ],
+      "legs": [
+        {
+          "fromStopId": "transport:out:arrive",
+          "toStopId": "stay:2026-10-27:bags",
+          "mode": "transit",
+          "durationSec": 3600,
+          "distanceM": 28567,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "stay:2026-10-27:bags",
+          "toStopId": "meal:2026-10-27:lunch",
+          "mode": "walk",
+          "durationSec": 0,
+          "distanceM": 0,
+          "estimated": false,
+          "line": null
+        },
+        {
+          "fromStopId": "meal:2026-10-27:lunch",
+          "toStopId": "spanish-steps",
+          "mode": "walk",
+          "durationSec": 1438,
+          "distanceM": 1917,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "spanish-steps",
+          "toStopId": "pantheon",
+          "mode": "walk",
+          "durationSec": 894,
+          "distanceM": 1192,
+          "estimated": true,
+          "line": null
+        },
+        {
+          "fromStopId": "pantheon",
+          "toStopId": "stay:2026-10-27:end",
+          "mode": "walk",
+          "durationSec": 565,
+          "distanceM": 753,
+          "estimated": true,
+          "line": null
+        }
+      ],
+      "warnings": []
+    },
+    "plannedDays": [
+      {
+        "date": "2026-10-27",
+        "stayId": "campo",
+        "stops": [
+          {
+            "id": "transport:out:arrive",
+            "kind": "transport",
+            "wishId": null,
+            "title": "Flight LS1235 lands at Rome Fiumicino",
+            "location": {
+              "lat": 41.8003,
+              "lng": 12.2389
+            },
+            "arriveMin": 665,
+            "departMin": 705,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "stay:2026-10-27:bags",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Drop bags at Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 765,
+            "departMin": 780,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": ["Check-in from 15:00 — any time this evening"]
+          },
+          {
+            "id": "meal:2026-10-27:lunch",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Lunch",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 780,
+            "departMin": 840,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "spanish-steps",
+            "kind": "wish",
+            "wishId": "spanish-steps",
+            "title": "Spanish Steps",
+            "location": {
+              "lat": 41.9058,
+              "lng": 12.4823
+            },
+            "arriveMin": 864,
+            "departMin": 894,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "pantheon",
+            "kind": "wish",
+            "wishId": "pantheon",
+            "title": "Pantheon",
+            "location": {
+              "lat": 41.8986,
+              "lng": 12.4769
+            },
+            "arriveMin": 919,
+            "departMin": 964,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "stay:2026-10-27:end",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 984,
+            "departMin": 984,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          }
+        ],
+        "legs": [
+          {
+            "fromStopId": "transport:out:arrive",
+            "toStopId": "stay:2026-10-27:bags",
+            "mode": "transit",
+            "durationSec": 3600,
+            "distanceM": 28567,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "stay:2026-10-27:bags",
+            "toStopId": "meal:2026-10-27:lunch",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-27:lunch",
+            "toStopId": "spanish-steps",
+            "mode": "walk",
+            "durationSec": 1438,
+            "distanceM": 1917,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "spanish-steps",
+            "toStopId": "pantheon",
+            "mode": "walk",
+            "durationSec": 894,
+            "distanceM": 1192,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "pantheon",
+            "toStopId": "stay:2026-10-27:end",
+            "mode": "walk",
+            "durationSec": 565,
+            "distanceM": 753,
+            "estimated": true,
+            "line": null
+          }
+        ],
+        "warnings": []
+      },
+      {
+        "date": "2026-10-28",
+        "stayId": "campo",
+        "stops": [
+          {
+            "id": "stay:2026-10-28:start",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 540,
+            "departMin": 540,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "colosseum",
+            "kind": "wish",
+            "wishId": "colosseum",
+            "title": "Colosseum and Roman Forum",
+            "location": {
+              "lat": 41.8902,
+              "lng": 12.4922
+            },
+            "arriveMin": 563,
+            "departMin": 750,
+            "waitSec": 420,
+            "locked": true,
+            "bookingId": "bk-colosseum",
+            "warnings": []
+          },
+          {
+            "id": "meal:2026-10-28:lunch",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Lunch",
+            "location": {
+              "lat": 41.8902,
+              "lng": 12.4922
+            },
+            "arriveMin": 760,
+            "departMin": 820,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "capitoline",
+            "kind": "wish",
+            "wishId": "capitoline",
+            "title": "Capitoline Museums",
+            "location": {
+              "lat": 41.893,
+              "lng": 12.4828
+            },
+            "arriveMin": 834,
+            "departMin": 954,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "trevi",
+            "kind": "wish",
+            "wishId": "trevi",
+            "title": "Trevi Fountain",
+            "location": {
+              "lat": 41.9009,
+              "lng": 12.4833
+            },
+            "arriveMin": 979,
+            "departMin": 999,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "navona",
+            "kind": "wish",
+            "wishId": "navona",
+            "title": "Piazza Navona",
+            "location": {
+              "lat": 41.8992,
+              "lng": 12.4731
+            },
+            "arriveMin": 1024,
+            "departMin": 1054,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "stay:2026-10-28:end",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1072,
+            "departMin": 1072,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          }
+        ],
+        "legs": [
+          {
+            "fromStopId": "stay:2026-10-28:start",
+            "toStopId": "colosseum",
+            "mode": "transit",
+            "durationSec": 1366,
+            "distanceM": 2332,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "colosseum",
+            "toStopId": "meal:2026-10-28:lunch",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-28:lunch",
+            "toStopId": "capitoline",
+            "mode": "walk",
+            "durationSec": 817,
+            "distanceM": 1089,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "capitoline",
+            "toStopId": "trevi",
+            "mode": "walk",
+            "durationSec": 857,
+            "distanceM": 1143,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "trevi",
+            "toStopId": "navona",
+            "mode": "walk",
+            "durationSec": 844,
+            "distanceM": 1125,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "navona",
+            "toStopId": "stay:2026-10-28:end",
+            "mode": "walk",
+            "durationSec": 450,
+            "distanceM": 600,
+            "estimated": true,
+            "line": null
+          }
+        ],
+        "warnings": []
+      },
+      {
+        "date": "2026-10-29",
+        "stayId": "campo",
+        "stops": [
+          {
+            "id": "stay:2026-10-29:start",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 516,
+            "departMin": 516,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "vatican",
+            "kind": "wish",
+            "wishId": "vatican",
+            "title": "Vatican Museums",
+            "location": {
+              "lat": 41.9065,
+              "lng": 12.4536
+            },
+            "arriveMin": 540,
+            "departMin": 750,
+            "waitSec": 0,
+            "locked": true,
+            "bookingId": "bk-vatican",
+            "warnings": []
+          },
+          {
+            "id": "meal:2026-10-29:lunch",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Lunch",
+            "location": {
+              "lat": 41.9065,
+              "lng": 12.4536
+            },
+            "arriveMin": 760,
+            "departMin": 820,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "st-peters",
+            "kind": "wish",
+            "wishId": "st-peters",
+            "title": "St Peter's Basilica",
+            "location": {
+              "lat": 41.9022,
+              "lng": 12.4539
+            },
+            "arriveMin": 828,
+            "departMin": 903,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "castel",
+            "kind": "wish",
+            "wishId": "castel",
+            "title": "Castel Sant'Angelo",
+            "location": {
+              "lat": 41.9031,
+              "lng": 12.4663
+            },
+            "arriveMin": 930,
+            "departMin": 1020,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "ghetto",
+            "kind": "wish",
+            "wishId": "ghetto",
+            "title": "Jewish Ghetto and Portico d'Ottavia",
+            "location": {
+              "lat": 41.8925,
+              "lng": 12.4777
+            },
+            "arriveMin": 1055,
+            "departMin": 1100,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "stay:2026-10-29:end",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 1120,
+            "departMin": 1120,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          }
+        ],
+        "legs": [
+          {
+            "fromStopId": "stay:2026-10-29:start",
+            "toStopId": "vatican",
+            "mode": "transit",
+            "durationSec": 1407,
+            "distanceM": 2534,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "vatican",
+            "toStopId": "meal:2026-10-29:lunch",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-29:lunch",
+            "toStopId": "st-peters",
+            "mode": "walk",
+            "durationSec": 467,
+            "distanceM": 622,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "st-peters",
+            "toStopId": "castel",
+            "mode": "walk",
+            "durationSec": 1005,
+            "distanceM": 1340,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "castel",
+            "toStopId": "ghetto",
+            "mode": "walk",
+            "durationSec": 1472,
+            "distanceM": 1963,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "ghetto",
+            "toStopId": "stay:2026-10-29:end",
+            "mode": "walk",
+            "durationSec": 573,
+            "distanceM": 764,
+            "estimated": true,
+            "line": null
+          }
+        ],
+        "warnings": []
+      },
+      {
+        "date": "2026-10-30",
+        "stayId": "campo",
+        "stops": [
+          {
+            "id": "stay:2026-10-30:start",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 540,
+            "departMin": 540,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "stay:2026-10-30:checkout",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Check out of Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 540,
+            "departMin": 555,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "borghese",
+            "kind": "wish",
+            "wishId": "borghese",
+            "title": "Borghese Gallery",
+            "location": {
+              "lat": 41.9142,
+              "lng": 12.4921
+            },
+            "arriveMin": 582,
+            "departMin": 720,
+            "waitSec": 1080,
+            "locked": true,
+            "bookingId": "bk-borghese",
+            "warnings": []
+          },
+          {
+            "id": "campo-market",
+            "kind": "wish",
+            "wishId": "campo-market",
+            "title": "Campo de' Fiori market",
+            "location": {
+              "lat": 41.8956,
+              "lng": 12.4722
+            },
+            "arriveMin": 757,
+            "departMin": 787,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "meal:2026-10-30:lunch",
+            "kind": "meal",
+            "wishId": null,
+            "title": "Lunch",
+            "location": {
+              "lat": 41.8956,
+              "lng": 12.4722
+            },
+            "arriveMin": 797,
+            "departMin": 857,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "stay:2026-10-30:end",
+            "kind": "stay",
+            "wishId": null,
+            "title": "Collect bags at Apartment by Campo de' Fiori",
+            "location": {
+              "lat": 41.8952,
+              "lng": 12.4716
+            },
+            "arriveMin": 859,
+            "departMin": 940,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          },
+          {
+            "id": "transport:back:depart",
+            "kind": "transport",
+            "wishId": null,
+            "title": "Flight LS1236 from Rome Fiumicino at 18:40",
+            "location": {
+              "lat": 41.8003,
+              "lng": 12.2389
+            },
+            "arriveMin": 1000,
+            "departMin": 1120,
+            "waitSec": 0,
+            "locked": false,
+            "bookingId": null,
+            "warnings": []
+          }
+        ],
+        "legs": [
+          {
+            "fromStopId": "stay:2026-10-30:start",
+            "toStopId": "stay:2026-10-30:checkout",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "stay:2026-10-30:checkout",
+            "toStopId": "borghese",
+            "mode": "transit",
+            "durationSec": 1604,
+            "distanceM": 3522,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "borghese",
+            "toStopId": "campo-market",
+            "mode": "transit",
+            "durationSec": 1587,
+            "distanceM": 3437,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "campo-market",
+            "toStopId": "meal:2026-10-30:lunch",
+            "mode": "walk",
+            "durationSec": 0,
+            "distanceM": 0,
+            "estimated": false,
+            "line": null
+          },
+          {
+            "fromStopId": "meal:2026-10-30:lunch",
+            "toStopId": "stay:2026-10-30:end",
+            "mode": "walk",
+            "durationSec": 65,
+            "distanceM": 87,
+            "estimated": true,
+            "line": null
+          },
+          {
+            "fromStopId": "stay:2026-10-30:end",
+            "toStopId": "transport:back:depart",
+            "mode": "transit",
+            "durationSec": 3600,
+            "distanceM": 28567,
+            "estimated": true,
+            "line": null
+          }
+        ],
+        "warnings": []
+      }
+    ],
+    "nowMin": 750,
+    "position": null,
+    "atStopId": null,
+    "doneStopIds": [],
+    "observation": {
+      "kind": "behind",
+      "place": null,
+      "sinceMin": 665,
+      "motion": "unknown",
+      "stopId": null
+    }
+  },
+  "expected": [
+    {
+      "id": "carry-on",
+      "kind": "carry-on",
+      "label": "Carry on with today: push everything back 60 min",
+      "days": [
+        {
+          "date": "2026-10-27",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "transport:out:arrive",
+              "kind": "transport",
+              "wishId": null,
+              "title": "Flight LS1235 lands at Rome Fiumicino (120 min late)",
+              "location": {
+                "lat": 41.8003,
+                "lng": 12.2389
+              },
+              "arriveMin": 785,
+              "departMin": 825,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-27:bags",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Drop bags at Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 885,
+              "departMin": 900,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": ["Check-in from 15:00 — any time this evening"]
+            },
+            {
+              "id": "spanish-steps",
+              "kind": "wish",
+              "wishId": "spanish-steps",
+              "title": "Spanish Steps",
+              "location": {
+                "lat": 41.9058,
+                "lng": 12.4823
+              },
+              "arriveMin": 924,
+              "departMin": 954,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "pantheon",
+              "kind": "wish",
+              "wishId": "pantheon",
+              "title": "Pantheon",
+              "location": {
+                "lat": 41.8986,
+                "lng": 12.4769
+              },
+              "arriveMin": 979,
+              "departMin": 1024,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-27:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 1044,
+              "departMin": 1044,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "transport:out:arrive",
+              "toStopId": "stay:2026-10-27:bags",
+              "mode": "transit",
+              "durationSec": 3600,
+              "distanceM": 28567,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "stay:2026-10-27:bags",
+              "toStopId": "spanish-steps",
+              "mode": "walk",
+              "durationSec": 1438,
+              "distanceM": 1917,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "spanish-steps",
+              "toStopId": "pantheon",
+              "mode": "walk",
+              "durationSec": 894,
+              "distanceM": 1192,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "pantheon",
+              "toStopId": "stay:2026-10-27:end",
+              "mode": "walk",
+              "durationSec": 565,
+              "distanceM": 753,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": [
+            "No time for lunch — it's past 14:30; grab something on the way"
+          ]
+        },
+        {
+          "date": "2026-10-28",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "stay:2026-10-28:start",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 540,
+              "departMin": 540,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "colosseum",
+              "kind": "wish",
+              "wishId": "colosseum",
+              "title": "Colosseum and Roman Forum",
+              "location": {
+                "lat": 41.8902,
+                "lng": 12.4922
+              },
+              "arriveMin": 563,
+              "departMin": 750,
+              "waitSec": 420,
+              "locked": true,
+              "bookingId": "bk-colosseum",
+              "warnings": []
+            },
+            {
+              "id": "meal:2026-10-28:lunch",
+              "kind": "meal",
+              "wishId": null,
+              "title": "Lunch",
+              "location": {
+                "lat": 41.8902,
+                "lng": 12.4922
+              },
+              "arriveMin": 760,
+              "departMin": 820,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "capitoline",
+              "kind": "wish",
+              "wishId": "capitoline",
+              "title": "Capitoline Museums",
+              "location": {
+                "lat": 41.893,
+                "lng": 12.4828
+              },
+              "arriveMin": 834,
+              "departMin": 954,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "trevi",
+              "kind": "wish",
+              "wishId": "trevi",
+              "title": "Trevi Fountain",
+              "location": {
+                "lat": 41.9009,
+                "lng": 12.4833
+              },
+              "arriveMin": 979,
+              "departMin": 999,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "navona",
+              "kind": "wish",
+              "wishId": "navona",
+              "title": "Piazza Navona",
+              "location": {
+                "lat": 41.8992,
+                "lng": 12.4731
+              },
+              "arriveMin": 1024,
+              "departMin": 1054,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-28:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 1072,
+              "departMin": 1072,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "stay:2026-10-28:start",
+              "toStopId": "colosseum",
+              "mode": "transit",
+              "durationSec": 1366,
+              "distanceM": 2332,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "colosseum",
+              "toStopId": "meal:2026-10-28:lunch",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "meal:2026-10-28:lunch",
+              "toStopId": "capitoline",
+              "mode": "walk",
+              "durationSec": 817,
+              "distanceM": 1089,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "capitoline",
+              "toStopId": "trevi",
+              "mode": "walk",
+              "durationSec": 857,
+              "distanceM": 1143,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "trevi",
+              "toStopId": "navona",
+              "mode": "walk",
+              "durationSec": 844,
+              "distanceM": 1125,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "navona",
+              "toStopId": "stay:2026-10-28:end",
+              "mode": "walk",
+              "durationSec": 450,
+              "distanceM": 600,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "date": "2026-10-29",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "stay:2026-10-29:start",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 516,
+              "departMin": 516,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "vatican",
+              "kind": "wish",
+              "wishId": "vatican",
+              "title": "Vatican Museums",
+              "location": {
+                "lat": 41.9065,
+                "lng": 12.4536
+              },
+              "arriveMin": 540,
+              "departMin": 750,
+              "waitSec": 0,
+              "locked": true,
+              "bookingId": "bk-vatican",
+              "warnings": []
+            },
+            {
+              "id": "meal:2026-10-29:lunch",
+              "kind": "meal",
+              "wishId": null,
+              "title": "Lunch",
+              "location": {
+                "lat": 41.9065,
+                "lng": 12.4536
+              },
+              "arriveMin": 760,
+              "departMin": 820,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "st-peters",
+              "kind": "wish",
+              "wishId": "st-peters",
+              "title": "St Peter's Basilica",
+              "location": {
+                "lat": 41.9022,
+                "lng": 12.4539
+              },
+              "arriveMin": 828,
+              "departMin": 903,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "castel",
+              "kind": "wish",
+              "wishId": "castel",
+              "title": "Castel Sant'Angelo",
+              "location": {
+                "lat": 41.9031,
+                "lng": 12.4663
+              },
+              "arriveMin": 930,
+              "departMin": 1020,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "ghetto",
+              "kind": "wish",
+              "wishId": "ghetto",
+              "title": "Jewish Ghetto and Portico d'Ottavia",
+              "location": {
+                "lat": 41.8925,
+                "lng": 12.4777
+              },
+              "arriveMin": 1055,
+              "departMin": 1100,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-29:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 1120,
+              "departMin": 1120,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "stay:2026-10-29:start",
+              "toStopId": "vatican",
+              "mode": "transit",
+              "durationSec": 1407,
+              "distanceM": 2534,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "vatican",
+              "toStopId": "meal:2026-10-29:lunch",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "meal:2026-10-29:lunch",
+              "toStopId": "st-peters",
+              "mode": "walk",
+              "durationSec": 467,
+              "distanceM": 622,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "st-peters",
+              "toStopId": "castel",
+              "mode": "walk",
+              "durationSec": 1005,
+              "distanceM": 1340,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "castel",
+              "toStopId": "ghetto",
+              "mode": "walk",
+              "durationSec": 1472,
+              "distanceM": 1963,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "ghetto",
+              "toStopId": "stay:2026-10-29:end",
+              "mode": "walk",
+              "durationSec": 573,
+              "distanceM": 764,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "date": "2026-10-30",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "stay:2026-10-30:start",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 540,
+              "departMin": 540,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-30:checkout",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Check out of Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 540,
+              "departMin": 555,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "borghese",
+              "kind": "wish",
+              "wishId": "borghese",
+              "title": "Borghese Gallery",
+              "location": {
+                "lat": 41.9142,
+                "lng": 12.4921
+              },
+              "arriveMin": 582,
+              "departMin": 720,
+              "waitSec": 1080,
+              "locked": true,
+              "bookingId": "bk-borghese",
+              "warnings": []
+            },
+            {
+              "id": "campo-market",
+              "kind": "wish",
+              "wishId": "campo-market",
+              "title": "Campo de' Fiori market",
+              "location": {
+                "lat": 41.8956,
+                "lng": 12.4722
+              },
+              "arriveMin": 757,
+              "departMin": 787,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "meal:2026-10-30:lunch",
+              "kind": "meal",
+              "wishId": null,
+              "title": "Lunch",
+              "location": {
+                "lat": 41.8956,
+                "lng": 12.4722
+              },
+              "arriveMin": 797,
+              "departMin": 857,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-30:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Collect bags at Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 859,
+              "departMin": 940,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "transport:back:depart",
+              "kind": "transport",
+              "wishId": null,
+              "title": "Flight LS1236 from Rome Fiumicino at 18:40",
+              "location": {
+                "lat": 41.8003,
+                "lng": 12.2389
+              },
+              "arriveMin": 1000,
+              "departMin": 1120,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "stay:2026-10-30:start",
+              "toStopId": "stay:2026-10-30:checkout",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "stay:2026-10-30:checkout",
+              "toStopId": "borghese",
+              "mode": "transit",
+              "durationSec": 1604,
+              "distanceM": 3522,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "borghese",
+              "toStopId": "campo-market",
+              "mode": "transit",
+              "durationSec": 1587,
+              "distanceM": 3437,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "campo-market",
+              "toStopId": "meal:2026-10-30:lunch",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "meal:2026-10-30:lunch",
+              "toStopId": "stay:2026-10-30:end",
+              "mode": "walk",
+              "durationSec": 65,
+              "distanceM": 87,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "stay:2026-10-30:end",
+              "toStopId": "transport:back:depart",
+              "mode": "transit",
+              "durationSec": 3600,
+              "distanceM": 28567,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": []
+        }
+      ],
+      "dropped": [],
+      "moved": [],
+      "explanation": "Keeps the other days as they are and re-times the rest of today from now."
+    },
+    {
+      "id": "resolve-rest",
+      "kind": "resolve-rest",
+      "label": "Re-plan the rest of the trip",
+      "days": [
+        {
+          "date": "2026-10-27",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "transport:out:arrive",
+              "kind": "transport",
+              "wishId": null,
+              "title": "Flight LS1235 lands at Rome Fiumicino (120 min late)",
+              "location": {
+                "lat": 41.8003,
+                "lng": 12.2389
+              },
+              "arriveMin": 785,
+              "departMin": 825,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-27:bags",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Drop bags at Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 885,
+              "departMin": 900,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": ["Check-in from 15:00 — any time this evening"]
+            },
+            {
+              "id": "stay:2026-10-27:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 900,
+              "departMin": 900,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "transport:out:arrive",
+              "toStopId": "stay:2026-10-27:bags",
+              "mode": "transit",
+              "durationSec": 3600,
+              "distanceM": 28567,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "stay:2026-10-27:bags",
+              "toStopId": "stay:2026-10-27:end",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            }
+          ],
+          "warnings": [
+            "No time for lunch — it's past 14:30; grab something on the way"
+          ]
+        },
+        {
+          "date": "2026-10-28",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "stay:2026-10-28:start",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 540,
+              "departMin": 540,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "colosseum",
+              "kind": "wish",
+              "wishId": "colosseum",
+              "title": "Colosseum and Roman Forum",
+              "location": {
+                "lat": 41.8902,
+                "lng": 12.4922
+              },
+              "arriveMin": 563,
+              "departMin": 750,
+              "waitSec": 420,
+              "locked": true,
+              "bookingId": "bk-colosseum",
+              "warnings": []
+            },
+            {
+              "id": "meal:2026-10-28:lunch",
+              "kind": "meal",
+              "wishId": null,
+              "title": "Lunch",
+              "location": {
+                "lat": 41.8902,
+                "lng": 12.4922
+              },
+              "arriveMin": 760,
+              "departMin": 820,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "capitoline",
+              "kind": "wish",
+              "wishId": "capitoline",
+              "title": "Capitoline Museums",
+              "location": {
+                "lat": 41.893,
+                "lng": 12.4828
+              },
+              "arriveMin": 834,
+              "departMin": 954,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "trevi",
+              "kind": "wish",
+              "wishId": "trevi",
+              "title": "Trevi Fountain",
+              "location": {
+                "lat": 41.9009,
+                "lng": 12.4833
+              },
+              "arriveMin": 979,
+              "departMin": 999,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "pantheon",
+              "kind": "wish",
+              "wishId": "pantheon",
+              "title": "Pantheon",
+              "location": {
+                "lat": 41.8986,
+                "lng": 12.4769
+              },
+              "arriveMin": 1019,
+              "departMin": 1064,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "navona",
+              "kind": "wish",
+              "wishId": "navona",
+              "title": "Piazza Navona",
+              "location": {
+                "lat": 41.8992,
+                "lng": 12.4731
+              },
+              "arriveMin": 1080,
+              "departMin": 1110,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-28:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 1128,
+              "departMin": 1128,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "stay:2026-10-28:start",
+              "toStopId": "colosseum",
+              "mode": "transit",
+              "durationSec": 1366,
+              "distanceM": 2332,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "colosseum",
+              "toStopId": "meal:2026-10-28:lunch",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "meal:2026-10-28:lunch",
+              "toStopId": "capitoline",
+              "mode": "walk",
+              "durationSec": 817,
+              "distanceM": 1089,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "capitoline",
+              "toStopId": "trevi",
+              "mode": "walk",
+              "durationSec": 857,
+              "distanceM": 1143,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "trevi",
+              "toStopId": "pantheon",
+              "mode": "walk",
+              "durationSec": 574,
+              "distanceM": 765,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "pantheon",
+              "toStopId": "navona",
+              "mode": "walk",
+              "durationSec": 314,
+              "distanceM": 418,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "navona",
+              "toStopId": "stay:2026-10-28:end",
+              "mode": "walk",
+              "durationSec": 450,
+              "distanceM": 600,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "date": "2026-10-29",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "stay:2026-10-29:start",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 516,
+              "departMin": 516,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "vatican",
+              "kind": "wish",
+              "wishId": "vatican",
+              "title": "Vatican Museums",
+              "location": {
+                "lat": 41.9065,
+                "lng": 12.4536
+              },
+              "arriveMin": 540,
+              "departMin": 750,
+              "waitSec": 0,
+              "locked": true,
+              "bookingId": "bk-vatican",
+              "warnings": []
+            },
+            {
+              "id": "meal:2026-10-29:lunch",
+              "kind": "meal",
+              "wishId": null,
+              "title": "Lunch",
+              "location": {
+                "lat": 41.9065,
+                "lng": 12.4536
+              },
+              "arriveMin": 760,
+              "departMin": 820,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "st-peters",
+              "kind": "wish",
+              "wishId": "st-peters",
+              "title": "St Peter's Basilica",
+              "location": {
+                "lat": 41.9022,
+                "lng": 12.4539
+              },
+              "arriveMin": 828,
+              "departMin": 903,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "castel",
+              "kind": "wish",
+              "wishId": "castel",
+              "title": "Castel Sant'Angelo",
+              "location": {
+                "lat": 41.9031,
+                "lng": 12.4663
+              },
+              "arriveMin": 930,
+              "departMin": 1020,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "spanish-steps",
+              "kind": "wish",
+              "wishId": "spanish-steps",
+              "title": "Spanish Steps",
+              "location": {
+                "lat": 41.9058,
+                "lng": 12.4823
+              },
+              "arriveMin": 1053,
+              "departMin": 1083,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-29:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 1117,
+              "departMin": 1117,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "stay:2026-10-29:start",
+              "toStopId": "vatican",
+              "mode": "transit",
+              "durationSec": 1407,
+              "distanceM": 2534,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "vatican",
+              "toStopId": "meal:2026-10-29:lunch",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "meal:2026-10-29:lunch",
+              "toStopId": "st-peters",
+              "mode": "walk",
+              "durationSec": 467,
+              "distanceM": 622,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "st-peters",
+              "toStopId": "castel",
+              "mode": "walk",
+              "durationSec": 1005,
+              "distanceM": 1340,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "castel",
+              "toStopId": "spanish-steps",
+              "mode": "walk",
+              "durationSec": 1324,
+              "distanceM": 1765,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "spanish-steps",
+              "toStopId": "stay:2026-10-29:end",
+              "mode": "walk",
+              "durationSec": 1438,
+              "distanceM": 1917,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": []
+        },
+        {
+          "date": "2026-10-30",
+          "stayId": "campo",
+          "stops": [
+            {
+              "id": "stay:2026-10-30:start",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 540,
+              "departMin": 540,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-30:checkout",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Check out of Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 540,
+              "departMin": 555,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "borghese",
+              "kind": "wish",
+              "wishId": "borghese",
+              "title": "Borghese Gallery",
+              "location": {
+                "lat": 41.9142,
+                "lng": 12.4921
+              },
+              "arriveMin": 582,
+              "departMin": 720,
+              "waitSec": 1080,
+              "locked": true,
+              "bookingId": "bk-borghese",
+              "warnings": []
+            },
+            {
+              "id": "meal:2026-10-30:lunch",
+              "kind": "meal",
+              "wishId": null,
+              "title": "Lunch",
+              "location": {
+                "lat": 41.9142,
+                "lng": 12.4921
+              },
+              "arriveMin": 730,
+              "departMin": 790,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "ghetto",
+              "kind": "wish",
+              "wishId": "ghetto",
+              "title": "Jewish Ghetto and Portico d'Ottavia",
+              "location": {
+                "lat": 41.8925,
+                "lng": 12.4777
+              },
+              "arriveMin": 817,
+              "departMin": 862,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "stay:2026-10-30:end",
+              "kind": "stay",
+              "wishId": null,
+              "title": "Collect bags at Apartment by Campo de' Fiori",
+              "location": {
+                "lat": 41.8952,
+                "lng": 12.4716
+              },
+              "arriveMin": 882,
+              "departMin": 940,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            },
+            {
+              "id": "transport:back:depart",
+              "kind": "transport",
+              "wishId": null,
+              "title": "Flight LS1236 from Rome Fiumicino at 18:40",
+              "location": {
+                "lat": 41.8003,
+                "lng": 12.2389
+              },
+              "arriveMin": 1000,
+              "departMin": 1120,
+              "waitSec": 0,
+              "locked": false,
+              "bookingId": null,
+              "warnings": []
+            }
+          ],
+          "legs": [
+            {
+              "fromStopId": "stay:2026-10-30:start",
+              "toStopId": "stay:2026-10-30:checkout",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "stay:2026-10-30:checkout",
+              "toStopId": "borghese",
+              "mode": "transit",
+              "durationSec": 1604,
+              "distanceM": 3522,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "borghese",
+              "toStopId": "meal:2026-10-30:lunch",
+              "mode": "walk",
+              "durationSec": 0,
+              "distanceM": 0,
+              "estimated": false,
+              "line": null
+            },
+            {
+              "fromStopId": "meal:2026-10-30:lunch",
+              "toStopId": "ghetto",
+              "mode": "transit",
+              "durationSec": 1600,
+              "distanceM": 3499,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "ghetto",
+              "toStopId": "stay:2026-10-30:end",
+              "mode": "walk",
+              "durationSec": 573,
+              "distanceM": 764,
+              "estimated": true,
+              "line": null
+            },
+            {
+              "fromStopId": "stay:2026-10-30:end",
+              "toStopId": "transport:back:depart",
+              "mode": "transit",
+              "durationSec": 3600,
+              "distanceM": 28567,
+              "estimated": true,
+              "line": null
+            }
+          ],
+          "warnings": []
+        }
+      ],
+      "dropped": ["campo-market"],
+      "moved": [
+        {
+          "wishId": "ghetto",
+          "from": "2026-10-29",
+          "to": "2026-10-30"
+        },
+        {
+          "wishId": "pantheon",
+          "from": "2026-10-27",
+          "to": "2026-10-28"
+        },
+        {
+          "wishId": "spanish-steps",
+          "from": "2026-10-27",
+          "to": "2026-10-29"
+        }
+      ],
+      "explanation": "Re-plans the rest of today from where you are, and the days after. Pantheon moves to Wed 28 Oct. Spanish Steps moves to Thu 29 Oct. Jewish Ghetto and Portico d'Ottavia moves to Fri 30 Oct. Drops Campo de' Fiori market."
+    }
+  ]
+}
