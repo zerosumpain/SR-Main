@@ -127,7 +127,7 @@ Find up to 3 ideas that genuinely FIT this slot:
 - with travel IN (from the stop before) plus the visit plus travel OUT (to the stop after) fitting inside the free minutes — check with travel_time for the likely ones, and say the numbers;
 - a place to eat when it is a meal slot (honour dietary needs in the profile);
 - not something already planned on another day, and not something they dropped.
-Use your tools sparingly (find_place, travel_time, opening_hours, web_search). For travel_time, name the ends by place name, "stay", or the coordinates given for the stop before and after. Never invent links, prices or opening times.
+Use your tools sparingly — at most 4 lookups and 2 web searches (find_place, travel_time, opening_hours, web_search); answer from what you know when you can. For travel_time, name the ends by place name, "stay", or the coordinates given for the stop before and after. Never invent links, prices or opening times.
 
 Answer ONLY with JSON:
 {"ideas":[{"title": string,"placeQuery": a precise place to look up ("Sant'Ignazio, Rome"),"durationMin": number,"why": one line,"fit": one line with the travel and spare minutes ("12 min walk from the Pantheon, 45 min there, 15 min on to Trevi — leaves 10 min spare")}],"note": string|null}
@@ -251,6 +251,17 @@ export interface Verdict {
 type SolverInput = Parameters<typeof solveTrip>[0];
 
 /**
+ * v6 lenience: an idea that becomes the slot's meal counts as landing in that
+ * stage wherever the clock puts it; and one in the stage next door that sits
+ * entirely inside the gap's times still fills the gap.
+ */
+function landsLeniently(stop: Pick<PlannedStop, 'arriveMin' | 'departMin'>, landed: DayStage, wish: Pick<Wish, 'replacesMeal'>, gap: Gap): boolean {
+  if (gap.meal && wish.replacesMeal === gap.meal) return true;
+  const adjacent = Math.abs(STAGE_RANK[landed] - STAGE_RANK[gap.stage]) === 1;
+  return adjacent && stop.arriveMin >= gap.before.min && stop.departMin <= gap.after.min;
+}
+
+/**
  * Dry-run an idea: add it to a copy of the trip pinned to the gap's day, solve
  * without saving, and compare with the same trip solved without it. It fits
  * when the solver plans it that day IN THE INTENDED STAGE and nothing else is
@@ -297,7 +308,9 @@ export function verifyIdea(input: SolverInput, wish: Wish, gap: Gap, baseline: S
     moves,
     reason: null,
   };
-  if (stop.stage && stop.stage !== gap.stage) return { ...verdict, reason: `It would land in the ${DAY_STAGE_LABEL[stop.stage].toLowerCase()} instead.` };
+  if (stop.stage && stop.stage !== gap.stage && !landsLeniently(stop, stop.stage, wish, gap)) {
+    return { ...verdict, reason: `It would land in the ${DAY_STAGE_LABEL[stop.stage].toLowerCase()} instead.` };
+  }
   if (pushesOut.length) return { ...verdict, reason: `It would push out ${pushesOut.join(', ')}.` };
   return { ...verdict, fits: true };
 }

@@ -1,20 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { solveTrip } from '$lib/trips/solver';
-import { romeInput } from './solver/fixtures/rome';
+import { romeInput, romePoints } from './solver/fixtures/rome';
+import { estimateMatrix } from './solver/estimate';
 
 // findIdeas with the plan, the model (a fake planner driving the agent turn)
 // and the map stubbed; the solver is real.
-const h = vi.hoisted(() => ({ logged: [] as string[], prompts: [] as string[] }));
-const input = romeInput();
-const plan = solveTrip(input);
+const h = vi.hoisted(() => ({ logged: [] as string[], prompts: [] as string[], fx: null as unknown as { input: ReturnType<typeof romeInput>; plan: ReturnType<typeof solveTrip> } }));
+const rome = (() => {
+  const input = romeInput();
+  return { input, plan: solveTrip(input) };
+})();
 
 vi.mock('./store.server', () => ({
-  latestPlan: async () => ({ id: 'p', version: 3, plan, matrix: input.matrix }),
+  latestPlan: async () => ({ id: 'p', version: 3, plan: h.fx.plan, matrix: h.fx.input.matrix }),
   listTransport: async () => [],
 }));
-vi.mock('./plan.server', () => ({ solverInput: async () => ({ input, state: { stays: input.stays, wishes: input.wishes, bookings: input.bookings } }) }));
+vi.mock('./plan.server', () => ({
+  solverInput: async () => ({ input: h.fx.input, state: { stays: h.fx.input.stays, wishes: h.fx.input.wishes, bookings: h.fx.input.bookings } }),
+}));
 vi.mock('./converse.server', () => ({ logEdit: async (_t: string, text: string) => void h.logged.push(text) }));
-vi.mock('./research.server', () => ({ findPlaceLoosely: async () => null }));
+vi.mock('./research.server', () => ({ findPlaceLoosely: async () => null, overpass: async () => null }));
+vi.mock('./llm.server', () => ({ jsonCall: async () => { throw new Error('no key'); } }));
 vi.mock('./agent.server', () => ({ agentTurn: async () => ({ reply: '{}', research: [], seenUrls: [], toolCalls: 0 }) }));
 
 const { findIdeas } = await import('./ideas.server');
@@ -29,6 +35,7 @@ const place = async (q: string) => (places[q] ? { name: q.split(',')[0], locatio
 beforeEach(() => {
   h.logged = [];
   h.prompts = [];
+  h.fx = rome;
 });
 
 describe('findIdeas', () => {
@@ -65,9 +72,118 @@ describe('findIdeas', () => {
       agent: (async () => ({ reply: '{"ideas":[]}', research: [], seenUrls: [], toolCalls: 0 })) as never,
       place: place as never,
     });
-    expect(none.note).toMatch(/^Nothing the planner found fits 320 minutes between Lunch and Dinner/);
+    expect(none.note).toMatch(/^Nothing fits 320 minutes between Lunch and Dinner/);
     const down = await findIdeas(trip, { date: '2026-10-28', stage: 'afternoon' }, 'site', { agent: (async () => { throw new Error('no key'); }) as never });
-    expect(down.note).toMatch(/not reachable/);
+    expect(down.note).toMatch(/not reachable just now and nothing nearby fits/);
+    expect(h.logged.at(-1)).toMatch(/Planner error: unreachable\. Nothing fitted\. Nearby search: OpenStreetMap did not answer\./);
     expect((await findIdeas(trip, { date: '2027-01-01', stage: 'afternoon' })).note).toBe('That day is not in the plan.');
+  });
+});
+
+// ── v6: ideas that always come back ─────────────────────────────────────────
+
+/**
+ * The logged production ask, reproduced: Rome, Tue 27 Oct, a light day —
+ * Pantheon until 12:46, lunch, then "Free time at Accommodation near Piazza
+ * Navona" from 14:03: a 77-minute lunch gap the planner answered with nothing.
+ */
+function romeLunch() {
+  const input = romeInput();
+  const stay = { ...input.stays[0], name: 'Accommodation near Piazza Navona', location: { lat: 41.8985, lng: 12.4718 } };
+  const on: Record<string, string> = { pantheon: '2026-10-27', colosseum: '2026-10-28', vatican: '2026-10-29', borghese: '2026-10-30' };
+  const wishes = input.wishes.filter((w) => on[w.id]).map((w) => ({ ...w, fixedDate: on[w.id], fixedStartMin: w.id === 'pantheon' ? 721 : null }));
+  const fixture = { ...input, stays: [stay], wishes, matrix: estimateMatrix(romePoints(wishes, [stay]), input.trip.modes) };
+  return { input: fixture, plan: solveTrip(fixture) };
+}
+const LUNCH_ASK = { date: '2026-10-27', stage: 'lunch' as const, afterStopId: 'pantheon', beforeStopId: 'stay:2026-10-27:rest' };
+
+/** An Overpass answer around the Pantheon: two trattorias close by, one across the river, one already a wish. */
+const OSM_LUNCH = {
+  elements: [
+    { type: 'node', id: 1, lat: 41.8989, lon: 12.4757, tags: { amenity: 'restaurant', name: 'Armando al Pantheon', 'diet:vegetarian': 'yes' } },
+    { type: 'node', id: 2, lat: 41.8979, lon: 12.4745, tags: { amenity: 'restaurant', name: 'Osteria del Sostegno' } },
+    { type: 'node', id: 3, lat: 41.8862, lon: 12.4668, tags: { amenity: 'restaurant', name: 'Far Trastevere' } },
+    { type: 'node', id: 4, lat: 41.8986, lon: 12.4769, tags: { amenity: 'cafe', name: 'Pantheon' } },
+  ],
+};
+
+describe('v6: the Rome lunch gap that came back empty', () => {
+  it('reproduces the 77-minute gap, and the nearby fallback brings back verified lunches', async () => {
+    h.fx = romeLunch();
+    const queries: string[] = [];
+    const agent = vi.fn(async () => ({ reply: '{"ideas":[],"note":null}', research: [], seenUrls: [], toolCalls: 0 }));
+    const r = await findIdeas(trip, LUNCH_ASK, 'phone', {
+      agent: agent as never,
+      overpass: async (q) => {
+        queries.push(q);
+        return OSM_LUNCH;
+      },
+    });
+    expect(r.gap).toMatchObject({ freeMin: 77, meal: 'lunch', before: { title: 'Pantheon', min: 766 }, after: { title: 'Free time at Accommodation near Piazza Navona', min: 843 } });
+    // The smaller budget is asked for.
+    expect((agent.mock.calls[0] as unknown[])[2]).toMatchObject({ budget: { calls: 4, searches: 2 } });
+    expect(queries[0]).toContain('restaurant|cafe');
+    expect(r.ideas.length).toBeGreaterThanOrEqual(1);
+    expect(r.ideas.every((i) => i.source === 'nearby' && i.verdict.fits)).toBe(true);
+    expect(r.ideas[0].title).toBe('Armando al Pantheon');
+    expect(r.ideas[0].wish).toMatchObject({ fixedDate: '2026-10-27', replacesMeal: 'lunch', place: { osmId: 'node/1' } });
+    expect(r.ideas.map((i) => i.title)).not.toContain('Pantheon');
+    expect(r.note).toMatch(/^These are places near the way from Pantheon/);
+    expect(h.logged[0]).toMatch(/^Asked for ideas for Tue 27 Oct lunch \(12:46–14:03, 77 min between Pantheon and Free time at Accommodation near Piazza Navona\)\. Found: Armando al Pantheon \(nearby\)/);
+  });
+
+  it('falls back when the planner fails, and logs the error kind', async () => {
+    h.fx = romeLunch();
+    const r = await findIdeas(trip, LUNCH_ASK, 'phone', {
+      agent: (async () => {
+        throw new Error('Request timed out.');
+      }) as never,
+      overpass: async () => OSM_LUNCH,
+    });
+    expect(r.ideas[0]).toMatchObject({ source: 'nearby', title: 'Armando al Pantheon' });
+    expect(r.note).toMatch(/^The planner took too long, so these are places near the way/);
+    expect(h.logged[0]).toMatch(/Planner error: timeout\. Found: Armando al Pantheon \(nearby\)/);
+  });
+
+  it('gives up on a planner that hangs past its deadline', async () => {
+    h.fx = romeLunch();
+    const r = await findIdeas(trip, LUNCH_ASK, 'phone', { agent: (() => new Promise(() => {})) as never, overpass: async () => OSM_LUNCH, plannerMs: 20 });
+    expect(r.ideas[0].source).toBe('nearby');
+    expect(h.logged[0]).toMatch(/Planner error: timeout\./);
+  });
+
+  it('repairs an unreadable answer once, and uses the planner’s ideas', async () => {
+    h.fx = romeLunch();
+    const repair = vi.fn(async () => ({ ideas: [{ title: 'Armando al Pantheon', placeQuery: 'Armando al Pantheon, Rome', durationMin: 60, why: 'Roman classics', fit: '2 min walk' }], note: null }));
+    const r = await findIdeas(trip, LUNCH_ASK, 'phone', {
+      agent: (async () => ({ reply: 'Try Armando al Pantheon for lunch, about an hour.', research: [], seenUrls: [], toolCalls: 0 })) as never,
+      repair,
+      place: (async () => ({ name: 'Armando al Pantheon', location: { lat: 41.8989, lng: 12.4757 }, osmId: 'node/1', address: null })) as never,
+      overpass: async () => {
+        throw new Error('should not be needed');
+      },
+    });
+    expect(repair).toHaveBeenCalledTimes(1);
+    expect(r.ideas).toHaveLength(1);
+    expect(r.ideas[0]).toMatchObject({ source: 'planner', verdict: { fits: true, landedStage: 'lunch' } });
+  });
+
+  it('an answer that cannot be repaired is an "unreadable" failure, and still falls back', async () => {
+    h.fx = romeLunch();
+    const r = await findIdeas(trip, LUNCH_ASK, 'phone', {
+      agent: (async () => ({ reply: 'garbled', research: [], seenUrls: [], toolCalls: 0 })) as never,
+      repair: async () => 'still garbled',
+      overpass: async () => OSM_LUNCH,
+    });
+    expect(r.ideas[0].source).toBe('nearby');
+    expect(h.logged[0]).toMatch(/Planner error: unreadable\./);
+  });
+
+  it('says plainly, and logs, when neither the planner nor the map has anything', async () => {
+    h.fx = romeLunch();
+    const r = await findIdeas(trip, LUNCH_ASK, 'phone', { agent: (async () => ({ reply: '{"ideas":[]}', research: [], seenUrls: [], toolCalls: 0 })) as never, overpass: async () => ({ elements: [] }) });
+    expect(r.ideas).toEqual([]);
+    expect(r.note).toMatch(/^Nothing fits 77 minutes between Pantheon and Free time/);
+    expect(h.logged[0]).toMatch(/Nothing fitted\. Nearby search: no places found nearby\.$/);
   });
 });

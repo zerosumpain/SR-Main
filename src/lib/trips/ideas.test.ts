@@ -59,6 +59,18 @@ describe('verifyIdea', () => {
     expect(v.legInMin).toBeGreaterThan(0);
   });
 
+  it('v6 lenience: the stage next door counts when it sits inside the gap’s times; a meal idea counts as the meal', () => {
+    const w = idea('idea:0', 'Sant’Ignazio', 40, 41.8991, 12.4797);
+    // It lands in the afternoon. Asked as the (adjacent) evening, inside the gap → fits.
+    expect(verifyIdea(input, w, { ...gap, stage: 'evening' }, plan)).toMatchObject({ fits: true, landedStage: 'afternoon' });
+    // Adjacent but not inside the gap's times → turned down.
+    expect(verifyIdea(input, w, { ...gap, stage: 'evening', after: { ...gap.after, min: gap.before.min + 10 } }, plan)).toMatchObject({ fits: false, reason: 'It would land in the afternoon instead.' });
+    // Two stages away → turned down.
+    expect(verifyIdea(input, w, { ...gap, stage: 'morning' }, plan).fits).toBe(false);
+    // An idea that replaces the slot's meal lands "in" the meal's stage wherever the clock puts it.
+    expect(verifyIdea(input, { ...w, replacesMeal: 'lunch' }, { ...gap, stage: 'morning', meal: 'lunch' }, plan).fits).toBe(true);
+  });
+
   it('turns down an idea that cannot fit, and names what one would push out', () => {
     const tooLong = verifyIdea(input, idea('idea:1', 'A whole-day cooking class', 600), gap, plan);
     expect(tooLong.fits).toBe(false);
