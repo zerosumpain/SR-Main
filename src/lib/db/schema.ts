@@ -7363,6 +7363,8 @@ export const trip = pgTable(
     /** 'draft' | 'planned' | 'active' | 'done' */
     status: text('status').notNull().default('draft'),
     notes: text('notes'),
+    /** v2.1: { [LocalDate]: 'light' | 'normal' | 'full' } — how full each day should be. */
+    dayLoads: jsonb('day_loads').$type<Partial<Record<string, 'light' | 'normal' | 'full'>>>(),
     /** The background research job's progress, for the page to poll. */
     research: jsonb('research').$type<Record<string, unknown>>(),
     /** v2: TripGuide — city know-how (getting around, taxis, tickets), model-written once. */
@@ -7413,6 +7415,8 @@ export const tripWish = pgTable(
     facts: jsonb('facts').$type<Record<string, unknown>>(),
     note: text('note'),
     sortHint: integer('sort_hint').notNull().default(0),
+    /** v2.1: 'lunch' | 'dinner' — this wish IS that day's meal (the automatic stop is dropped). */
+    replacesMeal: text('replaces_meal'),
     /** v2: StopGuide — what to know when you're there, model-written from facts. */
     guide: jsonb('guide').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

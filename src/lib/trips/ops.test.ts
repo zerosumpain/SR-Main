@@ -190,3 +190,46 @@ describe('links', () => {
     expect(describeOp({ op: 'removeStay', id: 's' })).toBe('A stay was removed.');
   });
 });
+
+describe('v2.1: day loads and meal-replacing wishes', () => {
+  it('merges day loads, drops normal and out-of-trip days, refuses bad loads', async () => {
+    const { fx } = fakes();
+    const seen: unknown[] = [];
+    fx.setTrip = async (f) => void seen.push(f.dayLoads);
+    const c = ctx({ trip: { ...TRIP, dayLoads: { '2026-10-27': 'full' } } });
+    const r = await applyOps(
+      [
+        { op: 'setTrip', fields: { dayLoads: { '2026-10-28': 'light', '2027-01-01': 'light' } } },
+        { op: 'setTrip', fields: { dayLoads: { '2026-10-27': 'normal' } } },
+        { op: 'setTrip', fields: { dayLoads: { '2026-10-29': 'sleepy' } } },
+      ],
+      c,
+      fx,
+    );
+    expect(seen).toEqual([{ '2026-10-27': 'full', '2026-10-28': 'light' }, { '2026-10-28': 'light' }]);
+    expect(r.rejected.map((x) => x.reason)).toEqual(['A day is light, normal or full, not “sleepy”.']);
+    expect(describeOp(r.applied[0])).toBe('Day loads set: 2026-10-27 full, 2026-10-28 light.');
+  });
+
+  it('adds a wish that is that day’s lunch, and can change it back', async () => {
+    const { fx } = fakes();
+    const added: unknown[] = [];
+    const orig = fx.addWish;
+    fx.addWish = async (w) => {
+      added.push(w.replacesMeal);
+      return orig(w);
+    };
+    const r = await applyOps(
+      [
+        { op: 'addWish', wish: { title: 'Long lunch in Trastevere', placeQuery: 'Pantheon, Rome', fixedDate: '2026-10-29', durationMin: 120, replacesMeal: 'lunch' } },
+        { op: 'addWish', wish: { title: 'Brunch', replacesMeal: 'breakfast' } },
+        { op: 'updateWish', id: 'w-pan', fields: { replacesMeal: null } },
+      ],
+      ctx(),
+      fx,
+    );
+    expect(added).toEqual(['lunch']);
+    expect(r.rejected.map((x) => x.reason)).toEqual(['A wish can replace lunch or dinner.']);
+    expect(r.applied.map((o) => o.op)).toEqual(['addWish', 'updateWish']);
+  });
+});

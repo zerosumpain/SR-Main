@@ -45,6 +45,7 @@
   }
 
   // ── Dates and small formatters ──
+  const loadOf = (d: string) => (data.trip.dayLoads ?? {})[d] ?? 'normal';
   const dates = $derived.by(() => {
     const out: string[] = [];
     const [y, m, d] = trip.startDate.split('-').map(Number);
@@ -65,7 +66,7 @@
   const MODE_LABEL: Record<TravelMode, string> = { walk: 'walk', cycle: 'cycle', drive: 'drive', transit: 'public transport', taxi: 'taxi' };
 
   // ── Intake ──
-  let intake = $state({ destination: '', title: '', startDate: '', endDate: '', timeZone: '', pace: 'normal', modes: [] as TravelMode[], notes: '' });
+  let intake = $state({ destination: '', title: '', startDate: '', endDate: '', timeZone: '', pace: 'normal', modes: [] as TravelMode[], notes: '', dayLoads: {} as Record<string, string> });
   $effect(() => {
     // Reset the form whenever a fresh trip arrives from the server.
     const t = data.trip;
@@ -78,6 +79,7 @@
       pace: t.pace,
       modes: [...t.modes],
       notes: t.notes ?? '',
+      dayLoads: { ...(t.dayLoads ?? {}) } as Record<string, string>,
     };
   });
   function toggleMode(m: TravelMode) {
@@ -370,7 +372,7 @@
           {#each plan.days as day, di (day.date)}
             {#if !focus || focus === day.date}
               <article class="day">
-                <h3><span class="mono">{di + 1}</span> {dayLabel(day.date)}</h3>
+                <h3><span class="mono">{di + 1}</span> {dayLabel(day.date)}{loadOf(day.date) !== 'normal' ? ` · ${loadOf(day.date)} day` : ''}</h3>
                 {#if day.legs.some((l) => l.mode === 'drive')}
                   <p class="small"><button class="nm-rowact" type="button" onclick={() => liveDrive(day)}>Live drive times</button> <span class="muted">{liveNote[day.date] ?? ''}</span></p>
                 {/if}
@@ -474,6 +476,17 @@
           <label class="check"><input type="checkbox" checked={intake.modes.includes(m)} disabled={m === 'walk'} onchange={() => toggleMode(m)} /> {MODE_LABEL[m]}</label>
         {/each}
       </fieldset>
+      <fieldset class="modes wide">
+        <legend>How full each day is</legend>
+        {#each dates as d (d)}
+          <label class="check"
+            >{dayLabel(d)}
+            <select class="nm-text-input small" value={intake.dayLoads[d] ?? 'normal'} onchange={(e) => (intake.dayLoads = { ...intake.dayLoads, [d]: e.currentTarget.value })}>
+              <option value="light">light</option><option value="normal">normal</option><option value="full">full</option>
+            </select></label
+          >
+        {/each}
+      </fieldset>
       <label class="wide">Notes<textarea class="nm-text-input" rows="2" bind:value={intake.notes}></textarea></label>
       <div class="row-actions wide"><button class="nm-save-btn" type="submit" disabled={busy}>Save trip</button></div>
     </form>
@@ -543,7 +556,7 @@
               <button class="nm-rowact" type="button" aria-label="Move {w.title} up" disabled={busy || i === 0} onclick={() => move(w, -1)}>↑</button>
               <button class="nm-rowact" type="button" aria-label="Move {w.title} down" disabled={busy || i === active.length - 1} onclick={() => move(w, 1)}>↓</button>
             </span>
-            <span class="w-title">{w.title}{w.locked ? ' · locked' : ''}{w.skipped ? ' · skipped' : ''}</span>
+            <span class="w-title">{w.title}{w.replacesMeal ? ` · is ${w.replacesMeal}` : ''}{w.locked ? ' · locked' : ''}{w.skipped ? ' · skipped' : ''}</span>
             <span class="pill" class:must={w.priority === 'must'}>{w.priority}</span>
           </div>
           <div class="w-place muted">
@@ -560,6 +573,7 @@
             <label>Minutes<input class="nm-text-input small" type="number" min="5" max="720" value={w.durationSec ? Math.round(w.durationSec / 60) : ''} placeholder={w.facts?.typicalVisitSec ? String(Math.round(w.facts.typicalVisitSec / 60)) : '60'} onchange={(e) => patchWish(w, { durationMin: e.currentTarget.value === '' ? null : Number(e.currentTarget.value) })} /></label>
             <label>Part of day<select class="nm-text-input small" value={w.partOfDay} onchange={(e) => patchWish(w, { partOfDay: e.currentTarget.value })}><option value="any">any</option><option value="morning">morning</option><option value="afternoon">afternoon</option><option value="evening">evening</option></select></label>
             <label>Day<select class="nm-text-input small" value={w.fixedDate ?? ''} onchange={(e) => patchWish(w, { fixedDate: e.currentTarget.value || null })}><option value="">any day</option>{#each dates as d (d)}<option value={d}>{dayLabel(d)}</option>{/each}</select></label>
+            <label>Is the meal<select class="nm-text-input small" value={w.replacesMeal ?? ''} onchange={(e) => patchWish(w, { replacesMeal: e.currentTarget.value || null })}><option value="">no</option><option value="lunch">lunch</option><option value="dinner">dinner</option></select></label>
             <label>Fixed time<input class="nm-text-input small" value={hhmm(w.fixedStartMin)} placeholder="hh:mm" onchange={(e) => patchWish(w, { fixedStartMin: e.currentTarget.value.trim() || null })} /></label>
             <label class="check"><input type="checkbox" checked={w.locked} onchange={(e) => patchWish(w, { locked: e.currentTarget.checked })} /> lock</label>
             <label class="check"><input type="checkbox" checked={w.skipped} onchange={(e) => patchWish(w, { skipped: e.currentTarget.checked })} /> skip</label>

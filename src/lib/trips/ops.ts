@@ -67,6 +67,7 @@ export interface NewWishFields {
   fixedStartMin: number | null;
   note: string | null;
   place: Wish['place'];
+  replacesMeal: Wish['replacesMeal'];
 }
 
 /** The side effects, supplied by the server (or a test). */
@@ -155,7 +156,7 @@ export function knownUrlsOf(wishes: Wish[], extra: string[] = []): Set<string> {
 
 function wishPatchFrom(fields: Obj): { ok: true; patch: WishPatch; placeQuery: string | null } | { ok: false; reason: string } {
   const body: Obj = {};
-  for (const k of ['title', 'priority', 'partOfDay', 'fixedDate', 'fixedStartMin', 'note', 'locked', 'skipped'] as const) if (k in fields) body[k] = fields[k];
+  for (const k of ['title', 'priority', 'partOfDay', 'fixedDate', 'fixedStartMin', 'note', 'locked', 'skipped', 'replacesMeal'] as const) if (k in fields) body[k] = fields[k];
   if ('durationMin' in fields) body.durationMin = fields.durationMin === null ? null : fields.durationMin;
   if ('suggested' in fields) {
     if (fields.suggested !== false) return { ok: false, reason: 'A suggestion can only be accepted (suggested: false).' };
@@ -184,6 +185,7 @@ function draftFrom(raw: unknown): { ok: true; draft: WishDraft } | { ok: false; 
       fixedDate: p.fixedDate ?? null,
       fixedStartMin: p.fixedStartMin ?? null,
       note: p.note ?? null,
+      replacesMeal: p.replacesMeal ?? null,
     },
   };
 }
@@ -214,8 +216,11 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
     const f = isObj(raw.fields) ? raw.fields : {};
     switch (raw.op) {
       case 'setTrip': {
-        const allowed = ['title', 'destination', 'timeZone', 'startDate', 'endDate', 'pace', 'modes', 'notes'];
+        const allowed = ['title', 'destination', 'timeZone', 'startDate', 'endDate', 'pace', 'modes', 'notes', 'dayLoads'];
         const fields = Object.fromEntries(Object.entries(f).filter(([k]) => allowed.includes(k)));
+        // Day loads MERGE into the trip's (a day set back to 'normal' is removed), so
+        // "make Wednesday lighter" does not wipe the other days' loads.
+        if (isObj(fields.dayLoads)) fields.dayLoads = { ...(ctx.trip.dayLoads ?? {}), ...fields.dayLoads };
         if (!Object.keys(fields).length) {
           reject(raw, 'setTrip changed nothing.');
           break;
@@ -227,6 +232,8 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
         }
         await fx.setTrip(parsed.value);
         ctx.trip = { ...ctx.trip, ...parsed.value };
+        // Record what was actually stored (normal and out-of-trip days fall away).
+        if ('dayLoads' in fields) fields.dayLoads = parsed.value.dayLoads;
         out.applied.push({ op: 'setTrip', fields: fields as never });
         out.changed = true;
         break;
@@ -351,6 +358,7 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
           fixedDate: draft.fixedDate,
           fixedStartMin: draft.fixedStartMin,
           note: draft.note,
+          replacesMeal: draft.replacesMeal ?? null,
           place: place ? { name: place.name, location: place.location, osmId: place.osmId, address: place.address } : null,
         });
         ctx.wishes = [...ctx.wishes, wish];
@@ -481,8 +489,11 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
 export function describeOp(op: TripOp, titles: Record<string, string> = {}): string {
   const name = (id: string) => titles[id] ?? 'a wish';
   switch (op.op) {
-    case 'setTrip':
-      return `Trip details changed (${Object.keys(op.fields).join(', ')}).`;
+    case 'setTrip': {
+      const loads = op.fields.dayLoads ? Object.entries(op.fields.dayLoads).map(([d, l]) => `${d} ${l}`).join(', ') : '';
+      const rest = Object.keys(op.fields).filter((k) => k !== 'dayLoads');
+      return [rest.length ? `Trip details changed (${rest.join(', ')}).` : '', loads ? `Day loads set: ${loads}.` : ''].filter(Boolean).join(' ');
+    }
     case 'addStay':
       return `Stay added: ${op.name}.`;
     case 'updateStay':

@@ -70,6 +70,7 @@ export function toTrip(r: TripRow): TripRecord {
     modes: (r.modes ?? ['walk']) as TravelMode[],
     status: r.status as TripStatus,
     notes: r.notes,
+    dayLoads: (r.dayLoads as Trip['dayLoads']) ?? {},
     research: (r.research as ResearchState | null) ?? null,
     guide: (r.guide as unknown as TripGuide | null) ?? null,
     updatedAt: r.updatedAt.toISOString(),
@@ -111,6 +112,7 @@ function toWish(r: WishRow): Wish {
     facts: (r.facts as Facts | null) ?? null,
     note: r.note,
     sortHint: r.sortHint,
+    replacesMeal: (r.replacesMeal as Wish['replacesMeal']) ?? null,
     guide: (r.guide as unknown as StopGuide | null) ?? null,
   };
 }
@@ -286,6 +288,7 @@ export async function addWishes(tripId: string, wishes: NewWish[]): Promise<Wish
         fixedStartMin: w.fixedStartMin,
         locked: w.fixedStartMin !== null,
         note: w.note,
+        replacesMeal: w.replacesMeal ?? null,
         suggested: w.suggested ?? false,
         place: (w.place ?? null) as Record<string, unknown> | null,
         facts: (w.facts ?? null) as Record<string, unknown> | null,

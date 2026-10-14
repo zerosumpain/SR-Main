@@ -9,6 +9,7 @@ import {
   TRAVEL_MODES,
   type BookingStatus,
   type LatLng,
+  type DayLoad,
   type LocalDate,
   type Observation,
   type OffPlanKind,
@@ -85,6 +86,8 @@ function daysBetween(a: LocalDate, b: LocalDate): number {
 }
 
 export interface TripInput {
+  /** v2.1: how full each day should be; only days of the trip, only non-normal loads kept. */
+  dayLoads?: Partial<Record<LocalDate, DayLoad>>;
   title: string;
   destination: string;
   timeZone: string;
@@ -108,7 +111,10 @@ export function parseTripInput(body: unknown): Parsed<TripInput> {
   const pace = PACES.includes(body.pace as Pace) ? (body.pace as Pace) : 'normal';
   const raw = Array.isArray(body.modes) ? body.modes : [];
   const modes = TRAVEL_MODES.filter((m) => m === 'walk' || raw.includes(m));
+  const loads = parseDayLoads(body.dayLoads, body.startDate as string, body.endDate as string);
+  if (!loads.ok) return loads;
   return ok({
+    dayLoads: loads.value,
     title,
     destination,
     timeZone: body.timeZone as string,
@@ -132,6 +138,26 @@ export function draftTrip(today: LocalDate): TripInput {
     return new Date(Date.UTC(y, m - 1, d) + n * 86_400_000).toISOString().slice(0, 10);
   };
   return { title: 'New trip', destination: 'New trip', timeZone: 'Europe/London', startDate: p(28), endDate: p(30), pace: 'normal', modes: ['walk', 'transit'], notes: null };
+}
+
+const LOADS: DayLoad[] = ['light', 'normal', 'full'];
+
+/**
+ * v2.1 day loads: a map of trip dates to 'light' | 'normal' | 'full'. Dates
+ * outside the trip are dropped (the trip may have just moved); 'normal' is
+ * the default and is not stored.
+ */
+export function parseDayLoads(v: unknown, startDate: LocalDate, endDate: LocalDate): Parsed<Partial<Record<LocalDate, DayLoad>>> {
+  if (v === null || v === undefined) return ok({});
+  if (!isObj(v)) return bad('dayLoads maps dates to light, normal or full.');
+  const out: Partial<Record<LocalDate, DayLoad>> = {};
+  for (const [date, load] of Object.entries(v)) {
+    if (!isLocalDate(date)) return bad(`${date} is not a date.`);
+    if (!LOADS.includes(load as DayLoad)) return bad(`A day is light, normal or full, not “${String(load)}”.`);
+    if (date < startDate || date > endDate || load === 'normal') continue;
+    out[date] = load as DayLoad;
+  }
+  return ok(Object.fromEntries(Object.entries(out).sort()) as Partial<Record<LocalDate, DayLoad>>);
 }
 
 export interface StayInput {
@@ -164,6 +190,7 @@ export function parseStayInput(body: unknown, trip: { startDate: LocalDate; endD
 }
 
 export interface WishInput {
+  replacesMeal?: 'lunch' | 'dinner' | null;
   title: string;
   priority: Priority;
   durationSec: number | null;
@@ -189,6 +216,7 @@ export function parseWishInput(body: unknown): Parsed<WishInput> {
     fixedDate: p.fixedDate ?? null,
     fixedStartMin: p.fixedStartMin ?? null,
     note: p.note ?? null,
+    replacesMeal: p.replacesMeal ?? null,
   });
 }
 
@@ -205,6 +233,8 @@ export interface WishPatch {
   note?: string | null;
   sortHint?: number;
   place?: { name: string; location: LatLng; osmId: string | null; address: string | null } | null;
+  /** v2.1: this wish IS that day's lunch or dinner. */
+  replacesMeal?: 'lunch' | 'dinner' | null;
 }
 
 /** An edit to a wish: only the keys present change. `suggested` can only be cleared (accept). */
@@ -258,6 +288,11 @@ export function parseWishPatch(body: unknown): Parsed<WishPatch> {
       const osmId = typeof p?.osmId === 'string' && /^(node|way|relation)\/\d+$/.test(p.osmId) ? p.osmId : null;
       out.place = { name, location, osmId, address: text(p?.address, 300) };
     }
+  }
+  if ('replacesMeal' in body) {
+    if (body.replacesMeal === null || body.replacesMeal === '') out.replacesMeal = null;
+    else if (body.replacesMeal !== 'lunch' && body.replacesMeal !== 'dinner') return bad('A wish can replace lunch or dinner.');
+    else out.replacesMeal = body.replacesMeal;
   }
   if ('sortHint' in body) {
     const n = Number(body.sortHint);

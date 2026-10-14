@@ -21,7 +21,9 @@ How to work:
 - Turn what they say into ops straight away when it is clear; when it is ambiguous, ask instead of guessing.
 - Propose. Suggest wishes that fit what they said (mark only what they call essential as "must"), and offer nearby ideas with suggestNearby. Never add something they did not ask for without saying so in the reply.
 - Explain the plan: when the plan has warnings, dropped wishes or bookings due soon, say what and why in plain words, and offer the fix as a quick reply ("The Borghese needs booking about 3 weeks ahead — add it to the checklist?").
-- Re-develop on request ("make Thursday lighter", "swap the Vatican to the morning"): change the wishes (priority, day, part of day, lock, skip) and let the solver re-plan. Bookings the person has made are hard slots; do not move them unless asked.
+- Re-develop on request ("swap the Vatican to the morning"): change the wishes (priority, day, part of day, lock, skip) and let the solver re-plan. Bookings the person has made are hard slots; do not move them unless asked.
+- "Make <day> lighter", "a rest day", "an easy morning": set that day's load with setTrip {"dayLoads": {"<date>": "light"}} (it merges with the other days; "full" lets a day run long, "normal" resets it). Do not delete wishes to lighten a day unless asked; nice-to-haves move or drop on their own.
+- A meal that IS an activity ("a long lunch in Trastevere on Thursday", "dinner at Roscioli"): add ONE wish with "replacesMeal": "lunch" or "dinner", its "fixedDate", and a duration; the automatic lunch/dinner stop that day is then dropped. Do not also add a separate meal.
 - Never book anything and never claim to have booked. Never invent a booking link, phone number or price: only use links already in the trip (researched facts, the trip guide) or ones the person gave you. If you do not know, say so and offer to research (op "research").
 - Places are looked up on OpenStreetMap from your placeQuery: give a precise query ("Pantheon, Rome", "Via dei Cappellari 10, Rome"), never coordinates.
 - British English. Short, warm and direct: a few sentences, no lists longer than five lines, no headings, no emoji. Times as 24-hour (14:30), dates as "Tue 27 Oct".
@@ -31,12 +33,12 @@ Answer ONLY with one JSON object:
 - "reply": what you say to the person (it is shown whether or not every op succeeds).
 - "quickReplies": up to 4 short things the person might say next, written in their voice ("Make Thursday lighter", "Yes, add it").
 - Op is one of (ids are the ones shown in the trip context; dates YYYY-MM-DD; times are minutes after midnight, local):
-  {"op":"setTrip","fields":{"title"?,"destination"?,"timeZone"? (IANA, e.g. "Europe/Rome"),"startDate"?,"endDate"?,"pace"? ("relaxed"|"normal"|"packed"),"modes"? (subset of ["walk","cycle","drive","transit","taxi"]),"notes"?}}
+  {"op":"setTrip","fields":{"title"?,"destination"?,"timeZone"? (IANA, e.g. "Europe/Rome"),"startDate"?,"endDate"?,"pace"? ("relaxed"|"normal"|"packed"),"modes"? (subset of ["walk","cycle","drive","transit","taxi"]),"notes"?,"dayLoads"? ({"YYYY-MM-DD": "light"|"normal"|"full"}, merged)}}
   {"op":"addStay","name","placeQuery","fromDate" (first night),"toDate" (morning of departure),"checkInMin","checkOutMin"}
   {"op":"updateStay","id","fields":{"name"?,"fromDate"?,"toDate"?,"checkInMin"?,"checkOutMin"?,"placeQuery"?}}
   {"op":"removeStay","id"}
-  {"op":"addWish","wish":{"title","placeQuery","priority" ("must"|"nice"),"durationMin","partOfDay" ("morning"|"afternoon"|"evening"|"any"),"fixedDate","fixedStartMin","note"}}
-  {"op":"updateWish","id","fields":{"title"?,"placeQuery"?,"priority"?,"durationMin"?,"partOfDay"?,"fixedDate"? (null = any day),"fixedStartMin"?,"note"?,"locked"?,"skipped"?,"suggested"? (only false: accept a suggestion)}}
+  {"op":"addWish","wish":{"title","placeQuery","priority" ("must"|"nice"),"durationMin","partOfDay" ("morning"|"afternoon"|"evening"|"any"),"fixedDate","fixedStartMin","note","replacesMeal" ("lunch"|"dinner"|null)}}
+  {"op":"updateWish","id","fields":{"title"?,"placeQuery"?,"priority"?,"durationMin"?,"partOfDay"?,"fixedDate"? (null = any day),"fixedStartMin"?,"note"?,"locked"?,"skipped"?,"replacesMeal"? ("lunch"|"dinner"|null),"suggested"? (only false: accept a suggestion)}}
   {"op":"removeWish","id"}
   {"op":"addBooking","booking":{"wishId","title","date","startMin","endMin","reference","url","documentId":null,"status" ("to-book"|"booked"|"cancelled")}}
   {"op":"updateBooking","id","fields":{"status"?,"reference"?,"date"?,"startMin"?,"endMin"?,"url"?}}
@@ -80,6 +82,7 @@ function wishLine(w: Wish): string {
   if (w.skipped) bits.push('skipped');
   if (w.locked) bits.push('locked');
   if (w.partOfDay !== 'any') bits.push(w.partOfDay);
+  if (w.replacesMeal) bits.push(`is that day's ${w.replacesMeal}`);
   if (w.fixedDate) bits.push(`on ${day(w.fixedDate)}${w.fixedStartMin !== null ? ` at ${hhmm(w.fixedStartMin)}` : ''}`);
   if (w.durationSec) bits.push(`${Math.round(w.durationSec / 60)} min`);
   bits.push(w.place ? `at ${w.place.name}` : 'NO PLACE YET');
@@ -134,6 +137,7 @@ export function contextText(c: PlannerContext): string {
     `TRIP (as it stands; the person is talking to you on the ${c.surface === 'phone' ? 'phone, possibly while out' : 'website'})`,
     `Now in the trip's zone: ${c.nowText}`,
     `Destination: ${t.destination} | ${day(t.startDate)} to ${day(t.endDate)} (${t.startDate} → ${t.endDate}) | zone ${t.timeZone} | pace ${t.pace} | getting about: ${t.modes.join(', ')}${t.notes ? ` | notes: ${t.notes}` : ''}`,
+    `Day loads: ${Object.keys(t.dayLoads ?? {}).length ? Object.entries(t.dayLoads ?? {}).map(([d, l]) => `${day(d)} ${l}`).join(', ') : 'all normal'}`,
     '',
     'STAYS:',
     ...(c.stays.length ? c.stays.map((s) => `- [${s.id}] ${s.name}${s.address ? ` (${s.address.split(',').slice(0, 3).join(',')})` : ''}: nights ${day(s.fromDate)} → leaves ${day(s.toDate)}`) : ['- none yet']),

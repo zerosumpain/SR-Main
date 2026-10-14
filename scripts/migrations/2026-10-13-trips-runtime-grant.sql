@@ -27,6 +27,8 @@ DO $$ BEGIN
     IF to_regclass('public.trip_event') IS NOT NULL THEN
       GRANT SELECT, INSERT, UPDATE, DELETE ON public.trip_event TO sr_main_runtime;
     END IF;
+    -- v2.1 (2026-10-14) adds columns only (trip.day_loads, trip_wish.replaces_meal):
+    -- table grants cover new columns, so nothing more is needed for them.
     -- v2 (2026-10-14): the planning conversation.
     IF to_regclass('public.trip_message') IS NOT NULL THEN
       GRANT SELECT, INSERT, UPDATE, DELETE ON public.trip_message TO sr_main_runtime;
