@@ -1,7 +1,7 @@
 // Seed the Rome test trip (D3) into a LOCAL database and solve version 1.
 //
 //   DATABASE_URL=postgresql://…/trips_local OWNER_EMAIL=preview@example.test \
-//     npx tsx scripts/seed-trips-local.ts [--replace]
+//     [TRIP_ID=<uuid>] npx tsx scripts/seed-trips-local.ts [--replace]
 //
 // LOCAL ONLY: refuses any DATABASE_URL whose database name does not end in
 // `_local`, so it cannot be pointed at production by accident. The trip comes
@@ -50,12 +50,14 @@ async function main() {
     if (process.argv.includes('--replace')) {
       const old = await client.query(`select id from trip where owner_email = $1 and title = $2`, [owner, ROME_TRIP.title]);
       for (const { id } of old.rows) {
-        for (const t of ['trip_event', 'trip_plan', 'trip_booking', 'trip_wish', 'trip_stay']) await client.query(`delete from ${t} where trip_id = $1`, [id]);
+        for (const t of ['trip_event', 'trip_message', 'trip_plan', 'trip_booking', 'trip_wish', 'trip_stay']) await client.query(`delete from ${t} where trip_id = $1`, [id]);
+        await client.query(`delete from app_settings where key = $1`, [`trips.guidance.${id}`]);
         await client.query(`delete from trip where id = $1`, [id]);
       }
     }
 
-    const tripId = randomUUID();
+    // TRIP_ID keeps a re-seeded trip at the same URL (with --replace).
+    const tripId = /^[0-9a-f-]{36}$/i.test(process.env.TRIP_ID ?? '') ? (process.env.TRIP_ID as string) : randomUUID();
     const ids = new Map<string, string>();
     const idOf = (fixtureId: string) => {
       if (!ids.has(fixtureId)) ids.set(fixtureId, randomUUID());
