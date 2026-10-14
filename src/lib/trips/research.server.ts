@@ -15,12 +15,7 @@
 // trip row (`research`) and the page polls it. A failure for one wish marks
 // that wish's unknowns and moves on: research never blocks planning.
 
-import type OpenAI from 'openai';
-import { getLLMClient } from '$lib/llm/client';
-import { withActivity } from '$lib/context/activity';
-import { thinkingRequestParams } from '$lib/models/thinking';
-import { getWorkload } from '$lib/models/workloads';
-import { resolveWorkloadModel } from '$lib/server/models/workload-settings';
+import { jsonCall } from './llm.server';
 import type { Facts, LatLng, Wish } from './model';
 import {
   emptyFacts,
@@ -52,27 +47,10 @@ export const MAX_SUGGESTIONS = 5;
 
 /** One JSON call on the `trips-reader` workload. Throws when no model answers. */
 async function readerJson(system: string, user: string, maxTokens: number): Promise<unknown> {
-  const def = getWorkload('trips-reader');
-  if (!def) throw new Error('trips-reader workload is not registered');
-  const ctx = await resolveWorkloadModel(def);
-  const { client, model } = await getLLMClient(ctx);
-  const res = await withActivity('trips-reader', () =>
-    client.chat.completions.create(
-      {
-        model,
-        temperature: 0,
-        max_tokens: maxTokens,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        ...thinkingRequestParams(ctx.provider, 'off', ctx.modelId),
-      } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
-      { signal: AbortSignal.timeout(LLM_TIMEOUT_MS), maxRetries: 1 },
-    ),
-  );
-  return parseLooseJson(res.choices[0]?.message?.content ?? '');
+  return jsonCall('trips-reader', [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ], { maxTokens, temperature: 0, timeoutMs: LLM_TIMEOUT_MS });
 }
 
 /** Free text → draft wishes for the person to confirm. Throws a sentence when no model answers. */
@@ -267,12 +245,12 @@ export async function startResearch(
 }
 
 /** Up to five nearby extras as suggestions (never planned until accepted). */
-async function suggestNearby(tripId: string): Promise<string | null> {
+export async function suggestNearby(tripId: string, near: LatLng | null = null): Promise<string | null> {
   const { wishes, stays } = await loadState(tripId);
   const pending = wishes.filter((w) => w.suggested).length;
   if (pending >= MAX_SUGGESTIONS) return null;
   const located = wishes.filter((w) => !w.suggested && w.place).map((w) => w.place!.location);
-  const centre = centreOf(located.length ? located : stays.map((s) => s.location));
+  const centre = near ?? centreOf(located.length ? located : stays.map((s) => s.location));
   if (!centre) return null;
   const answer = await overpass(overpassNearbyQuery(centre, 1500));
   if (!answer) return 'Nearby suggestions unavailable (OpenStreetMap did not answer).';

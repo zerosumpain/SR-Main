@@ -8,7 +8,7 @@
 
 import { and, asc, desc, eq, inArray, max, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { trip, tripBooking, tripEvent, tripPlan, tripStay, tripWish } from '$lib/db/schema';
+import { trip, tripBooking, tripEvent, tripMessage, tripPlan, tripStay, tripWish } from '$lib/db/schema';
 import type {
   Booking,
   Facts,
@@ -19,8 +19,12 @@ import type {
   Stay,
   TravelMatrix,
   TravelMode,
+  StopGuide,
   Trip,
   TripEvent,
+  TripGuide,
+  TripMessage,
+  TripOp,
   TripStatus,
   Wish,
 } from './model';
@@ -49,6 +53,7 @@ export interface ResearchState {
 
 export interface TripRecord extends Trip {
   research: ResearchState | null;
+  guide: TripGuide | null;
   updatedAt: string;
 }
 
@@ -66,13 +71,14 @@ export function toTrip(r: TripRow): TripRecord {
     status: r.status as TripStatus,
     notes: r.notes,
     research: (r.research as ResearchState | null) ?? null,
+    guide: (r.guide as unknown as TripGuide | null) ?? null,
     updatedAt: r.updatedAt.toISOString(),
   };
 }
 
 /** The wire shape of a trip: model fields only. */
 export function tripOnly(t: TripRecord): Trip {
-  const { research: _r, updatedAt: _u, ...rest } = t;
+  const { research: _r, updatedAt: _u, guide: _g, ...rest } = t;
   return rest;
 }
 
@@ -105,6 +111,7 @@ function toWish(r: WishRow): Wish {
     facts: (r.facts as Facts | null) ?? null,
     note: r.note,
     sortHint: r.sortHint,
+    guide: (r.guide as unknown as StopGuide | null) ?? null,
   };
 }
 
@@ -189,6 +196,7 @@ export async function touchTrip(id: string): Promise<void> {
 export async function deleteTrip(id: string): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.delete(tripEvent).where(eq(tripEvent.tripId, id));
+    await tx.delete(tripMessage).where(eq(tripMessage.tripId, id));
     await tx.delete(tripPlan).where(eq(tripPlan.tripId, id));
     await tx.delete(tripBooking).where(eq(tripBooking.tripId, id));
     await tx.delete(tripWish).where(eq(tripWish.tripId, id));
@@ -234,6 +242,19 @@ export async function addStay(tripId: string, s: StayInput): Promise<Stay> {
     })
     .returning();
   return toStay(row);
+}
+
+export async function updateStay(
+  tripId: string,
+  id: string,
+  fields: Partial<Pick<StayInput, 'name' | 'address' | 'location' | 'fromDate' | 'toDate' | 'checkInMin' | 'checkOutMin'>>,
+): Promise<void> {
+  if (!isUuid(id)) return;
+  const { location, ...rest } = fields;
+  await db
+    .update(tripStay)
+    .set({ ...rest, ...(location ? { lat: location.lat, lng: location.lng } : {}) })
+    .where(and(eq(tripStay.tripId, tripId), eq(tripStay.id, id)));
 }
 
 export async function deleteStay(tripId: string, id: string): Promise<boolean> {
@@ -445,3 +466,59 @@ export async function recentEvents(tripId: string, limit = 50): Promise<Array<Tr
   }));
 }
 
+
+// ── v2: guides and the planning conversation ───────────────────────────────
+
+export async function setTripGuide(id: string, guide: TripGuide | null): Promise<void> {
+  await db.update(trip).set({ guide: guide as unknown as Record<string, unknown> | null }).where(eq(trip.id, id));
+}
+
+export async function setStopGuide(tripId: string, wishId: string, guide: StopGuide | null): Promise<void> {
+  if (!isUuid(wishId)) return;
+  await db
+    .update(tripWish)
+    .set({ guide: guide as unknown as Record<string, unknown> | null })
+    .where(and(eq(tripWish.tripId, tripId), eq(tripWish.id, wishId)));
+}
+
+function toMessage(r: typeof tripMessage.$inferSelect): TripMessage {
+  return {
+    id: r.id,
+    role: r.role as TripMessage['role'],
+    text: r.text,
+    ops: (r.ops ?? []) as TripOp[],
+    planVersion: r.planVersion,
+    surface: r.surface as TripMessage['surface'],
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+/** The last `limit` messages, oldest first. */
+export async function recentMessages(tripId: string, limit = 50): Promise<TripMessage[]> {
+  const rows = await db
+    .select()
+    .from(tripMessage)
+    .where(eq(tripMessage.tripId, tripId))
+    .orderBy(desc(tripMessage.createdAt), desc(tripMessage.id))
+    .limit(limit);
+  return rows.reverse().map(toMessage);
+}
+
+export async function addMessage(
+  tripId: string,
+  m: Pick<TripMessage, 'role' | 'text' | 'ops' | 'planVersion' | 'surface'> & { at?: Date },
+): Promise<TripMessage> {
+  const [row] = await db
+    .insert(tripMessage)
+    .values({
+      tripId,
+      role: m.role,
+      text: m.text.slice(0, 8000),
+      ops: m.ops as unknown[],
+      planVersion: m.planVersion,
+      surface: m.surface,
+      ...(m.at ? { createdAt: m.at } : {}),
+    })
+    .returning();
+  return toMessage(row);
+}

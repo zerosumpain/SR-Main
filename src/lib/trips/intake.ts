@@ -10,6 +10,8 @@ import {
   type BookingStatus,
   type LatLng,
   type LocalDate,
+  type Observation,
+  type OffPlanKind,
   type Pace,
   type PartOfDay,
   type PlannedDay,
@@ -116,6 +118,20 @@ export function parseTripInput(body: unknown): Parsed<TripInput> {
     modes,
     notes: text(body.notes, 2000),
   });
+}
+
+/**
+ * The draft a trip starts as when it begins with an opening message: the
+ * planner's first ops set the real destination and dates. Placeholder dates
+ * four weeks out, three days long; the prompt tells the planner they are
+ * placeholders (`NEW_TRIP`).
+ */
+export function draftTrip(today: LocalDate): TripInput {
+  const p = (n: number) => {
+    const [y, m, d] = today.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d) + n * 86_400_000).toISOString().slice(0, 10);
+  };
+  return { title: 'New trip', destination: 'New trip', timeZone: 'Europe/London', startDate: p(28), endDate: p(30), pace: 'normal', modes: ['walk', 'transit'], notes: null };
 }
 
 export interface StayInput {
@@ -332,7 +348,13 @@ export function parseEventsBody(body: unknown): Parsed<EventsBody> {
     const at = typeof raw.at === 'string' && !Number.isNaN(Date.parse(raw.at)) ? raw.at : null;
     if (!at) return bad(`Event ${clientId} needs an ISO time.`);
     const detail = isObj(raw.detail) ? raw.detail : null;
-    if (raw.kind === 'option-applied' && !isPlannedDay(detail?.day)) return bad(`Event ${clientId} needs detail.day (a planned day).`);
+    if (
+      raw.kind === 'option-applied' &&
+      !isPlannedDay(detail?.day) &&
+      !(Array.isArray(detail?.days) && detail.days.length > 0 && detail.days.length <= 40 && detail.days.every(isPlannedDay))
+    ) {
+      return bad(`Event ${clientId} needs detail.day (a planned day) or detail.days (planned days).`);
+    }
     if (raw.kind === 'stop-added' && !text(detail?.title, 160)) return bad(`Event ${clientId} needs detail.title.`);
     events.push({
       clientId,
@@ -352,6 +374,33 @@ export interface ReplanBody {
   position: LatLng | null;
   atStopId: string | null;
   doneStopIds: string[];
+  /** v2: 'day' (default) = the day's options; 'trip' = whole-trip options + a narrative. */
+  scope: 'day' | 'trip';
+  observation: Observation | null;
+}
+
+const OFF_PLAN: OffPlanKind[] = ['behind', 'off-route', 'unplanned-stop', 'out-of-order', 'idle'];
+const MOTION: Observation['motion'][] = ['walking', 'cycling', 'automotive', 'stationary', 'unknown'];
+
+export function parseObservation(v: unknown): Parsed<Observation | null> {
+  if (v === null || v === undefined) return ok(null);
+  if (!isObj(v) || !OFF_PLAN.includes(v.kind as OffPlanKind)) return bad('observation.kind is not one the phone sends.');
+  const sinceMin = Number(v.sinceMin);
+  if (!Number.isInteger(sinceMin) || sinceMin < 0 || sinceMin >= 24 * 60 + 600) return bad('observation.sinceMin must be local minutes.');
+  let place: Observation['place'] = null;
+  if (v.place != null) {
+    const p = isObj(v.place) ? v.place : null;
+    const location = latLng(p?.location);
+    if (!location) return bad('observation.place needs a location.');
+    place = { name: text(p?.name, 160), location };
+  }
+  return ok({
+    kind: v.kind as OffPlanKind,
+    place,
+    sinceMin,
+    motion: MOTION.includes(v.motion as Observation['motion']) ? (v.motion as Observation['motion']) : 'unknown',
+    stopId: text(v.stopId, 200),
+  });
 }
 
 export function parseReplanBody(body: unknown): Parsed<ReplanBody> {
@@ -360,7 +409,12 @@ export function parseReplanBody(body: unknown): Parsed<ReplanBody> {
   const nowMin = Number(body.nowMin);
   if (!Number.isInteger(nowMin) || nowMin < 0 || nowMin >= 24 * 60 + 600) return bad('nowMin must be local minutes.');
   const done = Array.isArray(body.doneStopIds) ? body.doneStopIds.filter((s): s is string => typeof s === 'string').slice(0, 200) : [];
+  if (body.scope !== undefined && body.scope !== 'day' && body.scope !== 'trip') return bad("scope is 'day' or 'trip'.");
+  const observation = parseObservation(body.observation);
+  if (!observation.ok) return observation;
   return ok({
+    scope: body.scope === 'trip' ? 'trip' : 'day',
+    observation: observation.value,
     date: body.date,
     nowMin,
     position: body.position == null ? null : latLng(body.position),

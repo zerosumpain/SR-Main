@@ -70,8 +70,24 @@ describe('parseReplanBody', () => {
   it('reads the replan request', () => {
     expect(parseReplanBody({ date: '2026-10-27', nowMin: 700, position: { lat: 41.9, lng: 12.5 }, atStopId: null, doneStopIds: ['a', 4] })).toEqual({
       ok: true,
-      value: { date: '2026-10-27', nowMin: 700, position: { lat: 41.9, lng: 12.5 }, atStopId: null, doneStopIds: ['a'] },
+      value: { scope: 'day', observation: null, date: '2026-10-27', nowMin: 700, position: { lat: 41.9, lng: 12.5 }, atStopId: null, doneStopIds: ['a'] },
     });
     expect(parseReplanBody({ date: 'today', nowMin: 1 }).ok).toBe(false);
+  });
+
+  it('reads a whole-trip request with what the phone noticed (v2)', () => {
+    const r = parseReplanBody({
+      date: '2026-10-27', nowMin: 760, scope: 'trip', doneStopIds: [],
+      observation: { kind: 'unplanned-stop', place: { name: 'Bar', location: { lat: 41.9, lng: 12.47 } }, sinceMin: 740, motion: 'stationary', stopId: null },
+    });
+    expect(r).toMatchObject({ ok: true, value: { scope: 'trip', observation: { kind: 'unplanned-stop', sinceMin: 740, place: { name: 'Bar' } } } });
+    expect(parseReplanBody({ date: '2026-10-27', nowMin: 760, scope: 'week' }).ok).toBe(false);
+    expect(parseReplanBody({ date: '2026-10-27', nowMin: 760, observation: { kind: 'lost', sinceMin: 1 } }).ok).toBe(false);
+  });
+
+  it('accepts a whole-trip option applied (detail.days)', () => {
+    const day = { date: '2026-10-27', stayId: null, stops: [], legs: [], warnings: [] };
+    expect(parseEventsBody({ events: [{ clientId: 'e', kind: 'option-applied', at: '2026-10-27T09:00:00Z', detail: { days: [day, { ...day, date: '2026-10-28' }] } }] }).ok).toBe(true);
+    expect(parseEventsBody({ events: [{ clientId: 'e', kind: 'option-applied', at: '2026-10-27T09:00:00Z', detail: { days: [] } }] }).ok).toBe(false);
   });
 });
