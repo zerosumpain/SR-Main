@@ -4,12 +4,14 @@ import { withNativeAccess } from '$lib/server/native-handler';
 import { converse } from '$lib/trips/converse.server';
 import { familyTrip } from '$lib/trips/family.server';
 import { parseObservation } from '$lib/trips/intake';
+import { jobAccepted, startJob, wantsAsync } from '$lib/trips/jobs.server';
 
 /**
  * POST /api/native/trips/:id/converse — `{ text, position?, observation? }`.
  * The creator or a parent changes the trip through the planner; any other
  * family member gets advice only (no ops applied). Only the owner's turns use
- * the owner's memory.
+ * the owner's memory. v6: `"async": true` → 202 `{ job }` (poll
+ * GET /api/native/trips/jobs/:jobId).
  */
 export const POST: RequestHandler = withNativeAccess('any', async (event, identity, role) => {
   const ft = await familyTrip(event, identity, role, event.params.id);
@@ -23,11 +25,13 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
   const lat = Number(p?.lat);
   const lng = Number(p?.lng);
   const position = p && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
-  return converse(ft.trip, {
+  const run = () => converse(ft.trip, {
     text,
     surface: 'phone',
     observation: observation.value,
     position,
     caller: { isOwner: ft.caller.isOwner, canEdit: ft.access.canEdit, name: ft.caller.name, email: ft.caller.email, personId: ft.caller.personId },
   });
+  if (wantsAsync(body)) return jobAccepted(startJob(ft.caller.email, 'converse', run));
+  return run();
 });

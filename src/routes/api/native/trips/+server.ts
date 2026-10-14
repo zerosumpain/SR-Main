@@ -4,6 +4,7 @@ import { withNativeAccess } from '$lib/server/native-handler';
 import { converse } from '$lib/trips/converse.server';
 import { nativeTripCaller, NOT_FAMILY_TRIPS } from '$lib/trips/family.server';
 import { draftTrip } from '$lib/trips/intake';
+import { jobAccepted, startJob, wantsAsync } from '$lib/trips/jobs.server';
 import { localDateIn } from '$lib/trips/routing';
 import { createTrip, listAllTrips } from '$lib/trips/store.server';
 
@@ -20,6 +21,7 @@ export const GET: RequestHandler = withNativeAccess('any', async (event, identit
 /**
  * POST /api/native/trips — `{ text }`: any family member starts a trip with
  * an opening message and becomes its creator (edits freely). 201 `{ id, ...ConverseResult }`.
+ * v6: `"async": true` → 202 `{ job }`; the job's result is that same `{ id, ...ConverseResult }`.
  */
 export const POST: RequestHandler = withNativeAccess('any', async (event, identity, role) => {
   const caller = await nativeTripCaller(event, identity, role);
@@ -27,7 +29,11 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
   const body = (await event.request.json().catch(() => null)) as { text?: unknown } | null;
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
   if (!text) return json({ error: 'Say where and when — the planner takes it from there.' }, { status: 400 });
-  const trip = await createTrip(caller.email, draftTrip(localDateIn('Europe/London', new Date())));
-  const turn = await converse(trip, { text, surface: 'phone', caller: { isOwner: caller.isOwner, canEdit: true, name: caller.name, email: caller.email, personId: caller.personId } });
-  return json({ id: trip.id, ...turn }, { status: 201 });
+  const run = async () => {
+    const trip = await createTrip(caller.email, draftTrip(localDateIn('Europe/London', new Date())));
+    const turn = await converse(trip, { text, surface: 'phone', caller: { isOwner: caller.isOwner, canEdit: true, name: caller.name, email: caller.email, personId: caller.personId } });
+    return { id: trip.id, ...turn };
+  };
+  if (wantsAsync(body)) return jobAccepted(startJob(caller.email, 'create', run));
+  return json(await run(), { status: 201 });
 });

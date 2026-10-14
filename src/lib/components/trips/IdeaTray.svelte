@@ -9,6 +9,7 @@
    * in the conversation); "Not this" just hides the card.
    */
   import { onMount } from 'svelte';
+  import { postAsJob } from '$lib/trips/job-client';
   import { DAY_STAGE_LABEL, type DayStage, type ResearchStep, type TravelMode } from '$lib/trips/model';
 
   interface Verdict {
@@ -29,6 +30,8 @@
     fit: string;
     wish: Record<string, unknown> & { durationMin: number | null };
     verdict: Verdict;
+    /** v6: from the planner, or a nearby place from OpenStreetMap. */
+    source?: 'planner' | 'nearby';
   }
   interface Result {
     gap: { freeMin: number; before: { title: string }; after: { title: string } } | null;
@@ -69,26 +72,29 @@
   const MODE: Record<TravelMode, string> = { walk: 'walk', cycle: 'cycle', drive: 'drive', transit: 'public transport', taxi: 'taxi' };
   const dayShort = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
+  let timer: ReturnType<typeof setInterval> | undefined;
+  /** v6: ask as a job and poll it, so a long search is never cut off. */
+  async function look() {
+    phase = 'looking';
+    result = null;
+    error = null;
+    seconds = 0;
+    clearInterval(timer);
+    timer = setInterval(() => (seconds += 1), 1000);
+    try {
+      const { ok, body } = await postAsJob<Result & { message?: string }>(`${base}/ideas`, { date, stage, afterStopId, beforeStopId });
+      if (!ok) throw new Error(body.error ?? body.message ?? 'The planner did not answer.');
+      result = body;
+      phase = 'done';
+    } catch (err) {
+      error = (err as Error).message || 'The site did not answer.';
+      phase = 'failed';
+    } finally {
+      clearInterval(timer);
+    }
+  }
   onMount(() => {
-    const timer = setInterval(() => (seconds += 1), 1000);
-    void (async () => {
-      try {
-        const res = await fetch(`${base}/ideas`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ date, stage, afterStopId, beforeStopId }),
-        });
-        const body = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(body.error ?? body.message ?? 'The planner did not answer.');
-        result = body as Result;
-        phase = 'done';
-      } catch (err) {
-        error = (err as Error).message;
-        phase = 'failed';
-      } finally {
-        clearInterval(timer);
-      }
-    })();
+    void look();
     return () => clearInterval(timer);
   });
 
@@ -121,13 +127,15 @@
     <p class="looking" role="status"><span class="pulse" aria-hidden="true"></span> Looking for something that fits — checking places, opening times and the walk there and back ({seconds}s)…</p>
   {:else if phase === 'failed'}
     <p class="err" role="alert">{error}</p>
+    <button class="not" type="button" onclick={() => void look()}>Try again</button>
   {:else if result}
-    {#if result.note && !shown.length}<p class="note">{result.note}</p>{/if}
+    {#if result.note}<p class="note">{result.note}</p>{/if}
     <ul class="cards">
       {#each shown as idea (idea.title)}
         {@const v = idea.verdict}
         <li class="card" class:warn={!v.fits}>
           <strong class="name">{idea.title}</strong>
+          {#if idea.source === 'nearby'}<span class="small">Nearby, from OpenStreetMap</span>{/if}
           {#if idea.why}<p class="why">{idea.why}</p>{/if}
           <p class="fit mono">
             {#if v.arriveMin !== null}{hhmm(v.arriveMin)}–{hhmm(v.departMin)} ·{/if}
@@ -146,6 +154,7 @@
     {#if result.rejected.length}
       <p class="small">Checked and turned down: {result.rejected.map((r) => `${r.title} (${r.reason})`).join('; ')}</p>
     {/if}
+    {#if !shown.length}<button class="not" type="button" onclick={() => void look()}>Try again</button>{/if}
     {#if result.research.length}
       <details class="looked">
         <summary>What I looked up ({result.research.length})</summary>
