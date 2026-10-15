@@ -57,6 +57,7 @@
 /api/native/family/alarm/cancel
 /api/native/family/backlog
 /api/native/family/backlog/[id]
+/api/native/family/backlog/[id]/cast
 /api/native/family/backlog/[id]/reaction
 /api/native/family/backlog/digest
 /api/native/family/forecast
@@ -144,6 +145,7 @@
 /blog/[slug]/track
 /blog/preview/[token]
 /blog/tag/[tag]
+/cast/[ticket]
 /decks/[...path]
 /follow/[token]
 /login
