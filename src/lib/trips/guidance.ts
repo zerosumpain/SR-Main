@@ -413,9 +413,17 @@ export function readPrimer(
   return { primer: empty ? null : primer, neighbourhoods };
 }
 
-/** A guide with no primer yet (made before v7, or the primer call failed): make one. */
-export function primerNeeded(guide: TripGuide | null | undefined): boolean {
-  return !!guide && !guide.primer;
+/** A failed primer is tried again after this, not on every re-plan. */
+export const PRIMER_RETRY_MS = 24 * 3600_000;
+
+/**
+ * A guide with no primer yet (made before v7): make one. One that was tried
+ * and came back empty (`primerTriedAt`) waits a day before the next try.
+ */
+export function primerNeeded(guide: TripGuide | null | undefined, now: Date = new Date()): boolean {
+  if (!guide || guide.primer) return false;
+  const tried = guide.primerTriedAt ? Date.parse(guide.primerTriedAt) : NaN;
+  return !Number.isFinite(tried) || now.getTime() - tried >= PRIMER_RETRY_MS;
 }
 
 /**

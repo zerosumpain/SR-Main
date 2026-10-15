@@ -439,6 +439,8 @@ export interface TripGuide {
   primer?: CityPrimer | null;
   /** v7: the neighbourhoods the trip's places are in, each with its feel in a line. */
   neighbourhoods?: Neighbourhood[];
+  /** v7: when a primer was last tried and came back empty (so it is not retried on every re-plan). */
+  primerTriedAt?: string | null;
 }
 
 /** v7: what a visitor should know before arriving, written from search results and stable facts. */

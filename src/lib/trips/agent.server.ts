@@ -78,7 +78,7 @@ async function locate(name: string, ctx: AgentContext): Promise<{ name: string; 
   if (w?.place) return { name: w.place.name, location: w.place.location };
   const near = ctx.stays[0]?.location ?? null;
   const p = await findPlaceLoosely(n, ctx.trip.destination, near);
-  // A namesake on another continent is not the place: refuse anything over 100 km from every stay.
+  // A namesake on another continent is not the place: refuse anything beyond PLACE_REACH_M (300 km) of every stay.
   if (p && !withinReach(p.location, stayPoints(ctx))) return null;
   return p ? { name: p.name, location: p.location } : null;
 }

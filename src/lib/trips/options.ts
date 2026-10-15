@@ -75,7 +75,10 @@ export function readOptionDrafts(raw: unknown): OptionDraft[] {
   return out;
 }
 
-const hhmm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.round(m) % 60).padStart(2, '0')}`;
+const hhmm = (min: number) => {
+  const m = ((Math.round(min) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+};
 const MODE_WORD: Record<TravelMode, string> = { walk: 'walk', transit: 'by public transport', taxi: 'by taxi', drive: 'drive', cycle: 'cycle' } as Record<TravelMode, string>;
 
 /** What the option does to the day, in one line, from the solver's verdict. */

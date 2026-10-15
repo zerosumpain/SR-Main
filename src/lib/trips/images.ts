@@ -88,7 +88,8 @@ export function imageFromCommons(json: unknown, q: string): PlaceImage | null {
     if (!info) continue;
     // The thumbnail only: an original can be tens of megabytes.
     const url = cleanImageUrl(info.thumburl);
-    const sourceUrl = typeof info.descriptionurl === 'string' ? info.descriptionurl : null;
+    // The credit link goes to the file's own Commons page, nowhere else.
+    const sourceUrl = typeof info.descriptionurl === 'string' && /^https:\/\/commons\.wikimedia\.org\//.test(info.descriptionurl) ? info.descriptionurl : null;
     if (!url || !sourceUrl) continue;
     const meta = (info.extmetadata ?? {}) as Record<string, { value?: unknown } | undefined>;
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);

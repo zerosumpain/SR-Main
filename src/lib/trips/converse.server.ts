@@ -46,6 +46,9 @@ import {
   type TripRecord,
 } from './store.server';
 
+/** How long a turn waits for its options to be placed and checked. */
+const OPTIONS_DEADLINE_MS = 20_000;
+
 export const NO_PLANNER =
   'I can’t reach the planning model just now, so I couldn’t act on that. Your message is saved — try again shortly, or change the trip directly in the details.';
 
@@ -263,7 +266,10 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   }
 
   // v7: options offered for an open question, each checked against its day.
-  const options = answer.options.length && !changed ? await checkOptions(trip, answer.options).catch(() => []) : [];
+  // At most 20 s: past that the reply goes without them rather than hold the turn.
+  const options = answer.options.length && !changed
+    ? await Promise.race([checkOptions(trip, answer.options).catch(() => []), new Promise<[]>((r) => setTimeout(() => r([]), OPTIONS_DEADLINE_MS))])
+    : [];
 
   const rejectedNote = rejected.length ? `\n\n(Not done: ${rejected.map((r) => r.reason).join(' ')})` : '';
   const reply = await addMessage(trip.id, {

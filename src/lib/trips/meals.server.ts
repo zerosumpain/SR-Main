@@ -18,17 +18,23 @@ import { latestPlan, loadState, type TripRecord } from './store.server';
 
 /** Options are re-asked after this, places change hands. */
 const FRESH_MS = 14 * 24 * 3600_000;
-/** Meals looked up per run (each is an Overpass call, or two paced Nominatim ones). */
-const PER_RUN = 16;
+/** An empty answer (both map services busy, or nothing near) is asked again after this. */
+const EMPTY_RETRY_MS = 3600_000;
+/** Meals looked up per run (each an Overpass call, or two paced Nominatim ones in the background lane). */
+const PER_RUN = 8;
 
 const cacheKey = (tripId: string) => `trips.meals.${tripId}`;
 
 export type MealCache = Record<string, { fingerprint: string; options: MealOption[]; at: string }>;
 
-/** Each meal stop's options, where the cache answers for that stop as it is now. */
-export async function readMealOptions(tripId: string, plan: SolvedPlan): Promise<Record<string, MealOption[]>> {
+/**
+ * Each meal stop's options, where the cache answers for that stop as it is
+ * now — and, from the same read, whether any meal is still to look up.
+ */
+export async function readMealOptions(tripId: string, plan: SolvedPlan): Promise<{ options: Record<string, MealOption[]>; pending: boolean }> {
   const cache = await readSetting<MealCache>(cacheKey(tripId), {});
-  return currentOptions(cache, mealSlots(plan));
+  const slots = mealSlots(plan);
+  return { options: currentOptions(cache, slots), pending: staleSlots(cache, slots).length > 0 };
 }
 
 export function currentOptions(cache: MealCache, slots: MealSlot[]): Record<string, MealOption[]> {
@@ -44,7 +50,8 @@ export function currentOptions(cache: MealCache, slots: MealSlot[]): Record<stri
 export function staleSlots(cache: MealCache, slots: MealSlot[], now = Date.now()): MealSlot[] {
   return slots.filter((slot) => {
     const hit = cache[slot.stopId];
-    return !hit || hit.fingerprint !== slotFingerprint(slot) || now - Date.parse(hit.at) > FRESH_MS;
+    if (!hit || hit.fingerprint !== slotFingerprint(slot)) return true;
+    return now - Date.parse(hit.at) > (hit.options.length ? FRESH_MS : EMPTY_RETRY_MS);
   });
 }
 
@@ -55,7 +62,7 @@ async function findFor(slot: MealSlot, wishes: Wish[], hints: string[]): Promise
   if (!options.length) {
     // Overpass busy or empty: Nominatim's bounded search, one paced term at a time.
     const rows: unknown[] = [];
-    for (const term of mealTerms(slot)) rows.push(...(await nominatimAround(term, viewboxAround(area.centre, area.radiusM), 25)));
+    for (const term of mealTerms(slot)) rows.push(...(await nominatimAround(term, viewboxAround(area.centre, area.radiusM), 25, { background: true })));
     answer = { elements: elementsFromNominatim(rows) };
     options = rankMealOptions(answer, slot, { existing: wishes, hints });
   }
@@ -94,9 +101,4 @@ export function startMeals(trip: Pick<TripRecord, 'id' | 'profile'>, plan?: Solv
   })();
 }
 
-/** Whether any meal of the plan still needs looking up (the bundle starts a run when so). */
-export async function mealsPending(tripId: string, plan: SolvedPlan): Promise<boolean> {
-  const cache = await readSetting<MealCache>(cacheKey(tripId), {});
-  return staleSlots(cache, mealSlots(plan)).length > 0;
-}
 

@@ -198,13 +198,20 @@ export async function ensurePrimer(trip: TripRecord, guide: TripGuide | null): P
       { maxTokens: 1400, temperature: 0 },
     );
     const { primer, neighbourhoods } = readPrimer(raw, results, titles);
-    if (!primer && !neighbourhoods.length) return guide;
+    if (!primer && !neighbourhoods.length) {
+      // Nothing usable: say when it was tried, so the next try waits a day.
+      const tried: TripGuide = { ...guide, primerTriedAt: new Date().toISOString() };
+      await setTripGuide(trip.id, tried);
+      return tried;
+    }
     const next: TripGuide = { ...guide, primer, neighbourhoods };
     await setTripGuide(trip.id, next);
     return next;
   } catch (err) {
     console.warn('[trips/guidance] no model for the primer:', (err as Error)?.message);
-    return guide;
+    const tried: TripGuide = { ...guide, primerTriedAt: new Date().toISOString() };
+    await setTripGuide(trip.id, tried).catch(() => {});
+    return tried;
   }
 }
 

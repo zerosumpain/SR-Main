@@ -14,6 +14,9 @@
 import type { DayHours, Facts, LatLng, LocalDate, MealOption, PlannedDay, SolvedPlan, Wish } from './model';
 import { metresBetween, metresFromLine } from './nearby-ideas';
 import { windowsOn } from './solver/hours';
+import { safeUrl } from './intake';
+
+const safeLink = (raw: string | undefined): string | null => (raw ? safeUrl(raw) : null);
 
 /** Metres per minute on foot (~4.8 km/h), as the ideas use. */
 const WALK_M_PER_MIN = 80;
@@ -237,7 +240,8 @@ export function rankMealOptions(
       walkFrom: slot.anchorTitle,
       openText: open ? hoursText(hours) : null,
       openKnown: open === true,
-      website: tags.website ?? tags['contact:website'] ?? null,
+      // Only an http(s) link reaches the phone.
+      website: safeLink(tags.website ?? tags['contact:website']),
       phone: tags.phone ?? tags['contact:phone'] ?? null,
       diet,
       outdoorSeating: tags.outdoor_seating === 'yes',

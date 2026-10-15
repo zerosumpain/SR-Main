@@ -184,7 +184,7 @@ export async function findIdeas(
 // ── The planner's turn (v6: smaller budget, a deadline, one JSON repair) ────
 
 /** The ideas turn must leave room for the fallback inside the job cap
- * (and the phone's 180 s wait). */
+ * (and the phone's wait, now just past the cap). */
 export const IDEAS_PLANNER_MS = 75_000;
 /** At most this many nearby candidates are dry-run with the solver. */
 const NEARBY_VERIFY_MAX = 8;

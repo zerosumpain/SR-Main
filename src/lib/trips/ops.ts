@@ -14,7 +14,7 @@
 //    else is dropped (D5, and "never invent booking URLs").
 //  - Places: a stay or wish is placed by an OpenStreetMap search for the
 //    model's `placeQuery`, never by coordinates the model writes; a wish's
-//    place more than 100 km from every stay is a namesake, not found.
+//    place beyond 300 km of every stay is a namesake, not found.
 
 import {
   type TransportSegment,
@@ -394,7 +394,10 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
           break;
         }
         // A namesake far from the trip is not found: the wish waits for a place.
-        const place = draft.place ?? (draft.placeQuery ? await wishPlace(fx, ctx, draft.placeQuery, nearOf(ctx)) : null);
+        // A place carried on a suggestion is kept only within reach of the
+        // trip, like one found by name; otherwise its query is looked up.
+        const carried = draft.place && withinReach(draft.place.location, anchorsOf(ctx)) ? draft.place : null;
+        const place = carried ?? (draft.placeQuery ? await wishPlace(fx, ctx, draft.placeQuery, nearOf(ctx)) : null);
         const wish = await fx.addWish({
           title: draft.title,
           priority: draft.priority,

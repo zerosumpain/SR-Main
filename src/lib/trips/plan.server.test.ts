@@ -18,10 +18,9 @@ const h = vi.hoisted(() => ({
 
 vi.mock('./meals.server', () => ({
   startMeals: vi.fn(),
-  readMealOptions: vi.fn(async () => ({})),
-  mealsPending: vi.fn(async () => false),
+  readMealOptions: vi.fn(async () => ({ options: {}, pending: false })),
 }));
-vi.mock('./images.server', () => ({ tripImages: vi.fn(async () => ({})), startImages: vi.fn() }));
+vi.mock('./images.server', () => ({ tripImages: vi.fn(async () => ({ images: {}, pending: false })), startImages: vi.fn() }));
 vi.mock('./guidance.server', () => ({
   startGuidance: () => void h.guidanceRuns++,
   withGuidance: async (_t: string, plan: unknown) => plan,

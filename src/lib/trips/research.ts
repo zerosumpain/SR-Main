@@ -303,9 +303,10 @@ export function placeFromNominatim(row: unknown): OsmPlace | null {
  * How far from the trip a place found by name may be. A name search that
  * misses near the trip falls back to the whole world and takes the first
  * hit — a namesake on another continent is not the place. Shared with the
- * agent's `locate`.
+ * agent's `locate`. 300 km, not 100: a day trip is part of a trip (Rome to
+ * Pompeii is ~210 km, Edinburgh to Loch Ness ~250 km); another country is not.
  */
-export const PLACE_REACH_M = 100_000;
+export const PLACE_REACH_M = 300_000;
 
 /**
  * True when `at` is within reach of at least one of the trip's anchors (its

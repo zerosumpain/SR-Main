@@ -14,7 +14,7 @@ import type { LocalDate, Observation, PlannedDay, PlanSource, ReplanOption, Solv
 import { bundleGuidance, startGuidance } from './guidance.server';
 import { startImages, tripImages } from './images.server';
 import { withMealOptions } from './meals';
-import { mealsPending, readMealOptions, startMeals } from './meals.server';
+import { readMealOptions, startMeals } from './meals.server';
 import { jsonCall } from './llm.server';
 import { planFullness, wireTravellers, withAlternatives } from './family';
 import { NARRATIVE_SYSTEM, planSummary } from './prompt';
@@ -251,15 +251,17 @@ export async function tripBundle(
   ]);
   // Each leg carries its walk / public transport / taxi alternatives (v5),
   // and each meal with no place its real options nearby (v7).
-  const meals = latest ? await readMealOptions(trip.id, latest.plan) : {};
+  const read = latest ? await readMealOptions(trip.id, latest.plan) : { options: {}, pending: false };
+  const meals = read.options;
   // Guidance as cached; a day from today on that lacks it starts a background
   // run (not only today and tomorrow), so later days have directions too.
   const plan = latest ? withMealOptions(withAlternatives(await bundleGuidance(trip, latest.plan, state.wishes), latest.matrix), meals) : null;
-  // A plan read before its meals (or photos) were looked up starts that now;
-  // the next refresh carries them.
-  if (latest && (await mealsPending(trip.id, latest.plan))) startMeals(trip, latest.plan);
-  else if (latest) startImages(trip.id, state.wishes, Object.values(meals).flat());
-  const images = await tripImages(trip.id, state.wishes, Object.values(meals).flat());
+  const pictured = await tripImages(trip.id, state.wishes, Object.values(meals).flat());
+  const images = pictured.images;
+  // A plan read before its meals (or photos) were looked up starts that now
+  // (meals, then their photos); the next refresh carries them.
+  if (latest && read.pending) startMeals(trip, latest.plan);
+  else if (latest && pictured.pending) startImages(trip.id, state.wishes, Object.values(meals).flat());
   const replaces = new Map(state.wishes.filter((w) => w.replacesMeal).map((w) => [w.id, w.replacesMeal as 'breakfast' | 'lunch' | 'dinner']));
   const body: Omit<TripBundle, 'etag'> = {
     trip: wireTrip(trip, opts.creator),

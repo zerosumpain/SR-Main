@@ -68,17 +68,42 @@ export async function draftWishesFromText(text: string, trip: Pick<TripRecord, '
 
 // ── OpenStreetMap ──────────────────────────────────────────────────────────
 
-let nominatimChain = Promise.resolve();
-function paced<T>(fn: () => Promise<T>): Promise<T> {
-  const slot = nominatimChain.then(fn);
-  nominatimChain = slot.then(
-    () => new Promise((r) => setTimeout(r, NOMINATIM_GAP_MS)),
-    () => new Promise((r) => setTimeout(r, NOMINATIM_GAP_MS)),
-  );
-  return slot;
+/** Who is asking: a person waiting (a planner turn, an edit) or background filling (meals, photos). */
+export interface LookupOpts {
+  background?: boolean;
 }
 
-async function nominatim(path: string, params: Record<string, string>): Promise<unknown[]> {
+// One request a second to Nominatim, from one queue with two lanes: what a
+// person is waiting on always goes first, and background filling (meal
+// options, photographs) only runs when nothing else is waiting — so a big
+// trip's photos never hold up a planner turn behind them.
+const foreground: Array<() => Promise<void>> = [];
+const background: Array<() => Promise<void>> = [];
+let pumping = false;
+
+async function pump(): Promise<void> {
+  if (pumping) return;
+  pumping = true;
+  try {
+    for (;;) {
+      const job = foreground.shift() ?? background.shift();
+      if (!job) break;
+      await job().catch(() => {});
+      await new Promise((r) => setTimeout(r, NOMINATIM_GAP_MS));
+    }
+  } finally {
+    pumping = false;
+  }
+}
+
+function paced<T>(fn: () => Promise<T>, opts: LookupOpts = {}): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    (opts.background ? background : foreground).push(() => fn().then(resolve, reject));
+    void pump();
+  });
+}
+
+async function nominatim(path: string, params: Record<string, string>, opts: LookupOpts = {}): Promise<unknown[]> {
   return paced(async () => {
     const url = new URL(`https://nominatim.openstreetmap.org${path}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -93,7 +118,7 @@ async function nominatim(path: string, params: Record<string, string>): Promise<
     } catch {
       return [];
     }
-  });
+  }, opts);
 }
 
 /**
@@ -101,8 +126,8 @@ async function nominatim(path: string, params: Record<string, string>): Promise<
  * point — Nominatim's bounded search, the fallback when Overpass is busy.
  * Raw jsonv2 rows (with extratags); [] on any failure.
  */
-export async function nominatimAround(term: string, viewbox: string, limit = 15): Promise<unknown[]> {
-  return nominatim('/search', { q: term, viewbox, bounded: '1', limit: String(limit) });
+export async function nominatimAround(term: string, viewbox: string, limit = 15, opts: LookupOpts = {}): Promise<unknown[]> {
+  return nominatim('/search', { q: term, viewbox, bounded: '1', limit: String(limit) }, opts);
 }
 
 /** Try `placeQueries` in turn until one is found (each one Nominatim request, paced). */
@@ -115,22 +140,22 @@ export async function findPlaceLoosely(query: string, destination: string | null
 }
 
 /** Find a wish's place near the trip (a ~20 km box round `near` when known). */
-export async function findPlace(query: string, near: LatLng | null): Promise<OsmPlace | null> {
+export async function findPlace(query: string, near: LatLng | null, opts: LookupOpts = {}): Promise<OsmPlace | null> {
   const params: Record<string, string> = { q: query, limit: '1' };
   if (near) {
     params.viewbox = `${near.lng - 0.2},${near.lat + 0.2},${near.lng + 0.2},${near.lat - 0.2}`;
     params.bounded = '1';
   }
-  let rows = await nominatim('/search', params);
-  if (!rows.length && near) rows = await nominatim('/search', { q: query, limit: '1' });
+  let rows = await nominatim('/search', params, opts);
+  if (!rows.length && near) rows = await nominatim('/search', { q: query, limit: '1' }, opts);
   return placeFromNominatim(rows[0]);
 }
 
 /** OSM tags for a place we already have, by its id (`node/123`). v7: also for its Wikidata entry (./images.server). */
-export async function lookupPlace(osmId: string): Promise<OsmPlace | null> {
+export async function lookupPlace(osmId: string, opts: LookupOpts = {}): Promise<OsmPlace | null> {
   const m = /^(node|way|relation)\/(\d+)$/.exec(osmId);
   if (!m) return null;
-  const rows = await nominatim('/lookup', { osm_ids: `${m[1][0].toUpperCase()}${m[2]}` });
+  const rows = await nominatim('/lookup', { osm_ids: `${m[1][0].toUpperCase()}${m[2]}` }, opts);
   return placeFromNominatim(rows[0]);
 }
 

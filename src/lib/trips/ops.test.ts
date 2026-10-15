@@ -73,6 +73,13 @@ describe('applyOps', () => {
     expect(calls).toEqual(['addWish:Armando:placed']);
   });
 
+  it('drops a carried place far from the trip, even on a trusted addWish', async () => {
+    const { fx, calls } = fakes();
+    const far = { ...mealWish, place: { ...armando, location: { lat: 40.71, lng: -74.0 } } };
+    await applyOps([{ op: 'addWish', wish: far }], ctx(), { ...fx, trustsPlaces: true });
+    expect(calls).toEqual(['addWish:Armando:unplaced']);
+  });
+
   it("ignores a model's coordinates: no place without a query to resolve", async () => {
     const { fx, calls } = fakes();
     await applyOps([{ op: 'addWish', wish: mealWish }], ctx(), fx);
@@ -377,14 +384,15 @@ describe('places found by name are near the trip', () => {
     expect(calls).toEqual([]);
   });
 
-  it('withinReach: within 100 km of any anchor; nothing to compare with is no refusal', () => {
+  it('withinReach: within 300 km of any anchor — a day trip, not another country; nothing to compare with is no refusal', () => {
     const rome = { lat: 41.895, lng: 12.4716 };
     expect(withinReach({ lat: 41.75, lng: 12.29 }, [rome])).toBe(true); // Ostia, ~22 km
-    expect(withinReach({ lat: 40.7489, lng: 14.4848 }, [rome])).toBe(false); // Pompeii, ~210 km
-    expect(withinReach({ lat: 40.7489, lng: 14.4848 }, [rome, { lat: 40.8518, lng: 14.2681 }])).toBe(true); // a Naples stay too
+    expect(withinReach({ lat: 40.7489, lng: 14.4848 }, [rome])).toBe(true); // Pompeii, ~210 km: a day trip
+    expect(withinReach({ lat: 45.4642, lng: 9.19 }, [rome])).toBe(false); // Milan, ~480 km
+    expect(withinReach({ lat: 39.1, lng: -84.5 }, [rome])).toBe(false); // a Rome-namesake in Ohio's direction
     expect(withinReach({ lat: 48.85, lng: 2.35 }, [])).toBe(true);
     expect(withinReach({ lat: 48.85, lng: 2.35 }, [null, undefined])).toBe(true);
-    expect(PLACE_REACH_M).toBe(100_000);
+    expect(PLACE_REACH_M).toBe(300_000);
   });
 });
 
