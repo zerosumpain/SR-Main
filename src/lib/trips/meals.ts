@@ -61,7 +61,7 @@ export function daySlots(day: PlannedDay): MealSlot[] {
       startMin: stop.arriveMin,
       endMin: stop.departMin,
       anchor: anchor.location,
-      anchorTitle: anchor.title,
+      anchorTitle: anchor.kind === 'stay' ? placeName(anchor.title) : anchor.title,
       next: after?.location && after !== anchor ? { location: after.location, title: after.title } : null,
     });
   });
@@ -75,7 +75,8 @@ export function daySlots(day: PlannedDay): MealSlot[] {
  */
 export function slotFingerprint(slot: MealSlot): string {
   const r = (n: number) => n.toFixed(3);
-  return `${slot.date}|${slot.meal}|${r(slot.anchor.lat)},${r(slot.anchor.lng)}|${Math.round(slot.startMin / 30)}`;
+  // The leading version retires every cached answer when the ranking or its words change.
+  return `m1|${slot.date}|${slot.meal}|${r(slot.anchor.lat)},${r(slot.anchor.lng)}|${Math.round(slot.startMin / 30)}`;
 }
 
 /** Where to look and how far: round the stop before, a short walk out. */
@@ -161,7 +162,13 @@ const hhmm = (min: number) => {
 export function hoursText(hours: DayHours | null): string | null {
   if (hours === null) return null;
   if (!hours.length) return 'Closed that day';
-  return 'Open ' + hours.map((w) => `${hhmm(w.openMin)}–${hhmm(w.closeMin)}`).join(', ');
+  if (hours.some((w) => w.openMin <= 0 && w.closeMin >= 1440)) return 'Open all day';
+  return 'Open ' + hours.map((w) => `${hhmm(w.openMin)}–${w.closeMin >= 1440 ? 'midnight' : hhmm(w.closeMin)}`).join(', ');
+}
+
+/** "Free time at the flat" / "Drop bags at the flat" → "the flat": where you are, by name. */
+export function placeName(title: string): string {
+  return title.replace(/^(free time at|drop bags at|back at)\s+/i, '').trim() || title;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cuisineWords, daySlots, hoursOn, mealQuery, mealSlots, openFor, rankMealOptions, slotFingerprint, withMealOptions, type MealSlot } from './meals';
+import { cuisineWords, daySlots, hoursOn, hoursText, mealQuery, placeName, mealSlots, openFor, rankMealOptions, slotFingerprint, withMealOptions, type MealSlot } from './meals';
 import { currentOptions, staleSlots, type MealCache } from './meals.server';
 import type { PlannedDay, PlannedStop, SolvedPlan } from './model';
 
@@ -60,6 +60,15 @@ describe('opening hours', () => {
     expect(openFor([{ openMin: 750, closeMin: 900 }], 720, 45)).toBe(true);
     expect(openFor([{ openMin: 760, closeMin: 900 }], 720, 45)).toBe(false);
     expect(openFor([{ openMin: 600, closeMin: 740 }], 720, 45)).toBe(false);
+  });
+  it('says a whole day and midnight plainly', () => {
+    expect(hoursText([{ openMin: 0, closeMin: 1440 }])).toBe('Open all day');
+    expect(hoursText([{ openMin: 1140, closeMin: 1440 }])).toBe('Open 19:00–midnight');
+    expect(hoursText([])).toBe('Closed that day');
+  });
+  it('names the stay, not the free time at it', () => {
+    expect(placeName("Free time at Apartment by Campo de' Fiori")).toBe("Apartment by Campo de' Fiori");
+    expect(placeName('Pantheon')).toBe('Pantheon');
   });
   it('words cuisines', () => {
     expect(cuisineWords('italian;pizza;pasta')).toBe('Italian, pizza');
