@@ -14,12 +14,15 @@
 
 import type { MealOption, PlaceImage, Wish } from './model';
 import { commonsInfoUrl, imageFileFromEntity, imageFromCommons, WIKIDATA_URL, wikidataId } from './images';
-import { lookupPlace } from './research.server';
+import { metresBetween } from './nearby-ideas';
+import { findPlace, lookupPlace } from './research.server';
 import { readSetting, writeSetting } from './settings-cache.server';
 
 const USER_AGENT = 'StrangeRamblingsTrips/1.0 (+https://strangeramblings.com; trips photos from Wikimedia Commons)';
 const TIMEOUT_MS = 10_000;
 const MISS_RETRY_MS = 30 * 24 * 3600_000;
+/** A place found by name must be this close to where the plan has it, or it is not the place. */
+const SAME_PLACE_M = 400;
 /** Places looked up per run: a big trip fills over a few runs, not one long one. */
 const PER_RUN = 40;
 const MAX_SHARED = 3000;
@@ -85,7 +88,13 @@ export function startImages(tripId: string, wishes: Wish[], meals: MealOption[] 
         const osmId = w.place.osmId ?? null;
         if (perTrip[w.id] && perTrip[w.id].osmId === osmId) continue;
         lookedUp++;
-        const found = osmId ? await lookupPlace(osmId) : null;
+        // By its OSM id; a place placed by hand (no id) by its name near
+        // where it is — accepted only when the match is that same spot.
+        let found = osmId ? await lookupPlace(osmId) : null;
+        if (!osmId) {
+          const near = await findPlace(w.place.name || w.title, w.place.location);
+          found = near && metresBetween(near.location, w.place.location) <= SAME_PLACE_M ? near : null;
+        }
         perTrip[w.id] = { osmId, wikidata: wikidataId(found?.wikidata), at: new Date().toISOString() };
         tripChanged = true;
       }
