@@ -8,6 +8,7 @@
 
 import type { Facts, LatLng, PartOfDay, Priority, Trip, Wish } from './model';
 import { haversineM } from './solver/estimate';
+import { parseOpeningHours } from './solver/hours';
 
 /** Ticket resellers and aggregators — never offered as the booking link (D5). */
 export const RESELLER_HOSTS = [
@@ -67,12 +68,17 @@ export const FACTS_SYSTEM = [
   'Answer ONLY with a JSON object with these keys:',
   '{"bookingRequired": true|false|null, "bookAheadDays": number|null, "bookingUrl": string|null,',
   ' "officialUrl": string|null, "priceText": string|null, "typicalVisitMin": number|null,',
-  ' "closedDays": string|null, "summary": string|null, "sourceUrls": string[]}',
+  ' "closedDays": string|null, "closedDates": string[], "weeklyHours": {"Mo": string|null, ..., "Su": string|null}|null,',
+  ' "summary": string|null, "sourceUrls": string[]}',
   'Rules: use only what the results say; null when they do not say. bookingUrl and officialUrl must be the',
   "venue's OWN official site or its official ticket office, copied exactly from the results — never a reseller,",
   'tour operator or aggregator (GetYourGuide, Viator, Tiqets, Klook, Tripadvisor and the like). bookAheadDays is',
   'how many days ahead tickets typically sell out or must be booked. closedDays is a short phrase such as',
-  '"Sundays; 25 Dec". summary is one plain sentence. sourceUrls lists the result URLs you relied on.',
+  '"Sundays; 25 Dec". closedDates lists the dates of the visit window (YYYY-MM-DD) on which the results say it is',
+  'closed (a holiday, a strike, works) — [] when they do not say. weeklyHours gives each weekday the results state,',
+  'as "09:00-19:00" (or "09:00-13:00,15:00-19:00") or "closed"; null for a day they do not state, and null for the',
+  'whole object when they give no hours. Never guess hours.',
+  'summary is one plain sentence. sourceUrls lists the result URLs you relied on.',
 ].join('\n');
 
 export function factsPrompt(input: {
@@ -147,6 +153,36 @@ function str(v: unknown, max = 300): string | null {
   return typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
 }
 
+const WEEKDAY_CODES = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'] as const;
+
+/**
+ * The reader's `weeklyHours` into `Facts['hours']`: only the days it states
+ * (a missing day stays unknown — never "closed" by omission), each through the
+ * same opening_hours parser as OSM's text. Null when no day is readable.
+ */
+export function readWeeklyHours(raw: unknown): Facts['hours'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const hours: NonNullable<Facts['hours']> = {};
+  let any = false;
+  WEEKDAY_CODES.forEach((code, i) => {
+    const v = typeof o[code] === 'string' ? (o[code] as string).trim().toLowerCase() : '';
+    if (!v) return;
+    const day = (i + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7;
+    const parsed = parseOpeningHours(`${code} ${v === 'closed' ? 'off' : v}`)?.[day];
+    if (!parsed) return;
+    hours[day] = parsed;
+    any = true;
+  });
+  return any ? hours : null;
+}
+
+/** The reader's `closedDates`: real dates inside the visit window, sorted, no repeats. */
+export function readClosedDates(raw: unknown, window: { startDate: string; endDate: string } | null): string[] {
+  if (!Array.isArray(raw) || !window) return [];
+  return [...new Set(raw.filter((d): d is string => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && d >= window.startDate && d <= window.endDate))].sort();
+}
+
 /**
  * Read the model's answer into a fact sheet. OSM facts win for opening hours
  * and the website; the model's links are kept only when they are official and
@@ -160,6 +196,8 @@ export function readFacts(input: {
   previous: Facts | null;
   depth: 'brief' | 'deep';
   checkedAt: string;
+  /** The trip's dates: closures the reader finds are kept only inside them. */
+  trip?: { startDate: string; endDate: string } | null;
 }): Facts {
   const r = (input.raw && typeof input.raw === 'object' ? input.raw : {}) as Record<string, unknown>;
   const seen = new Set(input.results.map((x) => x.url));
@@ -197,10 +235,16 @@ export function readFacts(input: {
   const allSources = [...(prev?.sources ?? []), ...sources].filter((s, i, a) => a.findIndex((t) => t.url === s.url) === i).slice(0, 12);
 
   const visitMin = num(r.typicalVisitMin, 10, 600);
+  const openingHoursText = input.osm.openingHoursText ?? prev?.openingHoursText ?? null;
+  // OSM's text wins for hours: the reader's weekly hours are used only when
+  // there is no parseable OSM text (`hours` would otherwise shadow it).
+  const hours = parseOpeningHours(openingHoursText) ? null : (readWeeklyHours(r.weeklyHours) ?? prev?.hours ?? null);
+  // A closure found once is kept: wrongly closed costs a re-plan, wrongly open a wasted trip.
+  const closedDates = [...new Set([...(prev?.closedDates ?? []), ...readClosedDates(r.closedDates, input.trip ?? null)])].sort();
   const facts: Facts = {
-    openingHoursText: input.osm.openingHoursText ?? prev?.openingHoursText ?? null,
-    hours: prev?.hours ?? null,
-    closedDates: prev?.closedDates ?? [],
+    openingHoursText,
+    hours,
+    closedDates,
     bookingRequired: typeof r.bookingRequired === 'boolean' ? r.bookingRequired : (prev?.bookingRequired ?? null),
     bookAheadDays: num(r.bookAheadDays, 0, 365) ?? prev?.bookAheadDays ?? null,
     bookingUrl: grounded(r.bookingUrl) ?? prev?.bookingUrl ?? null,
@@ -215,7 +259,7 @@ export function readFacts(input: {
   };
   const closed = str(r.closedDays, 160);
   if (closed && !facts.summary?.includes(closed)) facts.summary = `${facts.summary ? `${facts.summary} ` : ''}Closed: ${closed}.`;
-  facts.unknown = FACT_FIELDS.filter(([k]) => facts[k] === null).map(([, label]) => label);
+  facts.unknown = FACT_FIELDS.filter(([k]) => facts[k] === null && !(k === 'openingHoursText' && facts.hours)).map(([, label]) => label);
   return facts;
 }
 

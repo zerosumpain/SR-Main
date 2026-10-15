@@ -6,10 +6,13 @@ import {
   parseLooseJson,
   placeFromNominatim,
   readDraftWishes,
+  readClosedDates,
   readFacts,
+  readWeeklyHours,
   searchQuery,
   suggestionsFromOverpass,
 } from './research';
+import { windowsOn } from './solver/hours';
 
 describe('resellers', () => {
   it('never offers a reseller as the booking link', () => {
@@ -56,6 +59,40 @@ describe('readFacts', () => {
     });
     expect(facts.sources.map((s) => s.url)).toEqual(['https://colosseo.it/en/tickets/', 'https://www.openstreetmap.org/copyright']);
     expect(facts.unknown).toEqual(['official booking link', 'price']);
+  });
+
+  it('closures the reader finds land in closedDates (inside the trip only), not just the summary', () => {
+    const prev = { ...readFacts({ raw: null, results: [], osm: { openingHoursText: null, website: null, wikidata: null }, previous: null, depth: 'brief', checkedAt: 'a' }), closedDates: ['2026-10-29'] };
+    const facts = readFacts({
+      raw: { closedDays: 'Mondays; 28 Oct (strike)', closedDates: ['2026-10-28', '2026-10-28', '2026-12-25', 'next Tuesday', '2026-02-30x'], summary: 'Big.' },
+      results,
+      osm: { openingHoursText: null, website: null, wikidata: null },
+      previous: prev,
+      depth: 'deep',
+      checkedAt: 'b',
+      trip: { startDate: '2026-10-27', endDate: '2026-10-30' },
+    });
+    expect(facts.closedDates).toEqual(['2026-10-28', '2026-10-29']); // an earlier closure is kept
+    expect(facts.summary).toBe('Big. Closed: Mondays; 28 Oct (strike).');
+    // Without the trip's dates nothing is trusted as a closure.
+    expect(readFacts({ raw: { closedDates: ['2026-10-28'] }, results, osm: { openingHoursText: null, website: null, wikidata: null }, previous: null, depth: 'brief', checkedAt: 'c' }).closedDates).toEqual([]);
+  });
+
+  it("the reader's weekly hours fill facts.hours only when OSM has none; a day it does not state stays unknown", () => {
+    const osmNone = { openingHoursText: null, website: null, wikidata: null };
+    const facts = readFacts({ raw: { weeklyHours: { Mo: 'closed', Tu: '09:00-19:00', We: '09:00-13:00, 15:00-19:00', Th: null, Fr: 'ask at the desk' } }, results, osm: osmNone, previous: null, depth: 'brief', checkedAt: 'x' });
+    expect(facts.hours).toEqual({ 1: [], 2: [{ openMin: 540, closeMin: 1140 }], 3: [{ openMin: 540, closeMin: 780 }, { openMin: 900, closeMin: 1140 }] });
+    expect(facts.unknown).not.toContain('opening hours');
+    expect(windowsOn(facts, '2026-10-26')).toEqual([]); // a Monday: closed
+    expect(windowsOn(facts, '2026-10-29')).toBeNull(); // a Thursday: unknown, never "closed by omission"
+    // OSM's own text wins: the reader's hours are not used over it.
+    const osm = readFacts({ raw: { weeklyHours: { Mo: 'closed' } }, results, osm: { openingHoursText: 'Mo-Su 08:30-17:00', website: null, wikidata: null }, previous: null, depth: 'brief', checkedAt: 'x' });
+    expect(osm.hours).toBeNull();
+    expect(windowsOn(osm, '2026-10-26')).toEqual([{ openMin: 510, closeMin: 1020 }]);
+    // Nothing readable → unknown.
+    expect(readWeeklyHours({ Mo: 'sometimes' })).toBeNull();
+    expect(readWeeklyHours(null)).toBeNull();
+    expect(readClosedDates(['2026-10-28'], null)).toEqual([]);
   });
 
   it('marks everything unknown when the search failed and OSM said nothing', () => {

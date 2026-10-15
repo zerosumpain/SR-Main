@@ -196,11 +196,11 @@ async function researchWish(trip: TripRecord, wish: Wish, near: LatLng | null, d
         console.warn('[trips/research] fact reader failed:', (err as Error)?.message);
       }
     }
-    facts = readFacts({ raw, results, osm: osmFacts, previous: wish.facts, depth, checkedAt });
+    facts = readFacts({ raw, results, osm: osmFacts, previous: wish.facts, depth, checkedAt, trip });
   } catch (err) {
     // No search key, a timeout, a refusal: the sheet keeps what OSM said and lists the rest as unknown.
     console.warn('[trips/research] search failed:', (err as Error)?.message);
-    facts = readFacts({ raw: null, results: [], osm: osmFacts, previous: wish.facts, depth, checkedAt });
+    facts = readFacts({ raw: null, results: [], osm: osmFacts, previous: wish.facts, depth, checkedAt, trip });
     if (!wish.facts?.summary) facts.summary = 'Web search unavailable — only OpenStreetMap was checked.';
   }
   await updateWish(trip.id, wish.id, { place, facts });
