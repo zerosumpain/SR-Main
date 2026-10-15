@@ -11,7 +11,9 @@
 //               one `trips-reader` call per day for the words.
 //
 // After each solve this runs in the background for today and the next day;
-// other days are made when the page is viewed. Leg guidance is cached per
+// other days are made when the page is viewed or the phone reads its bundle
+// (`bundleGuidance`). A stop guide is remade when its wish's facts are newer,
+// and the city guide when it is a month old and the trip is ten days off. Leg guidance is cached per
 // trip in `app_settings` by (date, mode, from, to), so a re-solve that keeps a
 // leg keeps its guidance, and the plan is decorated with it when read. No
 // figure here comes from Mapbox (D1).
@@ -22,6 +24,9 @@ import { appSettings } from '$lib/db/schema';
 import {
   decoratePlan,
   guidanceDates,
+  guidanceDue,
+  stopGuideNeeded,
+  tripGuideNeeded,
   legsLacking,
   LEG_GUIDE_SYSTEM,
   readLegWords,
@@ -35,11 +40,14 @@ import {
   stopGuidePrompt,
   transitFromMotis,
   TRIP_GUIDE_SYSTEM,
+  PRIMER_SYSTEM,
+  primerNeeded,
+  readPrimer,
   type GuidanceCache,
 } from './guidance';
 import { jsonCall } from './llm.server';
-import type { LatLng, LegGuidance, LocalDate, SolvedPlan, TravelMode } from './model';
-import { localDateIn, localToIso, timetableDate } from './routing';
+import type { LatLng, LegGuidance, LocalDate, SolvedPlan, TravelMode, TripGuide, Wish } from './model';
+import { legDepartIso, localDateIn } from './routing';
 import { getTrip, latestPlan, loadState, setStopGuide, setTripGuide, type TripRecord } from './store.server';
 
 const USER_AGENT = 'StrangeRamblingsTrips/1.0 (+https://strangeramblings.com)';
@@ -48,6 +56,8 @@ const TIMEOUT_MS = 12_000;
 const LEGS_PER_DAY = 20;
 
 const cacheKey = (tripId: string) => `trips.guidance.${tripId}`;
+/** Trips with a guidance run under way in this process. */
+const running = new Set<string>();
 
 export async function readGuidance(tripId: string): Promise<GuidanceCache> {
   try {
@@ -78,6 +88,28 @@ export async function deleteGuidance(tripId: string): Promise<void> {
 /** The plan with its guidance, for the page and the phone. */
 export async function withGuidance(tripId: string, plan: SolvedPlan): Promise<SolvedPlan> {
   return decoratePlan(plan, await readGuidance(tripId));
+}
+
+/** A bundle read starts a run at most this often per trip (a run that cannot finish — no model — is not retried on every refresh). */
+const BUNDLE_RUN_GAP_MS = 10 * 60_000;
+const bundleRuns = new Map<string, number>();
+
+/**
+ * The plan with its guidance for the phone's bundle — and, when a day from
+ * today on still lacks leg guidance or a stop guide (or the city guide is
+ * due), a background run for those days, so days 3+ have directions before
+ * the trip. Never waits for the run.
+ */
+export async function bundleGuidance(trip: TripRecord, plan: SolvedPlan, wishes: Wish[], now: Date = new Date()): Promise<SolvedPlan> {
+  const cache = await readGuidance(trip.id);
+  const today = localDateIn(trip.timeZone, now);
+  const due = guidanceDue(plan, cache, wishes, today);
+  const last = bundleRuns.get(trip.id) ?? 0;
+  if ((due.length || tripGuideNeeded(trip, today, now) || primerNeeded(trip.guide)) && now.getTime() - last >= BUNDLE_RUN_GAP_MS && !running.has(trip.id)) {
+    bundleRuns.set(trip.id, now.getTime());
+    startGuidance(trip.ownerEmail, trip.id, due);
+  }
+  return decoratePlan(plan, cache);
 }
 
 // ── Routed facts for one leg ───────────────────────────────────────────────
@@ -129,16 +161,62 @@ async function motis(params: Record<string, string>): Promise<{ itineraries?: un
 
 /** When to ask a timetable about a leg: its own date and time if near, else the same weekday next week. */
 function departIso(trip: TripRecord, date: LocalDate, departMin: number): string {
-  const today = localDateIn(trip.timeZone, new Date());
-  const ask = timetableDate(date, today);
-  return localToIso(ask, departMin, trip.timeZone);
+  return legDepartIso(date, departMin, localDateIn(trip.timeZone, new Date()), trip.timeZone);
 }
 
 // ── The trip guide ─────────────────────────────────────────────────────────
 
 /** Make the city guide once. Without search it is written from the model alone, with no links; without a model, none. */
+/**
+ * v7: the city primer and the trip's neighbourhoods, onto a guide that has
+ * none — one search ("visiting <city>: etiquette, tipping, phrases, safety")
+ * and one reader call. A failure leaves the guide as it was.
+ */
+export async function ensurePrimer(trip: TripRecord, guide: TripGuide | null): Promise<TripGuide | null> {
+  if (!guide || !primerNeeded(guide)) return guide;
+  let results: Array<{ title: string; url: string; content: string }> = [];
+  try {
+    const { search } = await import('$lib/deepdive/tavily');
+    const found = await search(`visiting ${trip.destination}: etiquette, tipping, cash or card, useful phrases, safety for tourists`, { purpose: 'trips.guide', maxResults: 6, searchDepth: 'basic' });
+    results = (found.results ?? []).map((r) => ({ title: r.title, url: r.url, content: r.content ?? '' }));
+  } catch (err) {
+    console.warn('[trips/guidance] primer search unavailable:', (err as Error)?.message);
+  }
+  const { wishes } = await loadState(trip.id);
+  const places = wishes.filter((w) => !w.skipped && !w.suggested && w.place).map((w) => `${w.title}${w.place?.address ? ` — ${w.place.address}` : ''}`);
+  const titles = wishes.filter((w) => !w.skipped && !w.suggested && w.place).map((w) => w.title);
+  try {
+    const raw = await jsonCall(
+      'trips-reader',
+      [
+        { role: 'system', content: PRIMER_SYSTEM },
+        {
+          role: 'user',
+          content: `City: ${trip.destination}\n\nThe trip's places:\n${places.length ? places.map((p) => `- ${p}`).join('\n') : '(none yet)'}\n\nSearch results:\n${results.length ? results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content.slice(0, 1200)}`).join('\n\n') : '(none — the search was unavailable; keep to widely known, stable facts)'}`,
+        },
+      ],
+      { maxTokens: 1400, temperature: 0 },
+    );
+    const { primer, neighbourhoods } = readPrimer(raw, results, titles);
+    if (!primer && !neighbourhoods.length) {
+      // Nothing usable: say when it was tried, so the next try waits a day.
+      const tried: TripGuide = { ...guide, primerTriedAt: new Date().toISOString() };
+      await setTripGuide(trip.id, tried);
+      return tried;
+    }
+    const next: TripGuide = { ...guide, primer, neighbourhoods };
+    await setTripGuide(trip.id, next);
+    return next;
+  } catch (err) {
+    console.warn('[trips/guidance] no model for the primer:', (err as Error)?.message);
+    const tried: TripGuide = { ...guide, primerTriedAt: new Date().toISOString() };
+    await setTripGuide(trip.id, tried).catch(() => {});
+    return tried;
+  }
+}
+
 export async function ensureTripGuide(trip: TripRecord): Promise<TripRecord['guide']> {
-  if (trip.guide) return trip.guide;
+  if (!tripGuideNeeded(trip, localDateIn(trip.timeZone, new Date()))) return ensurePrimer(trip, trip.guide);
   let results: Array<{ title: string; url: string; content: string }> = [];
   try {
     const { search } = await import('$lib/deepdive/tavily');
@@ -159,12 +237,14 @@ export async function ensureTripGuide(trip: TripRecord): Promise<TripRecord['gui
       ],
       { maxTokens: 1200, temperature: 0 },
     );
-    const guide = readTripGuide(raw, results, new Date().toISOString());
+    const fresh = readTripGuide(raw, results, new Date().toISOString());
+    // A refresh keeps the primer it had; one that came back empty keeps the guide there was.
+    const guide = fresh ? { ...fresh, primer: trip.guide?.primer ?? null, neighbourhoods: trip.guide?.neighbourhoods ?? [] } : null;
     if (guide) await setTripGuide(trip.id, guide);
-    return guide;
+    return ensurePrimer(trip, guide ?? trip.guide);
   } catch (err) {
     console.warn('[trips/guidance] no model for the city guide:', (err as Error)?.message);
-    return null;
+    return trip.guide;
   }
 }
 
@@ -247,7 +327,8 @@ export async function ensureStopGuides(trip: TripRecord, plan: SolvedPlan, dates
     const day = plan.days.find((d) => d.date === date);
     const todo = (day?.stops ?? [])
       .map((s) => (s.wishId ? byId.get(s.wishId) : undefined))
-      .filter((w): w is NonNullable<typeof w> => !!w && !w.guide && !done.has(w.id));
+      // None yet, or facts checked since it was written (./guidance `stopGuideNeeded`).
+      .filter((w): w is NonNullable<typeof w> => !!w && stopGuideNeeded(w) && !done.has(w.id));
     if (!todo.length) continue;
     todo.forEach((w) => done.add(w.id));
     try {
@@ -275,8 +356,6 @@ export async function ensureStopGuides(trip: TripRecord, plan: SolvedPlan, dates
 
 // ── The background run ─────────────────────────────────────────────────────
 
-const running = new Set<string>();
-
 /**
  * Guidance for a trip in the background, never awaited by a request: the city
  * guide, then for each day (today and the next first) its legs and its
@@ -291,7 +370,7 @@ export function startGuidance(owner: string, tripId: string, dates: LocalDate[] 
       let trip = await getTrip(owner, tripId);
       const latest = await latestPlan(tripId);
       if (!trip || !latest) return;
-      if (!trip.guide) {
+      if (tripGuideNeeded(trip, localDateIn(trip.timeZone, new Date())) || primerNeeded(trip.guide)) {
         await ensureTripGuide(trip);
         trip = (await getTrip(owner, tripId)) ?? trip;
       }

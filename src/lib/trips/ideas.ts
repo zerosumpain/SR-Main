@@ -9,7 +9,7 @@
 // re-solved without saving — and kept only if it lands in the slot it was
 // meant for; anything it would push out is named. I/O is in ./ideas.server.
 
-import { estimateLeg, solveTrip } from '$lib/trips/solver';
+import { estimateLeg, solveTrip, windowsOn } from '$lib/trips/solver';
 import { dayLabel } from './changes';
 import {
   DAY_STAGE_LABEL,
@@ -217,6 +217,8 @@ export function withPoint(matrix: TravelMatrix, id: string, at: LatLng, location
   const points = [...matrix.points, id];
   const seconds: TravelMatrix['seconds'] = {};
   const metres: TravelMatrix['metres'] = {};
+  const estimated: TravelMatrix['estimated'] = { ...matrix.estimated };
+  const cellEstimated: NonNullable<TravelMatrix['cellEstimated']> = {};
   for (const mode of Object.keys(matrix.seconds) as TravelMode[]) {
     const m = mode === 'taxi' ? 'drive' : mode;
     const leg = (p: string, into: boolean) => {
@@ -227,8 +229,17 @@ export function withPoint(matrix: TravelMatrix, id: string, at: LatLng, location
     };
     seconds[mode] = [...(matrix.seconds[mode] ?? []).map((row, i) => [...row, leg(matrix.points[i], true).seconds]), [...matrix.points.map((p) => leg(p, false).seconds), 0]];
     if (matrix.metres[mode]) metres[mode] = [...matrix.metres[mode]!.map((row, i) => [...row, leg(matrix.points[i], true).metres]), [...matrix.points.map((p) => leg(p, false).metres), 0]];
+    // The new point's legs are estimates; the cells already there keep what they were.
+    const was = matrix.cellEstimated?.[mode];
+    const flag: 0 | 1 = matrix.estimated[mode] ? 1 : 0;
+    const n = matrix.points.length;
+    cellEstimated[mode] = [
+      ...matrix.points.map((_, i) => [...Array.from({ length: n }, (_, j) => (i === j ? 0 : (was?.[i]?.[j] ?? flag))), 1 as const]),
+      [...Array.from({ length: n }, () => 1 as const), 0],
+    ];
+    estimated[mode] = true;
   }
-  return { points, seconds, metres, estimated: { ...matrix.estimated } };
+  return { points, seconds, metres, estimated, cellEstimated };
 }
 
 export interface Verdict {
@@ -308,6 +319,16 @@ export function verifyIdea(input: SolverInput, wish: Wish, gap: Gap, baseline: S
     moves,
     reason: null,
   };
+  // Its own hours that day (unknown = no say): an idea closed when it would
+  // be visited is turned down with why, even if the solver squeezed it in.
+  const hours = windowsOn(wish.facts, gap.date);
+  if (hours !== null) {
+    if (!hours.length) return { ...verdict, reason: `It is closed on ${dayLabel(gap.date)}.` };
+    const begin = stop.arriveMin + Math.round(stop.waitSec / 60);
+    if (!hours.some((w) => w.openMin <= begin && stop.departMin <= w.closeMin)) {
+      return { ...verdict, reason: `It is closed then — open ${hours.map((w) => `${hhmm(w.openMin)}–${hhmm(w.closeMin)}`).join(', ')} on ${dayLabel(gap.date)}.` };
+    }
+  }
   if (stop.stage && stop.stage !== gap.stage && !landsLeniently(stop, stop.stage, wish, gap)) {
     return { ...verdict, reason: `It would land in the ${DAY_STAGE_LABEL[stop.stage].toLowerCase()} instead.` };
   }

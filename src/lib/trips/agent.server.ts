@@ -20,8 +20,10 @@ import { BUDGET, newBudget, PLANNER_TOOLS, readAeroDataBox, researchStep, spend,
 import { localDateIn, localToIso, timetableDate } from './routing';
 import type { LatLng, ResearchStep, Stay, TravelMode, Wish } from './model';
 import { estimateLeg, windowsOn } from '$lib/trips/solver';
+import { withinReach } from './research';
 import { findPlace, findPlaceLoosely } from './research.server';
 import type { TripRecord } from './store.server';
+import { PLANNER_TURN_MS } from './limits';
 
 const USER_AGENT = 'StrangeRamblingsTrips/1.0 (+https://strangeramblings.com)';
 export const AERODATABOX_HANDLE = 'aerodatabox';
@@ -64,6 +66,8 @@ export function coordsIn(text: string): LatLng | null {
   return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
 }
 
+const stayPoints = (ctx: AgentContext): LatLng[] => ctx.stays.map((x) => x.location);
+
 /** Where a tool argument names a place: coordinates, "stay", a wish id, or a name to look up near the trip. */
 async function locate(name: string, ctx: AgentContext): Promise<{ name: string; location: LatLng } | null> {
   const n = name.trim();
@@ -74,8 +78,8 @@ async function locate(name: string, ctx: AgentContext): Promise<{ name: string; 
   if (w?.place) return { name: w.place.name, location: w.place.location };
   const near = ctx.stays[0]?.location ?? null;
   const p = await findPlaceLoosely(n, ctx.trip.destination, near);
-  // A namesake on another continent is not the place: refuse anything over 100 km from the stay.
-  if (p && near && estimateLeg(near, p.location, 'walk').metres / 1.3 > 100_000) return null;
+  // A namesake on another continent is not the place: refuse anything beyond PLACE_REACH_M (300 km) of every stay.
+  if (p && !withinReach(p.location, stayPoints(ctx))) return null;
   return p ? { name: p.name, location: p.location } : null;
 }
 
@@ -119,7 +123,8 @@ export const LIVE_TOOLS: AgentTools = {
         return { content: clip(text, 4000), sources: [{ url: res.finalUrl, title: null }] };
       }
       case 'find_place': {
-        const p = await findPlaceLoosely(s('query'), ctx.trip.destination, ctx.stays[0]?.location ?? null);
+        const found = await findPlaceLoosely(s('query'), ctx.trip.destination, ctx.stays[0]?.location ?? null);
+        const p = found && withinReach(found.location, stayPoints(ctx)) ? found : null;
         if (!p) return { content: 'Not found on OpenStreetMap.', error: 'not found' };
         return { content: JSON.stringify(p), summary: p.name, sources: p.website ? [{ url: p.website, title: p.name }] : [] };
       }
@@ -130,7 +135,8 @@ export const LIVE_TOOLS: AgentTools = {
         let text = facts?.openingHoursText ?? null;
         if (!text) {
           const p = await findPlace(`${s('place')}, ${ctx.trip.destination}`, ctx.stays[0]?.location ?? null);
-          text = p?.openingHoursText ?? null;
+          // A far namesake's hours are not this place's.
+          text = p && withinReach(p.location, stayPoints(ctx)) ? p.openingHoursText : null;
           if (text) facts = { ...(facts ?? ({} as NonNullable<Wish['facts']>)), openingHoursText: text, hours: null, closedDates: [] };
         }
         if (!text) return { content: 'Opening hours unknown.', error: 'unknown' };
@@ -229,7 +235,7 @@ export async function agentTurn(
     temperature: 0.2,
     maxTokens: 4000,
     activity: 'trips-planner',
-    timeoutMs: opts.timeoutMs ?? 180_000,
+    timeoutMs: opts.timeoutMs ?? PLANNER_TURN_MS,
     execute: async (call) => {
       const allowed = spend(budget, call.name, opts.budget ?? BUDGET);
       if (!allowed.ok) return allowed.reason;

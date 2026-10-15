@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   decoratePlan,
   guidanceDates,
+  guidanceDue,
+  stopGuideNeeded,
+  tripGuideNeeded,
   legKey,
   legsLacking,
   localMinutes,
@@ -50,6 +53,42 @@ describe('the guidance cache', () => {
     expect(guidanceDates(plan(), '2026-10-14')).toEqual(['2026-10-27', '2026-10-28']);
     expect(guidanceDates(plan(), '2026-10-28')).toEqual(['2026-10-28', '2026-10-29']);
     expect(guidanceDates(plan(), '2026-11-01')).toEqual([]);
+  });
+});
+
+describe('when guidance is due (refresh decisions)', () => {
+  const guide = (generatedAt: string) => ({ summary: 's', tips: [], links: [], generatedAt });
+  const facts = (checkedAt: string | null) => ({ ...emptyFacts('brief', checkedAt) });
+
+  it('a stop guide is remade when its facts were checked after it was written', () => {
+    expect(stopGuideNeeded({ guide: null, facts: null })).toBe(true);
+    expect(stopGuideNeeded({ guide: guide('2026-10-10T09:00:00Z'), facts: facts('2026-10-12T09:00:00Z') })).toBe(true);
+    expect(stopGuideNeeded({ guide: guide('2026-10-12T09:00:00Z'), facts: facts('2026-10-10T09:00:00Z') })).toBe(false);
+    expect(stopGuideNeeded({ guide: guide('2026-10-12T09:00:00Z'), facts: facts(null) })).toBe(false);
+    expect(stopGuideNeeded({ guide: guide('not a date'), facts: facts('2026-10-12T09:00:00Z') })).toBe(false);
+  });
+
+  it('the city guide is refreshed only when over 30 days old AND the trip starts within 10 days', () => {
+    const trip = (generatedAt: string | null) => ({ startDate: '2026-10-27', endDate: '2026-10-30', guide: generatedAt ? { gettingAround: 'g', taxi: null, transitTickets: null, tips: [], generatedAt } : null });
+    const now = new Date('2026-10-20T12:00:00Z');
+    expect(tripGuideNeeded(trip(null), '2026-10-20', now)).toBe(true);
+    expect(tripGuideNeeded(trip('2026-09-01T00:00:00Z'), '2026-10-20', now)).toBe(true); // 49 days old, 7 days to go
+    expect(tripGuideNeeded(trip('2026-10-01T00:00:00Z'), '2026-10-20', now)).toBe(false); // 19 days old
+    expect(tripGuideNeeded(trip('2026-09-01T00:00:00Z'), '2026-10-01', new Date('2026-10-01T12:00:00Z'))).toBe(false); // 26 days to go
+    expect(tripGuideNeeded(trip('2026-09-01T00:00:00Z'), '2026-10-28', new Date('2026-10-28T12:00:00Z'))).toBe(true); // under way
+    expect(tripGuideNeeded(trip('2026-09-01T00:00:00Z'), '2026-11-02', new Date('2026-11-02T12:00:00Z'))).toBe(false); // over
+  });
+
+  it('the days from today on lacking leg guidance or a stop guide, in order; past days are left alone', () => {
+    const g = { summary: 'x' } as LegGuidance;
+    const all = Object.fromEntries(['2026-10-27', '2026-10-28', '2026-10-29'].map((d) => [legKey(d, 'walk', A, B), g]));
+    const guided = [{ id: 'b', guide: guide('2026-10-12T09:00:00Z'), facts: facts('2026-10-10T09:00:00Z') }];
+    expect(guidanceDue(plan(), all, guided, '2026-10-14')).toEqual([]);
+    const { [legKey('2026-10-29', 'walk', A, B)]: _drop, ...noThird } = all;
+    expect(guidanceDue(plan(), noThird, guided, '2026-10-14')).toEqual(['2026-10-29']);
+    // Newer facts make every day with that stop due again.
+    expect(guidanceDue(plan(), all, [{ ...guided[0], facts: facts('2026-10-13T09:00:00Z') }], '2026-10-28')).toEqual(['2026-10-28', '2026-10-29']);
+    expect(guidanceDue(plan(), {}, guided, '2026-10-29')).toEqual(['2026-10-29']);
   });
 });
 
@@ -171,5 +210,37 @@ describe('batched guidance (v2.1)', () => {
     expect(out[0]?.links).toEqual([{ label: 'Official site', url: 'https://pantheon.example/' }]);
     expect(out[1]?.links).toEqual([]); // that link belongs to another place's facts
     expect(guidanceOrder(plan(), '2026-10-28')).toEqual(['2026-10-28', '2026-10-29', '2026-10-27']);
+  });
+});
+
+describe('the city primer and neighbourhoods (v7)', () => {
+  it('reads customs, money, phrases and safety, and keeps only the trip’s own places', async () => {
+    const { readPrimer, primerNeeded } = await import('./guidance');
+    const r = readPrimer(
+      {
+        customs: ['Shoulders and knees covered in churches', 'Lunch is late, dinner later'],
+        money: 'Cards almost everywhere; tipping is small change, not a percentage.',
+        phrases: [{ local: 'Buongiorno', meaning: 'Good morning' }, { local: 'Il conto, per favore', meaning: 'The bill, please' }, { local: '', meaning: 'x' }],
+        safety: 'Mind your pockets on the 64 bus and at the Trevi Fountain.',
+        neighbourhoods: [
+          { name: 'Centro Storico', line: 'Piazzas and baroque churches, busiest at midday.', places: ['Pantheon', 'piazza navona', 'Somewhere Invented'] },
+          { name: 'Nowhere', line: 'Made up', places: ['Not a trip place'] },
+        ],
+      },
+      [{ url: 'https://example.org/rome', title: 'Rome tips' }],
+      ['Pantheon', 'Piazza Navona', 'Colosseum'],
+    );
+    expect(r.primer?.customs).toHaveLength(2);
+    expect(r.primer?.phrases).toEqual([{ local: 'Buongiorno', meaning: 'Good morning' }, { local: 'Il conto, per favore', meaning: 'The bill, please' }]);
+    expect(r.primer?.sources).toEqual([{ url: 'https://example.org/rome', title: 'Rome tips' }]);
+    expect(r.neighbourhoods).toEqual([{ name: 'Centro Storico', line: 'Piazzas and baroque churches, busiest at midday.', places: ['Pantheon', 'Piazza Navona'] }]);
+    expect(primerNeeded(null)).toBe(false);
+    expect(primerNeeded({ gettingAround: 'x', taxi: null, transitTickets: null, tips: [], generatedAt: 'now' })).toBe(true);
+  });
+
+  it('answers no primer for an empty answer', async () => {
+    const { readPrimer } = await import('./guidance');
+    expect(readPrimer({}, [], []).primer).toBeNull();
+    expect(readPrimer(null, [], []).neighbourhoods).toEqual([]);
   });
 });

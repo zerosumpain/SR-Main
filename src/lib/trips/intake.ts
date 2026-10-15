@@ -481,7 +481,7 @@ export function parseIdeasAsk(body: unknown): Parsed<IdeasAsk> {
 export interface SuggestionInput {
   date: LocalDate;
   stage: DayStage;
-  wish: { title: string; placeQuery: string | null; priority: 'must' | 'nice'; durationMin: number | null; partOfDay: PartOfDay; fixedDate: LocalDate | null; fixedStartMin: number | null; note: string | null; replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null };
+  wish: { title: string; placeQuery: string | null; priority: 'must' | 'nice'; durationMin: number | null; partOfDay: PartOfDay; fixedDate: LocalDate | null; fixedStartMin: number | null; note: string | null; replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null; place?: { name: string; location: LatLng; osmId: string | null; address: string | null } | null };
   note: string | null;
   fitText: string | null;
 }

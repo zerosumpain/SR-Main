@@ -13,7 +13,8 @@
 //    researched facts, the trip guide, or a link the person typed. Anything
 //    else is dropped (D5, and "never invent booking URLs").
 //  - Places: a stay or wish is placed by an OpenStreetMap search for the
-//    model's `placeQuery`, never by coordinates the model writes.
+//    model's `placeQuery`, never by coordinates the model writes; a wish's
+//    place beyond 300 km of every stay is a namesake, not found.
 
 import {
   type TransportSegment,
@@ -30,6 +31,8 @@ import {
 } from './model';
 import { isLocalDate, isTimeZone, parseBookingPatch, parseTripInput, parseWishPatch, safeUrl, type BookingPatch, type TripInput, type WishPatch } from './intake';
 import { mergeProfile } from './profile';
+import { withinReach } from './research';
+import { readOptionDrafts, type OptionDraft } from './options';
 
 /** The most ops one turn may apply. */
 export const MAX_OPS = 25;
@@ -84,6 +87,8 @@ export interface OpEffects {
   updateStay(id: string, fields: Partial<StayFields>): Promise<void>;
   removeStay(id: string): Promise<void>;
   addWish(fields: NewWishFields): Promise<Wish>;
+  /** v7: an addWish may carry a place already found (a suggestion being approved). Never set for a model's ops. */
+  trustsPlaces?: boolean;
   updateWish(id: string, patch: WishPatch): Promise<void>;
   removeWish(id: string): Promise<void>;
   addBooking(fields: BookingPatch & { title: string; wishId: string | null }): Promise<Booking>;
@@ -113,7 +118,7 @@ const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.i
 const str = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() ? v.trim().replace(/\s+/g, ' ').slice(0, max) : null);
 
 /** The model's whole answer, read leniently: a reply always comes back. */
-export function readPlannerAnswer(raw: unknown): { reply: string; ops: unknown[]; quickReplies: string[] } {
+export function readPlannerAnswer(raw: unknown): { reply: string; ops: unknown[]; quickReplies: string[]; options: OptionDraft[] } {
   const o = isObj(raw) ? raw : {};
   const reply = str(o.reply, 4000) ?? (typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 4000) : 'Sorry — I lost my thread there. Could you say that again?');
   const ops = Array.isArray(o.ops) ? o.ops : [];
@@ -122,7 +127,8 @@ export function readPlannerAnswer(raw: unknown): { reply: string; ops: unknown[]
     .filter((q): q is string => !!q)
     .filter((q, i, a) => a.indexOf(q) === i)
     .slice(0, 4);
-  return { reply, ops, quickReplies };
+  // v7: choices offered instead of a change, for an open question.
+  return { reply, ops, quickReplies, options: readOptionDrafts(o.options) };
 }
 
 function addDays(date: LocalDate, days: number): LocalDate {
@@ -180,13 +186,21 @@ function wishPatchFrom(fields: Obj): { ok: true; patch: WishPatch; placeQuery: s
   return { ok: true, patch: parsed.value, placeQuery: 'placeQuery' in fields ? str(fields.placeQuery, 200) : null };
 }
 
-export function draftFrom(raw: unknown): { ok: true; draft: WishDraft } | { ok: false; reason: string } {
+export function draftFrom(raw: unknown, opts: { allowPlace?: boolean } = {}): { ok: true; draft: WishDraft } | { ok: false; reason: string } {
   if (!isObj(raw)) return { ok: false, reason: 'addWish needs a wish object.' };
   const title = str(raw.title, 160);
   if (!title) return { ok: false, reason: 'A wish needs a title.' };
   const patch = wishPatchFrom({ ...raw, title });
   if (!patch.ok) return patch;
   const p = patch.patch;
+  // v7: a place already found on the map rides along only where the caller
+  // trusts it (the phone's suggestion, the server's approval) — never a model's.
+  let place: WishDraft['place'] = undefined;
+  if (opts.allowPlace && 'place' in raw && raw.place != null) {
+    const parsed = parseWishPatch({ place: raw.place });
+    if (!parsed.ok) return { ok: false, reason: parsed.error };
+    place = parsed.value.place ?? null;
+  }
   return {
     ok: true,
     draft: {
@@ -199,6 +213,7 @@ export function draftFrom(raw: unknown): { ok: true; draft: WishDraft } | { ok: 
       fixedStartMin: p.fixedStartMin ?? null,
       note: p.note ?? null,
       replacesMeal: p.replacesMeal ?? null,
+      ...(place ? { place } : {}),
     },
   };
 }
@@ -206,6 +221,22 @@ export function draftFrom(raw: unknown): { ok: true; draft: WishDraft } | { ok: 
 /** The first stay's position, else any placed wish's: where "near" means for a place search. */
 function nearOf(ctx: OpContext): LatLng | null {
   return ctx.stays[0]?.location ?? ctx.wishes.find((w) => w.place)?.place?.location ?? null;
+}
+
+/**
+ * What a wish's place found by name must be near (./research `withinReach`):
+ * any of the stays — a trip may have more than one city — or, before there
+ * is a stay, the places already on the trip.
+ */
+function anchorsOf(ctx: OpContext): LatLng[] {
+  if (ctx.stays.length) return ctx.stays.map((s) => s.location);
+  return ctx.wishes.flatMap((w) => (w.place ? [w.place.location] : []));
+}
+
+/** A wish's place by name, or null when the map has none near the trip. */
+async function wishPlace(fx: OpEffects, ctx: OpContext, query: string, near: LatLng | null): Promise<PlacedResult | null> {
+  const place = await fx.resolvePlace(query, near);
+  return place && withinReach(place.location, anchorsOf(ctx)) ? place : null;
 }
 
 /**
@@ -348,7 +379,7 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
         break;
       }
       case 'addWish': {
-        const d = draftFrom(raw.wish);
+        const d = draftFrom(raw.wish, { allowPlace: fx.trustsPlaces === true });
         if (!d.ok) {
           reject(raw, d.reason);
           break;
@@ -362,7 +393,11 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
           reject(raw, `“${draft.title}” is already a wish.`);
           break;
         }
-        const place = draft.placeQuery ? await fx.resolvePlace(draft.placeQuery, nearOf(ctx)) : null;
+        // A namesake far from the trip is not found: the wish waits for a place.
+        // A place carried on a suggestion is kept only within reach of the
+        // trip, like one found by name; otherwise its query is looked up.
+        const carried = draft.place && withinReach(draft.place.location, anchorsOf(ctx)) ? draft.place : null;
+        const place = carried ?? (draft.placeQuery ? await wishPlace(fx, ctx, draft.placeQuery, nearOf(ctx)) : null);
         const wish = await fx.addWish({
           title: draft.title,
           priority: draft.priority,
@@ -398,9 +433,9 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
         }
         const patch: WishPatch = { ...p.patch };
         if (p.placeQuery) {
-          const place = await fx.resolvePlace(p.placeQuery, wish.place?.location ?? nearOf(ctx));
+          const place = await wishPlace(fx, ctx, p.placeQuery, wish.place?.location ?? nearOf(ctx));
           if (!place) {
-            reject(raw, `Could not find “${p.placeQuery}” on the map.`);
+            reject(raw, `Could not find “${p.placeQuery}” on the map near the trip.`);
             break;
           }
           patch.place = { name: place.name, location: place.location, osmId: place.osmId, address: place.address };
@@ -505,6 +540,12 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
           break;
         }
         const seg = parsed.value;
+        // "Researched" means found online: times with no source seen are the
+        // planner's own estimate, and say so (never passed off as looked up).
+        if (seg.confidence === 'researched' && !(seg.sources ?? existing?.sources ?? []).length) {
+          seg.confidence = 'estimated';
+          if (adding) seg.checkedAt = null;
+        }
         // Locate each end by name on OpenStreetMap.
         for (const end of ['from', 'to'] as const) {
           const e = seg[end];
@@ -643,7 +684,8 @@ export function parseTransport(
     out[k] = m;
   }
   if (out.departDate && out.arriveDate && out.arriveDate < out.departDate) return { ok: false, reason: 'It arrives before it leaves.' };
-  if ('confidence' in raw || !partial) out.confidence = raw.confidence === 'researched' ? 'researched' : 'stated';
+  // Never 'live' from a model or a form: only a status feed may say that.
+  if ('confidence' in raw || !partial) out.confidence = raw.confidence === 'researched' ? 'researched' : raw.confidence === 'estimated' ? 'estimated' : 'stated';
   if ('bookingRef' in raw) out.bookingRef = str(raw.bookingRef, 40);
   if ('sources' in raw || !partial) {
     out.sources = (Array.isArray(raw.sources) ? raw.sources : [])

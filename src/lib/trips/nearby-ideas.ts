@@ -24,6 +24,8 @@ export interface NearbyCandidate {
   durationMin: number;
   why: string;
   fit: string;
+  /** OSM's `opening_hours` text, when on record — the idea is checked against it. */
+  openingHours: string | null;
 }
 
 /** Straight-line metres between two points (equirectangular; fine at city scale). */
@@ -190,6 +192,7 @@ export function nearbyCandidates(
       durationMin,
       why: `${(KIND_WORD[kind] ?? 'a place').replace(/^./, (c) => c.toUpperCase())} near the way from ${gap.before.title} to ${gap.after.title}, found on OpenStreetMap${diet ? ` (marked ${hints.join('/')} friendly)` : ''}.`,
       fit: `About ${inMin} min walk from ${gap.before.title}, ${durationMin} min for ${gap.meal ? gap.meal : STAGE_WORD[gap.stage]}, ${outMin} min on to ${gap.after.title}.`,
+      openingHours: tags.opening_hours?.trim() || null,
       score,
     });
   }

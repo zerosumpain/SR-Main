@@ -10,6 +10,7 @@
 // person's message is still stored, the reply says the planner is not
 // available, and the forms keep working.
 
+import { checkOptions } from './options.server';
 import { diffPlans } from './changes';
 import { CHECK_SYSTEM, checkPrompt, readCheck, turnDiff } from './check';
 import type { ConverseResult, LatLng, Observation, ResearchStep, SolvedPlan, TripMessage, TripOp } from './model';
@@ -18,6 +19,7 @@ import { gatherProfile, rememberStated, saveProfile } from './profile.server';
 import { travellersOnly } from './profile';
 import { parseLooseJson } from './research';
 import { jsonCall } from './llm.server';
+import { CHECK_CALL_MS } from './limits';
 import { applyOps, knownUrlsOf, readPlannerAnswer, urlsIn, type ApplyResult, type OpEffects } from './ops';
 import { replan } from './plan.server';
 import { plannerMessages, type PlannerContext } from './prompt';
@@ -43,6 +45,9 @@ import {
   updateWish,
   type TripRecord,
 } from './store.server';
+
+/** How long a turn waits for its options to be placed and checked. */
+const OPTIONS_DEADLINE_MS = 20_000;
 
 export const NO_PLANNER =
   'I can’t reach the planning model just now, so I couldn’t act on that. Your message is saved — try again shortly, or change the trip directly in the details.';
@@ -260,6 +265,12 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     })().catch((err) => console.warn('[trips/converse] suggestions failed:', (err as Error)?.message));
   }
 
+  // v7: options offered for an open question, each checked against its day.
+  // At most 20 s: past that the reply goes without them rather than hold the turn.
+  const options = answer.options.length && !changed
+    ? await Promise.race([checkOptions(trip, answer.options).catch(() => []), new Promise<[]>((r) => setTimeout(() => r([]), OPTIONS_DEADLINE_MS))])
+    : [];
+
   const rejectedNote = rejected.length ? `\n\n(Not done: ${rejected.map((r) => r.reason).join(' ')})` : '';
   const reply = await addMessage(trip.id, {
     role: 'assistant',
@@ -280,6 +291,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     changes,
     research: lookups,
     messages: [userMessage, reply],
+    options,
   };
 }
 
@@ -318,7 +330,7 @@ async function checkAndCorrect(
           { role: 'system', content: CHECK_SYSTEM },
           { role: 'user', content: checkPrompt({ request, firstReply, applied: first.applied, diff: turnDiff(before, after, titles), titles }) },
         ],
-        { maxTokens: 1500, timeoutMs: 90_000 },
+        { maxTokens: 1500, timeoutMs: CHECK_CALL_MS },
       ),
     );
   } catch (err) {
@@ -343,13 +355,13 @@ async function checkAndCorrect(
 export async function applyAndReplan(
   trip: TripRecord,
   ops: unknown[],
-  opts: { surface: 'site' | 'phone'; eventText: string },
+  opts: { surface: 'site' | 'phone'; eventText: string; trustedPlaces?: boolean },
 ): Promise<{ applied: ApplyResult['applied']; rejected: ApplyResult['rejected']; planVersion: number | null }> {
   const [state, transport, latest] = await Promise.all([loadState(trip.id), listTransport(trip.id), latestPlan(trip.id)]);
   const result = await applyOps(
     ops,
     { trip, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: knownUrlsOf(state.wishes), transport, profile: trip.profile },
-    effectsFor(trip, null, null),
+    { ...effectsFor(trip, null, null), trustsPlaces: opts.trustedPlaces === true },
   );
   let planVersion = latest?.version ?? null;
   if (result.changed) {

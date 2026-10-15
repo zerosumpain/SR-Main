@@ -65,20 +65,25 @@ export function assembleMode(
   points: RoutePoint[],
   answers: Map<string, PairAnswer>,
   fallback: (a: RoutePoint, b: RoutePoint) => PairAnswer,
-): { seconds: Array<Array<number | null>>; metres: Array<Array<number | null>>; estimatedCells: number } {
+): { seconds: Array<Array<number | null>>; metres: Array<Array<number | null>>; estimatedCells: number; cells: Array<Array<0 | 1>> } {
   let estimatedCells = 0;
   const seconds: Array<Array<number | null>> = [];
   const metres: Array<Array<number | null>> = [];
+  /** 1 where the cell is the fallback estimate, 0 where it was routed. */
+  const cells: Array<Array<0 | 1>> = [];
   for (const a of points) {
     const sRow: Array<number | null> = [];
     const mRow: Array<number | null> = [];
+    const cRow: Array<0 | 1> = [];
     for (const b of points) {
       if (a === b) {
         sRow.push(0);
         mRow.push(0);
+        cRow.push(0);
         continue;
       }
       let hit = answers.get(pairKey(a.location, b.location));
+      cRow.push(hit ? 0 : 1);
       if (!hit) {
         hit = fallback(a, b);
         estimatedCells++;
@@ -88,8 +93,9 @@ export function assembleMode(
     }
     seconds.push(sRow);
     metres.push(mRow);
+    cells.push(cRow);
   }
-  return { seconds, metres, estimatedCells };
+  return { seconds, metres, estimatedCells, cells };
 }
 
 /**
@@ -153,4 +159,37 @@ export function timetableDate(tripStart: LocalDate, today: LocalDate): LocalDate
   let t = p(today) + 86_400_000;
   while (new Date(t).getUTCDay() !== weekday) t += 86_400_000;
   return new Date(t).toISOString().slice(0, 10);
+}
+
+/**
+ * When to ask a timetable about one leg: its own day (or, when that day's
+ * timetable is not yet likely published, the same weekday soon — see
+ * `timetableDate`) at the minute it leaves. A trip's legs are not all at
+ * 10:00 on its first day.
+ */
+export function legDepartIso(date: LocalDate, departMin: number, today: LocalDate, timeZone: string): string {
+  return localToIso(timetableDate(date, today), departMin, timeZone);
+}
+
+/**
+ * The per-trip route cache key. A timetable answer depends on when, so a
+ * transit key carries the hour it was asked for (UTC, from `departIso`); a
+ * walk, cycle or drive route does not change with the hour.
+ */
+export function routeCacheKey(mode: TravelMode, a: LatLng, b: LatLng, departIso: string): string {
+  const pair = `${mode}|${pairKey(a, b)}`;
+  return mode === 'transit' ? `${pair}|${departIso.slice(0, 13)}` : pair;
+}
+
+/** How long a routed answer is kept, and how long a straight-line stand-in for a failed lookup. */
+export const ROUTE_TTL_MS = 30 * 86_400_000;
+export const FALLBACK_TTL_MS = 60 * 60_000;
+
+/**
+ * Whether a cached route may still be used. A stand-in estimate (the router
+ * failed once) is kept an hour, not a month, so a blip is asked again soon.
+ */
+export function routeStillFresh(entry: { at: number; fallback?: boolean } | undefined, now: number): boolean {
+  if (!entry) return false;
+  return now - entry.at < (entry.fallback ? FALLBACK_TTL_MS : ROUTE_TTL_MS);
 }

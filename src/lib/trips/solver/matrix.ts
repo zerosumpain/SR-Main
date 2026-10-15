@@ -110,10 +110,12 @@ export function modeSeconds(
   const row: TravelMode = mode === 'taxi' ? 'drive' : mode;
   const sec = cell(matrix.seconds, row, i, j);
   if (sec === null) return null;
+  // Per cell where the matrix knows (a partly routed mode), else the mode's flag.
+  const known = matrix.cellEstimated?.[row]?.[i]?.[j];
   return {
     seconds: mode === 'taxi' ? taxiSec(sec) : sec,
     metres: cell(matrix.metres, row, i, j),
-    estimated: matrix.estimated[row] ?? false,
+    estimated: known === undefined ? (matrix.estimated[row] ?? false) : known === 1,
   };
 }
 
@@ -203,6 +205,8 @@ export function sliceMatrix(matrix: TravelMatrix, points: string[]): TravelMatri
     const metres = matrix.metres[mode];
     if (metres) out.metres[mode] = idx.map(([, i]) => idx.map(([, j]) => metres[i]?.[j] ?? null));
     if (matrix.estimated[mode] !== undefined) out.estimated[mode] = matrix.estimated[mode];
+    const cells = matrix.cellEstimated?.[mode];
+    if (cells) (out.cellEstimated ??= {})[mode] = idx.map(([, i]) => idx.map(([, j]) => cells[i]?.[j] ?? 1));
   }
   return out;
 }

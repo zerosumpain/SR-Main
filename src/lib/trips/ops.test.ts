@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Booking, Stay, Trip, Wish } from './model';
 import { applyOps, describeOp, knownUrlOrNull, knownUrlsOf, MAX_OPS, readPlannerAnswer, urlsIn, type OpContext, type OpEffects } from './ops';
-import { emptyFacts } from './research';
+import { emptyFacts, PLACE_REACH_M, withinReach } from './research';
 
 const TRIP: Trip = {
   id: 't1', ownerEmail: 'o@example.test', title: 'Rome', destination: 'Rome, Italy', timeZone: 'Europe/Rome',
@@ -48,7 +48,7 @@ function ctx(over: Partial<OpContext> = {}): OpContext {
 describe('readPlannerAnswer', () => {
   it('reads the JSON answer and trims quick replies', () => {
     const r = readPlannerAnswer({ reply: ' Done. ', ops: [{ op: 'research' }], quickReplies: ['Yes', 'Yes', '', 'No', 'Maybe', 'Later', 'Never'] });
-    expect(r).toEqual({ reply: 'Done.', ops: [{ op: 'research' }], quickReplies: ['Yes', 'No', 'Maybe', 'Later'] });
+    expect(r).toEqual({ reply: 'Done.', ops: [{ op: 'research' }], quickReplies: ['Yes', 'No', 'Maybe', 'Later'], options: [] });
   });
   it('always has a reply', () => {
     expect(readPlannerAnswer(null).reply).toMatch(/say that again/);
@@ -58,6 +58,34 @@ describe('readPlannerAnswer', () => {
 });
 
 describe('applyOps', () => {
+  // v7: a place already found on the map (a meal option) survives a parent's
+  // approval, but a model can never hand in coordinates of its own.
+  const armando = { name: 'Armando', location: { lat: 41.899, lng: 12.477 }, osmId: 'node/9', address: null };
+  const mealWish = { title: 'Armando', placeQuery: null, priority: 'must', durationMin: 60, partOfDay: 'any', fixedDate: '2026-10-27', replacesMeal: 'lunch', place: armando };
+
+  it('keeps a found place on a trusted addWish (an approved suggestion)', async () => {
+    const { fx, calls } = fakes();
+    let placed: unknown = null;
+    const trusted: OpEffects = { ...fx, trustsPlaces: true, addWish: async (w) => { placed = w.place; return fx.addWish(w); } };
+    const r = await applyOps([{ op: 'addWish', wish: mealWish }], ctx(), trusted);
+    expect(r.rejected).toEqual([]);
+    expect(placed).toEqual(armando);
+    expect(calls).toEqual(['addWish:Armando:placed']);
+  });
+
+  it('drops a carried place far from the trip, even on a trusted addWish', async () => {
+    const { fx, calls } = fakes();
+    const far = { ...mealWish, place: { ...armando, location: { lat: 40.71, lng: -74.0 } } };
+    await applyOps([{ op: 'addWish', wish: far }], ctx(), { ...fx, trustsPlaces: true });
+    expect(calls).toEqual(['addWish:Armando:unplaced']);
+  });
+
+  it("ignores a model's coordinates: no place without a query to resolve", async () => {
+    const { fx, calls } = fakes();
+    await applyOps([{ op: 'addWish', wish: mealWish }], ctx(), fx);
+    expect(calls).toEqual(['addWish:Armando:unplaced']);
+  });
+
   it('applies in order, so a later op sees an earlier one', async () => {
     const { fx, calls } = fakes();
     const c = ctx({ stays: [], wishes: [] });
@@ -328,3 +356,88 @@ describe('v3: transport, remember and the profile', () => {
     expect(r.rejected.map((x) => x.reason)).toEqual(['updateProfile changed nothing.']);
   });
 });
+
+describe('places found by name are near the trip', () => {
+  // Nominatim's worldwide fallback takes the first hit: a "Pantheon" in Paris
+  // is a namesake, not the place, and must not be planned as if it were.
+  const far = { 'Pantheon, Rome': { lat: 48.8462, lng: 2.3464 }, 'Uffizi, Florence': { lat: 43.7678, lng: 11.2553 } };
+  const pantheon = { title: 'Pantheon', placeQuery: 'Pantheon, Rome', priority: 'must', durationMin: 60, partOfDay: 'any' };
+
+  it('addWish: a place over 100 km from every stay is not found — the wish waits for a place', async () => {
+    const { fx, calls } = fakes(far);
+    const r = await applyOps([{ op: 'addWish', wish: pantheon }], ctx({ wishes: [] }), fx);
+    expect(r.rejected).toEqual([]);
+    expect(calls).toEqual(['addWish:Pantheon:unplaced']);
+  });
+
+  it('addWish: a second city with its own stay is within reach', async () => {
+    const { fx, calls } = fakes(far);
+    const florence: Stay = { ...STAY, id: 's2', name: 'Florence flat', location: { lat: 43.7696, lng: 11.2558 } };
+    await applyOps([{ op: 'addWish', wish: { ...pantheon, title: 'Uffizi', placeQuery: 'Uffizi, Florence' } }], ctx({ stays: [STAY, florence], wishes: [] }), fx);
+    expect(calls).toEqual(['addWish:Uffizi:placed']);
+  });
+
+  it('updateWish: a far place is refused, the wish keeps its own', async () => {
+    const { fx, calls } = fakes(far);
+    const r = await applyOps([{ op: 'updateWish', id: 'w-pan', fields: { placeQuery: 'Pantheon, Rome' } }], ctx(), fx);
+    expect(r.rejected.map((x) => x.reason)).toEqual(['Could not find “Pantheon, Rome” on the map near the trip.']);
+    expect(calls).toEqual([]);
+  });
+
+  it('withinReach: within 300 km of any anchor — a day trip, not another country; nothing to compare with is no refusal', () => {
+    const rome = { lat: 41.895, lng: 12.4716 };
+    expect(withinReach({ lat: 41.75, lng: 12.29 }, [rome])).toBe(true); // Ostia, ~22 km
+    expect(withinReach({ lat: 40.7489, lng: 14.4848 }, [rome])).toBe(true); // Pompeii, ~210 km: a day trip
+    expect(withinReach({ lat: 45.4642, lng: 9.19 }, [rome])).toBe(false); // Milan, ~480 km
+    expect(withinReach({ lat: 39.1, lng: -84.5 }, [rome])).toBe(false); // a Rome-namesake in Ohio's direction
+    expect(withinReach({ lat: 48.85, lng: 2.35 }, [])).toBe(true);
+    expect(withinReach({ lat: 48.85, lng: 2.35 }, [null, undefined])).toBe(true);
+    expect(PLACE_REACH_M).toBe(300_000);
+  });
+});
+
+describe('journey confidence', () => {
+  const seg = (over: Record<string, unknown> = {}) => ({
+    kind: 'flight', direction: 'outbound', carrier: 'Jet2', number: 'LS1235',
+    from: { name: 'Newcastle', code: 'NCL', timeZone: 'Europe/London' }, to: { name: 'Rome Fiumicino', code: 'FCO', timeZone: 'Europe/Rome' },
+    departDate: '2026-10-27', departMin: 420, arriveDate: '2026-10-27', arriveMin: 705, ...over,
+  });
+  const run = async (ops: unknown[], c: Partial<OpContext> = {}) => {
+    const saved: Array<Record<string, unknown>> = [];
+    const { fx } = fakes();
+    const r = await applyOps(ops, ctx(c), {
+      ...fx,
+      addTransport: async (s) => { saved.push(s as never); return { id: 'tr1', ...s }; },
+      updateTransport: async (_id, f) => void saved.push(f as never),
+    });
+    return { r, saved };
+  };
+
+  it('an arrival the planner estimated with no sources is stored as "estimated", never "researched"', async () => {
+    const { saved } = await run([{ op: 'addTransport', segment: seg({ confidence: 'researched', sources: [] }) }]);
+    expect(saved[0]).toMatchObject({ confidence: 'estimated', checkedAt: null, sources: [] });
+    // A source it did not see this turn is dropped, so that is an estimate too.
+    const unseen = await run([{ op: 'addTransport', segment: seg({ confidence: 'researched', sources: [{ url: 'https://invented.example/', title: 'x' }] }) }]);
+    expect(unseen.saved[0]).toMatchObject({ confidence: 'estimated' });
+    const said = await run([{ op: 'addTransport', segment: seg({ confidence: 'estimated' }) }]);
+    expect(said.saved[0]).toMatchObject({ confidence: 'estimated' });
+  });
+
+  it('researched with a source seen stays researched; a model can never claim live', async () => {
+    const known = new Set(['https://aerodatabox.com/']);
+    const { saved } = await run([{ op: 'addTransport', segment: seg({ confidence: 'researched', sources: [{ url: 'https://aerodatabox.com/', title: 'AeroDataBox' }] }) }], { knownUrls: known });
+    expect(saved[0]).toMatchObject({ confidence: 'researched' });
+    expect(typeof saved[0].checkedAt).toBe('string');
+    const live = await run([{ op: 'addTransport', segment: seg({ confidence: 'live' }) }]);
+    expect(live.saved[0]).toMatchObject({ confidence: 'stated' });
+  });
+
+  it('an update to "researched" keeps it only when the journey already has sources', async () => {
+    const base = { id: 'tr1', ...seg(), from: { ...seg().from, location: null }, to: { ...seg().to, location: null }, confidence: 'stated', status: null, delayMin: null, bookingRef: null, checkedAt: null } as never as import('./model').TransportSegment;
+    const none = await run([{ op: 'updateTransport', id: 'tr1', fields: { confidence: 'researched' } }], { transport: [{ ...base, sources: [] }] });
+    expect(none.saved[0]).toMatchObject({ confidence: 'estimated' });
+    const some = await run([{ op: 'updateTransport', id: 'tr1', fields: { confidence: 'researched' } }], { transport: [{ ...base, sources: [{ url: 'https://aerodatabox.com/', title: null }] }] });
+    expect(some.saved[0]).toMatchObject({ confidence: 'researched' });
+  });
+});
+

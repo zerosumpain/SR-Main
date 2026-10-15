@@ -24,7 +24,7 @@ import { DAY_STAGE_LABEL, type DayStage, type ResearchStep, type Stay, type Wish
 import { dietaryHints, elementsFromNominatim, gapCentre, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM, nominatimTerms, viewboxAround, type NearbyCandidate } from './nearby-ideas';
 import { solverInput } from './plan.server';
 import { profileText, travellersOnly } from './profile';
-import { parseLooseJson } from './research';
+import { emptyFacts, parseLooseJson, withinReach } from './research';
 import { findPlaceLoosely, nominatimAround, overpass } from './research.server';
 import { latestPlan, listTransport, type TripRecord } from './store.server';
 
@@ -97,7 +97,10 @@ export async function findIdeas(
   const baseline = solveTrip(input);
   const ideas: Idea[] = [];
   const rejected: IdeasResult['rejected'] = [];
-  const asWish = (id: string, title: string, durationMin: number, place: Wish['place'], partOfDay: Wish['partOfDay']): Wish => ({
+  // The candidate's own OSM hours (as ./meals reads them), so an idea that is
+  // closed at that time is turned down with a reason; no text = unknown.
+  const hoursFacts = (text: string | null | undefined): Wish['facts'] => (text ? { ...emptyFacts('brief', null), openingHoursText: text } : null);
+  const asWish = (id: string, title: string, durationMin: number, place: Wish['place'], partOfDay: Wish['partOfDay'], facts: Wish['facts'] = null): Wish => ({
     id,
     title,
     place,
@@ -109,21 +112,23 @@ export async function findIdeas(
     locked: false,
     suggested: false,
     skipped: false,
-    facts: null,
+    facts,
     note: null,
     sortHint: 0,
     replacesMeal: gap.meal,
   });
 
   for (const [i, d] of planned.drafts.entries()) {
-    const found = await (deps.place ?? findPlaceLoosely)(d.placeQuery, trip.destination, gap.before.location ?? gap.after.location).catch(() => null);
+    const hit = await (deps.place ?? findPlaceLoosely)(d.placeQuery, trip.destination, gap.before.location ?? gap.after.location).catch(() => null);
+    // A namesake far from the gap and every stay is not the place (./research `withinReach`).
+    const found = hit && withinReach(hit.location, [gap.before.location, gap.after.location, ...state.stays.map((s) => s.location)]) ? hit : null;
     if (!found) {
-      rejected.push({ title: d.title, reason: `“${d.placeQuery}” was not found on the map.` });
+      rejected.push({ title: d.title, reason: `“${d.placeQuery}” was not found on the map near there.` });
       continue;
     }
     const draft = ideaDraft(d, gap);
     const place = { name: found.name, location: found.location, osmId: found.osmId, address: found.address };
-    const verdict = verifyIdea(input, asWish(`idea:${i}`, d.title, d.durationMin, place, draft.partOfDay), gap, baseline);
+    const verdict = verifyIdea(input, asWish(`idea:${i}`, d.title, d.durationMin, place, draft.partOfDay, hoursFacts(found.openingHoursText)), gap, baseline);
     if (verdict.fits || verdict.pushesOut.length) ideas.push({ title: d.title, why: d.why, fit: d.fit, wish: { ...draft, place }, verdict, source: 'planner' });
     else rejected.push({ title: d.title, reason: verdict.reason ?? 'It does not fit.' });
   }
@@ -138,7 +143,7 @@ export async function findIdeas(
     for (const [i, c] of near.candidates.entries()) {
       if (ideas.filter((x) => x.verdict.fits).length >= 3 || i >= NEARBY_VERIFY_MAX) break;
       const draft = ideaDraft({ title: c.title, placeQuery: c.title, durationMin: c.durationMin, why: c.why, fit: c.fit }, gap);
-      const verdict = verifyIdea(input, asWish(`nearby:${i}`, c.title, c.durationMin, c.place, draft.partOfDay), gap, baseline);
+      const verdict = verifyIdea(input, asWish(`nearby:${i}`, c.title, c.durationMin, c.place, draft.partOfDay, hoursFacts(c.openingHours)), gap, baseline);
       if (verdict.fits) ideas.push({ title: c.title, why: c.why, fit: c.fit, wish: { ...draft, placeQuery: `${c.title}, ${trip.destination}`, place: c.place }, verdict, source: 'nearby' });
       else turnedDown.push({ title: c.title, reason: verdict.reason ?? 'It does not fit.' });
     }
@@ -178,7 +183,8 @@ export async function findIdeas(
 
 // ── The planner's turn (v6: smaller budget, a deadline, one JSON repair) ────
 
-/** The ideas turn must leave room for the fallback inside the 150 s job cap. */
+/** The ideas turn must leave room for the fallback inside the job cap
+ * (and the phone's wait, now just past the cap). */
 export const IDEAS_PLANNER_MS = 75_000;
 /** At most this many nearby candidates are dry-run with the solver. */
 const NEARBY_VERIFY_MAX = 8;

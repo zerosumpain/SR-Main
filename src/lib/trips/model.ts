@@ -11,6 +11,8 @@
 // constraints and re-plans.
 
 /** A point. Always lat/lng objects on the wire — never an unlabelled pair. */
+import type { PlanOption } from './options';
+
 export interface LatLng {
   lat: number;
   lng: number;
@@ -218,6 +220,58 @@ export interface PlannedStop {
   warnings: string[];
   /** v4: which part of the day this stop belongs to. Set by the solver. */
   stage?: DayStage;
+  /**
+   * v7: a lunch or dinner with no place yet — up to three real places near
+   * where you will be, open then (./meals). Bundle only, never solved on.
+   */
+  mealOptions?: MealOption[];
+}
+
+/** v7: a real place to eat for a planned meal, from OpenStreetMap. */
+export interface MealOption {
+  /** Its OSM id, `node/123`. */
+  id: string;
+  name: string;
+  kind: 'restaurant' | 'cafe';
+  /** "Italian, pizza" — from OSM's cuisine tag; null when not on record. */
+  cuisine: string | null;
+  place: { name: string; location: LatLng; osmId: string | null; address: string | null };
+  /** Minutes on foot from the stop before (straight-line estimate). */
+  walkMin: number;
+  walkFrom: string;
+  /** "Open 12:00–15:00" that day; null when its hours are not on record. */
+  openText: string | null;
+  /** True when its own hours say it is open for the meal. */
+  openKnown: boolean;
+  website: string | null;
+  phone: string | null;
+  /** Dietary tags it carries that the family asked for ("vegetarian"). */
+  diet: string[];
+  outdoorSeating: boolean;
+  wheelchair: boolean | null;
+  wikidata: string | null;
+  /** One line: what, how far, when it is open. */
+  why: string;
+  source: 'OpenStreetMap';
+}
+
+/**
+ * v7: a photograph of a place, from Wikimedia Commons by its Wikidata entry
+ * — free to show with its credit and licence, which always travel with it.
+ */
+export interface PlaceImage {
+  /** A ~800 px wide JPEG/PNG on upload.wikimedia.org. */
+  url: string;
+  width: number | null;
+  height: number | null;
+  /** The author, plain text ("Jane Smith"); null when Commons has none. */
+  credit: string | null;
+  /** "CC BY-SA 4.0", "Public domain". */
+  license: string | null;
+  /** The file's Commons page, for the credit link. */
+  sourceUrl: string;
+  /** The Wikidata entry it came from, `Q123`. */
+  wikidata: string;
 }
 
 export interface PlannedLeg {
@@ -260,8 +314,15 @@ export interface TravelMatrix {
   points: string[];
   seconds: Partial<Record<TravelMode, Array<Array<number | null>>>>;
   metres: Partial<Record<TravelMode, Array<Array<number | null>>>>;
-  /** Which modes were routed vs estimated. */
+  /** Which modes were routed vs estimated (true = at least one cell estimated). */
   estimated: Partial<Record<TravelMode, boolean>>;
+  /**
+   * Server only, never on the wire (./bundle `wireMatrix`): for a mode that
+   * is partly routed, which cells were estimated (1) or routed (0), aligned
+   * with `seconds`, so each leg says truly whether it was routed. Absent =
+   * the mode's `estimated` flag holds for every cell.
+   */
+  cellEstimated?: Partial<Record<TravelMode, Array<Array<0 | 1>>>>;
 }
 
 export interface SolvedPlan {
@@ -374,6 +435,34 @@ export interface TripGuide {
   transitTickets: string | null;
   tips: string[];
   generatedAt: string;
+  /** v7: the city primer — customs, money, a few words, safety (./guidance `readPrimer`). */
+  primer?: CityPrimer | null;
+  /** v7: the neighbourhoods the trip's places are in, each with its feel in a line. */
+  neighbourhoods?: Neighbourhood[];
+  /** v7: when a primer was last tried and came back empty (so it is not retried on every re-plan). */
+  primerTriedAt?: string | null;
+}
+
+/** v7: what a visitor should know before arriving, written from search results and stable facts. */
+export interface CityPrimer {
+  /** "Churches ask for covered shoulders and knees." ≤ 5. */
+  customs: string[];
+  /** Cash or card, tipping, in a sentence or two. */
+  money: string | null;
+  /** A few words of the language: ≤ 8, the local phrase and what it means. */
+  phrases: Array<{ local: string; meaning: string }>;
+  /** Plain, proportionate: pickpockets on the 64 bus, not a list of fears. */
+  safety: string | null;
+  sources: Array<{ url: string; title: string | null }>;
+}
+
+/** v7: an area of the city the trip goes to, and which of its places are there. */
+export interface Neighbourhood {
+  name: string;
+  /** Its feel, in one line. */
+  line: string;
+  /** Titles of the trip's places in it. */
+  places: string[];
 }
 
 /**
@@ -407,6 +496,12 @@ export interface WishDraft {
   fixedStartMin: number | null;
   note: string | null;
   replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null;
+  /**
+   * v7: a place already found on the map (a meal option, a nearby idea) —
+   * kept only on the phone's suggestion route and the server's own approval
+   * of it, never from a model's op: a model's place is a query to resolve.
+   */
+  place?: { name: string; location: LatLng; osmId: string | null; address: string | null } | null;
 }
 
 /**
@@ -444,6 +539,8 @@ export interface ConverseResult {
   changes: string[];
   /** v3: what the planner looked up this turn. */
   research?: ResearchStep[];
+  /** v7: choices offered for an open question, each checked against its day (./options). */
+  options?: PlanOption[];
 }
 
 /** What the phone saw that made it think the person is off the plan. */
@@ -500,8 +597,12 @@ export interface TransportSegment {
   /** Local to `to.timeZone`. */
   arriveDate: LocalDate;
   arriveMin: number;
-  /** How sure we are of the times. 'stated' = the person said; 'researched' = found online; 'live' = a status feed on the day. */
-  confidence: 'stated' | 'researched' | 'live';
+  /**
+   * How sure we are of the times. 'stated' = the person said; 'researched' =
+   * found online (it has sources); 'estimated' = the planner's own estimate
+   * from the usual journey time, nothing found; 'live' = a status feed on the day.
+   */
+  confidence: 'stated' | 'researched' | 'estimated' | 'live';
   /** Live status when known: delays move the arrival day's start. */
   status: 'scheduled' | 'delayed' | 'departed' | 'landed' | 'cancelled' | null;
   /** Minutes late per the latest status, when known. */

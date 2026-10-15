@@ -286,7 +286,7 @@
           <summary>Facts · checked {checked(w.facts.checkedAt)} · {w.facts.depth}{w.facts.unknown.length ? ` · ${w.facts.unknown.length} unknown` : ''}</summary>
           {#if w.facts.summary}<p>{w.facts.summary}</p>{/if}
           <dl>
-            <dt>Opening hours</dt><dd>{w.facts.openingHoursText ?? 'unknown'}</dd>
+            <dt>Opening hours</dt><dd>{w.facts.openingHoursText ?? (w.facts.hours ? 'from the web — see the sources' : 'unknown')}</dd>
             <dt>Booking</dt><dd>{w.facts.bookingRequired === null ? 'unknown' : w.facts.bookingRequired ? 'required' : 'not needed'}{w.facts.bookAheadDays !== null ? ` · book ${w.facts.bookAheadDays} days ahead` : ''}</dd>
             <dt>Price</dt><dd>{w.facts.priceText ?? 'unknown'}</dd>
             <dt>Typical visit</dt><dd>{w.facts.typicalVisitSec ? `${Math.round(w.facts.typicalVisitSec / 60)} min` : 'unknown'}</dd>
