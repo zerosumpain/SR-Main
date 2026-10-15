@@ -388,3 +388,48 @@ describe('places found by name are near the trip', () => {
   });
 });
 
+describe('journey confidence', () => {
+  const seg = (over: Record<string, unknown> = {}) => ({
+    kind: 'flight', direction: 'outbound', carrier: 'Jet2', number: 'LS1235',
+    from: { name: 'Newcastle', code: 'NCL', timeZone: 'Europe/London' }, to: { name: 'Rome Fiumicino', code: 'FCO', timeZone: 'Europe/Rome' },
+    departDate: '2026-10-27', departMin: 420, arriveDate: '2026-10-27', arriveMin: 705, ...over,
+  });
+  const run = async (ops: unknown[], c: Partial<OpContext> = {}) => {
+    const saved: Array<Record<string, unknown>> = [];
+    const { fx } = fakes();
+    const r = await applyOps(ops, ctx(c), {
+      ...fx,
+      addTransport: async (s) => { saved.push(s as never); return { id: 'tr1', ...s }; },
+      updateTransport: async (_id, f) => void saved.push(f as never),
+    });
+    return { r, saved };
+  };
+
+  it('an arrival the planner estimated with no sources is stored as "estimated", never "researched"', async () => {
+    const { saved } = await run([{ op: 'addTransport', segment: seg({ confidence: 'researched', sources: [] }) }]);
+    expect(saved[0]).toMatchObject({ confidence: 'estimated', checkedAt: null, sources: [] });
+    // A source it did not see this turn is dropped, so that is an estimate too.
+    const unseen = await run([{ op: 'addTransport', segment: seg({ confidence: 'researched', sources: [{ url: 'https://invented.example/', title: 'x' }] }) }]);
+    expect(unseen.saved[0]).toMatchObject({ confidence: 'estimated' });
+    const said = await run([{ op: 'addTransport', segment: seg({ confidence: 'estimated' }) }]);
+    expect(said.saved[0]).toMatchObject({ confidence: 'estimated' });
+  });
+
+  it('researched with a source seen stays researched; a model can never claim live', async () => {
+    const known = new Set(['https://aerodatabox.com/']);
+    const { saved } = await run([{ op: 'addTransport', segment: seg({ confidence: 'researched', sources: [{ url: 'https://aerodatabox.com/', title: 'AeroDataBox' }] }) }], { knownUrls: known });
+    expect(saved[0]).toMatchObject({ confidence: 'researched' });
+    expect(typeof saved[0].checkedAt).toBe('string');
+    const live = await run([{ op: 'addTransport', segment: seg({ confidence: 'live' }) }]);
+    expect(live.saved[0]).toMatchObject({ confidence: 'stated' });
+  });
+
+  it('an update to "researched" keeps it only when the journey already has sources', async () => {
+    const base = { id: 'tr1', ...seg(), from: { ...seg().from, location: null }, to: { ...seg().to, location: null }, confidence: 'stated', status: null, delayMin: null, bookingRef: null, checkedAt: null } as never as import('./model').TransportSegment;
+    const none = await run([{ op: 'updateTransport', id: 'tr1', fields: { confidence: 'researched' } }], { transport: [{ ...base, sources: [] }] });
+    expect(none.saved[0]).toMatchObject({ confidence: 'estimated' });
+    const some = await run([{ op: 'updateTransport', id: 'tr1', fields: { confidence: 'researched' } }], { transport: [{ ...base, sources: [{ url: 'https://aerodatabox.com/', title: null }] }] });
+    expect(some.saved[0]).toMatchObject({ confidence: 'researched' });
+  });
+});
+

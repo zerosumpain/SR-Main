@@ -535,6 +535,12 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
           break;
         }
         const seg = parsed.value;
+        // "Researched" means found online: times with no source seen are the
+        // planner's own estimate, and say so (never passed off as looked up).
+        if (seg.confidence === 'researched' && !(seg.sources ?? existing?.sources ?? []).length) {
+          seg.confidence = 'estimated';
+          if (adding) seg.checkedAt = null;
+        }
         // Locate each end by name on OpenStreetMap.
         for (const end of ['from', 'to'] as const) {
           const e = seg[end];
@@ -673,7 +679,8 @@ export function parseTransport(
     out[k] = m;
   }
   if (out.departDate && out.arriveDate && out.arriveDate < out.departDate) return { ok: false, reason: 'It arrives before it leaves.' };
-  if ('confidence' in raw || !partial) out.confidence = raw.confidence === 'researched' ? 'researched' : 'stated';
+  // Never 'live' from a model or a form: only a status feed may say that.
+  if ('confidence' in raw || !partial) out.confidence = raw.confidence === 'researched' ? 'researched' : raw.confidence === 'estimated' ? 'estimated' : 'stated';
   if ('bookingRef' in raw) out.bookingRef = str(raw.bookingRef, 40);
   if ('sources' in raw || !partial) {
     out.sources = (Array.isArray(raw.sources) ? raw.sources : [])

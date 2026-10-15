@@ -565,8 +565,12 @@ export interface TransportSegment {
   /** Local to `to.timeZone`. */
   arriveDate: LocalDate;
   arriveMin: number;
-  /** How sure we are of the times. 'stated' = the person said; 'researched' = found online; 'live' = a status feed on the day. */
-  confidence: 'stated' | 'researched' | 'live';
+  /**
+   * How sure we are of the times. 'stated' = the person said; 'researched' =
+   * found online (it has sources); 'estimated' = the planner's own estimate
+   * from the usual journey time, nothing found; 'live' = a status feed on the day.
+   */
+  confidence: 'stated' | 'researched' | 'estimated' | 'live';
   /** Live status when known: delays move the arrival day's start. */
   status: 'scheduled' | 'delayed' | 'departed' | 'landed' | 'cancelled' | null;
   /** Minutes late per the latest status, when known. */

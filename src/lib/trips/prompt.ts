@@ -49,7 +49,7 @@ Answer ONLY with one JSON object:
   {"op":"addBooking","booking":{"wishId","title","date","startMin","endMin","reference","url","documentId":null,"status" ("to-book"|"booked"|"cancelled")}}
   {"op":"updateBooking","id","fields":{"status"?,"reference"?,"date"?,"startMin"?,"endMin"?,"url"?}}
   {"op":"research","wishIds":[...],"depth":"brief"|"deep"}
-  {"op":"addTransport","segment":{"kind" ("flight"|"train"|"coach"|"ferry"|"car"),"direction" ("outbound"|"return"|"internal"),"carrier","number","from":{"name","code" (IATA/station code or null),"timeZone"},"to":{"name","code","timeZone"},"departDate","departMin","arriveDate","arriveMin" (each LOCAL to its own end),"confidence" ("stated"|"researched"),"bookingRef","sources":[{"url","title"}] (only URLs you saw this turn)}}
+  {"op":"addTransport","segment":{"kind" ("flight"|"train"|"coach"|"ferry"|"car"),"direction" ("outbound"|"return"|"internal"),"carrier","number","from":{"name","code" (IATA/station code or null),"timeZone"},"to":{"name","code","timeZone"},"departDate","departMin","arriveDate","arriveMin" (each LOCAL to its own end),"confidence" ("stated"|"researched"|"estimated"),"bookingRef","sources":[{"url","title"}] (only URLs you saw this turn)}}
   {"op":"updateTransport","id","fields":{...any of the segment's fields}}
   {"op":"removeTransport","id"}
   {"op":"remember","text": the lasting preference in one sentence,"category" ("preferences"|"people"|"health"|"places")}
