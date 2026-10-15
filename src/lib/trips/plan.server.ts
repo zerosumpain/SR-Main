@@ -12,7 +12,7 @@ import { bundleEtag, canonicalJson, dayMatrices, sha256, stayPoint, type TripBun
 import { diffPlans, keepRunningDay, replaceDay } from './changes';
 import type { LocalDate, Observation, PlannedDay, PlanSource, ReplanOption, SolvedPlan, TripAccess, TripEvent, TripReplanOption } from './model';
 import { startGuidance, withGuidance } from './guidance.server';
-import { tripImages } from './images.server';
+import { startImages, tripImages } from './images.server';
 import { withMealOptions } from './meals';
 import { mealsPending, readMealOptions, startMeals } from './meals.server';
 import { jsonCall } from './llm.server';
@@ -256,6 +256,7 @@ export async function tripBundle(
   // A plan read before its meals (or photos) were looked up starts that now;
   // the next refresh carries them.
   if (latest && (await mealsPending(trip.id, latest.plan))) startMeals(trip, latest.plan);
+  else if (latest) startImages(trip.id, state.wishes, Object.values(meals).flat());
   const images = await tripImages(trip.id, state.wishes, Object.values(meals).flat());
   const replaces = new Map(state.wishes.filter((w) => w.replacesMeal).map((w) => [w.id, w.replacesMeal as 'breakfast' | 'lunch' | 'dinner']));
   const body: Omit<TripBundle, 'etag'> = {
