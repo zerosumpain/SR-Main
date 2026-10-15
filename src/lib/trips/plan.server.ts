@@ -11,7 +11,7 @@ import { solveTrip, replanDay, replanTrip } from '$lib/trips/solver';
 import { bundleEtag, canonicalJson, dayMatrices, sha256, stayPoint, type TripBundle, type WireTrip } from './bundle';
 import { diffPlans, keepRunningDay, replaceDay } from './changes';
 import type { LocalDate, Observation, PlannedDay, PlanSource, ReplanOption, SolvedPlan, TripAccess, TripEvent, TripReplanOption } from './model';
-import { startGuidance, withGuidance } from './guidance.server';
+import { bundleGuidance, startGuidance } from './guidance.server';
 import { startImages, tripImages } from './images.server';
 import { withMealOptions } from './meals';
 import { mealsPending, readMealOptions, startMeals } from './meals.server';
@@ -252,7 +252,9 @@ export async function tripBundle(
   // Each leg carries its walk / public transport / taxi alternatives (v5),
   // and each meal with no place its real options nearby (v7).
   const meals = latest ? await readMealOptions(trip.id, latest.plan) : {};
-  const plan = latest ? withMealOptions(withAlternatives(await withGuidance(trip.id, latest.plan), latest.matrix), meals) : null;
+  // Guidance as cached; a day from today on that lacks it starts a background
+  // run (not only today and tomorrow), so later days have directions too.
+  const plan = latest ? withMealOptions(withAlternatives(await bundleGuidance(trip, latest.plan, state.wishes), latest.matrix), meals) : null;
   // A plan read before its meals (or photos) were looked up starts that now;
   // the next refresh carries them.
   if (latest && (await mealsPending(trip.id, latest.plan))) startMeals(trip, latest.plan);

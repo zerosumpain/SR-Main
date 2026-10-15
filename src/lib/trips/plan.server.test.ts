@@ -25,6 +25,7 @@ vi.mock('./images.server', () => ({ tripImages: vi.fn(async () => ({})), startIm
 vi.mock('./guidance.server', () => ({
   startGuidance: () => void h.guidanceRuns++,
   withGuidance: async (_t: string, plan: unknown) => plan,
+  bundleGuidance: async (_t: unknown, plan: unknown) => plan,
 }));
 vi.mock('./llm.server', () => ({
   jsonCall: async (_w: string, messages: unknown[]) => {

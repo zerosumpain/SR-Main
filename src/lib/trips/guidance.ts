@@ -10,7 +10,7 @@
 // D1 still holds: nothing here carries a Mapbox-derived figure. Durations come
 // from the stored plan (openrouteservice, Transitous or the estimate).
 
-import type { Facts, GuideLink, LatLng, LegGuidance, LocalDate, PlannedDay, PlannedLeg, SolvedPlan, StopGuide, TravelMode, TripGuide } from './model';
+import type { Facts, GuideLink, LatLng, LegGuidance, LocalDate, PlannedDay, PlannedLeg, SolvedPlan, StopGuide, TravelMode, Trip, TripGuide, Wish } from './model';
 import { officialOnly } from './research';
 import { pairKey } from './routing';
 
@@ -67,6 +67,55 @@ export function guidanceDates(plan: SolvedPlan, today: LocalDate): LocalDate[] {
   const dates = plan.days.map((d) => d.date);
   const from = dates.findIndex((d) => d >= today);
   return from < 0 ? [] : dates.slice(from, from + 2);
+}
+
+// ── When guidance is due ───────────────────────────────────────────────────
+
+/** A city guide older than this is refreshed — but only as the trip comes near. */
+export const TRIP_GUIDE_MAX_AGE_DAYS = 30;
+export const TRIP_GUIDE_REFRESH_WITHIN_DAYS = 10;
+const DAY_MS = 86_400_000;
+
+/**
+ * Whether a wish needs its stop guide (re)made: it has none, or its facts were
+ * checked after the guide was written (new hours, a closure, a booking rule).
+ * An unreadable time is no reason to spend a model call.
+ */
+export function stopGuideNeeded(wish: Pick<Wish, 'guide' | 'facts'>): boolean {
+  if (!wish.guide) return true;
+  const checked = Date.parse(wish.facts?.checkedAt ?? '');
+  const made = Date.parse(wish.guide.generatedAt);
+  return Number.isFinite(checked) && Number.isFinite(made) && checked > made;
+}
+
+/**
+ * Whether the city guide needs making: none yet, or older than 30 days while
+ * the trip starts within 10 days (and is not over). A far-off trip keeps its
+ * guide until then; a refresh closer to the time catches changed fares.
+ */
+export function tripGuideNeeded(trip: Pick<Trip, 'startDate' | 'endDate'> & { guide?: TripGuide | null }, today: LocalDate, now: Date = new Date()): boolean {
+  if (!trip.guide) return true;
+  const made = Date.parse(trip.guide.generatedAt);
+  if (!Number.isFinite(made) || now.getTime() - made <= TRIP_GUIDE_MAX_AGE_DAYS * DAY_MS) return false;
+  if (today > trip.endDate) return false;
+  return (Date.parse(`${trip.startDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS <= TRIP_GUIDE_REFRESH_WITHIN_DAYS;
+}
+
+/**
+ * The days from today on that still lack leg guidance or a stop guide, in
+ * date order — what a bundle read should start a background run for. Past
+ * days are left alone.
+ */
+export function guidanceDue(plan: SolvedPlan, cache: GuidanceCache, wishes: Array<Pick<Wish, 'id' | 'guide' | 'facts'>>, today: LocalDate): LocalDate[] {
+  const byId = new Map(wishes.map((w) => [w.id, w]));
+  const upcoming = plan.days.filter((d) => d.date >= today);
+  const lacking = new Set(legsLacking(plan, upcoming.map((d) => d.date), cache).map((x) => x.day.date));
+  const needsStopGuide = (d: PlannedDay) =>
+    d.stops.some((s) => {
+      const w = s.wishId ? byId.get(s.wishId) : undefined;
+      return !!w && stopGuideNeeded(w);
+    });
+  return upcoming.filter((d) => lacking.has(d.date) || needsStopGuide(d)).map((d) => d.date);
 }
 
 // ── Walking steps ──────────────────────────────────────────────────────────
