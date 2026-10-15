@@ -16,6 +16,12 @@ const h = vi.hoisted(() => ({
   model: null as null | ((messages: unknown[]) => unknown),
 }));
 
+vi.mock('./meals.server', () => ({
+  startMeals: vi.fn(),
+  readMealOptions: vi.fn(async () => ({})),
+  mealsPending: vi.fn(async () => false),
+}));
+vi.mock('./images.server', () => ({ tripImages: vi.fn(async () => ({})), startImages: vi.fn() }));
 vi.mock('./guidance.server', () => ({
   startGuidance: () => void h.guidanceRuns++,
   withGuidance: async (_t: string, plan: unknown) => plan,
@@ -239,6 +245,17 @@ describe('the phone', () => {
     expect(stored.days[3].stops.some((s) => s.id === 'here:2026-10-30:700')).toBe(true);
     expect(h.guidanceRuns).toBe(2);
     expect(await storePhoneDays(trip(), [])).toBeNull();
+  });
+
+  it('never stores the meal options a phone day carries back (v7)', async () => {
+    await replan(trip());
+    const before = h.plans[0].plan as SolvedPlan;
+    const option = { id: 'node/1', name: 'Armando', kind: 'restaurant' as const, cuisine: 'Italian', place: { name: 'Armando', location: { lat: 41.9, lng: 12.47 }, osmId: 'node/1', address: null }, walkMin: 2, walkFrom: 'Pantheon', openText: null, openKnown: false, website: null, phone: null, diet: [], outdoorSeating: false, wheelchair: null, wikidata: null, why: 'x', source: 'OpenStreetMap' as const };
+    const day = { ...before.days[1], warnings: ['phone'], stops: before.days[1].stops.map((st) => ({ ...st, mealOptions: [option] })) };
+    await storePhoneDays(trip(), [day]);
+    const stored = h.plans[h.plans.length - 1].plan as SolvedPlan;
+    expect(stored.days[1].warnings).toEqual(['phone']);
+    expect(JSON.stringify(stored)).not.toContain('mealOptions');
   });
 });
 

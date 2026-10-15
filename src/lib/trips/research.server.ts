@@ -125,8 +125,8 @@ export async function findPlace(query: string, near: LatLng | null): Promise<Osm
   return placeFromNominatim(rows[0]);
 }
 
-/** OSM tags for a place we already have, by its id (`node/123`). */
-async function lookupPlace(osmId: string): Promise<OsmPlace | null> {
+/** OSM tags for a place we already have, by its id (`node/123`). v7: also for its Wikidata entry (./images.server). */
+export async function lookupPlace(osmId: string): Promise<OsmPlace | null> {
   const m = /^(node|way|relation)\/(\d+)$/.exec(osmId);
   if (!m) return null;
   const rows = await nominatim('/lookup', { osm_ids: `${m[1][0].toUpperCase()}${m[2]}` });

@@ -21,6 +21,7 @@ import type {
   TripAccess,
   TripSuggestion,
   DayFullness,
+  PlaceImage,
   Wish,
 } from './model';
 
@@ -80,6 +81,11 @@ export interface TripBundle {
   suggestions: TripSuggestion[];
   /** v5: how full each day is. */
   fullness: Record<LocalDate, DayFullness>;
+  /**
+   * v7: photographs of the trip's places, by wish id — and of meal options,
+   * by their OSM id — from Wikimedia Commons, each with its credit.
+   */
+  images?: Record<string, PlaceImage>;
   etag: string;
 }
 

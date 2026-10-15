@@ -12,6 +12,9 @@ import { bundleEtag, canonicalJson, dayMatrices, sha256, stayPoint, type TripBun
 import { diffPlans, keepRunningDay, replaceDay } from './changes';
 import type { LocalDate, Observation, PlannedDay, PlanSource, ReplanOption, SolvedPlan, TripAccess, TripEvent, TripReplanOption } from './model';
 import { startGuidance, withGuidance } from './guidance.server';
+import { tripImages } from './images.server';
+import { withMealOptions } from './meals';
+import { mealsPending, readMealOptions, startMeals } from './meals.server';
 import { jsonCall } from './llm.server';
 import { planFullness, wireTravellers, withAlternatives } from './family';
 import { NARRATIVE_SYSTEM, planSummary } from './prompt';
@@ -125,6 +128,8 @@ export async function replan(
   const stored = await appendPlan(trip.id, { source, inputHash, plan, matrix: input.matrix, changes });
   // Guidance for today and the next day, in the background (cached per leg).
   startGuidance(trip.ownerEmail, trip.id);
+  // v7: real places for the meals, and the places' photographs.
+  startMeals(trip, stored.plan);
   return { plan: stored, created: true };
 }
 
@@ -150,7 +155,10 @@ export async function replanOptions(trip: TripRecord, body: ReplanBody): Promise
 export async function storePhoneDays(trip: TripRecord, days: PlannedDay[]): Promise<StoredPlan | null> {
   const previous = await latestPlan(trip.id);
   if (!previous || !days.length) return null;
-  const plan = days.reduce((p, d) => replaceDay(p, d), previous.plan);
+  // A day back from the phone carries the meal options it was sent (v7):
+  // those are the bundle's decoration, not the plan's, and are not stored.
+  const bare = days.map((d) => ({ ...d, stops: d.stops.map(({ mealOptions: _m, ...s }) => s) }));
+  const plan = bare.reduce((p, d) => replaceDay(p, d), previous.plan);
   const { wishes } = await loadState(trip.id);
   const changes = diffPlans(previous.plan, plan, titlesOf(wishes))
     .filter((t) => t !== 'No change to the schedule.')
@@ -163,6 +171,7 @@ export async function storePhoneDays(trip: TripRecord, days: PlannedDay[]): Prom
     changes: changes.length ? changes : ['Changed on the phone — times only.'],
   });
   startGuidance(trip.ownerEmail, trip.id);
+  startMeals(trip, stored.plan);
   return stored;
 }
 
@@ -240,8 +249,14 @@ export async function tripBundle(
     listTransport(trip.id),
     listSuggestions(trip.id),
   ]);
-  // Each leg carries its walk / public transport / taxi alternatives (v5).
-  const plan = latest ? withAlternatives(await withGuidance(trip.id, latest.plan), latest.matrix) : null;
+  // Each leg carries its walk / public transport / taxi alternatives (v5),
+  // and each meal with no place its real options nearby (v7).
+  const meals = latest ? await readMealOptions(trip.id, latest.plan) : {};
+  const plan = latest ? withMealOptions(withAlternatives(await withGuidance(trip.id, latest.plan), latest.matrix), meals) : null;
+  // A plan read before its meals (or photos) were looked up starts that now;
+  // the next refresh carries them.
+  if (latest && (await mealsPending(trip.id, latest.plan))) startMeals(trip, latest.plan);
+  const images = await tripImages(trip.id, state.wishes, Object.values(meals).flat());
   const replaces = new Map(state.wishes.filter((w) => w.replacesMeal).map((w) => [w.id, w.replacesMeal as 'breakfast' | 'lunch' | 'dinner']));
   const body: Omit<TripBundle, 'etag'> = {
     trip: wireTrip(trip, opts.creator),
@@ -259,6 +274,7 @@ export async function tripBundle(
     access,
     suggestions: suggestions.map(suggestionWire),
     fullness: latest ? planFullness(latest.plan, trip.pace, trip.dayLoads ?? {}, replaces) : {},
+    images,
   };
   return { ...body, etag: bundleEtag(body) };
 }

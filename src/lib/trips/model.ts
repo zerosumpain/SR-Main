@@ -218,6 +218,58 @@ export interface PlannedStop {
   warnings: string[];
   /** v4: which part of the day this stop belongs to. Set by the solver. */
   stage?: DayStage;
+  /**
+   * v7: a lunch or dinner with no place yet — up to three real places near
+   * where you will be, open then (./meals). Bundle only, never solved on.
+   */
+  mealOptions?: MealOption[];
+}
+
+/** v7: a real place to eat for a planned meal, from OpenStreetMap. */
+export interface MealOption {
+  /** Its OSM id, `node/123`. */
+  id: string;
+  name: string;
+  kind: 'restaurant' | 'cafe';
+  /** "Italian, pizza" — from OSM's cuisine tag; null when not on record. */
+  cuisine: string | null;
+  place: { name: string; location: LatLng; osmId: string | null; address: string | null };
+  /** Minutes on foot from the stop before (straight-line estimate). */
+  walkMin: number;
+  walkFrom: string;
+  /** "Open 12:00–15:00" that day; null when its hours are not on record. */
+  openText: string | null;
+  /** True when its own hours say it is open for the meal. */
+  openKnown: boolean;
+  website: string | null;
+  phone: string | null;
+  /** Dietary tags it carries that the family asked for ("vegetarian"). */
+  diet: string[];
+  outdoorSeating: boolean;
+  wheelchair: boolean | null;
+  wikidata: string | null;
+  /** One line: what, how far, when it is open. */
+  why: string;
+  source: 'OpenStreetMap';
+}
+
+/**
+ * v7: a photograph of a place, from Wikimedia Commons by its Wikidata entry
+ * — free to show with its credit and licence, which always travel with it.
+ */
+export interface PlaceImage {
+  /** A ~800 px wide JPEG/PNG on upload.wikimedia.org. */
+  url: string;
+  width: number | null;
+  height: number | null;
+  /** The author, plain text ("Jane Smith"); null when Commons has none. */
+  credit: string | null;
+  /** "CC BY-SA 4.0", "Public domain". */
+  license: string | null;
+  /** The file's Commons page, for the credit link. */
+  sourceUrl: string;
+  /** The Wikidata entry it came from, `Q123`. */
+  wikidata: string;
 }
 
 export interface PlannedLeg {

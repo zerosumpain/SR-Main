@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { ownerTrip, readJson, replanned } from '$lib/trips/api.server';
 import { parseTripInput } from '$lib/trips/intake';
 import { deleteGuidance } from '$lib/trips/guidance.server';
+import { deleteTripSettings } from '$lib/trips/settings-cache.server';
 import { deleteTrip, getTrip, updateTrip } from '$lib/trips/store.server';
 
 /** PATCH /api/trips/:id — the intake again (destination, dates, zone, pace, modes, notes); re-plans. */
@@ -21,5 +22,6 @@ export const DELETE: RequestHandler = async (event) => {
   const { trip } = await ownerTrip(event);
   await deleteTrip(trip.id);
   await deleteGuidance(trip.id);
+  await deleteTripSettings(trip.id, ['meals', 'images']);
   return json({ deleted: true });
 };
