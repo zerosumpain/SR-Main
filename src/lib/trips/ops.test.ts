@@ -48,7 +48,7 @@ function ctx(over: Partial<OpContext> = {}): OpContext {
 describe('readPlannerAnswer', () => {
   it('reads the JSON answer and trims quick replies', () => {
     const r = readPlannerAnswer({ reply: ' Done. ', ops: [{ op: 'research' }], quickReplies: ['Yes', 'Yes', '', 'No', 'Maybe', 'Later', 'Never'] });
-    expect(r).toEqual({ reply: 'Done.', ops: [{ op: 'research' }], quickReplies: ['Yes', 'No', 'Maybe', 'Later'] });
+    expect(r).toEqual({ reply: 'Done.', ops: [{ op: 'research' }], quickReplies: ['Yes', 'No', 'Maybe', 'Later'], options: [] });
   });
   it('always has a reply', () => {
     expect(readPlannerAnswer(null).reply).toMatch(/say that again/);

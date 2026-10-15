@@ -25,6 +25,10 @@ vi.mock('./agent.server', () => ({
     return { reply: JSON.stringify(h.model(messages)), research: h.research2, seenUrls: [], toolCalls: h.research2.length };
   },
 }));
+vi.mock('./options.server', () => ({
+  checkOptions: async (_trip: unknown, drafts: Array<{ title: string; date: string; stage: string }>) =>
+    drafts.map((d, i) => ({ id: `${d.date}:${d.stage}:${i}`, title: d.title, fit: '14:10–15:10', verdict: { fits: true } })),
+}));
 vi.mock('./profile.server', () => ({
   gatherProfile: async () => {
     h.gathered++;
@@ -143,6 +147,30 @@ describe('converse', () => {
     // The model saw the system prompt, the trip and the new text last.
     expect(h.seen[0][0].role).toBe('system');
     expect(h.seen[0].at(-1)).toEqual({ role: 'user', content: 'Add the Pantheon, first thing' });
+  });
+
+  it('offers checked options for an open question, and changes nothing (v7)', async () => {
+    h.model = () => ({
+      reply: 'Two ideas for Wednesday afternoon:',
+      ops: [],
+      quickReplies: [],
+      options: [
+        { date: '2026-10-28', stage: 'afternoon', title: 'Galleria Spada', placeQuery: 'Galleria Spada, Rome', durationMin: 60, why: 'Small and odd.', indoor: true },
+        { date: '2026-10-28', stage: 'afternoon', title: 'Gianicolo walk', placeQuery: 'Gianicolo, Rome', durationMin: 75, why: 'The view.', indoor: false },
+      ],
+    });
+    const r = await converse(TRIP, { text: 'What shall we do Wednesday afternoon?', surface: 'phone' });
+    expect(h.replans).toEqual([]);
+    expect(r.options?.map((o) => o.title)).toEqual(['Galleria Spada', 'Gianicolo walk']);
+  });
+
+  it('offers no options on a turn that changed the plan', async () => {
+    h.model = (m) => (isCheck(m) ? { ok: true, reply: 'Done.', ops: [] } : {
+      reply: 'Added it.', ops: [{ op: 'addWish', wish: { title: 'Gelato', placeQuery: null } }], quickReplies: [],
+      options: [{ date: '2026-10-28', stage: 'afternoon', title: 'X', placeQuery: 'X, Rome' }],
+    });
+    const r = await converse(TRIP, { text: 'Add a gelato stop', surface: 'phone' });
+    expect(r.options).toEqual([]);
   });
 
   it('does not re-solve when nothing changed', async () => {

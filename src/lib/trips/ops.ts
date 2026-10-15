@@ -32,6 +32,7 @@ import {
 import { isLocalDate, isTimeZone, parseBookingPatch, parseTripInput, parseWishPatch, safeUrl, type BookingPatch, type TripInput, type WishPatch } from './intake';
 import { mergeProfile } from './profile';
 import { withinReach } from './research';
+import { readOptionDrafts, type OptionDraft } from './options';
 
 /** The most ops one turn may apply. */
 export const MAX_OPS = 25;
@@ -117,7 +118,7 @@ const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.i
 const str = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() ? v.trim().replace(/\s+/g, ' ').slice(0, max) : null);
 
 /** The model's whole answer, read leniently: a reply always comes back. */
-export function readPlannerAnswer(raw: unknown): { reply: string; ops: unknown[]; quickReplies: string[] } {
+export function readPlannerAnswer(raw: unknown): { reply: string; ops: unknown[]; quickReplies: string[]; options: OptionDraft[] } {
   const o = isObj(raw) ? raw : {};
   const reply = str(o.reply, 4000) ?? (typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 4000) : 'Sorry — I lost my thread there. Could you say that again?');
   const ops = Array.isArray(o.ops) ? o.ops : [];
@@ -126,7 +127,8 @@ export function readPlannerAnswer(raw: unknown): { reply: string; ops: unknown[]
     .filter((q): q is string => !!q)
     .filter((q, i, a) => a.indexOf(q) === i)
     .slice(0, 4);
-  return { reply, ops, quickReplies };
+  // v7: choices offered instead of a change, for an open question.
+  return { reply, ops, quickReplies, options: readOptionDrafts(o.options) };
 }
 
 function addDays(date: LocalDate, days: number): LocalDate {

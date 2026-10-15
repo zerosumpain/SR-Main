@@ -10,6 +10,7 @@
 // person's message is still stored, the reply says the planner is not
 // available, and the forms keep working.
 
+import { checkOptions } from './options.server';
 import { diffPlans } from './changes';
 import { CHECK_SYSTEM, checkPrompt, readCheck, turnDiff } from './check';
 import type { ConverseResult, LatLng, Observation, ResearchStep, SolvedPlan, TripMessage, TripOp } from './model';
@@ -261,6 +262,9 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     })().catch((err) => console.warn('[trips/converse] suggestions failed:', (err as Error)?.message));
   }
 
+  // v7: options offered for an open question, each checked against its day.
+  const options = answer.options.length && !changed ? await checkOptions(trip, answer.options).catch(() => []) : [];
+
   const rejectedNote = rejected.length ? `\n\n(Not done: ${rejected.map((r) => r.reason).join(' ')})` : '';
   const reply = await addMessage(trip.id, {
     role: 'assistant',
@@ -281,6 +285,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     changes,
     research: lookups,
     messages: [userMessage, reply],
+    options,
   };
 }
 

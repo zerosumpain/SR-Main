@@ -11,6 +11,8 @@
 // constraints and re-plans.
 
 /** A point. Always lat/lng objects on the wire — never an unlabelled pair. */
+import type { PlanOption } from './options';
+
 export interface LatLng {
   lat: number;
   lng: number;
@@ -535,6 +537,8 @@ export interface ConverseResult {
   changes: string[];
   /** v3: what the planner looked up this turn. */
   research?: ResearchStep[];
+  /** v7: choices offered for an open question, each checked against its day (./options). */
+  options?: PlanOption[];
 }
 
 /** What the phone saw that made it think the person is off the plan. */
