@@ -40,10 +40,13 @@ import {
   stopGuidePrompt,
   transitFromMotis,
   TRIP_GUIDE_SYSTEM,
+  PRIMER_SYSTEM,
+  primerNeeded,
+  readPrimer,
   type GuidanceCache,
 } from './guidance';
 import { jsonCall } from './llm.server';
-import type { LatLng, LegGuidance, LocalDate, SolvedPlan, TravelMode, Wish } from './model';
+import type { LatLng, LegGuidance, LocalDate, SolvedPlan, TravelMode, TripGuide, Wish } from './model';
 import { legDepartIso, localDateIn } from './routing';
 import { getTrip, latestPlan, loadState, setStopGuide, setTripGuide, type TripRecord } from './store.server';
 
@@ -102,7 +105,7 @@ export async function bundleGuidance(trip: TripRecord, plan: SolvedPlan, wishes:
   const today = localDateIn(trip.timeZone, now);
   const due = guidanceDue(plan, cache, wishes, today);
   const last = bundleRuns.get(trip.id) ?? 0;
-  if ((due.length || tripGuideNeeded(trip, today, now)) && now.getTime() - last >= BUNDLE_RUN_GAP_MS && !running.has(trip.id)) {
+  if ((due.length || tripGuideNeeded(trip, today, now) || primerNeeded(trip.guide)) && now.getTime() - last >= BUNDLE_RUN_GAP_MS && !running.has(trip.id)) {
     bundleRuns.set(trip.id, now.getTime());
     startGuidance(trip.ownerEmail, trip.id, due);
   }
@@ -164,8 +167,49 @@ function departIso(trip: TripRecord, date: LocalDate, departMin: number): string
 // ── The trip guide ─────────────────────────────────────────────────────────
 
 /** Make the city guide once. Without search it is written from the model alone, with no links; without a model, none. */
+/**
+ * v7: the city primer and the trip's neighbourhoods, onto a guide that has
+ * none — one search ("visiting <city>: etiquette, tipping, phrases, safety")
+ * and one reader call. A failure leaves the guide as it was.
+ */
+export async function ensurePrimer(trip: TripRecord, guide: TripGuide | null): Promise<TripGuide | null> {
+  if (!guide || !primerNeeded(guide)) return guide;
+  let results: Array<{ title: string; url: string; content: string }> = [];
+  try {
+    const { search } = await import('$lib/deepdive/tavily');
+    const found = await search(`visiting ${trip.destination}: etiquette, tipping, cash or card, useful phrases, safety for tourists`, { purpose: 'trips.guide', maxResults: 6, searchDepth: 'basic' });
+    results = (found.results ?? []).map((r) => ({ title: r.title, url: r.url, content: r.content ?? '' }));
+  } catch (err) {
+    console.warn('[trips/guidance] primer search unavailable:', (err as Error)?.message);
+  }
+  const { wishes } = await loadState(trip.id);
+  const places = wishes.filter((w) => !w.skipped && !w.suggested && w.place).map((w) => `${w.title}${w.place?.address ? ` — ${w.place.address}` : ''}`);
+  const titles = wishes.filter((w) => !w.skipped && !w.suggested && w.place).map((w) => w.title);
+  try {
+    const raw = await jsonCall(
+      'trips-reader',
+      [
+        { role: 'system', content: PRIMER_SYSTEM },
+        {
+          role: 'user',
+          content: `City: ${trip.destination}\n\nThe trip's places:\n${places.length ? places.map((p) => `- ${p}`).join('\n') : '(none yet)'}\n\nSearch results:\n${results.length ? results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content.slice(0, 1200)}`).join('\n\n') : '(none — the search was unavailable; keep to widely known, stable facts)'}`,
+        },
+      ],
+      { maxTokens: 1400, temperature: 0 },
+    );
+    const { primer, neighbourhoods } = readPrimer(raw, results, titles);
+    if (!primer && !neighbourhoods.length) return guide;
+    const next: TripGuide = { ...guide, primer, neighbourhoods };
+    await setTripGuide(trip.id, next);
+    return next;
+  } catch (err) {
+    console.warn('[trips/guidance] no model for the primer:', (err as Error)?.message);
+    return guide;
+  }
+}
+
 export async function ensureTripGuide(trip: TripRecord): Promise<TripRecord['guide']> {
-  if (!tripGuideNeeded(trip, localDateIn(trip.timeZone, new Date()))) return trip.guide;
+  if (!tripGuideNeeded(trip, localDateIn(trip.timeZone, new Date()))) return ensurePrimer(trip, trip.guide);
   let results: Array<{ title: string; url: string; content: string }> = [];
   try {
     const { search } = await import('$lib/deepdive/tavily');
@@ -186,10 +230,11 @@ export async function ensureTripGuide(trip: TripRecord): Promise<TripRecord['gui
       ],
       { maxTokens: 1200, temperature: 0 },
     );
-    const guide = readTripGuide(raw, results, new Date().toISOString());
+    const fresh = readTripGuide(raw, results, new Date().toISOString());
+    // A refresh keeps the primer it had; one that came back empty keeps the guide there was.
+    const guide = fresh ? { ...fresh, primer: trip.guide?.primer ?? null, neighbourhoods: trip.guide?.neighbourhoods ?? [] } : null;
     if (guide) await setTripGuide(trip.id, guide);
-    // A refresh that came back empty keeps the guide there was.
-    return guide ?? trip.guide;
+    return ensurePrimer(trip, guide ?? trip.guide);
   } catch (err) {
     console.warn('[trips/guidance] no model for the city guide:', (err as Error)?.message);
     return trip.guide;
@@ -318,7 +363,7 @@ export function startGuidance(owner: string, tripId: string, dates: LocalDate[] 
       let trip = await getTrip(owner, tripId);
       const latest = await latestPlan(tripId);
       if (!trip || !latest) return;
-      if (tripGuideNeeded(trip, localDateIn(trip.timeZone, new Date()))) {
+      if (tripGuideNeeded(trip, localDateIn(trip.timeZone, new Date())) || primerNeeded(trip.guide)) {
         await ensureTripGuide(trip);
         trip = (await getTrip(owner, tripId)) ?? trip;
       }

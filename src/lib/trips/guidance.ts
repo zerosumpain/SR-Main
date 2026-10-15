@@ -10,7 +10,7 @@
 // D1 still holds: nothing here carries a Mapbox-derived figure. Durations come
 // from the stored plan (openrouteservice, Transitous or the estimate).
 
-import type { Facts, GuideLink, LatLng, LegGuidance, LocalDate, PlannedDay, PlannedLeg, SolvedPlan, StopGuide, TravelMode, Trip, TripGuide, Wish } from './model';
+import type { CityPrimer, Facts, GuideLink, LatLng, LegGuidance, LocalDate, PlannedDay, PlannedLeg, SolvedPlan, StopGuide, TravelMode, Trip, TripGuide, Neighbourhood, Wish } from './model';
 import { officialOnly } from './research';
 import { pairKey } from './routing';
 
@@ -366,6 +366,57 @@ export function readStopGuide(raw: unknown, facts: Facts | null, now: string): S
 
 export const TRIP_GUIDE_SYSTEM = `You write a short "getting around" guide for a city, for a visitor, from the web search results given (and widely known, stable facts). Fields: "gettingAround" (2–3 sentences: walking, the main public transport, how tickets work), "taxi" ({"how": how to get a licensed taxi — ranks, hailing rules, apps that genuinely operate there, the official taxi number; "links": [{"label","url"}] ONLY copied from the search results; "phone": the official taxi number ONLY if it appears in the search results, else null}) or null, "transitTickets" (one sentence: what ticket to buy, where, validating) or null, and up to 5 "tips". Never invent a URL, phone number or price; if unsure, say so in words and give no link. British English, no emoji.
 Answer ONLY with JSON: {"gettingAround": string, "taxi": {...}|null, "transitTickets": string|null, "tips": string[]}`;
+
+export const PRIMER_SYSTEM = `You write a short primer for a visitor to a city, from the web search results given (and widely known, stable facts), plus the neighbourhoods that the trip's places are in. Fields:
+- "customs": up to 5 short, practical customs a visitor should know (dress for churches, queuing, meal times, greetings).
+- "money": one or two sentences on cash and cards and on tipping, or null.
+- "phrases": up to 8 {"local": the phrase in the local language, "meaning": English} — greetings, please/thank you, the bill, excuse me. [] for an English-speaking city.
+- "safety": one plain, proportionate sentence (pickpockets on crowded buses, for example), or null.
+- "neighbourhoods": for the trip's places listed, the city neighbourhoods they are in — up to 6 {"name", "line": its feel in one line, "places": the titles from the list that are in it, exactly as given}. Only neighbourhoods that hold at least one listed place.
+Never invent a URL, price or phone number. British English, no emoji. Answer ONLY with JSON: {"customs": string[], "money": string|null, "phrases": [{"local","meaning"}], "safety": string|null, "neighbourhoods": [{"name","line","places"}]}`;
+
+/**
+ * Read a primer and the neighbourhoods. Each neighbourhood keeps only the
+ * place titles that ARE the trip's (as given), and goes if none are left.
+ */
+export function readPrimer(
+  raw: unknown,
+  results: Array<{ url: string; title?: string | null }>,
+  placeTitles: string[],
+): { primer: CityPrimer | null; neighbourhoods: Neighbourhood[] } {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const phrases = (Array.isArray(r.phrases) ? r.phrases : [])
+    .map((p) => (p && typeof p === 'object' ? (p as Record<string, unknown>) : {}))
+    .map((p) => ({ local: text(p.local, 80), meaning: text(p.meaning, 80) }))
+    .filter((p): p is { local: string; meaning: string } => !!p.local && !!p.meaning)
+    .slice(0, 8);
+  const primer: CityPrimer = {
+    customs: texts(r.customs, 200, 5),
+    money: text(r.money, 400),
+    phrases,
+    safety: text(r.safety, 300),
+    sources: results.slice(0, 6).map((x) => ({ url: x.url, title: x.title ?? null })),
+  };
+  const known = new Map(placeTitles.map((t) => [t.trim().toLowerCase(), t]));
+  const neighbourhoods = (Array.isArray(r.neighbourhoods) ? r.neighbourhoods : [])
+    .map((n) => (n && typeof n === 'object' ? (n as Record<string, unknown>) : {}))
+    .map((n) => ({
+      name: text(n.name, 80),
+      line: text(n.line, 200),
+      places: (Array.isArray(n.places) ? n.places : [])
+        .map((p) => (typeof p === 'string' ? known.get(p.trim().toLowerCase()) : undefined))
+        .filter((p): p is string => !!p),
+    }))
+    .filter((n): n is Neighbourhood => !!n.name && !!n.line && n.places.length > 0)
+    .slice(0, 6);
+  const empty = !primer.customs.length && !primer.money && !primer.phrases.length && !primer.safety;
+  return { primer: empty ? null : primer, neighbourhoods };
+}
+
+/** A guide with no primer yet (made before v7, or the primer call failed): make one. */
+export function primerNeeded(guide: TripGuide | null | undefined): boolean {
+  return !!guide && !guide.primer;
+}
 
 /**
  * Read a city guide. Links must be from the search results (or `tel:` of a

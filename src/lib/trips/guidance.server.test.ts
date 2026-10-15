@@ -33,7 +33,7 @@ const plan: SolvedPlan = {
   warnings: [],
   score: 0,
 };
-const guide = { gettingAround: 'g', taxi: null, transitTickets: null, tips: [], generatedAt: '2026-10-10T00:00:00Z' };
+const guide = { gettingAround: 'g', taxi: null, transitTickets: null, tips: [], generatedAt: '2026-10-10T00:00:00Z', primer: { customs: [], money: 'Cards', phrases: [], safety: null, sources: [] }, neighbourhoods: [] };
 const trip = (id: string) => ({ id, ownerEmail: 'o@example.test', timeZone: 'Europe/Rome', startDate: '2026-10-27', endDate: '2026-10-29', guide }) as never;
 const g = { summary: 'Walk' };
 

@@ -433,6 +433,32 @@ export interface TripGuide {
   transitTickets: string | null;
   tips: string[];
   generatedAt: string;
+  /** v7: the city primer — customs, money, a few words, safety (./guidance `readPrimer`). */
+  primer?: CityPrimer | null;
+  /** v7: the neighbourhoods the trip's places are in, each with its feel in a line. */
+  neighbourhoods?: Neighbourhood[];
+}
+
+/** v7: what a visitor should know before arriving, written from search results and stable facts. */
+export interface CityPrimer {
+  /** "Churches ask for covered shoulders and knees." ≤ 5. */
+  customs: string[];
+  /** Cash or card, tipping, in a sentence or two. */
+  money: string | null;
+  /** A few words of the language: ≤ 8, the local phrase and what it means. */
+  phrases: Array<{ local: string; meaning: string }>;
+  /** Plain, proportionate: pickpockets on the 64 bus, not a list of fears. */
+  safety: string | null;
+  sources: Array<{ url: string; title: string | null }>;
+}
+
+/** v7: an area of the city the trip goes to, and which of its places are there. */
+export interface Neighbourhood {
+  name: string;
+  /** Its feel, in one line. */
+  line: string;
+  /** Titles of the trip's places in it. */
+  places: string[];
 }
 
 /**

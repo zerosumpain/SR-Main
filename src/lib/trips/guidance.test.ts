@@ -212,3 +212,35 @@ describe('batched guidance (v2.1)', () => {
     expect(guidanceOrder(plan(), '2026-10-28')).toEqual(['2026-10-28', '2026-10-29', '2026-10-27']);
   });
 });
+
+describe('the city primer and neighbourhoods (v7)', () => {
+  it('reads customs, money, phrases and safety, and keeps only the trip’s own places', async () => {
+    const { readPrimer, primerNeeded } = await import('./guidance');
+    const r = readPrimer(
+      {
+        customs: ['Shoulders and knees covered in churches', 'Lunch is late, dinner later'],
+        money: 'Cards almost everywhere; tipping is small change, not a percentage.',
+        phrases: [{ local: 'Buongiorno', meaning: 'Good morning' }, { local: 'Il conto, per favore', meaning: 'The bill, please' }, { local: '', meaning: 'x' }],
+        safety: 'Mind your pockets on the 64 bus and at the Trevi Fountain.',
+        neighbourhoods: [
+          { name: 'Centro Storico', line: 'Piazzas and baroque churches, busiest at midday.', places: ['Pantheon', 'piazza navona', 'Somewhere Invented'] },
+          { name: 'Nowhere', line: 'Made up', places: ['Not a trip place'] },
+        ],
+      },
+      [{ url: 'https://example.org/rome', title: 'Rome tips' }],
+      ['Pantheon', 'Piazza Navona', 'Colosseum'],
+    );
+    expect(r.primer?.customs).toHaveLength(2);
+    expect(r.primer?.phrases).toEqual([{ local: 'Buongiorno', meaning: 'Good morning' }, { local: 'Il conto, per favore', meaning: 'The bill, please' }]);
+    expect(r.primer?.sources).toEqual([{ url: 'https://example.org/rome', title: 'Rome tips' }]);
+    expect(r.neighbourhoods).toEqual([{ name: 'Centro Storico', line: 'Piazzas and baroque churches, busiest at midday.', places: ['Pantheon', 'Piazza Navona'] }]);
+    expect(primerNeeded(null)).toBe(false);
+    expect(primerNeeded({ gettingAround: 'x', taxi: null, transitTickets: null, tips: [], generatedAt: 'now' })).toBe(true);
+  });
+
+  it('answers no primer for an empty answer', async () => {
+    const { readPrimer } = await import('./guidance');
+    expect(readPrimer({}, [], []).primer).toBeNull();
+    expect(readPrimer(null, [], []).neighbourhoods).toEqual([]);
+  });
+});
