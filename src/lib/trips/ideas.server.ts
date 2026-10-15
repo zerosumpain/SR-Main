@@ -24,7 +24,7 @@ import { DAY_STAGE_LABEL, type DayStage, type ResearchStep, type Stay, type Wish
 import { dietaryHints, elementsFromNominatim, gapCentre, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM, nominatimTerms, viewboxAround, type NearbyCandidate } from './nearby-ideas';
 import { solverInput } from './plan.server';
 import { profileText, travellersOnly } from './profile';
-import { parseLooseJson } from './research';
+import { parseLooseJson, withinReach } from './research';
 import { findPlaceLoosely, nominatimAround, overpass } from './research.server';
 import { latestPlan, listTransport, type TripRecord } from './store.server';
 
@@ -116,9 +116,11 @@ export async function findIdeas(
   });
 
   for (const [i, d] of planned.drafts.entries()) {
-    const found = await (deps.place ?? findPlaceLoosely)(d.placeQuery, trip.destination, gap.before.location ?? gap.after.location).catch(() => null);
+    const hit = await (deps.place ?? findPlaceLoosely)(d.placeQuery, trip.destination, gap.before.location ?? gap.after.location).catch(() => null);
+    // A namesake far from the gap and every stay is not the place (./research `withinReach`).
+    const found = hit && withinReach(hit.location, [gap.before.location, gap.after.location, ...state.stays.map((s) => s.location)]) ? hit : null;
     if (!found) {
-      rejected.push({ title: d.title, reason: `“${d.placeQuery}” was not found on the map.` });
+      rejected.push({ title: d.title, reason: `“${d.placeQuery}” was not found on the map near there.` });
       continue;
     }
     const draft = ideaDraft(d, gap);

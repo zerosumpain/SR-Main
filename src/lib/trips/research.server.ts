@@ -32,6 +32,7 @@ import {
   WISHES_SYSTEM,
   type DraftWish,
   type OsmPlace,
+  withinReach,
 } from './research';
 import { addWishes, getTrip, loadState, setResearch, updateWish, type ResearchState, type TripRecord } from './store.server';
 
@@ -163,12 +164,16 @@ function centreOf(points: LatLng[]): LatLng | null {
   };
 }
 
-async function researchWish(trip: TripRecord, wish: Wish, near: LatLng | null, depth: 'brief' | 'deep'): Promise<void> {
+async function researchWish(trip: TripRecord, wish: Wish, near: LatLng | null, depth: 'brief' | 'deep', anchors: LatLng[] = near ? [near] : []): Promise<void> {
   const checkedAt = new Date().toISOString();
   // (a) the place
   let osm: OsmPlace | null = null;
   if (wish.place?.osmId) osm = await lookupPlace(wish.place.osmId);
-  if (!osm && !wish.place) osm = await findPlace(`${wish.title}, ${trip.destination}`, near);
+  if (!osm && !wish.place) {
+    // A namesake far from the trip is not the place: the wish stays unplaced.
+    const found = await findPlace(`${wish.title}, ${trip.destination}`, near);
+    osm = found && withinReach(found.location, anchors) ? found : null;
+  }
   const place: Wish['place'] =
     wish.place ?? (osm ? { name: osm.name, location: osm.location, osmId: osm.osmId, address: osm.address } : null);
   const osmFacts = { openingHoursText: osm?.openingHoursText ?? null, website: osm?.website ?? null, wikidata: osm?.wikidata ?? null };
@@ -245,7 +250,7 @@ export async function startResearch(
       for (const [i, wish] of targets.entries()) {
         await setResearch(tripId, { ...state, done: i, current: wish.title });
         try {
-          await researchWish(trip, wish, near, opts.depth);
+          await researchWish(trip, wish, near, opts.depth, stays.length ? stays.map((s) => s.location) : near ? [near] : []);
         } catch (err) {
           console.warn(`[trips/research] ${wish.title}:`, (err as Error)?.message);
         }

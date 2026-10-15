@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Booking, Stay, Trip, Wish } from './model';
 import { applyOps, describeOp, knownUrlOrNull, knownUrlsOf, MAX_OPS, readPlannerAnswer, urlsIn, type OpContext, type OpEffects } from './ops';
-import { emptyFacts } from './research';
+import { emptyFacts, PLACE_REACH_M, withinReach } from './research';
 
 const TRIP: Trip = {
   id: 't1', ownerEmail: 'o@example.test', title: 'Rome', destination: 'Rome, Italy', timeZone: 'Europe/Rome',
@@ -349,3 +349,42 @@ describe('v3: transport, remember and the profile', () => {
     expect(r.rejected.map((x) => x.reason)).toEqual(['updateProfile changed nothing.']);
   });
 });
+
+describe('places found by name are near the trip', () => {
+  // Nominatim's worldwide fallback takes the first hit: a "Pantheon" in Paris
+  // is a namesake, not the place, and must not be planned as if it were.
+  const far = { 'Pantheon, Rome': { lat: 48.8462, lng: 2.3464 }, 'Uffizi, Florence': { lat: 43.7678, lng: 11.2553 } };
+  const pantheon = { title: 'Pantheon', placeQuery: 'Pantheon, Rome', priority: 'must', durationMin: 60, partOfDay: 'any' };
+
+  it('addWish: a place over 100 km from every stay is not found — the wish waits for a place', async () => {
+    const { fx, calls } = fakes(far);
+    const r = await applyOps([{ op: 'addWish', wish: pantheon }], ctx({ wishes: [] }), fx);
+    expect(r.rejected).toEqual([]);
+    expect(calls).toEqual(['addWish:Pantheon:unplaced']);
+  });
+
+  it('addWish: a second city with its own stay is within reach', async () => {
+    const { fx, calls } = fakes(far);
+    const florence: Stay = { ...STAY, id: 's2', name: 'Florence flat', location: { lat: 43.7696, lng: 11.2558 } };
+    await applyOps([{ op: 'addWish', wish: { ...pantheon, title: 'Uffizi', placeQuery: 'Uffizi, Florence' } }], ctx({ stays: [STAY, florence], wishes: [] }), fx);
+    expect(calls).toEqual(['addWish:Uffizi:placed']);
+  });
+
+  it('updateWish: a far place is refused, the wish keeps its own', async () => {
+    const { fx, calls } = fakes(far);
+    const r = await applyOps([{ op: 'updateWish', id: 'w-pan', fields: { placeQuery: 'Pantheon, Rome' } }], ctx(), fx);
+    expect(r.rejected.map((x) => x.reason)).toEqual(['Could not find “Pantheon, Rome” on the map near the trip.']);
+    expect(calls).toEqual([]);
+  });
+
+  it('withinReach: within 100 km of any anchor; nothing to compare with is no refusal', () => {
+    const rome = { lat: 41.895, lng: 12.4716 };
+    expect(withinReach({ lat: 41.75, lng: 12.29 }, [rome])).toBe(true); // Ostia, ~22 km
+    expect(withinReach({ lat: 40.7489, lng: 14.4848 }, [rome])).toBe(false); // Pompeii, ~210 km
+    expect(withinReach({ lat: 40.7489, lng: 14.4848 }, [rome, { lat: 40.8518, lng: 14.2681 }])).toBe(true); // a Naples stay too
+    expect(withinReach({ lat: 48.85, lng: 2.35 }, [])).toBe(true);
+    expect(withinReach({ lat: 48.85, lng: 2.35 }, [null, undefined])).toBe(true);
+    expect(PLACE_REACH_M).toBe(100_000);
+  });
+});
+

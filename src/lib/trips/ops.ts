@@ -13,7 +13,8 @@
 //    researched facts, the trip guide, or a link the person typed. Anything
 //    else is dropped (D5, and "never invent booking URLs").
 //  - Places: a stay or wish is placed by an OpenStreetMap search for the
-//    model's `placeQuery`, never by coordinates the model writes.
+//    model's `placeQuery`, never by coordinates the model writes; a wish's
+//    place more than 100 km from every stay is a namesake, not found.
 
 import {
   type TransportSegment,
@@ -30,6 +31,7 @@ import {
 } from './model';
 import { isLocalDate, isTimeZone, parseBookingPatch, parseTripInput, parseWishPatch, safeUrl, type BookingPatch, type TripInput, type WishPatch } from './intake';
 import { mergeProfile } from './profile';
+import { withinReach } from './research';
 
 /** The most ops one turn may apply. */
 export const MAX_OPS = 25;
@@ -220,6 +222,22 @@ function nearOf(ctx: OpContext): LatLng | null {
 }
 
 /**
+ * What a wish's place found by name must be near (./research `withinReach`):
+ * any of the stays — a trip may have more than one city — or, before there
+ * is a stay, the places already on the trip.
+ */
+function anchorsOf(ctx: OpContext): LatLng[] {
+  if (ctx.stays.length) return ctx.stays.map((s) => s.location);
+  return ctx.wishes.flatMap((w) => (w.place ? [w.place.location] : []));
+}
+
+/** A wish's place by name, or null when the map has none near the trip. */
+async function wishPlace(fx: OpEffects, ctx: OpContext, query: string, near: LatLng | null): Promise<PlacedResult | null> {
+  const place = await fx.resolvePlace(query, near);
+  return place && withinReach(place.location, anchorsOf(ctx)) ? place : null;
+}
+
+/**
  * Validate and apply ops in order. Never throws for a bad op: it is listed in
  * `rejected` with a sentence and the turn carries on. An effect that throws
  * (the database) does propagate — that is a server fault, not a bad op.
@@ -373,7 +391,8 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
           reject(raw, `“${draft.title}” is already a wish.`);
           break;
         }
-        const place = draft.place ?? (draft.placeQuery ? await fx.resolvePlace(draft.placeQuery, nearOf(ctx)) : null);
+        // A namesake far from the trip is not found: the wish waits for a place.
+        const place = draft.place ?? (draft.placeQuery ? await wishPlace(fx, ctx, draft.placeQuery, nearOf(ctx)) : null);
         const wish = await fx.addWish({
           title: draft.title,
           priority: draft.priority,
@@ -409,9 +428,9 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
         }
         const patch: WishPatch = { ...p.patch };
         if (p.placeQuery) {
-          const place = await fx.resolvePlace(p.placeQuery, wish.place?.location ?? nearOf(ctx));
+          const place = await wishPlace(fx, ctx, p.placeQuery, wish.place?.location ?? nearOf(ctx));
           if (!place) {
-            reject(raw, `Could not find “${p.placeQuery}” on the map.`);
+            reject(raw, `Could not find “${p.placeQuery}” on the map near the trip.`);
             break;
           }
           patch.place = { name: place.name, location: place.location, osmId: place.osmId, address: place.address };

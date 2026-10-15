@@ -201,4 +201,18 @@ describe('v6: the Rome lunch gap that came back empty', () => {
     expect(r.note).toMatch(/^Nothing fits 77 minutes between Pantheon and Free time/);
     expect(h.logged[0]).toMatch(/Nothing fitted\. Nearby search: no places found nearby\.$/);
   });
+
+  it('a namesake found far from the trip is "not found", never a far-away match', async () => {
+    const agent = async () => ({
+      reply: JSON.stringify({ ideas: [{ title: "Sant'Ignazio", placeQuery: "Sant'Ignazio, Rome", durationMin: 40, why: 'x', fit: 'x' }], note: null }),
+      research: [],
+      seenUrls: [],
+      toolCalls: 0,
+    });
+    // The worldwide fallback's first hit: a church of that name in Buenos Aires.
+    const far = async () => ({ name: "Sant'Ignazio", location: { lat: -34.6083, lng: -58.3712 }, osmId: 'way/9', address: 'Buenos Aires', openingHoursText: null, website: null, wikidata: null });
+    const r = await findIdeas(trip, { date: '2026-10-28', stage: 'afternoon' }, 'site', { agent: agent as never, place: far as never });
+    expect(r.ideas.filter((i) => i.source === 'planner')).toEqual([]);
+    expect(r.rejected[0]).toEqual({ title: "Sant'Ignazio", reason: "“Sant'Ignazio, Rome” was not found on the map near there." });
+  });
 });

@@ -7,6 +7,7 @@
 // ./research.server.
 
 import type { Facts, LatLng, PartOfDay, Priority, Trip, Wish } from './model';
+import { haversineM } from './solver/estimate';
 
 /** Ticket resellers and aggregators — never offered as the booking link (D5). */
 export const RESELLER_HOSTS = [
@@ -252,6 +253,24 @@ export function placeFromNominatim(row: unknown): OsmPlace | null {
     website: str(tags.website, 300) ?? str(tags['contact:website'], 300) ?? str(tags.url, 300),
     wikidata: str(tags.wikidata, 40),
   };
+}
+
+/**
+ * How far from the trip a place found by name may be. A name search that
+ * misses near the trip falls back to the whole world and takes the first
+ * hit — a namesake on another continent is not the place. Shared with the
+ * agent's `locate`.
+ */
+export const PLACE_REACH_M = 100_000;
+
+/**
+ * True when `at` is within reach of at least one of the trip's anchors (its
+ * stays, or the points a search was made around). Nothing to compare with
+ * (a trip with no places yet) is not a reason to refuse.
+ */
+export function withinReach(at: LatLng, anchors: Array<LatLng | null | undefined>, reachM = PLACE_REACH_M): boolean {
+  const known = anchors.filter((a): a is LatLng => !!a && Number.isFinite(a.lat) && Number.isFinite(a.lng));
+  return !known.length || known.some((a) => haversineM(a, at) <= reachM);
 }
 
 /** Overpass QL for notable places within `radiusM` of a point. */
