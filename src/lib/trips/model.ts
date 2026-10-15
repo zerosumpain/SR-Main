@@ -312,8 +312,15 @@ export interface TravelMatrix {
   points: string[];
   seconds: Partial<Record<TravelMode, Array<Array<number | null>>>>;
   metres: Partial<Record<TravelMode, Array<Array<number | null>>>>;
-  /** Which modes were routed vs estimated. */
+  /** Which modes were routed vs estimated (true = at least one cell estimated). */
   estimated: Partial<Record<TravelMode, boolean>>;
+  /**
+   * Server only, never on the wire (./bundle `wireMatrix`): for a mode that
+   * is partly routed, which cells were estimated (1) or routed (0), aligned
+   * with `seconds`, so each leg says truly whether it was routed. Absent =
+   * the mode's `estimated` flag holds for every cell.
+   */
+  cellEstimated?: Partial<Record<TravelMode, Array<Array<0 | 1>>>>;
 }
 
 export interface SolvedPlan {

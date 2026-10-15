@@ -44,7 +44,7 @@ import {
 } from './guidance';
 import { jsonCall } from './llm.server';
 import type { LatLng, LegGuidance, LocalDate, SolvedPlan, TravelMode, Wish } from './model';
-import { localDateIn, localToIso, timetableDate } from './routing';
+import { legDepartIso, localDateIn } from './routing';
 import { getTrip, latestPlan, loadState, setStopGuide, setTripGuide, type TripRecord } from './store.server';
 
 const USER_AGENT = 'StrangeRamblingsTrips/1.0 (+https://strangeramblings.com)';
@@ -158,9 +158,7 @@ async function motis(params: Record<string, string>): Promise<{ itineraries?: un
 
 /** When to ask a timetable about a leg: its own date and time if near, else the same weekday next week. */
 function departIso(trip: TripRecord, date: LocalDate, departMin: number): string {
-  const today = localDateIn(trip.timeZone, new Date());
-  const ask = timetableDate(date, today);
-  return localToIso(ask, departMin, trip.timeZone);
+  return legDepartIso(date, departMin, localDateIn(trip.timeZone, new Date()), trip.timeZone);
 }
 
 // ── The trip guide ─────────────────────────────────────────────────────────

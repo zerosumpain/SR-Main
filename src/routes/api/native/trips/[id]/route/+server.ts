@@ -5,7 +5,7 @@ import { familyTrip } from '$lib/trips/family.server';
 import { legKey } from '$lib/trips/guidance';
 import { readGuidance } from '$lib/trips/guidance.server';
 import { parseRouteQuery } from '$lib/trips/intake';
-import { localToIso } from '$lib/trips/routing';
+import { legDepartIso, localDateIn } from '$lib/trips/routing';
 import { routeFor } from '$lib/trips/routing.server';
 import { latestPlan } from '$lib/trips/store.server';
 
@@ -25,7 +25,9 @@ export const GET: RequestHandler = withNativeAccess('any', async (event, identit
   const to = day?.stops.find((s) => s.id === q.value.to);
   if (!day || !from || !to) return json({ error: 'Those stops are not on that day of the plan.' }, { status: 404 });
   if (!from.location || !to.location) return json({ error: 'One of those stops has no position.' }, { status: 422 });
-  const route = await routeFor(ft.trip.id, q.value.mode, from.location, to.location, localToIso(q.value.date, from.departMin, ft.trip.timeZone));
+  // Asked for when the leg leaves (a timetable that exists: see timetableDate).
+  const departIso = legDepartIso(q.value.date, from.departMin, localDateIn(ft.trip.timeZone, new Date()), ft.trip.timeZone);
+  const route = await routeFor(ft.trip.id, q.value.mode, from.location, to.location, departIso);
   const guidance = (await readGuidance(ft.trip.id))[legKey(day.date, q.value.mode, from.location, to.location)] ?? null;
   return { ...route, guidance };
 });

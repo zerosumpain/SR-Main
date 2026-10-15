@@ -217,6 +217,8 @@ export function withPoint(matrix: TravelMatrix, id: string, at: LatLng, location
   const points = [...matrix.points, id];
   const seconds: TravelMatrix['seconds'] = {};
   const metres: TravelMatrix['metres'] = {};
+  const estimated: TravelMatrix['estimated'] = { ...matrix.estimated };
+  const cellEstimated: NonNullable<TravelMatrix['cellEstimated']> = {};
   for (const mode of Object.keys(matrix.seconds) as TravelMode[]) {
     const m = mode === 'taxi' ? 'drive' : mode;
     const leg = (p: string, into: boolean) => {
@@ -227,8 +229,17 @@ export function withPoint(matrix: TravelMatrix, id: string, at: LatLng, location
     };
     seconds[mode] = [...(matrix.seconds[mode] ?? []).map((row, i) => [...row, leg(matrix.points[i], true).seconds]), [...matrix.points.map((p) => leg(p, false).seconds), 0]];
     if (matrix.metres[mode]) metres[mode] = [...matrix.metres[mode]!.map((row, i) => [...row, leg(matrix.points[i], true).metres]), [...matrix.points.map((p) => leg(p, false).metres), 0]];
+    // The new point's legs are estimates; the cells already there keep what they were.
+    const was = matrix.cellEstimated?.[mode];
+    const flag: 0 | 1 = matrix.estimated[mode] ? 1 : 0;
+    const n = matrix.points.length;
+    cellEstimated[mode] = [
+      ...matrix.points.map((_, i) => [...Array.from({ length: n }, (_, j) => (i === j ? 0 : (was?.[i]?.[j] ?? flag))), 1 as const]),
+      [...Array.from({ length: n }, () => 1 as const), 0],
+    ];
+    estimated[mode] = true;
   }
-  return { points, seconds, metres, estimated: { ...matrix.estimated } };
+  return { points, seconds, metres, estimated, cellEstimated };
 }
 
 export interface Verdict {

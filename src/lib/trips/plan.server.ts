@@ -8,7 +8,7 @@
 // Same input, same plan: an edit that changes nothing appends nothing.
 
 import { solveTrip, replanDay, replanTrip } from '$lib/trips/solver';
-import { bundleEtag, canonicalJson, dayMatrices, sha256, stayPoint, type TripBundle, type WireTrip } from './bundle';
+import { bundleEtag, canonicalJson, dayMatrices, sha256, stayPoint, wireMatrix, type TripBundle, type WireTrip } from './bundle';
 import { diffPlans, keepRunningDay, replaceDay } from './changes';
 import type { LocalDate, Observation, PlannedDay, PlanSource, ReplanOption, SolvedPlan, TripAccess, TripEvent, TripReplanOption } from './model';
 import { bundleGuidance, startGuidance } from './guidance.server';
@@ -268,7 +268,7 @@ export async function tripBundle(
     bookings: state.bookings,
     plan: latest && plan ? { id: latest.id, version: latest.version, createdAt: latest.createdAt, plan, changes: latest.changes } : null,
     matrices: dayMatrices(latest?.matrix ?? null, latest?.plan ?? null),
-    tripMatrix: latest?.matrix ?? null,
+    tripMatrix: wireMatrix(latest?.matrix ?? null),
     messages,
     guide: trip.guide,
     transport,

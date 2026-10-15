@@ -122,8 +122,21 @@ export function daySubMatrix(matrix: TravelMatrix, day: PlannedDay): TravelMatri
 export function dayMatrices(matrix: TravelMatrix | null, plan: SolvedPlan | null): Record<LocalDate, TravelMatrix> {
   const out: Record<LocalDate, TravelMatrix> = {};
   if (!matrix || !plan) return out;
-  for (const day of plan.days) out[day.date] = daySubMatrix(matrix, day);
+  for (const day of plan.days) out[day.date] = wireMatrix(daySubMatrix(matrix, day));
   return out;
+}
+
+/**
+ * A matrix as the phone reads it: points, seconds, metres and the per-mode
+ * `estimated` flags. The server's per-cell `cellEstimated` stays off the wire
+ * (the app decodes `estimated` as `[String: Bool]` and nothing more).
+ */
+export function wireMatrix(matrix: TravelMatrix): TravelMatrix;
+export function wireMatrix(matrix: TravelMatrix | null): TravelMatrix | null;
+export function wireMatrix(matrix: TravelMatrix | null): TravelMatrix | null {
+  if (!matrix) return null;
+  const { cellEstimated: _cells, ...wire } = matrix;
+  return wire;
 }
 
 /** JSON with object keys sorted, so the same value always hashes the same. */
