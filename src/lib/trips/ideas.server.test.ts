@@ -215,4 +215,25 @@ describe('v6: the Rome lunch gap that came back empty', () => {
     expect(r.ideas.filter((i) => i.source === 'planner')).toEqual([]);
     expect(r.rejected[0]).toEqual({ title: "Sant'Ignazio", reason: "“Sant'Ignazio, Rome” was not found on the map near there." });
   });
+
+  it("an idea is checked against its own OSM hours: closed then is turned down with why", async () => {
+    const agent = async () => ({
+      reply: JSON.stringify({ ideas: [{ title: "Sant'Ignazio", placeQuery: "Sant'Ignazio, Rome", durationMin: 40, why: 'x', fit: 'x' }], note: null }),
+      research: [],
+      seenUrls: [],
+      toolCalls: 0,
+    });
+    const withHours = (openingHoursText: string) => async (q: string) => ({ ...(await place(q))!, openingHoursText });
+    const morning = await findIdeas(trip, { date: '2026-10-28', stage: 'afternoon' }, 'site', { agent: agent as never, place: withHours('Mo-Su 07:30-12:30') as never });
+    expect(morning.ideas.filter((i) => i.source === 'planner')).toEqual([]);
+    // Without its hours this idea used to fit; now the solver (or the hours guard) says why not.
+    expect(morning.rejected[0]?.title).toBe("Sant'Ignazio");
+    expect(morning.rejected[0]?.reason).toMatch(/closed/i);
+    const wednesday = await findIdeas(trip, { date: '2026-10-28', stage: 'afternoon' }, 'site', { agent: agent as never, place: withHours('Mo-Tu,Th-Su 09:00-19:00; We off') as never });
+    expect(wednesday.ideas.filter((i) => i.source === 'planner')).toEqual([]);
+    expect(wednesday.rejected[0]?.reason).toMatch(/closed/i);
+    const open = await findIdeas(trip, { date: '2026-10-28', stage: 'afternoon' }, 'site', { agent: agent as never, place: withHours('Mo-Su 09:00-19:00') as never });
+    expect(open.ideas.map((i) => i.title)).toEqual(["Sant'Ignazio"]);
+  });
 });
+

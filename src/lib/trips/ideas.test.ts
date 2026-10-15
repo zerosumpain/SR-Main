@@ -3,6 +3,7 @@ import { solveTrip } from '$lib/trips/solver';
 import { romeInput } from './solver/fixtures/rome';
 import { computeGap, ideaDraft, ideasPrompt, readIdeas, verifyIdea, withPoint } from './ideas';
 import type { Wish } from './model';
+import { emptyFacts } from './research';
 
 const input = romeInput();
 const plan = solveTrip(input);
@@ -69,6 +70,19 @@ describe('verifyIdea', () => {
     expect(verifyIdea(input, w, { ...gap, stage: 'morning' }, plan).fits).toBe(false);
     // An idea that replaces the slot's meal lands "in" the meal's stage wherever the clock puts it.
     expect(verifyIdea(input, { ...w, replacesMeal: 'lunch' }, { ...gap, stage: 'morning', meal: 'lunch' }, plan).fits).toBe(true);
+  });
+
+  it('an idea closed that day, or at the time it would be visited, is turned down with why — unknown hours are no say', () => {
+    const w = idea('idea:0', 'Sant’Ignazio', 40, 41.8991, 12.4797);
+    const withText = (openingHoursText: string): Wish => ({ ...w, facts: { ...emptyFacts('brief', null), openingHoursText } });
+    const closedWed = verifyIdea(input, withText('Mo-Tu,Th-Su 09:00-19:00; We off'), gap, plan);
+    expect(closedWed.fits).toBe(false);
+    expect(closedWed.reason).toMatch(/closed/i);
+    const morningOnly = verifyIdea(input, withText('Mo-Su 07:30-12:30'), gap, plan);
+    expect(morningOnly.fits).toBe(false);
+    expect(morningOnly.reason).toMatch(/closed/i);
+    expect(verifyIdea(input, withText('Mo-Su 09:00-19:00'), gap, plan).fits).toBe(true);
+    expect(verifyIdea(input, withText('sunrise-sunset'), gap, plan).fits).toBe(true); // unparseable = unknown
   });
 
   it('turns down an idea that cannot fit, and names what one would push out', () => {
