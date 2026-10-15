@@ -156,6 +156,8 @@ export async function decide(
     const r = await applyAndReplan(trip, [{ op: 'addWish', wish: suggestionWish(done) }], {
       surface: 'phone',
       eventText: `${caller.name} approved ${done.byName}'s suggestion: ${done.wish.title} for ${slotName(done)}.`,
+      // The place it was suggested with (a meal option, a nearby idea) was found on the map: keep it.
+      trustedPlaces: true,
     });
     planVersion = r.planVersion;
     applied = r.applied.length;

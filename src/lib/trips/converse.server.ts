@@ -343,13 +343,13 @@ async function checkAndCorrect(
 export async function applyAndReplan(
   trip: TripRecord,
   ops: unknown[],
-  opts: { surface: 'site' | 'phone'; eventText: string },
+  opts: { surface: 'site' | 'phone'; eventText: string; trustedPlaces?: boolean },
 ): Promise<{ applied: ApplyResult['applied']; rejected: ApplyResult['rejected']; planVersion: number | null }> {
   const [state, transport, latest] = await Promise.all([loadState(trip.id), listTransport(trip.id), latestPlan(trip.id)]);
   const result = await applyOps(
     ops,
     { trip, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: knownUrlsOf(state.wishes), transport, profile: trip.profile },
-    effectsFor(trip, null, null),
+    { ...effectsFor(trip, null, null), trustsPlaces: opts.trustedPlaces === true },
   );
   let planVersion = latest?.version ?? null;
   if (result.changed) {

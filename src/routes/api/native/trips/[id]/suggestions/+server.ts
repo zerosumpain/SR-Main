@@ -15,7 +15,8 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
   const ft = await familyTrip(event, identity, role, event.params.id);
   if (ft instanceof Response) return ft;
   if (!ft.access.canSuggest) return json({ error: 'You cannot suggest for this trip.' }, { status: 403 });
-  const parsed = parseSuggestionInput(await event.request.json().catch(() => null), draftFrom);
+  // A suggestion may carry a place already found on the map (a meal option, a nearby idea).
+  const parsed = parseSuggestionInput(await event.request.json().catch(() => null), (raw) => draftFrom(raw, { allowPlace: true }));
   if (!parsed.ok) return json({ error: parsed.error }, { status: 400 });
   const s = await suggest(ft.trip, ft.caller, parsed.value);
   return json({ suggestion: suggestionWire(s) }, { status: 201 });

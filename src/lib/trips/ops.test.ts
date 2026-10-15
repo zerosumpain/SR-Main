@@ -58,6 +58,27 @@ describe('readPlannerAnswer', () => {
 });
 
 describe('applyOps', () => {
+  // v7: a place already found on the map (a meal option) survives a parent's
+  // approval, but a model can never hand in coordinates of its own.
+  const armando = { name: 'Armando', location: { lat: 41.899, lng: 12.477 }, osmId: 'node/9', address: null };
+  const mealWish = { title: 'Armando', placeQuery: null, priority: 'must', durationMin: 60, partOfDay: 'any', fixedDate: '2026-10-27', replacesMeal: 'lunch', place: armando };
+
+  it('keeps a found place on a trusted addWish (an approved suggestion)', async () => {
+    const { fx, calls } = fakes();
+    let placed: unknown = null;
+    const trusted: OpEffects = { ...fx, trustsPlaces: true, addWish: async (w) => { placed = w.place; return fx.addWish(w); } };
+    const r = await applyOps([{ op: 'addWish', wish: mealWish }], ctx(), trusted);
+    expect(r.rejected).toEqual([]);
+    expect(placed).toEqual(armando);
+    expect(calls).toEqual(['addWish:Armando:placed']);
+  });
+
+  it("ignores a model's coordinates: no place without a query to resolve", async () => {
+    const { fx, calls } = fakes();
+    await applyOps([{ op: 'addWish', wish: mealWish }], ctx(), fx);
+    expect(calls).toEqual(['addWish:Armando:unplaced']);
+  });
+
   it('applies in order, so a later op sees an earlier one', async () => {
     const { fx, calls } = fakes();
     const c = ctx({ stays: [], wishes: [] });

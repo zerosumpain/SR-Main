@@ -84,6 +84,8 @@ export interface OpEffects {
   updateStay(id: string, fields: Partial<StayFields>): Promise<void>;
   removeStay(id: string): Promise<void>;
   addWish(fields: NewWishFields): Promise<Wish>;
+  /** v7: an addWish may carry a place already found (a suggestion being approved). Never set for a model's ops. */
+  trustsPlaces?: boolean;
   updateWish(id: string, patch: WishPatch): Promise<void>;
   removeWish(id: string): Promise<void>;
   addBooking(fields: BookingPatch & { title: string; wishId: string | null }): Promise<Booking>;
@@ -180,13 +182,21 @@ function wishPatchFrom(fields: Obj): { ok: true; patch: WishPatch; placeQuery: s
   return { ok: true, patch: parsed.value, placeQuery: 'placeQuery' in fields ? str(fields.placeQuery, 200) : null };
 }
 
-export function draftFrom(raw: unknown): { ok: true; draft: WishDraft } | { ok: false; reason: string } {
+export function draftFrom(raw: unknown, opts: { allowPlace?: boolean } = {}): { ok: true; draft: WishDraft } | { ok: false; reason: string } {
   if (!isObj(raw)) return { ok: false, reason: 'addWish needs a wish object.' };
   const title = str(raw.title, 160);
   if (!title) return { ok: false, reason: 'A wish needs a title.' };
   const patch = wishPatchFrom({ ...raw, title });
   if (!patch.ok) return patch;
   const p = patch.patch;
+  // v7: a place already found on the map rides along only where the caller
+  // trusts it (the phone's suggestion, the server's approval) — never a model's.
+  let place: WishDraft['place'] = undefined;
+  if (opts.allowPlace && 'place' in raw && raw.place != null) {
+    const parsed = parseWishPatch({ place: raw.place });
+    if (!parsed.ok) return { ok: false, reason: parsed.error };
+    place = parsed.value.place ?? null;
+  }
   return {
     ok: true,
     draft: {
@@ -199,6 +209,7 @@ export function draftFrom(raw: unknown): { ok: true; draft: WishDraft } | { ok: 
       fixedStartMin: p.fixedStartMin ?? null,
       note: p.note ?? null,
       replacesMeal: p.replacesMeal ?? null,
+      ...(place ? { place } : {}),
     },
   };
 }
@@ -348,7 +359,7 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
         break;
       }
       case 'addWish': {
-        const d = draftFrom(raw.wish);
+        const d = draftFrom(raw.wish, { allowPlace: fx.trustsPlaces === true });
         if (!d.ok) {
           reject(raw, d.reason);
           break;
@@ -362,7 +373,7 @@ export async function applyOps(rawOps: unknown[], ctx: OpContext, fx: OpEffects)
           reject(raw, `“${draft.title}” is already a wish.`);
           break;
         }
-        const place = draft.placeQuery ? await fx.resolvePlace(draft.placeQuery, nearOf(ctx)) : null;
+        const place = draft.place ?? (draft.placeQuery ? await fx.resolvePlace(draft.placeQuery, nearOf(ctx)) : null);
         const wish = await fx.addWish({
           title: draft.title,
           priority: draft.priority,

@@ -459,6 +459,12 @@ export interface WishDraft {
   fixedStartMin: number | null;
   note: string | null;
   replacesMeal?: 'breakfast' | 'lunch' | 'dinner' | null;
+  /**
+   * v7: a place already found on the map (a meal option, a nearby idea) —
+   * kept only on the phone's suggestion route and the server's own approval
+   * of it, never from a model's op: a model's place is a query to resolve.
+   */
+  place?: { name: string; location: LatLng; osmId: string | null; address: string | null } | null;
 }
 
 /**
