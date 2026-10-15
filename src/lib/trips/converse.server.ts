@@ -18,6 +18,7 @@ import { gatherProfile, rememberStated, saveProfile } from './profile.server';
 import { travellersOnly } from './profile';
 import { parseLooseJson } from './research';
 import { jsonCall } from './llm.server';
+import { CHECK_CALL_MS } from './limits';
 import { applyOps, knownUrlsOf, readPlannerAnswer, urlsIn, type ApplyResult, type OpEffects } from './ops';
 import { replan } from './plan.server';
 import { plannerMessages, type PlannerContext } from './prompt';
@@ -318,7 +319,7 @@ async function checkAndCorrect(
           { role: 'system', content: CHECK_SYSTEM },
           { role: 'user', content: checkPrompt({ request, firstReply, applied: first.applied, diff: turnDiff(before, after, titles), titles }) },
         ],
-        { maxTokens: 1500, timeoutMs: 90_000 },
+        { maxTokens: 1500, timeoutMs: CHECK_CALL_MS },
       ),
     );
   } catch (err) {

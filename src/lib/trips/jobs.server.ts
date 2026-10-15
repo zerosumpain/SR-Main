@@ -8,11 +8,14 @@
 //
 // In memory, per process: a job is readable only by the caller who started
 // it (anyone else gets 404, as for an unknown id), is failed with a plain
-// message after 150 s, and is forgotten 30 min after it finishes. An id lost
-// to a restart is a 404 too: the app says "try again".
+// message once it outruns the longest the work itself can take (JOB_CAP_MS,
+// derived from the planner's own ceilings in ./limits), and is forgotten
+// 30 min after it finishes. An id lost to a restart is a 404 too: the app
+// says "try again".
 
 import { randomUUID } from 'node:crypto';
 import { json } from '@sveltejs/kit';
+import { TURN_CEILING_MS } from './limits';
 
 export type TripJobKind = 'ideas' | 'converse' | 'create' | 'replan';
 export type TripJobStatus = 'running' | 'done' | 'failed';
@@ -29,13 +32,29 @@ export interface TripJob {
   error: string | null;
 }
 
-export const JOB_CAP_MS = 150_000;
+/**
+ * A little past the longest a turn can run (its own model-call ceilings plus
+ * re-solves), so the cap only catches work that is truly stuck — never work
+ * that would have finished and saved anyway.
+ */
+export const JOB_CAP_MS = TURN_CEILING_MS + 30_000;
 export const JOB_RETENTION_MS = 30 * 60_000;
 /** A ceiling on what one process holds, oldest finished first out. */
 const MAX_JOBS = 500;
 
 export const JOB_TIMEOUT_MESSAGE = 'That took too long — try again.';
 export const JOB_FAILED_MESSAGE = 'Something went wrong — try again.';
+/** A trip was created but its first turn did not finish: it is saved, not lost. */
+export const JOB_KEPT_MESSAGE = 'Your trip is saved, but the planner did not finish — open it from your trips and carry on.';
+
+/**
+ * Handed to the work: `keep` records a partial result (a created trip's
+ * `{ id }`) that a failed or capped job still carries, so what was already
+ * made is never lost with the error.
+ */
+export interface JobHandle {
+  keep(partial: Record<string, unknown>): void;
+}
 
 interface Entry {
   job: TripJob;
@@ -60,9 +79,10 @@ const view = (job: TripJob): TripJob => ({ ...job });
 /**
  * Start `work` in the background for `owner`. Returns the running job at
  * once. `work` returns the synchronous call's JSON body; a throw (or the
- * cap) fails the job with a plain message — never the error text itself.
+ * cap) fails the job with a plain message — never the error text itself. A
+ * failed job's `result` is whatever the work `keep`-ed (else null).
  */
-export function startJob(owner: string, kind: TripJobKind, work: () => Promise<unknown>, opts: { capMs?: number; now?: () => number } = {}): TripJob {
+export function startJob(owner: string, kind: TripJobKind, work: (handle: JobHandle) => Promise<unknown>, opts: { capMs?: number; now?: () => number } = {}): TripJob {
   const now = opts.now ?? Date.now;
   prune(now());
   const job: TripJob = { id: randomUUID(), kind, status: 'running', startedAt: new Date(now()).toISOString(), finishedAt: null, result: null, error: null };
@@ -74,19 +94,26 @@ export function startJob(owner: string, kind: TripJobKind, work: () => Promise<u
     entry.job = { ...entry.job, ...patch, finishedAt: new Date(t).toISOString() };
     entry.finishedMs = t;
   };
+  let kept: Record<string, unknown> | null = null;
+  const handle: JobHandle = {
+    keep: (partial) => {
+      kept = { ...(kept ?? {}), ...partial };
+    },
+  };
+  const failed = (error: string) => finish({ status: 'failed', result: kept, error: kept ? JOB_KEPT_MESSAGE : error });
   const cap = setTimeout(() => {
     console.warn(`[trips/jobs] ${kind} ${job.id} hit the ${Math.round((opts.capMs ?? JOB_CAP_MS) / 1000)} s cap`);
-    finish({ status: 'failed', result: null, error: JOB_TIMEOUT_MESSAGE });
+    failed(JOB_TIMEOUT_MESSAGE);
   }, opts.capMs ?? JOB_CAP_MS);
   // Unref so a pending cap never holds the process open.
   (cap as { unref?: () => void }).unref?.();
   void Promise.resolve()
-    .then(work)
+    .then(() => work(handle))
     .then(
       (result) => finish({ status: 'done', result: result ?? null, error: null }),
       (err) => {
         console.error(`[trips/jobs] ${kind} ${job.id} failed:`, err);
-        finish({ status: 'failed', result: null, error: JOB_FAILED_MESSAGE });
+        failed(JOB_FAILED_MESSAGE);
       },
     )
     .finally(() => clearTimeout(cap));

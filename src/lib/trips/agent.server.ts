@@ -22,6 +22,7 @@ import type { LatLng, ResearchStep, Stay, TravelMode, Wish } from './model';
 import { estimateLeg, windowsOn } from '$lib/trips/solver';
 import { findPlace, findPlaceLoosely } from './research.server';
 import type { TripRecord } from './store.server';
+import { PLANNER_TURN_MS } from './limits';
 
 const USER_AGENT = 'StrangeRamblingsTrips/1.0 (+https://strangeramblings.com)';
 export const AERODATABOX_HANDLE = 'aerodatabox';
@@ -229,7 +230,7 @@ export async function agentTurn(
     temperature: 0.2,
     maxTokens: 4000,
     activity: 'trips-planner',
-    timeoutMs: opts.timeoutMs ?? 180_000,
+    timeoutMs: opts.timeoutMs ?? PLANNER_TURN_MS,
     execute: async (call) => {
       const allowed = spend(budget, call.name, opts.budget ?? BUDGET);
       if (!allowed.ok) return allowed.reason;

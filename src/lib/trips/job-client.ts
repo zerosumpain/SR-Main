@@ -6,6 +6,8 @@
 // the answer, so the page works either way. Browser-safe; `fetch` and the
 // wait are injectable for tests.
 
+import { TURN_CEILING_MS } from './limits';
+
 export interface JobOutcome<T> {
   ok: boolean;
   /** The synchronous call's JSON (or the job's `result`), or `{ error }`. */
@@ -20,8 +22,11 @@ interface PolledJob {
 }
 
 export const POLL_EVERY_MS = 1500;
-/** A little past the server's 150 s cap, so the server's own message wins. */
-export const POLL_GIVE_UP_MS = 165_000;
+/**
+ * A little past the server's job cap (the turn's ceiling + 30 s, see
+ * ./jobs.server), so the server's own message wins.
+ */
+export const POLL_GIVE_UP_MS = TURN_CEILING_MS + 45_000;
 
 export async function postAsJob<T>(
   url: string,
