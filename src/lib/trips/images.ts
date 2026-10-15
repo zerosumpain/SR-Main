@@ -64,15 +64,32 @@ export function plainText(html: unknown, max = 160): string | null {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+/** Wikimedia's own image hosts: thumbnails moved to `thumb.` in 2026. */
+const IMAGE_HOSTS = new Set(['upload.wikimedia.org', 'thumb.wikimedia.org']);
+
+/** An https URL on Wikimedia's image hosts, without tracking parameters; else null. */
+export function cleanImageUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:' || !IMAGE_HOSTS.has(u.hostname)) return null;
+    for (const k of [...u.searchParams.keys()]) if (k.startsWith('utm_')) u.searchParams.delete(k);
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
 /** The Commons answer as our image, or null when it has no usable thumbnail. */
 export function imageFromCommons(json: unknown, q: string): PlaceImage | null {
   const pages = (json as { query?: { pages?: Record<string, unknown> } } | null)?.query?.pages ?? {};
   for (const page of Object.values(pages)) {
     const info = (page as { imageinfo?: Array<Record<string, unknown>> }).imageinfo?.[0];
     if (!info) continue;
-    const url = typeof info.thumburl === 'string' ? info.thumburl : typeof info.url === 'string' ? info.url : null;
+    // The thumbnail only: an original can be tens of megabytes.
+    const url = cleanImageUrl(info.thumburl);
     const sourceUrl = typeof info.descriptionurl === 'string' ? info.descriptionurl : null;
-    if (!url || !sourceUrl || !/^https:\/\/upload\.wikimedia\.org\//.test(url)) continue;
+    if (!url || !sourceUrl) continue;
     const meta = (info.extmetadata ?? {}) as Record<string, { value?: unknown } | undefined>;
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
     return {

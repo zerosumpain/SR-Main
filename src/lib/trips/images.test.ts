@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commonsInfoUrl, imageFileFromEntity, imageFromCommons, plainText, wikidataId } from './images';
+import { cleanImageUrl, commonsInfoUrl, imageFileFromEntity, imageFromCommons, plainText, wikidataId } from './images';
 
 // v7: places' photographs from Wikimedia Commons (pure half).
 describe('wikidata ids', () => {
@@ -47,7 +47,16 @@ describe('the Commons answer', () => {
       url: info.thumburl, width: 800, height: 533, credit: 'Jane Smith', license: 'CC BY-SA 4.0', sourceUrl: info.descriptionurl, wikidata: 'Q99309',
     });
   });
-  it('refuses an image not on Wikimedia’s upload host', () => {
+  it('takes the new thumbnail host, without its tracking parameters', () => {
+    const thumb = 'https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7b/P.jpg/960px-P.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo';
+    expect(imageFromCommons(page({ ...info, thumburl: thumb }), 'Q99309')?.url).toBe('https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7b/P.jpg/960px-P.jpg');
+    expect(cleanImageUrl('http://upload.wikimedia.org/a.jpg')).toBeNull();
+    expect(cleanImageUrl('https://wikimedia.org.evil.example/a.jpg')).toBeNull();
+  });
+  it('never falls back to the full-size original', () => {
+    expect(imageFromCommons(page({ ...info, thumburl: undefined, url: 'https://upload.wikimedia.org/wikipedia/commons/a/ab/P.jpg' }), 'Q1')).toBeNull();
+  });
+  it('refuses an image not on Wikimedia’s image hosts', () => {
     expect(imageFromCommons(page({ ...info, thumburl: 'https://evil.example/x.jpg', url: 'https://evil.example/x.jpg' }), 'Q1')).toBeNull();
     expect(imageFromCommons({ query: { pages: {} } }, 'Q1')).toBeNull();
   });
