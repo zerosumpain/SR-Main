@@ -111,6 +111,7 @@ describe('every native route gates itself', () => {
         // in each handler; everyone else 403s.
         '/family/backlog/+server.ts',
         '/family/backlog/[id]/+server.ts',
+        '/family/backlog/[id]/cast/+server.ts',
         '/family/backlog/[id]/reaction/+server.ts',
         '/family/backlog/digest/+server.ts',
         // The travel desk's forecast. Scoped exactly as /home/people is: a

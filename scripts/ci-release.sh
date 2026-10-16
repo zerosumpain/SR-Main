@@ -143,6 +143,24 @@ if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
   sudo apt-get install -y --no-install-recommends ffmpeg
 fi
 
+# Family backlog "Play on TV" fetches TikTok/YouTube clips with yt-dlp
+# ($lib/family/backlog-cast.server). The standalone binary, pinned and checked:
+# Debian's package lags months behind the sites it reads. Bump both lines
+# together when TikTok changes and fetches start falling back to mirroring.
+YT_DLP_VERSION=2026.08.19
+YT_DLP_SHA256=58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a
+if [ "$(yt-dlp --version 2>/dev/null || true)" != "$YT_DLP_VERSION" ]; then
+  yt_tmp="$(mktemp)"
+  if curl -fsSL -o "$yt_tmp" "https://github.com/yt-dlp/yt-dlp/releases/download/$YT_DLP_VERSION/yt-dlp_linux" &&
+    echo "$YT_DLP_SHA256  $yt_tmp" | sha256sum -c --quiet; then
+    sudo install -m 0755 "$yt_tmp" /usr/local/bin/yt-dlp
+  else
+    # Not fatal: without it every cast falls back to the phone, nothing else breaks.
+    echo "::warning::yt-dlp $YT_DLP_VERSION could not be installed; Play on TV will fall back to mirroring" >&2
+  fi
+  rm -f "$yt_tmp"
+fi
+
 # Read what is serving now BEFORE the swap. This is the release log's "what did
 # this replace" boundary. Empty on the first run of this script.
 PREV_SHA="$(sed -n 's/^sha=//p' "$VPS_DIR/build/.deploy-sha" 2>/dev/null | head -1 || true)"

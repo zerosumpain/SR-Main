@@ -90,6 +90,12 @@ const PUBLIC_PATHS = [
   // and expired all 404 alike ($lib/home/presence/route-session). A PREFIX, so
   // check-public-routes.mjs is what stops a sibling becoming anonymous.
   '/follow',
+  // A fetched family-backlog video, for a TV: /cast/<ticket>.mp4. A Chromecast
+  // or an AirPlay TV has no login, so the ticket is the permission — HMAC over
+  // one item id, six hours, and the item must still be listed; forged, expired,
+  // deleted and evicted all 404 alike ($lib/family/backlog-cast). A PREFIX, so
+  // check-public-routes.mjs is what stops a sibling becoming anonymous.
+  '/cast',
   // The page that explains the landing page's pixel character. Public like the
   // landing page itself; only one route lives under this prefix.
   '/rambler',
