@@ -4,8 +4,9 @@
  * Two things were quietly untrue:
  *
  *   - nightly.yml said it runs "the eight *.integration.test.ts files the merge
- *     gate has never once executed". There are 42 after JKAI Chat, Intel,
- *     Canvas and workflow tests moved with their applications. The earlier
+ *     gate has never once executed". There were 42 after JKAI Chat, Intel,
+ *     Canvas and workflow tests moved with their applications, and 43 with
+ *     daydream's subject test (2026-10-16). The earlier
  *     count was right when it was written and nothing had re-counted since.
  *     Intel spaces had added,
  *     src/lib/jkai/intel/spaces.integration.test.ts and
@@ -72,7 +73,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // The trip store (trips/store.integration, 2026-10-13) checks plan versions are
 // numbered without clashes under concurrent appends and that phone events are
 // idempotent; it creates and removes its own rows under a throwaway owner.
-const INTEGRATION_FILES = 42;
+const INTEGRATION_FILES = 43;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

@@ -50,7 +50,9 @@ import type { EvidenceRef } from './snapshot-types';
  */
 // `think-question` is the channel a think note's question started from — shared
 // by every note from that channel, so it says nothing about WHICH claim.
-const GENERIC_KINDS: ReadonlySet<string> = new Set(['features', 'think-question']);
+// `think-subject` is what a note is about (`think/subjects.ts`): two notes on
+// one subject can say different things, and that module decides between them.
+const GENERIC_KINDS: ReadonlySet<string> = new Set(['features', 'think-question', 'think-subject']);
 
 /** How many shared rows before two claims are the same claim. One row in
  *  common is a coincidence; a claim is rarely built on fewer than two. */

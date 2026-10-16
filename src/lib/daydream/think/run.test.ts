@@ -13,7 +13,7 @@ const base = {
   rounds: 5,
   profile: ['WHAT HE HAS CORRECTED: "PE days are kit reminders"'],
   said: ['Canva charged twice'],
-  interests: ['notebook: Roman aqueducts'],
+  interest: { title: 'Roman aqueducts', from: 'notebook' as const, key: 'topic:roman-aqueducts' },
   today: '2026-09-25',
 };
 
@@ -40,6 +40,34 @@ describe('systemPrompt', () => {
     expect(r).not.toMatch(/PE days/);
     expect(r).toMatch(/RESEARCH CYCLE/);
     expect(r).toMatch(/Roman aqueducts/);
+  });
+
+  it('gives a research cycle one interest and the so-what rule', () => {
+    const r = systemPrompt({ ...base, question: research, set: 'research', profile: [] });
+    expect(r).toMatch(/THIS CYCLE'S INTEREST[^\n]*"Roman aqueducts"/);
+    expect(r).toMatch(/SO WHAT/);
+    expect(r).not.toMatch(/HIS INTERESTS/);
+  });
+
+  it('lists covered subjects, his taste, and tested pairs where they belong', () => {
+    const subjects = [{ key: 'merchant:sky', title: 'Sky TV monthly charge increased by £1.69' }];
+    const taste = ['WHAT HE HAS TOLD YOU IS NOT WORTH SAYING. Do not write another note like these:', '  • He already knew: "Steps are up"'];
+    const tested = ['sleepMinutes against recoveryScore (tested 2026-10-15, 90-day window): same day r 0.04 over 62 days, p 0.783'];
+    const p = systemPrompt({ ...base, question: health, set: 'private', subjects, taste, tested });
+    const r = systemPrompt({ ...base, question: research, set: 'research', profile: [], subjects: [], taste, tested });
+    expect(p).toMatch(/SUBJECTS ALREADY COVERED[\s\S]*\[merchant:sky\] Sky TV/);
+    expect(p).toMatch(/He already knew: "Steps are up"/);
+    expect(p).toMatch(/ALREADY TESTED[\s\S]*sleepMinutes against recoveryScore/);
+    expect(p).toMatch(/"changed"/);
+    // The ledger is his health data; a research cycle never holds it.
+    expect(r).not.toMatch(/ALREADY TESTED/);
+    expect(r).toMatch(/He already knew/);
+  });
+
+  it('leads a summary cycle with the summary brief', () => {
+    const p = systemPrompt({ ...base, question: health, set: 'private', summary: true });
+    expect(p).toMatch(/MONTHLY SUMMARY OF WHAT HAS BEEN TESTED/);
+    expect(p).not.toContain(health.brief);
   });
 
   it('tells the model that silence is fine and generic notes are worthless', () => {

@@ -20,12 +20,14 @@ import { mutedKinds } from '../thought-store';
 import { loadNoteContexts } from './context.server';
 import { REPLACES_KIND, TOPIC_KINDS, TOPIC_WINDOW_DAYS, replacesEntry, supersededBy, type TopicCandidate } from './topics';
 import { THINK_CADENCE_MS, questionAt, type Channel, type Outcome } from './questions';
-import { dayToStored, keptUntil } from './shelf';
+import { dayToStored, keptUntil, sweepDue } from './shelf';
+import { PLAN_FRESH_DAYS } from './subjects';
 import {
   channelLabel,
   inScope,
   isForPhone,
   isOnFeed,
+  livingPlanId,
   outcomeLabel,
   todayNotes,
   toFeedNote,
@@ -60,6 +62,7 @@ const ROW_COLUMNS = {
   reviewModel: daydreamThoughts.reviewModel,
   proposedActions: daydreamThoughts.proposedActions,
   relevantUntil: daydreamThoughts.relevantUntil,
+  feedbackNote: daydreamThoughts.feedbackNote,
 };
 
 /** The newest think rows for the owner, before any reader's rules. */
@@ -77,7 +80,8 @@ async function loadThinkRows(opts: { since?: Date; limit: number }): Promise<Thi
 /** The phone's Today card: the newest two from the last 48 hours. */
 export async function loadTodayNotes(now = new Date()): Promise<NativeNote[]> {
   const [rows, muted] = await Promise.all([
-    loadThinkRows({ since: new Date(now.getTime() - 48 * 3_600_000), limit: 100 }),
+    // A week, not 48 hours: the living plan can be that old (`todayNotes`).
+    loadThinkRows({ since: new Date(now.getTime() - PLAN_FRESH_DAYS * 86_400_000), limit: 200 }),
     mutedKinds(),
   ]);
   return todayNotes(rows, muted, now).map(toNativeNote);
@@ -104,7 +108,8 @@ export async function loadFeedNotes(opts: { days?: number; now?: Date } = {}): P
   const [rows, muted] = await Promise.all([loadThinkRows({ since, limit: 400 }), mutedKinds()]);
   const shown = rows.filter(isOnFeed);
   const ctx = await loadNoteContexts(shown);
-  return shown.map((r) => toFeedNote(r, muted, ctx.get(r.id), now));
+  const planId = livingPlanId(shown, now);
+  return shown.map((r) => ({ ...toFeedNote(r, muted, ctx.get(r.id), now), living: r.id === planId }));
 }
 
 /** The phone's Daydream page: its notes with stage, next step and sources,
@@ -122,7 +127,8 @@ export async function loadNativeDetail(opts: { limit: number; staleOnly?: boolea
   const [rows, muted] = await Promise.all([loadThinkRows({ limit: 300 }), mutedKinds()]);
   const shown = rows.filter((r) => isForPhone(r, muted));
   const ctx = await loadNoteContexts(shown);
-  const all = shown.map((r) => toNativeDetail(r, ctx.get(r.id), now));
+  const planId = livingPlanId(shown, now);
+  const all = shown.map((r) => ({ ...toNativeDetail(r, ctx.get(r.id), now), living: r.id === planId }));
   const pipeline = { decide: 0, motion: 0, done: 0 };
   for (const n of all) pipeline[n.bucket]++;
   const past = all.filter((n) => n.stale);
@@ -322,6 +328,20 @@ export async function supersedeOnTopic(createdKeys: readonly string[], now = new
  *  was put off by him, and filing must not overwrite that. */
 const FILEABLE_STATUSES = ['new', 'delivered', 'seen', 'suppressed'];
 export const FILED_STALE_REASON = 'past its date: filed by owner';
+/** The sweep's own reason, so its filings can be counted, and put back with
+ *  one UPDATE, apart from his. */
+export const SWEPT_STALE_REASON = 'past its date: filed automatically';
+
+/** Set `expired` on the given notes, from a fileable status only. */
+async function expireNotes(ids: readonly string[], reason: string, now: Date): Promise<number> {
+  if (ids.length === 0) return 0;
+  const done = await db
+    .update(daydreamThoughts)
+    .set({ status: 'expired', suppressedReason: reason, updatedAt: now })
+    .where(and(inArray(daydreamThoughts.id, [...ids]), inArray(daydreamThoughts.status, FILEABLE_STATUSES)))
+    .returning({ id: daydreamThoughts.id });
+  return done.length;
+}
 
 /**
  * File notes the feed flags as past their date: `expired`, which every reader
@@ -332,13 +352,20 @@ export const FILED_STALE_REASON = 'past its date: filed by owner';
  */
 export async function fileStale(ids: readonly string[] | 'all', now = new Date()): Promise<number> {
   const flagged = (await loadFeedNotes({ now })).filter((n) => n.stale && (ids === 'all' || ids.includes(n.id))).map((n) => n.id);
-  if (flagged.length === 0) return 0;
-  const done = await db
-    .update(daydreamThoughts)
-    .set({ status: 'expired', suppressedReason: FILED_STALE_REASON, updatedAt: now })
-    .where(and(inArray(daydreamThoughts.id, flagged), inArray(daydreamThoughts.status, FILEABLE_STATUSES)))
-    .returning({ id: daydreamThoughts.id });
-  return done.length;
+  return expireNotes(flagged, FILED_STALE_REASON, now);
+}
+
+/**
+ * The sweep: file every note that has carried the flag, unanswered, for more
+ * than `SWEEP_GRACE_DAYS`. The same read as the Inbox, so it can only file
+ * what he was shown flagged, and the same rule as "File it". Returns the
+ * filed titles for the pulse.
+ */
+export async function sweepStale(now = new Date()): Promise<{ filed: number; flagged: number; titles: string[] }> {
+  const flagged = (await loadFeedNotes({ now })).filter((n) => n.stale);
+  const due = flagged.filter((n) => sweepDue(n.stale, now));
+  const filed = await expireNotes(due.map((n) => n.id), SWEPT_STALE_REASON, now);
+  return { filed, flagged: flagged.length, titles: due.map((n) => n.title) };
 }
 
 /** "Still relevant": keep it off the flag for another fortnight. Returns the

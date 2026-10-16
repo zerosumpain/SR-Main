@@ -5,11 +5,14 @@ import { recordFeedback } from '$lib/daydream/thought-store';
 import { parseFeedbackBody } from '$lib/daydream/think/notes';
 import { thinkNoteKind } from '$lib/daydream/think/notes.server';
 import { parseOwnerVerdict, recordOwnerVerdict } from '$lib/daydream/owner-verdict';
+import { isReason } from '$lib/daydream/reasons';
+import { recordReason } from '$lib/daydream/reasons.server';
 
 /**
  * POST /api/native/daydream/feedback — `{ id, verdict: useful|not_useful|never }`,
- * or a ruling on the claim: `{ id, verdict: wrong|right, why }` (why required
- * for wrong — it becomes the lesson).
+ * a ruling on the claim: `{ id, verdict: wrong|right, why }` (why required
+ * for wrong — it becomes the lesson), or a one-tap reason:
+ * `{ id, reason: already_knew|not_my_thing|not_now|did_it }`.
  *
  * The same writer as the feed's buttons and the WhatsApp reply
  * (`recordFeedback`), so a verdict from the phone moves the kind's weight
@@ -29,6 +32,16 @@ export const POST: RequestHandler = withDevice(async ({ request }) => {
     if (!(await thinkNoteKind(ruling.thoughtId))) return json({ error: 'No such note' }, { status: 404 });
     await recordOwnerVerdict(ruling.thoughtId, ruling.verdict, ruling.why);
     return { ok: true };
+  }
+  // `{ id, reason }` — a one-tap reason (`reasons.ts`); additive, an older app
+  // never sends it. "not_now" files the note with no verdict.
+  const reason = (body as Record<string, unknown> | null)?.reason;
+  if (reason !== undefined) {
+    if (!isReason(reason)) return json({ error: 'reason must be already_knew, not_my_thing, not_now or did_it' }, { status: 400 });
+    const id = typeof (body as Record<string, unknown>).id === 'string' ? ((body as Record<string, unknown>).id as string).trim() : '';
+    if (!id || !(await thinkNoteKind(id))) return json({ error: 'No such note' }, { status: 404 });
+    const res = await recordReason(id, reason);
+    return { ok: true, ...res };
   }
   const parsed = parseFeedbackBody(body);
   if (!parsed.ok) return json({ error: parsed.error }, { status: 400 });

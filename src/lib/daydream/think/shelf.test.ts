@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { datesIn, eventDayOf, keptUntil, parseUntil, shelfOf, stalenessOf } from './shelf';
+import { datesIn, eventDayOf, keptUntil, parseUntil, shelfOf, stalenessOf, sweepDue } from './shelf';
 
 const at = (s: string) => new Date(s);
 const open = { stage: 'spotted' };
@@ -96,4 +96,16 @@ describe('parseUntil', () => {
 
 it('keptUntil is a fortnight on', () => {
   expect(keptUntil(at('2026-10-11T20:00:00Z'))).toBe('2026-10-25');
+});
+
+describe('sweepDue', () => {
+  const stale = { until: '2026-10-09' };
+  it('waits out a week of grace after the last day, in London days', () => {
+    expect(sweepDue(stale, at('2026-10-16T12:00:00Z'))).toBe(false); // 7 days on
+    expect(sweepDue(stale, at('2026-10-16T23:30:00Z'))).toBe(true); // 00:30 BST on the 17th
+    expect(sweepDue(stale, at('2026-10-17T08:00:00Z'))).toBe(true);
+  });
+  it('never sweeps an unflagged note', () => {
+    expect(sweepDue(null, at('2027-01-01T08:00:00Z'))).toBe(false);
+  });
 });

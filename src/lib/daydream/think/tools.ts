@@ -47,7 +47,7 @@
 // pack" to "code built every card the model saw" — the property
 // `ponder/lookups.ts` was protecting, kept rather than traded away.
 
-import { createCorrelator, correlateDescription } from './correlate';
+import { createCorrelator, correlateDescription, type LedgerSession } from './correlate';
 import { HUB_SECTIONS, activitiesTool, healthHubTool, healthSeriesDescription, healthSeriesTool } from './health';
 import { chatThreadsTool, diaryTool, mailFactsTool, spendTool } from './reads';
 import { isResearchChannel, type Channel } from './questions';
@@ -237,10 +237,13 @@ export interface ToolCallOutcome {
  * One cycle's tools: the definitions to offer, and a caller that refuses
  * anything outside the cycle's set BEFORE it runs, and cards what it runs.
  */
-export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subject: string }) {
+export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subject: string; ledger?: LedgerSession }) {
   const allowed = toolsIn(opts.set);
   const cards = new Map<string, Card>();
-  const correlate = createCorrelator({ subject: opts.subject, now: opts.now });
+  /** Cards of correlate() pairs tested recently with nothing new (`ledger.ts`). */
+  const staleCards = new Set<string>();
+  const correlate = createCorrelator({ subject: opts.subject, now: opts.now, ledger: opts.ledger });
+  let lastStale = false;
   let calls = 0;
 
   async function runLocal(name: LocalTool, args: Record<string, unknown>): Promise<string> {
@@ -249,8 +252,11 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         return healthHubTool(args);
       case 'health_series':
         return healthSeriesTool(args, opts.now);
-      case 'correlate':
-        return (await correlate(args)).text;
+      case 'correlate': {
+        const out = await correlate(args);
+        lastStale = out.stale === true;
+        return out.text;
+      }
       case 'mail_facts':
         return mailFactsTool(args, opts.now);
       case 'diary':
@@ -268,6 +274,7 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
     set: opts.set,
     allowed,
     cards,
+    staleCards,
     get calls() {
       return calls;
     },
@@ -291,6 +298,7 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         return { card: null, failed: true, content: `Refused: this cycle has used all ${MAX_TOOL_CALLS} tool calls. Write your answer.` };
       }
       calls++;
+      lastStale = false;
       let raw: unknown;
       try {
         if (isLocal(name)) {
@@ -309,7 +317,19 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
       }
       const card = makeCard(cards.size + 1, name, args, raw, opts.day);
       cards.set(card.id, card);
+      if (lastStale) staleCards.add(card.id);
       return { card, failed: false, content: renderCard(card) };
+    },
+
+    /**
+     * A card code issues before the model looks — the ledger on a summary
+     * cycle. It takes the next id like any other, is citable like any other,
+     * and costs none of the cycle's tool calls.
+     */
+    seed(tool: string, args: Record<string, unknown>, text: string): Card {
+      const card = makeCard(cards.size + 1, tool, args, text, opts.day);
+      cards.set(card.id, card);
+      return card;
     },
   };
 }
