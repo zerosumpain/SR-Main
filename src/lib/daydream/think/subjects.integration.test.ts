@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { inArray, sql } from 'drizzle-orm';
 
 // Every read and write here is real, against an isolated local database: the
@@ -13,7 +13,7 @@ import { readSeenAgain } from './subjects';
 import { readReplaces } from './topics';
 import { loadLedger, saveTests } from './ledger.server';
 import { recordReason, loadTaste } from '../reasons.server';
-import { setSetting } from '$lib/server/models/settings';
+import { getSetting, setSetting } from '$lib/server/models/settings';
 import { LEDGER_SETTING } from './ledger';
 
 const database = process.env.DATABASE_URL ?? '';
@@ -21,6 +21,10 @@ const enabled = process.env.DAYDREAM_SUBJECT_TESTS === '1' && /(?:127\.0\.0\.1|l
 
 const ids: string[] = [];
 const NOW = new Date();
+// Per run, so a seeded preview database never shares a subject with the test.
+const RUN = randomUUID().replace(/[^a-f]/g, '').slice(0, 6);
+const sub = (key: string) => `${key}${RUN}`;
+let ledgerBefore: unknown = null;
 const ago = (h: number) => new Date(NOW.getTime() - h * 3_600_000);
 
 async function note(o: { kind?: string; title?: string; subject?: string; channel?: string; created?: Date; status?: string; feedback?: string | null; feedbackNote?: string | null }) {
@@ -58,27 +62,32 @@ async function get(id: string) {
 
 // File scope, so it runs after BOTH blocks — the cycle's rows are known only
 // once it has written them.
+beforeAll(async () => {
+  if (enabled) ledgerBefore = await getSetting(LEDGER_SETTING);
+});
 afterAll(async () => {
   if (!enabled) return;
   if (ids.length) await db.delete(daydreamThoughts).where(inArray(daydreamThoughts.id, ids));
-  await setSetting(LEDGER_SETTING, {});
+  // Whatever a cycle wrote under this run's subjects, even if it failed midway.
+  await db.delete(daydreamThoughts).where(sql`${daydreamThoughts.evidence}::text like ${`%${RUN}%`}`);
+  await setSetting(LEDGER_SETTING, ledgerBefore ?? {});
 });
 
 describe.skipIf(!enabled)('subjects against the local database', () => {
 
   it('finds notes by subject in every status, and nothing else', async () => {
-    const a = await note({ subject: 'merchant:sky', status: 'expired', created: ago(100) });
-    const b = await note({ subject: 'merchant:sky' });
-    await note({ subject: 'merchant:github' });
+    const a = await note({ subject: sub('merchant:sky'), status: 'expired', created: ago(100) });
+    const b = await note({ subject: sub('merchant:sky') });
+    await note({ subject: sub('merchant:github') });
     await note({});
-    const rows = await loadSubjectNotes(['merchant:sky'], NOW);
+    const rows = await loadSubjectNotes([sub('merchant:sky')], NOW);
     expect(rows.map((r) => r.id).sort()).toEqual([a, b].sort());
-    expect(rows.find((r) => r.id === a)).toMatchObject({ open: false, answered: false, key: 'merchant:sky' });
+    expect(rows.find((r) => r.id === a)).toMatchObject({ open: false, answered: false, key: sub('merchant:sky') });
     expect(rows.find((r) => r.id === b)).toMatchObject({ open: true });
   });
 
   it('folds a repeat into the earlier note', async () => {
-    const a = await note({ subject: 'merchant:postcode-lottery' });
+    const a = await note({ subject: sub('merchant:postcode-lottery') });
     await foldInto(a, '2026-10-15', NOW);
     await foldInto(a, '2026-10-16', NOW);
     const r = await get(a);
@@ -87,27 +96,27 @@ describe.skipIf(!enabled)('subjects against the local database', () => {
   });
 
   it('archives the older notes under a revision, and records what it replaced', async () => {
-    const old = await note({ subject: 'merchant:sky-2', created: ago(50) });
-    const fresh = await note({ subject: 'merchant:sky-2', title: 'Sky rose again, to £41.50' });
+    const old = await note({ subject: sub('merchant:sky-2'), created: ago(50) });
+    const fresh = await note({ subject: sub('merchant:sky-2'), title: 'Sky rose again, to £41.50' });
     expect(await supersedeOnSubject(fresh, [{ id: old, title: 'Sky TV monthly charge increased by £1.69' }], NOW)).toBe(1);
     expect(await get(old)).toMatchObject({ status: 'archived', suppressedReason: `superseded: ${fresh}` });
     expect(readReplaces((await get(fresh)).proposedActions)).toEqual([{ id: old, title: 'Sky TV monthly charge increased by £1.69' }]);
   });
 
   it('lists recent subjects, and only topic subjects for a research cycle', async () => {
-    await note({ kind: 'think_research', subject: 'topic:ember-1', channel: 'research', title: 'Blind names in Ember-1' });
+    await note({ kind: 'think_research', subject: sub('topic:ember-1'), channel: 'research', title: 'Blind names in Ember-1' });
     const all = await recentSubjects(NOW);
     const research = await recentSubjects(NOW, { prefix: 'topic:' });
-    expect(all.some((s) => s.key === 'merchant:sky')).toBe(true);
+    expect(all.some((s) => s.key === sub('merchant:sky'))).toBe(true);
     expect(research.every((s) => s.key.startsWith('topic:'))).toBe(true);
-    expect(research.some((s) => s.key === 'topic:ember-1')).toBe(true);
+    expect(research.some((s) => s.key === sub('topic:ember-1'))).toBe(true);
   });
 
   it('counts his verdicts on an interest, reasons included', async () => {
-    await note({ kind: 'think_research', subject: 'topic:barns-ness', channel: 'research', feedback: 'not_useful', created: ago(30) });
-    await note({ kind: 'think_research', subject: 'topic:barns-ness', channel: 'research', feedback: 'not_useful', feedbackNote: 'already_knew', created: ago(10) });
+    await note({ kind: 'think_research', subject: sub('topic:barns-ness'), channel: 'research', feedback: 'not_useful', created: ago(30) });
+    await note({ kind: 'think_research', subject: sub('topic:barns-ness'), channel: 'research', feedback: 'not_useful', feedbackNote: 'already_knew', created: ago(10) });
     const cov = await interestCoverage(NOW);
-    expect(cov.get('topic:barns-ness')).toMatchObject({ verdicts: [true, true] });
+    expect(cov.get(sub('topic:barns-ness'))).toMatchObject({ verdicts: [true, true] });
   });
 
   it('files "not now" with no verdict, and keeps the taste from "already knew"', async () => {
@@ -135,7 +144,7 @@ describe.skipIf(!enabled)('subjects against the local database', () => {
 
 // ── One think cycle end to end: the model and the spend tool are stubbed, the
 // rest — audit, subject rule, persistence, fold, supersession — is real.
-const cycle = vi.hoisted(() => ({ reply: '', spend: 'SKY DIGITAL £39.69 [bank] 2026-10-10' }));
+const cycle = vi.hoisted(() => ({ reply: '', spend: '' }));
 vi.mock('./reads', async (orig) => ({ ...(await orig<typeof import('./reads')>()), spendTool: async () => cycle.spend }));
 vi.mock('$lib/llm/client', () => ({ getLLMClient: async () => ({ client: {}, model: 'stub' }) }));
 vi.mock('../model', () => ({ resolveDaydreamModel: async () => ({ provider: 'openrouter', modelId: 'stub' }) }));
@@ -149,8 +158,10 @@ vi.mock('$lib/llm/tool-loop', () => ({
 }));
 
 describe.skipIf(!enabled)('a think cycle against the local database', () => {
+  // A merchant name unique to this run, so a seeded database cannot answer for it.
+  const shop = `Skyqa${RUN}`;
   const sky = (over: Record<string, unknown> = {}) =>
-    JSON.stringify({ notes: [{ outcome: 'money_analysis', title: 'Sky TV went up by £1.69', body: 'Sky now takes £39.69 a month, up £1.69 from September.', cites: ['C1'], subject: 'merchant:Sky', ...over }] });
+    JSON.stringify({ notes: [{ outcome: 'money_analysis', title: `Sky TV went up by £1.69 ${RUN}`, body: 'Sky now takes £39.69 a month, up £1.69 from September.', cites: ['C1'], subject: `merchant:${shop}`, ...over }] });
 
   it('writes the first note, folds the repeat, and revises on a new figure', async () => {
     const { runThink } = await import('./run');
@@ -163,28 +174,29 @@ describe.skipIf(!enabled)('a think cycle against the local database', () => {
       return d;
     };
 
+    cycle.spend = `${shop.toUpperCase()} DIGITAL £39.69 [bank] 2026-10-10`;
     cycle.reply = sky();
     const first = await runThink({ now: at(0) });
     expect(first.error).toBeNull();
     expect(first.notes.created).toBe(1);
 
-    cycle.reply = sky({ title: 'Sky charge rose £1.69 this month' });
+    cycle.reply = sky({ title: `Sky charge rose £1.69 this month ${RUN}` });
     const second = await runThink({ now: at(5) });
     expect(second.subjects.folded).toBe(1);
     expect(second.notes.created).toBe(0);
 
-    cycle.spend = 'SKY DIGITAL £41.50 [bank] 2026-11-10';
-    cycle.reply = sky({ title: 'Sky rose again, to £41.50', body: 'Sky now takes £41.50 a month, a second rise.', changed: 'a second rise, to £41.50' });
+    cycle.spend = `${shop.toUpperCase()} DIGITAL £41.50 [bank] 2026-11-10`;
+    cycle.reply = sky({ title: `Sky rose again, to £41.50 ${RUN}`, body: 'Sky now takes £41.50 a month, a second rise.', changed: 'a second rise, to £41.50' });
     const third = await runThink({ now: at(10) });
     expect(third.subjects).toMatchObject({ revised: 1, superseded: 1 });
 
     const rows = await db
       .select({ id: daydreamThoughts.id, status: daydreamThoughts.status, narrative: daydreamThoughts.narrative, actions: daydreamThoughts.proposedActions, title: daydreamThoughts.title })
       .from(daydreamThoughts)
-      .where(sql`${daydreamThoughts.evidence} @> '[{"kind":"think-subject","id":"merchant:sky"}]'::jsonb and ${daydreamThoughts.kind} = 'think_money_analysis' and ${daydreamThoughts.title} like 'Sky%'`);
+      .where(sql`${daydreamThoughts.evidence} @> ${JSON.stringify([{ kind: 'think-subject', id: `merchant:${shop.toLowerCase()}` }])}::jsonb`);
     for (const r of rows) ids.push(r.id);
-    const orig = rows.find((r) => r.title === 'Sky TV went up by £1.69')!;
-    const rev = rows.find((r) => r.title === 'Sky rose again, to £41.50')!;
+    const orig = rows.find((r) => r.title === `Sky TV went up by £1.69 ${RUN}`)!;
+    const rev = rows.find((r) => r.title === `Sky rose again, to £41.50 ${RUN}`)!;
     expect(orig.status).toBe('archived');
     expect(readSeenAgain(orig.actions)).toHaveLength(1);
     expect(rev.narrative).toMatch(/^What changed: a second rise, to £41\.50/);

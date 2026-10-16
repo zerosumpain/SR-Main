@@ -384,7 +384,12 @@ export async function runThink(
     // resting on refuted rows lands suppressed, a muted kind is dropped.
     const persisted = await persistCandidates(
       kept.map((n) => n.candidate),
-      { runId: `think-${now.getTime()}`, now, subject },
+      {
+        runId: `think-${now.getTime()}`,
+        now,
+        subject,
+        revisions: new Set([...decisions].filter(([, d]) => d.action === 'revise').map(([k]) => k)),
+      },
     );
     result.notes = { ...persisted, proposed: kept.length };
 
