@@ -56,11 +56,15 @@ async function get(id: string) {
   return r;
 }
 
+// File scope, so it runs after BOTH blocks — the cycle's rows are known only
+// once it has written them.
+afterAll(async () => {
+  if (!enabled) return;
+  if (ids.length) await db.delete(daydreamThoughts).where(inArray(daydreamThoughts.id, ids));
+  await setSetting(LEDGER_SETTING, {});
+});
+
 describe.skipIf(!enabled)('subjects against the local database', () => {
-  afterAll(async () => {
-    if (ids.length) await db.delete(daydreamThoughts).where(inArray(daydreamThoughts.id, ids));
-    await setSetting(LEDGER_SETTING, {});
-  });
 
   it('finds notes by subject in every status, and nothing else', async () => {
     const a = await note({ subject: 'merchant:sky', status: 'expired', created: ago(100) });
