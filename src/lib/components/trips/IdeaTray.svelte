@@ -171,12 +171,27 @@
 
 <style>
   .tray {
-    margin: 8px 0 10px;
-    padding: 10px 12px;
-    border: 1px dashed var(--band-rule, var(--line-strong));
+    /* A sheet of card laid on the stage, taped at the top: it reads the same
+       on every stage's paper, the ink evening's included. */
+    position: relative;
+    margin: 14px 0 12px;
+    padding: 14px 14px 12px;
+    border: 1px solid var(--line-strong);
     border-radius: 2px;
-    background: var(--bg);
+    background: var(--np-card, var(--surface-card));
     color: var(--text-primary);
+    box-shadow: 0 10px 20px -16px rgba(26, 16, 8, 0.5);
+  }
+  .tray::before {
+    content: '';
+    position: absolute;
+    top: -9px;
+    left: 50%;
+    width: min(110px, 30%);
+    height: 18px;
+    background: var(--np-tape, rgba(214, 196, 160, 0.72));
+    transform: translateX(-50%) rotate(-2deg);
+    pointer-events: none;
   }
   .tray-hd {
     display: flex;
@@ -186,11 +201,10 @@
     margin-bottom: 6px;
   }
   .tray-title {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--accent-ink);
+    font-family: var(--fs-serif);
+    font-style: italic;
+    font-size: 19px;
+    color: var(--text-primary);
   }
   .tray-meta,
   .small {
@@ -233,6 +247,14 @@
       animation: none;
     }
   }
+  @media print {
+    .tray::before {
+      display: none;
+    }
+    .card {
+      transform: none;
+    }
+  }
   .cards {
     list-style: none;
     margin: 0;
@@ -242,17 +264,42 @@
     gap: 8px;
   }
   .card {
-    padding: 8px 10px;
+    /* An index card: a red head rule under the name, a pencil tick of
+       green (fits) or amber (doesn't) at its left edge. */
+    position: relative;
+    padding: 10px 12px 10px 14px;
     border: 1px solid var(--line-strong);
-    border-left: 3px solid var(--success);
     border-radius: 2px;
-    background: var(--surface-card);
+    background-color: var(--bg);
+    background-image: linear-gradient(var(--np-margin-a, rgba(196, 87, 10, 0.55)), var(--np-margin-a, rgba(196, 87, 10, 0.55)));
+    background-size: 100% 1px;
+    background-position: 0 38px;
+    background-repeat: no-repeat;
+    box-shadow: inset 3px 0 0 var(--success);
+  }
+  .card:nth-child(odd) {
+    transform: rotate(-0.5deg);
+  }
+  .card:nth-child(even) {
+    transform: rotate(0.4deg);
   }
   .card.warn {
-    border-left-color: var(--warn);
+    box-shadow: inset 3px 0 0 var(--warn);
   }
   .name {
     display: block;
+    height: 28px;
+    line-height: 28px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .why {
+    font-family: var(--fs-serif);
+    font-style: italic;
   }
   .why {
     margin: 2px 0;
@@ -280,15 +327,17 @@
   .not {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    text-transform: uppercase;
     padding: 3px 10px;
-    border-radius: 100px;
+    border-radius: 2px;
     cursor: pointer;
   }
   .add {
     border: 1px solid var(--accent);
     background: var(--accent);
-    color: var(--bg);
+    color: var(--text-on-accent, #fff);
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 13px;
   }
   .not {
     border: 1px solid var(--line-strong);

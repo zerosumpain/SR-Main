@@ -50,6 +50,15 @@
     onAdded?: () => Promise<void>;
   } = $props();
 
+  /** Stops whose quick edits (day, lock, must/nice) are open. Closed by default, so the day reads as a plan. */
+  let adjusting = $state<Set<string>>(new Set());
+  function toggleAdjust(id: string) {
+    const next = new Set(adjusting);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    adjusting = next;
+  }
+
   /** The open idea tray: the whole stage, or the gap between two stops. */
   let tray = $state<{ afterStopId: string | null; beforeStopId: string | null } | null>(null);
   const around = (id: string) => {
@@ -84,15 +93,17 @@
 
 <section class="band band-{stage}" aria-label="{DAY_STAGE_LABEL[stage]}, {dayName}">
   <header class="band-hd">
+    <span class="dot" aria-hidden="true"></span>
     <h3>{DAY_STAGE_LABEL[stage]}</h3>
     {#if span}<span class="span mono">{span}</span>{/if}
-    <button class="ask" type="button" disabled={busy} onclick={() => onAsk(`For ${dayName}, ${ASK[stage]}: `)}>Ask about this stage</button>
+    <span class="hd-acts">
+      {#if !tray}<button class="pen" type="button" onclick={() => (tray = { afterStopId: null, beforeStopId: null })}>Find an idea</button>{/if}
+      <button class="pen" type="button" disabled={busy} onclick={() => onAsk(`For ${dayName}, ${ASK[stage]}: `)}>Ask the planner</button>
+    </span>
   </header>
 
   {#if !items.some((i) => i.stop.kind !== 'stay' || i.stop.id.endsWith(':rest'))}
-    <p class="free">Free — nothing planned. <button class="link" type="button" aria-expanded={!!tray} onclick={() => (tray = { afterStopId: null, beforeStopId: null })}>Ask for an idea</button></p>
-  {:else if !tray}
-    <p class="free"><button class="link" type="button" onclick={() => (tray = { afterStopId: null, beforeStopId: null })}>Find an idea for this stage</button></p>
+    <p class="free">Free — nothing planned yet.</p>
   {/if}
   {#if tray}
     <IdeaTray {base} {date} {stage} {dayName} afterStopId={tray.afterStopId} beforeStopId={tray.beforeStopId} {onAdded} onClose={() => (tray = null)} />
@@ -131,7 +142,7 @@
         </li>
       {/if}
       <li class="stop kind-{s.kind}" class:changed={highlight.has(s.id)}>
-        <span class="time mono">{hhmm(s.arriveMin)}{s.departMin !== s.arriveMin ? `–${hhmm(s.departMin)}` : ''}</span>
+        <span class="time mono">{hhmm(s.arriveMin)}{#if s.departMin !== s.arriveMin}<span class="t-to">–{hhmm(s.departMin)}</span>{/if}</span>
         <span class="body">
           {#if s.kind === 'transport'}<span class="tag mono">{s.id.endsWith(':arrive') ? 'Arrive' : 'Leave'}</span>{:else if s.kind === 'meal'}<span class="tag mono">Meal</span>{/if}
           <strong class="title">{s.title}</strong>
@@ -144,14 +155,20 @@
           {#if s.kind === 'wish' && s.wishId}
             {@const w = wishOf(s.wishId)}
             {#if w}
-              <span class="edits">
-                <select aria-label="Move {s.title} to another day" value={w.fixedDate ?? ''} disabled={busy} onchange={(e) => onPatch(w, { fixedDate: e.currentTarget.value || null }, 'Moved.')}>
-                  <option value="">any day</option>
-                  {#each dates as d (d)}<option value={d}>{dateLabel(d)}</option>{/each}
-                </select>
-                <button type="button" disabled={busy} onclick={() => onPatch(w, { locked: !w.locked }, w.locked ? 'Unlocked.' : 'Locked to this day and time.')}>{w.locked ? 'Unlock' : 'Lock'}</button>
-                <button type="button" disabled={busy} onclick={() => onPatch(w, { priority: w.priority === 'must' ? 'nice' : 'must' })}>{w.priority === 'must' ? 'Must' : 'Nice'}</button>
-              </span>
+              {#if w.locked || w.priority === 'must'}<span class="marks">{#if w.priority === 'must'}<span class="tag mono">must</span>{/if}{#if w.locked}<span class="tag mono">locked</span>{/if}</span>{/if}
+              <button class="adjust" type="button" aria-expanded={adjusting.has(s.id)} onclick={() => toggleAdjust(s.id)}>{adjusting.has(s.id) ? 'Done' : 'Adjust'}</button>
+              {#if adjusting.has(s.id)}
+                <span class="edits">
+                  <label>Day
+                    <select aria-label="Move {s.title} to another day" value={w.fixedDate ?? ''} disabled={busy} onchange={(e) => onPatch(w, { fixedDate: e.currentTarget.value || null }, 'Moved.')}>
+                      <option value="">any day</option>
+                      {#each dates as d (d)}<option value={d}>{dateLabel(d)}</option>{/each}
+                    </select>
+                  </label>
+                  <button type="button" disabled={busy} aria-pressed={w.locked} onclick={() => onPatch(w, { locked: !w.locked }, w.locked ? 'Unlocked.' : 'Locked to this day and time.')}>{w.locked ? 'Unlock' : 'Lock day and time'}</button>
+                  <button type="button" disabled={busy} onclick={() => onPatch(w, { priority: w.priority === 'must' ? 'nice' : 'must' })}>{w.priority === 'must' ? 'Make it a nice-to-have' : 'Make it a must'}</button>
+                </span>
+              {/if}
               {#if w.guide}
                 <details class="guide">
                   <summary>When you get there</summary>
@@ -169,104 +186,127 @@
 </section>
 
 <style>
+  /* Each stage is a different kind of paper on the same sheet, marked with
+     its own pencil (the same pencils as the overview's day cards):
+     breakfast & morning on a ruled index card (petrol), lunch on a sticky
+     note (orange), the afternoon on graph paper (ochre), dinner & evening on
+     the cover's ink. The stage's name always says which it is. */
   .band {
     --band-ink: var(--text-primary);
     --band-soft: var(--text-secondary);
     --band-rule: var(--line-strong);
     --band-link: var(--accent-ink);
+    --pencil: var(--accent-ink);
     position: relative;
-    padding: 16px 18px 14px;
+    padding: 14px 18px 12px;
     border: 1px solid var(--line-strong);
     border-radius: 2px;
     color: var(--band-ink);
   }
-  /* Breakfast & morning — paper with a fine petrol grain. */
   .band-morning {
-    background-color: var(--surface-card);
-    background-image: radial-gradient(var(--accent-ink-tint-12) 1px, transparent 1.2px);
-    background-size: 10px 10px;
-    border-left: 4px solid var(--accent-ink);
+    background-color: var(--np-card, var(--surface-card));
+    background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--np-rule, rgba(14, 91, 102, 0.16)) 31px 32px);
+    box-shadow: inset 4px 0 0 var(--pencil);
   }
-  .band-morning h3 {
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: var(--fs-label);
-    color: var(--accent-ink);
-  }
-  /* Lunch — a warm orange wash, display heading. */
   .band-lunch {
-    background: var(--accent-tint-08);
-    border-top: 3px solid var(--accent);
+    --pencil: var(--accent);
+    --band-ink: #1a1008;
+    --band-soft: #5a4632;
+    --band-rule: rgba(26, 16, 8, 0.25);
+    --band-link: #8a3c06;
+    background: linear-gradient(160deg, #f7d9b4, #f2c99a);
+    border-color: transparent;
+    box-shadow: 0 10px 20px -16px rgba(26, 16, 8, 0.45);
   }
-  .band-lunch h3 {
-    font-family: var(--font-display);
-    font-size: 1.35rem;
-    color: var(--accent);
-  }
-  /* Afternoon — the rail colour with a quiet diagonal hatch. */
   .band-afternoon {
-    background-color: var(--surface-rail);
-    background-image: repeating-linear-gradient(135deg, var(--surface-overlay) 0 2px, transparent 2px 9px);
+    --pencil: #8c6a12;
+    background-color: var(--np-card, var(--surface-card));
+    background-image:
+      linear-gradient(var(--np-graph-major, rgba(14, 91, 102, 0.14)) 1px, transparent 1px),
+      linear-gradient(90deg, var(--np-graph-major, rgba(14, 91, 102, 0.14)) 1px, transparent 1px),
+      linear-gradient(var(--np-graph-minor, rgba(14, 91, 102, 0.06)) 1px, transparent 1px),
+      linear-gradient(90deg, var(--np-graph-minor, rgba(14, 91, 102, 0.06)) 1px, transparent 1px);
+    background-size:
+      80px 80px,
+      80px 80px,
+      16px 16px,
+      16px 16px;
+    border-color: rgba(14, 91, 102, 0.3);
   }
-  .band-afternoon h3 {
-    font-family: var(--font-display);
-    font-size: 1.2rem;
-    text-decoration: underline;
-    text-decoration-color: var(--accent-ink);
-    text-decoration-thickness: 2px;
-    text-underline-offset: 6px;
-  }
-  /* Dinner & evening — the ink ground of the site's bar. */
   .band-evening {
-    --band-ink: var(--chrome-ink);
-    --band-soft: var(--accent-ink-on-dark);
-    --band-rule: var(--accent-on-dark-40);
+    --pencil: var(--accent-on-dark);
+    --band-ink: var(--bg);
+    --band-soft: var(--on-ink-70);
+    --band-rule: var(--on-ink-30);
     --band-link: var(--accent-on-dark);
-    background: var(--chrome-bg);
-    border-color: var(--chrome-bg);
+    background-color: var(--text-primary);
+    background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--on-ink-05) 31px 32px);
+    border-color: var(--text-primary);
   }
-  .band-evening h3 {
-    font-family: var(--font-display);
-    font-size: 1.35rem;
-    color: var(--accent-on-dark);
+  :global(html[data-reading-theme='night']) .band-evening,
+  :global(html[data-theme='dark']) .band-evening {
+    --band-ink: var(--chrome-ink);
+    background-color: var(--chrome-bg);
   }
   .band-hd {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 6px 12px;
-    margin-bottom: 8px;
+    gap: 4px 12px;
+    margin-bottom: 6px;
+  }
+  .dot {
+    align-self: center;
+    width: 10px;
+    height: 10px;
+    border-radius: 100px;
+    background: var(--pencil);
   }
   .band-hd h3 {
     margin: 0;
+    font-family: var(--fs-serif);
+    font-optical-sizing: auto;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 24px;
+    line-height: 32px;
+    color: var(--band-ink);
   }
   .span {
     font-size: var(--fs-label-xs);
     color: var(--band-soft);
   }
-  .ask {
+  .hd-acts {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
     margin-left: auto;
+  }
+  .pen {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
     padding: 3px 10px;
-    border: 1px solid var(--band-rule);
+    border: 1px dashed var(--band-rule);
     border-radius: 100px;
     background: transparent;
-    color: var(--band-ink);
+    color: var(--band-link);
     cursor: pointer;
   }
-  .ask:hover:not(:disabled),
-  .ask:focus-visible {
+  .pen:hover:not(:disabled),
+  .pen:focus-visible {
+    border-style: solid;
     border-color: var(--band-link);
-    color: var(--band-link);
+    outline: none;
+  }
+  .pen:disabled {
+    opacity: 0.5;
   }
   .free {
-    margin: 4px 0;
+    margin: 0 0 4px;
+    font-family: var(--fs-serif);
+    font-style: italic;
     color: var(--band-soft);
-    font-size: var(--fs-label);
   }
   .link {
     background: none;
@@ -280,7 +320,9 @@
   .gap {
     display: inline-block;
     margin-left: 8px;
-    font-size: var(--fs-label-xs);
+    font-family: var(--fs-serif);
+    font-style: italic;
+    font-size: var(--fs-label);
   }
   .stops {
     list-style: none;
@@ -289,9 +331,10 @@
   }
   .stop {
     display: grid;
-    grid-template-columns: 92px minmax(0, 1fr);
+    grid-template-columns: 96px minmax(0, 1fr);
     gap: 10px;
-    padding: 6px 4px;
+    padding: 4px 4px;
+    line-height: 24px;
     border-radius: 2px;
   }
   .stop.changed {
@@ -317,7 +360,7 @@
   .time {
     font-size: var(--fs-label);
     color: var(--band-soft);
-    padding-top: 2px;
+    font-variant-numeric: tabular-nums;
   }
   .title {
     font-weight: 600;
@@ -325,6 +368,11 @@
   .kind-stay .title,
   .kind-meal .title {
     font-weight: 400;
+  }
+  .kind-stay .title {
+    font-family: var(--fs-serif);
+    font-style: italic;
+    color: var(--band-soft);
   }
   .kind-transport .title {
     color: var(--band-link);
@@ -339,54 +387,95 @@
     margin-right: 6px;
     color: var(--band-soft);
   }
+  .marks {
+    margin-left: 8px;
+  }
   .note {
     color: var(--band-soft);
     font-size: var(--fs-label);
   }
   .warn {
     display: block;
+    font-family: var(--fs-serif);
+    font-style: italic;
     color: var(--warn);
     font-size: var(--fs-label);
+  }
+  .band-lunch .warn {
+    color: #8a3c06;
   }
   .band-evening .warn {
     color: var(--accent-on-dark);
   }
+  .adjust {
+    margin-left: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--band-soft);
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .adjust:hover,
+  .adjust:focus-visible,
+  .adjust[aria-expanded='true'] {
+    color: var(--band-link);
+  }
   .edits {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 8px;
-    margin-top: 4px;
+    align-items: center;
+    gap: 6px 10px;
+    margin: 6px 0 4px;
+    padding: 6px 8px;
+    border: 1px dashed var(--band-rule);
+    border-radius: 2px;
+  }
+  .edits label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--band-soft);
   }
   .edits select,
   .edits button {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    padding: 1px 6px;
+    padding: 2px 8px;
     border: 1px solid var(--band-rule);
     border-radius: 2px;
     background: transparent;
     color: var(--band-ink);
+    cursor: pointer;
   }
   .band-evening .edits select option {
     color: var(--text-primary);
   }
   .leg {
     display: grid;
-    grid-template-columns: 92px minmax(0, 1fr);
+    grid-template-columns: 96px minmax(0, 1fr);
     gap: 10px;
     padding: 0 4px;
     font-size: var(--fs-label-xs);
+    line-height: 20px;
     color: var(--band-soft);
   }
   .leg-line {
     justify-self: center;
     width: 0;
-    border-left: 2px dashed var(--band-rule);
-    min-height: 18px;
+    border-left: 2px dotted var(--pencil);
+    min-height: 20px;
+    opacity: 0.7;
   }
   .guide {
     margin: 2px 0 4px;
     font-size: var(--fs-label);
+    line-height: 22px;
     color: var(--band-ink);
   }
   .guide summary {
@@ -413,11 +502,24 @@
     }
     .stop,
     .leg {
-      grid-template-columns: 70px minmax(0, 1fr);
+      grid-template-columns: 52px minmax(0, 1fr);
       gap: 8px;
     }
-    .ask {
+    .time {
+      font-size: var(--fs-label-xs);
+      line-height: 20px;
+      padding-top: 2px;
+    }
+    .t-to {
+      display: block;
+      opacity: 0.75;
+    }
+    .hd-acts {
       margin-left: 0;
+      width: 100%;
+    }
+    .band-hd h3 {
+      font-size: 21px;
     }
   }
 </style>

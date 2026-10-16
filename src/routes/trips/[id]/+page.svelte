@@ -1,4 +1,12 @@
 <script lang="ts">
+  // The trip studio, written in the notebook (the landing page's NOTES
+  // theme): an ink cover with the trip's dates stamped on it and what is
+  // still to book ringed; a strip of day tabs; then one ruled sheet holding
+  // either the overview (the map or a hand sketch, the days as pinned index
+  // cards, what to book as a tick list, the latest revision) or one day (its
+  // four stages, each on its own kind of paper). The planner is a notepad
+  // beside the sheet on a wide screen and a sheet that slides up on a phone,
+  // so it is never more than one tap away.
   import { postAsJob } from '$lib/trips/job-client';
   import { invalidateAll, replaceState } from '$app/navigation';
   import { tick, untrack } from 'svelte';
@@ -9,7 +17,14 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TripMap, { type MapDay } from '$lib/components/trips/TripMap.svelte';
   import { dayLabel } from '$lib/trips/changes';
-  import { TRAVEL_MODES, type LatLng, type PlannedDay, type TravelMode, type Wish } from '$lib/trips/model';
+  import { type LatLng, type PlannedDay, type TravelMode, type Wish } from '$lib/trips/model';
+  import DateStamp from '$lib/components/notes-paper/DateStamp.svelte';
+  import InkRing from '$lib/components/notes-paper/InkRing.svelte';
+  import Tally from '$lib/components/notes-paper/Tally.svelte';
+  import TripCover from '$lib/components/trips/notes/TripCover.svelte';
+  import MarginBlock from '$lib/components/trips/notes/MarginBlock.svelte';
+  import RouteSketch from '$lib/components/trips/notes/RouteSketch.svelte';
+  import { countWord, dateSpan, firstChanges, stampDate, tripName, weekday } from '$lib/components/trips/notes/notes';
 
   let { data } = $props();
 
@@ -89,8 +104,16 @@
     } catch {
       /* shallow routing unavailable (tests): the tab still changes */
     }
-    if (focus) void tick().then(() => document.getElementById(`tab-${t}`)?.focus());
+    void tick().then(() => {
+      const el = document.getElementById(`tab-${t}`);
+      el?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (focus) el?.focus();
+    });
   }
+  $effect(() => {
+    // On load, bring the open day's tab into view in a strip narrower than the trip.
+    untrack(() => document.getElementById(`tab-${tab}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+  });
   function onTabKey(e: KeyboardEvent) {
     const i = tabs.indexOf(tab);
     const next = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : null;
@@ -101,9 +124,21 @@
   // Changed items glow briefly after a reply.
   let highlight = $state<Set<string>>(new Set());
   let composer = $state<HTMLTextAreaElement | null>(null);
+  // On a phone the planner is a sheet that slides up; everything that hands
+  // the planner a question opens it.
+  let talkOpen = $state(false);
+  function openTalk() {
+    talkOpen = true;
+    void tick().then(() => {
+      if (talkEl) talkEl.scrollTop = talkEl.scrollHeight;
+      composer?.focus();
+    });
+  }
   function ask(text: string) {
+    talkOpen = true;
     draft = text;
     void tick().then(() => {
+      if (talkEl) talkEl.scrollTop = talkEl.scrollHeight;
       composer?.focus();
       composer?.setSelectionRange(text.length, text.length);
     });
@@ -232,337 +267,594 @@
     const m = Math.round(sec / 60);
     return m > 45 ? `Free time ${m} min` : `wait ${m} min`;
   };
+
+  // ── The cover and the overview ──
+  const name = $derived(tripName(trip));
+  const place = $derived(trip.destination.split(',')[0]?.trim() || trip.destination);
+  const coverLine = $derived.by(() => {
+    const n = dates.length;
+    const words = `${countWord(n)} ${n === 1 ? 'day' : 'days'} in ${place}, ${dateSpan(trip.startDate, trip.endDate)}`;
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  });
+  const toBook = $derived(data.checklist.filter((c) => c.status !== 'booked').length);
+  const places = $derived(data.wishes.filter((w) => !w.suggested && !w.skipped).length);
+  const latest = $derived(data.versions[0] ?? null);
+  const latestShown = $derived(latest ? firstChanges(latest.changes, 4) : { shown: [], more: 0 });
+  let allChanges = $state(false);
+  const hasProfile = $derived(
+    !!data.profile && (data.profile.travellers.length > 0 || data.profile.constraints.length > 0 || data.profile.preferences.length > 0 || data.profile.history.length > 0),
+  );
+  const dayIndex = $derived(plan ? plan.days.findIndex((d) => d.date === tab) : -1);
+  const stayName = (id: string | null) => (id ? (data.stays.find((s) => s.id === id)?.name ?? 'the stay') : null);
+  function onWindowKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && talkOpen) talkOpen = false;
+  }
 </script>
 
-<svelte:head><title>{trip.title} — Trips</title></svelte:head>
+<svelte:window onkeydown={onWindowKey} />
+
+<svelte:head><title>{name.name} — Trips</title></svelte:head>
 
 <PageHeader title="Trips" />
 
-<div class="studio-wrap">
-  <header class="studio-hd">
-    <div>
-      <p class="kicker">Trip studio · {trip.destination}</p>
-      <h1>{trip.title}</h1>
-      <p class="sub">{dayLabel(trip.startDate)} – {dayLabel(trip.endDate)} · {trip.pace} pace · {trip.modes.map((m) => MODE_LABEL[m]).join(', ')}</p>
+<TripCover kicker="Trip" title={name.name} line={coverLine} titleId="trip-h">
+  {#snippet actions()}
+    <a href="/trips">← All trips</a>
+    <button type="button" disabled={busy} onclick={() => call('POST', `${base}/plan`, undefined, 'Plan checked.')}>{busy ? 'Working…' : 'Re-plan now'}</button>
+    <a href="#details">The details</a>
+  {/snippet}
+  {#snippet marks()}
+    <div class="mark">
+      <span class="mark-k">Leaving</span>
+      <DateStamp date={stampDate(trip.startDate)} sub={weekday(trip.startDate)} datetime={trip.startDate} tilt={-4} seed={41} />
     </div>
-    <div class="hd-actions">
-      <button class="nm-btn-ghost" type="button" disabled={busy} onclick={() => call('POST', `${base}/plan`, undefined, 'Plan checked.')}>Re-plan now</button>
-      <a class="nm-btn-ghost" href="#details">Details</a>
+    <div class="mark">
+      <span class="mark-k">Places</span>
+      <span class="mark-fig"><span class="fig">{places}</span>{#if places > 0 && places <= 20}<Tally count={places} seed={23} height={18} />{/if}</span>
     </div>
-  </header>
+    <div class="mark">
+      <span class="mark-k">To book</span>
+      <span class="mark-fig">
+        {#if toBook > 0}<span class="fig"><InkRing seed={59} pad={0.32}>{toBook}</InkRing></span>{:else}<span class="fig done">✓</span><span class="mark-note">all booked</span>{/if}
+      </span>
+    </div>
+  {/snippet}
+</TripCover>
 
-  {#if problem}<p class="banner error" role="alert">{problem}</p>{/if}
-  {#if notice}<p class="banner" role="status">{notice}</p>{/if}
+<main class="desk">
+  <div class="sheet np-sheet np-tear">
+    {#if problem}<p class="banner error" role="alert">{problem}</p>{/if}
+    {#if notice}<p class="banner" role="status">{notice}</p>{/if}
 
-  <div class="studio">
-    <div class="canvas">
-      <div class="tabs" role="tablist" aria-label="Overview and days of the trip" tabindex="-1" onkeydown={onTabKey}>
-        {#each tabs as t, ti (t)}
-          <button
-            id="tab-{t}"
-            class="tab"
-            class:overview={t === 'overview'}
-            role="tab"
-            type="button"
-            aria-selected={tab === t}
-            aria-controls="studio-panel"
-            tabindex={tab === t ? 0 : -1}
-            onclick={() => selectTab(t)}
-          >
-            {#if t === 'overview'}
-              <span class="tab-num">∗</span><span class="tab-label">Overview</span>
-            {:else}
-              <span class="tab-num">{ti}</span><span class="tab-label">{dayLabel(t)}</span>{#if loadOf(t) !== 'normal'}<span class="tab-load">{loadOf(t)}</span>{/if}
-            {/if}
-          </button>
-        {/each}
-      </div>
-
-      <div id="studio-panel" class="panel" role="tabpanel" aria-labelledby="tab-{tab}" tabindex="0">
-        {#if !plan}
-          <div class="empty-studio">
-            <h2>Nothing on the board yet</h2>
-            <p class="muted">Tell the planner where you are going, when, and where you are staying — the days appear here as you talk.</p>
+    <div class="studio">
+      <div class="canvas">
+        <MarginBlock kicker={tab === 'overview' ? 'The trip' : `Day ${dayIndex + 1}`} as="nav" aria-label="Overview and days of the trip">
+          <div class="tabs" role="tablist" aria-label="Overview and days of the trip" tabindex="-1" onkeydown={onTabKey}>
+            {#each tabs as t, ti (t)}
+              <button
+                id="tab-{t}"
+                class="tab"
+                class:overview={t === 'overview'}
+                role="tab"
+                type="button"
+                aria-selected={tab === t}
+                aria-controls="studio-panel"
+                tabindex={tab === t ? 0 : -1}
+                onclick={() => selectTab(t)}
+              >
+                {#if t === 'overview'}
+                  <span class="tab-num">∗</span><span class="tab-label"><span class="tab-day">Overview</span><span class="tab-date">all days</span></span>
+                {:else}
+                  <span class="tab-num">{ti}</span><span class="tab-label"><span class="tab-day">{weekday(t).slice(0, 3)}</span><span class="tab-date">{stampDate(t)}{#if loadOf(t) !== 'normal'} · {loadOf(t)}{/if}</span></span>
+                {/if}
+              </button>
+            {/each}
           </div>
-        {:else if tab === 'overview'}
-          <div class="ov-grid">
-            <div class="ov-map">
-              <TripMap days={mapDays} suggestions={mapSuggestions} focus={null} />
-              {#if estimatedModes.length}<p class="muted small">Some travel times are estimated from distance ({estimatedModes.join(', ')}).</p>{/if}
-            </div>
-            <DayCards days={plan.days} {loadOf} onOpen={(d) => selectTab(d, true)} />
-          </div>
-          {#each plan.warnings as wn, wi (wi)}<p class="warn">{wn}</p>{/each}
-          {#if plan.dropped.length}
-            <div class="ov-block">
-              <h3 class="block-hd">Not planned</h3>
-              <ul class="plain">{#each plan.dropped as d (d.wishId)}<li class="line"><span><strong>{titleOf[d.wishId] ?? 'A wish'}</strong> — {d.reason}</span></li>{/each}</ul>
-            </div>
-          {/if}
-          <section class="nm-sec">
-            <div class="nm-sec-hd"><span class="sr-label-tight">Getting there and back</span><span class="nm-sec-meta">frames the first and last day</span></div>
-            {#if !data.transport.length}
-              <p class="muted">No journey yet — tell the planner your flight or train (“we fly from Newcastle at 07:35 on the 27th”).</p>
-            {:else}
-              <ul class="plain">
-                {#each data.transport as t (t.id)}
-                  <li class="line">
-                    <span>
-                      <strong>{t.direction === 'outbound' ? 'Out' : t.direction === 'return' ? 'Back' : 'Between'}: {t.kind}{t.number ? ` ${t.number}` : ''}{t.carrier ? ` (${t.carrier})` : ''}</strong>
-                      — {t.from.name}{t.from.code ? ` ${t.from.code}` : ''} {dayLabel(t.departDate)} {hhmm(t.departMin)} → {t.to.name}{t.to.code ? ` ${t.to.code}` : ''} {dayLabel(t.arriveDate)} {hhmm(t.arriveMin)}
-                      <span class="mono small src">{t.confidence}{t.delayMin ? ` · ${t.delayMin} min late` : ''}</span>
-                      {#each t.sources as src, si (src.url)}{si ? ', ' : ' · '}<a href={src.url} target="_blank" rel="noopener noreferrer">{src.title ?? 'source'}</a>{/each}
-                    </span>
-                    <button class="nm-rowact danger" type="button" disabled={busy} onclick={() => call('DELETE', `${base}/transport/${t.id}`, undefined, 'Journey removed.')}>Remove</button>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-          </section>
+        </MarginBlock>
 
-          <!-- ── Booking checklist (D5: never books) ───────────── -->
-          <section class="nm-sec">
-            <div class="nm-sec-hd"><span class="sr-label-tight">To book</span><span class="nm-sec-meta">most urgent first · links go to the official seller · the site never books</span></div>
-            {#if data.checklist.length === 0}
-              <p class="muted">Nothing needs booking that research has found.</p>
-            {:else}
-              <ul class="plain checklist">
-                {#each data.checklist as c (bookingKey(c))}
-                  <li class="line">
-                    <span class="urg urg-{c.urgency}">{URGENCY[c.urgency]}</span>
-                    <span class="c-main">
-                      <strong>{c.title}</strong>{c.visitDate ? ` · visit ${dayLabel(c.visitDate)}` : ''}
-                      <span class="muted block">{c.why}</span>
-                    </span>
-                    <span class="inline">
-                      {#if c.url}<a class="nm-btn-ghost" href={c.url} target="_blank" rel="noopener noreferrer">Official site</a>{/if}
-                      {#if c.status !== 'booked'}
-                        {#if booking[bookingKey(c)]?.open}
-                          <input class="nm-text-input small" placeholder="reference" bind:value={booking[bookingKey(c)].reference} />
-                          <select class="nm-text-input small" bind:value={booking[bookingKey(c)].date}><option value="">day?</option>{#each dates as d (d)}<option value={d}>{dayLabel(d)}</option>{/each}</select>
-                          <input class="nm-text-input small" placeholder="hh:mm" bind:value={booking[bookingKey(c)].time} />
-                          <button class="nm-save-btn" type="button" disabled={busy} onclick={() => markBooked(c)}>Save</button>
-                        {:else}
-                          <button class="nm-btn-ghost" type="button" onclick={() => openBooking(c)}>Mark booked</button>
+        <div id="studio-panel" class="panel" role="tabpanel" aria-labelledby="tab-{tab}" tabindex="-1">
+          {#if !plan}
+            <MarginBlock kicker="Begin">
+              <h2 class="sheet-h">Nothing on the page yet</h2>
+              <p class="np-aside">Tell the planner where you’re going, when, and where you’re staying — the days appear here as you talk.</p>
+              <button class="pen-btn" type="button" onclick={openTalk}>Talk to the planner →</button>
+            </MarginBlock>
+          {:else if tab === 'overview'}
+            <MarginBlock kicker="Map" aria-labelledby="map-h">
+              <h2 id="map-h" class="vh">Where everything is</h2>
+              <div class="ov-map np-taped">
+                <TripMap days={mapDays} suggestions={mapSuggestions} focus={null}>
+                  {#snippet fallback()}<RouteSketch days={mapDays} />{/snippet}
+                </TripMap>
+              </div>
+              {#if estimatedModes.length}<p class="np-aside small">Some travel times are estimated from distance ({estimatedModes.join(', ')}).</p>{/if}
+            </MarginBlock>
+
+            <MarginBlock kicker="Days" aria-labelledby="days-h">
+              <h2 id="days-h" class="sheet-h">Day by day</h2>
+              <p class="np-aside lede">Each day in four parts. Open one to see the times, the walks between and what to do when you get there.</p>
+              <DayCards days={plan.days} {loadOf} onOpen={(d) => selectTab(d, true)} />
+            </MarginBlock>
+
+            {#if plan.warnings.length || plan.dropped.length}
+              <MarginBlock kicker="Note" aria-label="Worth knowing">
+                <div class="np-sticky sticky">
+                  <h3 class="sticky-h">Worth knowing</h3>
+                  {#each plan.warnings as wn, wi (wi)}<p>{wn}</p>{/each}
+                  {#if plan.dropped.length}
+                    <p class="sticky-k">Couldn’t fit in:</p>
+                    <ul>{#each plan.dropped as d (d.wishId)}<li><strong>{titleOf[d.wishId] ?? 'A wish'}</strong> — {d.reason}</li>{/each}</ul>
+                  {/if}
+                </div>
+              </MarginBlock>
+            {/if}
+
+            <MarginBlock kicker="Book" aria-labelledby="book-h">
+              <h2 id="book-h" class="sheet-h">To book</h2>
+              <p class="np-aside lede">Most urgent first. Links go to the official seller — the site never books anything.</p>
+              {#if data.checklist.length === 0}
+                <p class="np-aside">Nothing needs booking that research has found.</p>
+              {:else}
+                <ul class="ticks" role="list">
+                  {#each data.checklist as c (bookingKey(c))}
+                    <li class="tick-row" class:done={c.status === 'booked'}>
+                      <span class="box" aria-hidden="true">{#if c.status === 'booked'}<svg viewBox="0 0 20 20"><path d="M4 10.5 L8.5 15 L16.5 4.5" /></svg>{/if}</span>
+                      <span class="c-main">
+                        <span class="c-title"><strong>{c.title}</strong>{#if c.visitDate}<span class="c-visit"> · {dayLabel(c.visitDate)}</span>{/if}</span>
+                        <span class="c-why">{c.why}</span>
+                      </span>
+                      <span class="c-side">
+                        <span class="urg urg-{c.urgency}">{URGENCY[c.urgency]}</span>
+                        {#if c.url}<a class="pen-link" href={c.url} target="_blank" rel="noopener noreferrer">Official site ↗</a>{/if}
+                        {#if c.status !== 'booked'}
+                          {#if booking[bookingKey(c)]?.open}
+                            <span class="book-form">
+                              <input class="field" placeholder="reference" aria-label="Booking reference" bind:value={booking[bookingKey(c)].reference} />
+                              <select class="field" aria-label="Day" bind:value={booking[bookingKey(c)].date}><option value="">day?</option>{#each dates as d (d)}<option value={d}>{dayLabel(d)}</option>{/each}</select>
+                              <input class="field time" placeholder="hh:mm" aria-label="Time" bind:value={booking[bookingKey(c)].time} />
+                              <button class="pen-btn small" type="button" disabled={busy} onclick={() => markBooked(c)}>Save</button>
+                            </span>
+                          {:else}
+                            <button class="pen-link" type="button" onclick={() => openBooking(c)}>Mark booked</button>
+                          {/if}
                         {/if}
-                      {/if}
-                    </span>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-          </section>
-
-          <details class="nm-sec" open={!!data.profile && !data.messages.length}>
-            <summary class="nm-sec-hd"><span class="sr-label-tight">What I know about you</span><span class="nm-sec-meta">from your JKAI memory, notes and family roster{data.profile ? ` · ${checked(data.profile.gatheredAt)}` : ''}</span></summary>
-            {#if !data.profile}
-              <p class="muted">Not gathered yet — it will be on your first message.</p>
-            {:else}
-              <p class="muted small">The planner uses this without being asked. Tell it in the conversation if anything is wrong; lasting preferences you state can be saved to memory.</p>
-              <dl class="profile">
-                <dt>Travelling</dt><dd>{data.profile.travellers.map((t) => `${t.name}${t.relation ? ` (${t.relation})` : ''}${t.notes.length ? ` — ${t.notes.join('; ')}` : ''}`).join(', ')}</dd>
-                <dt>Needs</dt><dd>{#if data.profile.constraints.length}<ul>{#each data.profile.constraints as c, ci (ci)}<li>{c.text} <span class="mono small src">{c.source}</span></li>{/each}</ul>{:else}none known{/if}</dd>
-                <dt>Likes</dt><dd>{#if data.profile.preferences.length}<ul>{#each data.profile.preferences as c, ci (ci)}<li>{c.text} <span class="mono small src">{c.source}</span></li>{/each}</ul>{:else}none known{/if}</dd>
-                {#if data.profile.history.length}<dt>Before</dt><dd><ul>{#each data.profile.history as h, hi (hi)}<li>{h}</li>{/each}</ul></dd>{/if}
-              </dl>
-            {/if}
-            <button class="nm-btn-ghost" type="button" disabled={busy} onclick={() => call('POST', `${base}/profile`, undefined, 'Gathered again.')}>Gather again</button>
-          </details>
-
-          <!-- ── What changed ───────────────────────────────────── -->
-          {#if data.versions.length}
-            <section class="nm-sec">
-              <div class="nm-sec-hd"><span class="sr-label-tight">What changed</span><span class="nm-sec-meta">every edit is a new version</span></div>
-              {#each data.versions as v, vi (v.version)}
-                <details open={vi === 0}>
-                  <summary class="mono small">v{v.version} · {v.source} · {new Date(v.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</summary>
-                  <ul class="changes">{#each v.changes as c, ci (ci)}<li>{c}</li>{/each}</ul>
-                </details>
-              {/each}
-            </section>
-          {/if}
-        {:else}
-          {@const day = plan.days.find((x) => x.date === tab)}
-          {#if day}
-            {@const di = plan.days.indexOf(day)}
-            <header class="day-hd">
-              <span class="day-num">{di + 1}</span>
-              <div>
-                <h2>{dayLabel(day.date)}</h2>
-                <p class="muted small">{loadOf(day.date)} day{day.stayId ? ` · from ${data.stays.find((s) => s.id === day.stayId)?.name ?? 'the stay'}` : ''}</p>
-              </div>
-              {#if day.legs.some((l) => l.mode === 'drive' || l.mode === 'taxi')}
-                <button class="nm-rowact" type="button" onclick={() => liveDrive(day)}>Live drive times</button>
-                <span class="muted small">{liveNote[day.date] ?? ''}</span>
+                      </span>
+                    </li>
+                  {/each}
+                </ul>
               {/if}
-            </header>
-            {#each day.warnings as wn, wi (wi)}<p class="warn">{wn}</p>{/each}
-            <div class="day-grid">
-              <div class="day-map"><TripMap days={mapDays} suggestions={[]} focus={day.date} /></div>
-              <div class="bands">
-                {#each groupDay(day) as g (g.stage)}
-                  <StageBand
-                    stage={g.stage}
-                    items={g.items}
-                    dayName={dayLabel(day.date)}
-                    date={day.date}
-                    wishes={data.wishes}
-                    {dates}
-                    {highlight}
-                    {live}
-                    {busy}
-                    onAsk={ask}
-                    onPatch={(w, patch, done) => patchWish(w, patch, done)}
-                    dateLabel={dayLabel}
-                    {base}
-                    dayStopIds={day.stops.map((x) => x.id)}
-                    onAdded={() => reloadAndHighlight()}
-                  />
-                {/each}
-              </div>
-            </div>
-          {:else}
-            <p class="muted">That day is not in the plan. <button class="nm-rowact" type="button" onclick={() => selectTab('overview')}>Back to the overview</button></p>
-          {/if}
-        {/if}
-      </div>
-    </div>
+            </MarginBlock>
 
-    <aside class="talk" aria-label="Planning conversation">
-      <div class="nm-sec-hd"><span class="sr-label-tight">Plan it together</span><span class="nm-sec-meta">the planner changes the trip; you can also edit the details below</span></div>
-      <div class="messages" bind:this={talkEl}>
-        {#if !shown.length && !pending}
-          <p class="muted">Tell the planner about the trip — where and when, where you’re staying, who’s going and what you want to do. It will ask for anything missing.</p>
-        {/if}
-        {#each shown as m (m.id)}
-          {#if m.role === 'event'}
-            <p class="msg event"><span class="mono small">{timeOf(m.createdAt)}</span> Changed directly: {m.text}</p>
-          {:else}
-            <div class="msg {m.role}">
-              <p>{m.text}</p>
-              {#if m.research?.length}
-                <details class="lookups">
-                  <summary class="small">Looked up {m.research.length} thing{m.research.length === 1 ? '' : 's'}</summary>
-                  <ul>
-                    {#each m.research as r, ri (ri)}
-                      <li>{r.summary}{#each r.sources as src, si (src.url)}{si ? ', ' : ' — '}<a href={src.url} target="_blank" rel="noopener noreferrer">{src.title ?? new URL(src.url).hostname}</a>{/each}</li>
+            <MarginBlock kicker="Travel" aria-labelledby="travel-h">
+              <h2 id="travel-h" class="sheet-h small">Getting there and back</h2>
+              {#if !data.transport.length}
+                <p class="np-aside">No journey yet. Tell the planner your flight or train and it frames the first and last day round it.</p>
+                <button class="pen-link" type="button" onclick={() => ask('We fly from … at … on …, and back at … on …')}>Tell the planner →</button>
+              {:else}
+                <ul class="journeys" role="list">
+                  {#each data.transport as t (t.id)}
+                    <li class="journey">
+                      <span class="j-dir">{t.direction === 'outbound' ? 'Out' : t.direction === 'return' ? 'Back' : 'Between'}</span>
+                      <span class="j-main">
+                        <strong>{t.from.name}{t.from.code ? ` ${t.from.code}` : ''} → {t.to.name}{t.to.code ? ` ${t.to.code}` : ''}</strong>
+                        <span class="j-when">{dayLabel(t.departDate)} {hhmm(t.departMin)} → {dayLabel(t.arriveDate)} {hhmm(t.arriveMin)} · {t.kind}{t.number ? ` ${t.number}` : ''}{t.carrier ? ` (${t.carrier})` : ''}</span>
+                        <span class="j-src">{t.confidence}{t.delayMin ? ` · ${t.delayMin} min late` : ''}{#each t.sources as src, si (src.url)}{si ? ', ' : ' · '}<a href={src.url} target="_blank" rel="noopener noreferrer">{src.title ?? 'source'}</a>{/each}</span>
+                      </span>
+                      <button class="pen-link danger" type="button" disabled={busy} onclick={() => call('DELETE', `${base}/transport/${t.id}`, undefined, 'Journey removed.')}>Remove</button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </MarginBlock>
+
+            <MarginBlock kicker="You" aria-labelledby="you-h">
+              <h2 id="you-h" class="sheet-h small">What the planner knows about you</h2>
+              {#if !data.profile}
+                <p class="np-aside">Not gathered yet — it will be on your first message.</p>
+              {:else if !hasProfile}
+                <p class="np-aside">Nothing trip-relevant found in your memory, notes or family roster yet ({checked(data.profile.gatheredAt)}). Tell the planner anything it should know.</p>
+              {:else}
+                <p class="np-aside lede">From your JKAI memory, notes and family roster, {checked(data.profile.gatheredAt)}. It uses this without being asked; say in the conversation if anything is wrong.</p>
+                <dl class="profile">
+                  {#if data.profile.travellers.length}<dt>Travelling</dt><dd>{data.profile.travellers.map((t) => `${t.name}${t.relation ? ` (${t.relation})` : ''}${t.notes.length ? ` — ${t.notes.join('; ')}` : ''}`).join(', ')}</dd>{/if}
+                  {#if data.profile.constraints.length}<dt>Needs</dt><dd><ul>{#each data.profile.constraints as c, ci (ci)}<li>{c.text} <span class="src">{c.source}</span></li>{/each}</ul></dd>{/if}
+                  {#if data.profile.preferences.length}<dt>Likes</dt><dd><ul>{#each data.profile.preferences as c, ci (ci)}<li>{c.text} <span class="src">{c.source}</span></li>{/each}</ul></dd>{/if}
+                  {#if data.profile.history.length}<dt>Before</dt><dd><ul>{#each data.profile.history as h, hi (hi)}<li>{h}</li>{/each}</ul></dd>{/if}
+                </dl>
+              {/if}
+              <button class="pen-link" type="button" disabled={busy} onclick={() => call('POST', `${base}/profile`, undefined, 'Gathered again.')}>Gather again</button>
+            </MarginBlock>
+
+            {#if latest}
+              <MarginBlock kicker="Changes" aria-labelledby="changes-h">
+                <div class="rev-hd">
+                  <h2 id="changes-h" class="sheet-h small">What changed last</h2>
+                  <DateStamp date="v{latest.version}" sub={timeOf(latest.createdAt)} tilt={3} seed={latest.version * 7} />
+                </div>
+                <ul class="changes">
+                  {#each allChanges ? latest.changes : latestShown.shown as c, ci (ci)}<li>{c}</li>{/each}
+                </ul>
+                {#if latestShown.more && !allChanges}<button class="pen-link" type="button" onclick={() => (allChanges = true)}>and {latestShown.more} more</button>{/if}
+                {#if data.versions.length > 1}
+                  <details class="earlier">
+                    <summary>Earlier versions ({data.versions.length - 1})</summary>
+                    {#each data.versions.slice(1) as v (v.version)}
+                      <details class="version">
+                        <summary>v{v.version} · {v.source} · {timeOf(v.createdAt)} · {v.changes.length} change{v.changes.length === 1 ? '' : 's'}</summary>
+                        <ul class="changes">{#each v.changes as c, ci (ci)}<li>{c}</li>{/each}</ul>
+                      </details>
                     {/each}
-                  </ul>
-                </details>
+                  </details>
+                {/if}
+              </MarginBlock>
+            {/if}
+          {:else}
+            {@const day = plan.days.find((x) => x.date === tab)}
+            {#if day}
+              {@const di = plan.days.indexOf(day)}
+              {@const stay = stayName(day.stayId)}
+              <MarginBlock kicker={stampDate(day.date)} aria-labelledby="day-h">
+                <header class="day-hd">
+                  <div class="day-title">
+                    <h2 id="day-h" class="sheet-h"><span class="day-num">{di + 1}</span> {weekday(day.date)}</h2>
+                    <p class="np-aside">{loadOf(day.date) === 'normal' ? 'A full day' : `A ${loadOf(day.date)} day`}{stay ? `, starting from ${stay}` : ''}.</p>
+                  </div>
+                  <div class="day-step">
+                    <button class="pen-link" type="button" disabled={di === 0} onclick={() => selectTab(di === 0 ? 'overview' : plan.days[di - 1].date, true)}>← {di === 0 ? 'Overview' : 'Day before'}</button>
+                    {#if di < plan.days.length - 1}<button class="pen-link" type="button" onclick={() => selectTab(plan.days[di + 1].date, true)}>Next day →</button>{/if}
+                  </div>
+                </header>
+                {#each day.warnings as wn, wi (wi)}<p class="warn">{wn}</p>{/each}
+                <div class="day-map np-taped">
+                  <TripMap days={mapDays} suggestions={[]} focus={day.date}>
+                    {#snippet fallback()}<RouteSketch days={mapDays} focus={day.date} />{/snippet}
+                  </TripMap>
+                </div>
+                {#if day.legs.some((l) => l.mode === 'drive' || l.mode === 'taxi')}
+                  <p class="live"><button class="pen-link" type="button" onclick={() => liveDrive(day)}>Live drive times</button> <span class="np-aside small">{liveNote[day.date] ?? ''}</span></p>
+                {/if}
+              </MarginBlock>
+              <MarginBlock kicker="Plan" aria-label="The day, in four parts">
+                <div class="bands">
+                  {#each groupDay(day) as g (g.stage)}
+                    <StageBand
+                      stage={g.stage}
+                      items={g.items}
+                      dayName={dayLabel(day.date)}
+                      date={day.date}
+                      wishes={data.wishes}
+                      {dates}
+                      {highlight}
+                      {live}
+                      {busy}
+                      onAsk={ask}
+                      onPatch={(w, patch, done) => patchWish(w, patch, done)}
+                      dateLabel={dayLabel}
+                      {base}
+                      dayStopIds={day.stops.map((x) => x.id)}
+                      onAdded={() => reloadAndHighlight()}
+                    />
+                  {/each}
+                </div>
+              </MarginBlock>
+            {:else}
+              <MarginBlock>
+                <p class="np-aside">That day is not in the plan. <button class="pen-link" type="button" onclick={() => selectTab('overview')}>Back to the overview</button></p>
+              </MarginBlock>
+            {/if}
+          {/if}
+        </div>
+
+        <MarginBlock kicker="Details" id="details" aria-labelledby="details-h">
+          <details class="drawer">
+            <summary><span id="details-h" class="drawer-title">The details</span> <span class="np-aside small">the trip, stays, wishes and research the conversation set — edit them directly if you like</span></summary>
+            <div class="drawer-body">
+              <TripDetails
+                trip={data.trip}
+                stays={data.stays}
+                wishes={data.wishes}
+                guide={data.guide}
+                events={data.events}
+                {dates}
+                {busy}
+                {call}
+                {base}
+                hasPlan={!!data.plan}
+              />
+            </div>
+          </details>
+        </MarginBlock>
+      </div>
+
+      <aside class="talk" class:open={talkOpen} aria-label="Planning conversation">
+        <div class="pad">
+          <header class="talk-hd">
+            <div>
+              <h2 class="talk-h">The planner</h2>
+              <p class="talk-sub">Talk it through. It changes the plan, and you can see what moved.</p>
+            </div>
+            <button class="close" type="button" onclick={() => (talkOpen = false)} aria-label="Close the planner">Close</button>
+          </header>
+          <div class="messages" bind:this={talkEl}>
+            {#if !shown.length && !pending}
+              <p class="np-aside">Tell the planner about the trip — where and when, where you’re staying, who’s going and what you want to do. It will ask for anything missing.</p>
+            {/if}
+            {#each shown as m (m.id)}
+              {#if m.role === 'event'}
+                <p class="msg event"><span class="meta">{timeOf(m.createdAt)}</span> Changed directly: {m.text}</p>
+              {:else}
+                <div class="msg {m.role}">
+                  <span class="who">{m.role === 'user' ? (m.surface === 'phone' ? 'you, on the phone' : 'you') : 'planner'} · {timeOf(m.createdAt)}{m.planVersion ? ` · v${m.planVersion}` : ''}</span>
+                  <p>{m.text}</p>
+                  {#if m.research?.length}
+                    <details class="lookups">
+                      <summary>Looked up {m.research.length} thing{m.research.length === 1 ? '' : 's'}</summary>
+                      <ul>
+                        {#each m.research as r, ri (ri)}
+                          <li>{r.summary}{#each r.sources as src, si (src.url)}{si ? ', ' : ' — '}<a href={src.url} target="_blank" rel="noopener noreferrer">{src.title ?? new URL(src.url).hostname}</a>{/each}</li>
+                        {/each}
+                      </ul>
+                    </details>
+                  {/if}
+                  {#if m.ops.length}<span class="ops">{m.ops.length} change{m.ops.length === 1 ? '' : 's'} to the plan</span>{/if}
+                </div>
               {/if}
-              <span class="meta mono small">{m.role === 'user' ? (m.surface === 'phone' ? 'you, on the phone' : 'you') : 'planner'} · {timeOf(m.createdAt)}{m.ops.length ? ` · ${m.ops.length} change${m.ops.length === 1 ? '' : 's'}` : ''}{m.planVersion ? ` · plan v${m.planVersion}` : ''}</span>
+            {/each}
+            {#if pending}
+              <div class="msg user"><span class="who">you · now</span><p>{pending}</p></div>
+              <p class="msg event thinking" role="status">The planner is thinking<span class="dots" aria-hidden="true">…</span></p>
+            {/if}
+          </div>
+          {#if quick.length}
+            <div class="quick">
+              {#each quick as q (q)}<button class="prompt" type="button" disabled={sending} onclick={() => send(q)}>{q}</button>{/each}
             </div>
           {/if}
-        {/each}
-        {#if pending}
-          <div class="msg user"><p>{pending}</p></div>
-          <p class="msg event" role="status">The planner is thinking…</p>
-        {/if}
-      </div>
-      {#if quick.length}
-        <div class="quick">
-          {#each quick as q (q)}<button class="nm-btn-ghost" type="button" disabled={sending} onclick={() => send(q)}>{q}</button>{/each}
+          <form class="composer" onsubmit={(e) => { e.preventDefault(); void send(draft); }}>
+            <textarea rows="3" bind:this={composer} bind:value={draft} onkeydown={onKey} placeholder="“Make Thursday lighter”, “add the Borghese”, “we land at 10:40”…" aria-label="Message the planner"></textarea>
+            <div class="composer-go">
+              <span class="hint">Enter to send · Shift + Enter for a new line</span>
+              <button class="pen-btn" type="submit" disabled={sending || !draft.trim()}>{sending ? 'Sending…' : 'Send'}</button>
+            </div>
+          </form>
         </div>
-      {/if}
-      <form class="composer" onsubmit={(e) => { e.preventDefault(); void send(draft); }}>
-        <textarea class="nm-text-input" rows="2" bind:this={composer} bind:value={draft} onkeydown={onKey} placeholder="“Make Thursday lighter”, “we’re staying near Campo de’ Fiori”, “add the Borghese”…" aria-label="Message the planner"></textarea>
-        <button class="nm-save-btn" type="submit" disabled={sending || !draft.trim()}>{sending ? 'Sending…' : 'Send'}</button>
-      </form>
-    </aside>
+      </aside>
+    </div>
   </div>
+</main>
 
-  <details class="drawer" id="details">
-    <summary><span class="drawer-title">Details</span> <span class="muted small">the trip, stays, wishes and research — what the conversation set; edit directly if you like</span></summary>
-    <TripDetails
-      trip={data.trip}
-      stays={data.stays}
-      wishes={data.wishes}
-      guide={data.guide}
-      events={data.events}
-      {dates}
-      {busy}
-      {call}
-      {base}
-      hasPlan={!!data.plan}
-    />
-  </details>
-</div>
+{#if talkOpen}<button class="scrim" type="button" tabindex="-1" aria-label="Close the planner" onclick={() => (talkOpen = false)}></button>{/if}
+{#if !talkOpen}
+  <button class="talk-fab" type="button" onclick={openTalk}>Ask the planner{#if shown.length} <span class="fab-n">{shown.filter((m) => m.role !== 'event').length}</span>{/if}</button>
+{/if}
 
 <style>
-  /* ── The studio (v4) ── */
-  .studio-wrap {
-    max-width: 1480px;
-    margin: 0 auto;
-    padding: 1.6rem 1.5rem 4rem;
-    color: var(--text-primary);
-    font-family: var(--font-body);
+  .vh {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
-  .studio-hd {
+  /* ── Cover marks ── */
+  .mark {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    gap: 16px;
-    flex-wrap: wrap;
-    padding-bottom: 14px;
-    margin-bottom: 18px;
-    border-bottom: 2px solid var(--line-title);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
   }
-  .kicker {
-    margin: 0;
+  .mark-k {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--accent-ink);
+    color: var(--on-ink-70);
+    white-space: nowrap;
   }
-  .studio-hd h1 {
-    margin: 4px 0;
-    font-family: var(--font-display);
-    font-size: clamp(1.8rem, 4vw, 2.8rem);
-    line-height: 1.05;
-  }
-  .sub {
-    margin: 0;
-    color: var(--text-secondary);
-  }
-  .hd-actions {
+  .mark-fig {
     display: flex;
-    gap: 8px;
+    align-items: flex-end;
+    gap: 12px;
+    min-height: 44px;
+  }
+  .fig {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 40px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--bg);
+    font-variant-numeric: tabular-nums;
+  }
+  .fig.done {
+    color: var(--accent-on-dark);
+  }
+  .mark-note {
+    font-family: var(--fs-serif);
+    font-style: italic;
+    color: var(--on-ink-70);
+    margin-bottom: 4px;
+  }
+  .mark-fig :global(.np-tally) {
+    margin-bottom: 6px;
+  }
+  .mark-fig :global(.np-ring svg) {
+    top: calc(50% - 0.62em);
+    height: 1.24em;
+  }
+
+  /* ── The sheet ── */
+  .desk {
+    padding: 0 0 72px;
+  }
+  .sheet {
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 26px 0 32px;
+    background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--np-rule) 31px 32px);
   }
   .studio {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
-    gap: 20px;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+    gap: 8px;
     align-items: start;
   }
   .canvas {
     min-width: 0;
   }
+  .panel:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: -2px;
+  }
+  .sheet-h {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(26px, 3vw, 36px);
+    line-height: 1.15;
+    letter-spacing: -0.03em;
+  }
+  .sheet-h.small {
+    font-size: clamp(20px, 2.2vw, 26px);
+  }
+  .lede {
+    margin: 2px 0 14px;
+  }
+  .small {
+    font-size: var(--fs-label);
+  }
+  .banner {
+    margin: 0 28px 12px calc(var(--np-margin-x) + 28px);
+    padding: 8px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 2px;
+    background: var(--np-card);
+    font-size: var(--fs-label);
+  }
+  .banner.error {
+    border-color: var(--error);
+    color: var(--error);
+  }
+  .warn {
+    margin: 6px 0;
+    font-family: var(--fs-serif);
+    font-style: italic;
+    color: var(--warn);
+  }
+
+  /* ── Pens: buttons and links in the notebook's hand ── */
+  .pen-btn {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 15px;
+    padding: 9px 16px;
+    border: 0;
+    border-radius: 2px;
+    background: var(--accent);
+    color: var(--text-on-accent, #fff);
+    cursor: pointer;
+  }
+  .pen-btn.small {
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+  .pen-btn:hover:not(:disabled),
+  .pen-btn:focus-visible {
+    background: var(--accent-hover);
+    outline: none;
+  }
+  .pen-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .pen-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent-ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .pen-link:disabled {
+    color: var(--text-ghost);
+    text-decoration: none;
+    cursor: default;
+  }
+  .pen-link.danger {
+    color: var(--error);
+  }
+  .prompt {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    padding: 4px 10px;
+    border: 1px dashed var(--np-pen-ink);
+    border-radius: 100px;
+    background: transparent;
+    color: var(--np-pen-ink);
+    cursor: pointer;
+    text-align: left;
+  }
+  .prompt:hover:not(:disabled),
+  .prompt:focus-visible {
+    border-style: solid;
+    background: var(--accent-ink-tint-06);
+    outline: none;
+  }
+  .field {
+    font-family: var(--font-body);
+    font-size: var(--fs-label);
+    padding: 3px 2px;
+    border: 0;
+    border-bottom: 1px solid var(--line-strong);
+    border-radius: 0;
+    background: transparent;
+    color: var(--np-ink);
+    max-width: 150px;
+  }
+  .field.time {
+    max-width: 70px;
+  }
+  .field:focus {
+    outline: none;
+    border-bottom: 2px solid var(--accent-ink);
+  }
+
+  /* ── The day strip: index tabs along the top of the sheet ── */
   .tabs {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     overflow-x: auto;
-    padding-bottom: 2px;
+    padding: 6px 2px 4px;
     scrollbar-width: thin;
   }
   .tab {
     flex: 0 0 auto;
     display: inline-flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 8px 14px 9px;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px 8px 12px;
     border: 1px solid var(--line-strong);
-    border-bottom: 0;
-    border-radius: 2px 2px 0 0;
-    background: var(--surface-rail);
-    color: var(--text-secondary);
+    border-radius: 2px;
+    background: transparent;
+    color: var(--np-ink-soft);
     cursor: pointer;
     font: inherit;
+    transition: transform 120ms ease;
+  }
+  .tab:hover {
+    background: var(--np-card);
+    color: var(--np-ink);
   }
   .tab[aria-selected='true'] {
-    background: var(--surface-card);
-    color: var(--text-primary);
+    background: var(--np-card);
+    color: var(--np-ink);
+    border-color: var(--accent-ink);
     box-shadow: inset 0 3px 0 var(--accent);
+    transform: rotate(-0.6deg);
   }
   .tab:focus-visible {
     outline: 2px solid var(--accent-ink);
@@ -570,190 +862,135 @@
   }
   .tab-num {
     font-family: var(--font-display);
-    font-size: 1.2rem;
-    color: var(--accent);
-  }
-  .tab-label {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .tab-load {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    border: 1px solid var(--accent-ink);
-    color: var(--accent-ink);
-    border-radius: 100px;
-    padding: 0 6px;
-  }
-  .panel {
-    border: 1px solid var(--line-strong);
-    background: var(--surface-card);
-    padding: 18px;
-    min-height: 420px;
-  }
-  .panel:focus-visible {
-    outline: 2px solid var(--accent-ink);
-  }
-  .empty-studio h2,
-  .day-hd h2 {
-    font-family: var(--font-display);
-    margin: 0;
-  }
-  .ov-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-    gap: 16px;
-    align-items: start;
-  }
-  .ov-block {
-    margin-top: 18px;
-  }
-  .block-hd {
-    font-family: var(--font-display);
-    font-size: 1.05rem;
-    margin: 0 0 6px;
-  }
-  .day-hd {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
-  }
-  .day-num {
-    font-family: var(--font-display);
-    font-size: 3rem;
+    font-weight: 800;
+    font-size: 26px;
     line-height: 1;
     color: var(--accent);
   }
-  .day-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 14px;
-  }
-  .bands {
-    display: grid;
-    gap: 10px;
-  }
-  @media (max-width: 900px) {
-    .ov-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  @media (max-width: 640px) {
-    .studio-wrap {
-      padding: 1rem 16px 3rem;
-    }
-    .panel {
-      padding: 12px;
-    }
-    .day-num {
-      font-size: 2.2rem;
-    }
-  }
-  .talk {
-    position: sticky;
-    top: calc(var(--site-nav-height, 48px) + 8px);
+  .tab-label {
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - var(--site-nav-height, 48px) - 24px);
-    border: 1px solid var(--line-strong);
-    background: var(--bg);
-    padding: 12px 14px;
+    text-align: left;
+    line-height: 1.2;
   }
-  .drawer {
-    margin-top: 24px;
-    border-top: 2px solid var(--line-title);
-    padding-top: 12px;
-  }
-  .drawer > summary {
-    cursor: pointer;
-    margin-bottom: 14px;
-  }
-  .drawer-title {
+  .tab-day {
     font-family: var(--font-display);
-    font-size: 1.3rem;
+    font-weight: 800;
+    font-size: 15px;
   }
-  .banner {
-    padding: 8px 12px;
+  .tab-date {
+    font-family: var(--fs-serif);
+    font-style: italic;
+    font-size: 14px;
+  }
+
+  /* ── Overview ── */
+  .ov-map,
+  .day-map {
+    margin-top: 6px;
+    padding: 10px;
+    background: var(--np-card);
     border: 1px solid var(--line-strong);
-    border-radius: 2px;
-    background: var(--bg-section);
-    font-size: var(--fs-label);
-    margin: 0 0 1rem;
   }
-  .banner.error {
-    border-color: var(--error);
-    color: var(--error);
+  .sticky {
+    max-width: 640px;
   }
-  details.nm-sec > summary {
-    cursor: pointer;
-    list-style: none;
+  .sticky p,
+  .sticky ul {
+    margin: 4px 0;
   }
-  .row-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 12px;
-    align-items: center;
-    margin: 10px 0;
+  .sticky ul {
+    padding-left: 18px;
   }
-  .inline {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
+  .sticky-h {
+    margin: 0 0 4px;
+    font-family: var(--fs-serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 22px;
   }
-  .plain {
+  .sticky-k {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* The booking list: a hand-ruled tick box per line. */
+  .ticks {
     list-style: none;
     margin: 0;
     padding: 0;
   }
-  .line {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-    padding: 8px 0;
-    border-top: 1px solid var(--line-hair);
+  .tick-row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: start;
+    padding: 10px 0;
+    border-top: 1px dashed var(--line-strong);
   }
-  .line:first-child {
+  .tick-row:first-child {
     border-top: 0;
   }
-  .muted {
-    color: var(--text-muted);
+  .box {
+    width: 18px;
+    height: 18px;
+    margin-top: 3px;
+    border: 1.5px solid var(--np-ink);
+    border-radius: 2px;
+    transform: rotate(-2deg);
   }
-  .small {
-    font-size: var(--fs-label-xs);
+  .box svg {
+    width: 26px;
+    height: 26px;
+    margin: -8px 0 0 -1px;
+    overflow: visible;
   }
-  .block {
-    display: block;
+  .box path {
+    fill: none;
+    stroke: var(--good, var(--success));
+    stroke-width: 2.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
-  .mono {
-    font-family: var(--font-mono);
+  .done .c-title strong {
+    text-decoration: line-through;
+    text-decoration-color: var(--np-ink-soft);
   }
-  .warn {
-    color: var(--warn);
-    font-size: var(--fs-label);
-    margin: 4px 0;
+  .c-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
   }
-  .nm-text-input.small {
-    padding: 3px 6px;
-    font-size: var(--fs-label);
-    max-width: 150px;
+  .c-visit {
+    color: var(--np-ink-soft);
   }
-  textarea.nm-text-input {
-    width: 100%;
-    resize: vertical;
+  .c-why {
+    font-family: var(--fs-serif);
+    font-style: italic;
+    color: var(--np-ink-soft);
+  }
+  .c-side {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 6px 12px;
+    max-width: 360px;
+  }
+  .book-form {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
   }
   .urg {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    min-width: 76px;
-    color: var(--text-secondary);
+    color: var(--np-ink-soft);
   }
   .urg-overdue,
   .urg-now {
@@ -765,152 +1002,476 @@
   .urg-done {
     color: var(--success);
   }
-  .c-main {
-    flex: 1;
-    min-width: 200px;
-  }
-  .changes {
-    margin: 4px 0 10px;
-    padding-left: 18px;
-    font-size: var(--fs-label);
-  }
-  :global(.nm-rowact[data-active='true']) {
-    color: var(--accent);
-    text-decoration: underline;
-  }
-  .messages {
-    flex: 1;
-    min-height: 200px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding-right: 4px;
-  }
-  .msg {
-    max-width: 92%;
-    padding: 8px 10px;
-    border: 1px solid var(--line-strong);
-    border-radius: 2px;
-    background: var(--bg);
-  }
-  .msg p {
-    margin: 0;
-    white-space: pre-wrap;
-  }
-  .msg.user {
-    align-self: flex-end;
-    border-color: var(--accent);
-  }
-  .msg.assistant {
-    align-self: flex-start;
-    background: var(--bg-section);
-  }
-  .msg.event {
-    align-self: center;
-    border: 0;
-    background: none;
-    color: var(--text-muted);
-    font-size: var(--fs-label-xs);
+
+  .journeys {
+    list-style: none;
+    margin: 8px 0 0;
     padding: 0;
   }
-  .msg .meta {
-    display: block;
-    margin-top: 4px;
-    color: var(--text-ghost);
+  .journey {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: baseline;
+    padding: 8px 0;
+    border-top: 1px dashed var(--line-strong);
   }
-  .quick {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
+  .journey:first-child {
+    border-top: 0;
   }
-  .composer {
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
-    margin-top: 8px;
-  }
-  .composer textarea {
-    flex: 1;
-  }
-  .lookups {
-    margin-top: 6px;
+  .j-dir {
+    font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    color: var(--text-secondary);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--np-pen-text);
   }
-  .lookups summary {
-    cursor: pointer;
+  .j-main {
+    display: flex;
+    flex-direction: column;
   }
-  .lookups ul {
-    margin: 4px 0 0;
-    padding-left: 16px;
+  .j-when,
+  .j-src {
+    font-size: var(--fs-label);
+    color: var(--np-ink-soft);
   }
-  .lookups a,
-  .line a {
+  .j-src a,
+  .lookups a {
     color: var(--accent-ink);
   }
+
   .profile {
     display: grid;
     grid-template-columns: max-content 1fr;
-    gap: 4px 14px;
-    margin: 8px 0;
+    gap: 6px 16px;
+    margin: 4px 0 12px;
   }
   .profile dt {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--text-secondary);
+    color: var(--np-pen-ink);
+    padding-top: 3px;
   }
   .profile dd {
     margin: 0;
   }
   .profile ul {
     margin: 0;
-    padding-left: 16px;
+    padding: 0;
+    list-style: none;
   }
   .src {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--text-ghost);
   }
-  .guide {
-    margin-top: 4px;
-    font-family: var(--font-body);
-    font-size: var(--fs-label);
-    color: var(--text-primary);
+
+  .rev-hd {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
   }
-  .guide summary {
-    cursor: pointer;
-    color: var(--accent-ink);
-  }
-  .guide ul {
-    margin: 4px 0;
+  .changes {
+    margin: 10px 0 6px;
     padding-left: 18px;
+    line-height: 1.6;
   }
-  .guide p {
-    margin: 4px 0;
+  .changes li::marker {
+    color: var(--accent);
   }
-  .links a {
+  .earlier {
+    margin-top: 12px;
+  }
+  .earlier > summary,
+  .version > summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
     color: var(--accent-ink);
   }
+  .version {
+    margin: 6px 0 0 14px;
+  }
+  .version .changes {
+    font-size: var(--fs-label);
+  }
+
+  /* ── A day ── */
+  .day-hd {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 8px 20px;
+  }
+  .day-num {
+    color: var(--accent);
+    margin-right: 4px;
+  }
+  .day-title .np-aside {
+    margin-top: 2px;
+  }
+  .day-step {
+    display: flex;
+    gap: 16px;
+    padding-bottom: 6px;
+  }
+  .live {
+    margin: 8px 0 0;
+  }
+  .bands {
+    display: grid;
+    gap: 16px;
+  }
+
+  /* ── The details drawer: the forms, on the same paper ── */
+  .drawer > summary {
+    cursor: pointer;
+    list-style-position: outside;
+  }
+  .drawer-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(20px, 2.2vw, 26px);
+    letter-spacing: -0.02em;
+  }
+  .drawer-body {
+    margin-top: 14px;
+  }
+
+  /* ── The planner: a notepad beside the sheet ── */
+  .talk {
+    position: sticky;
+    top: calc(var(--site-nav-height, 48px) + 12px);
+    padding: 20px 24px 20px 0;
+  }
+  .pad {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - var(--site-nav-height, 48px) - 48px);
+    background-color: var(--np-card);
+    background-image: repeating-linear-gradient(to bottom, transparent 0 23px, var(--np-rule) 23px 24px);
+    border: 1px solid var(--line-strong);
+    border-top: 0;
+    box-shadow: 0 18px 36px -24px rgba(26, 16, 8, 0.4);
+  }
+  .talk-hd {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 18px 12px;
+    background: var(--text-primary);
+    color: var(--bg);
+    border-top: 6px solid var(--accent);
+  }
+  .talk-h {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    color: var(--bg);
+  }
+  .talk-sub {
+    margin: 2px 0 0;
+    font-family: var(--fs-serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--accent-on-dark);
+  }
+  .close {
+    display: none;
+    padding: 4px 10px;
+    border: 1px solid var(--on-ink-45);
+    border-radius: 100px;
+    background: transparent;
+    color: var(--bg);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    cursor: pointer;
+  }
+  .messages {
+    flex: 1;
+    min-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px 18px 8px;
+  }
+  .msg {
+    max-width: 100%;
+  }
+  .msg p {
+    margin: 0;
+    white-space: pre-wrap;
+    line-height: 24px;
+  }
+  .who {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
+    color: var(--text-ghost);
+    line-height: 20px;
+  }
+  /* What you wrote, in petrol pen, set in from the right. */
+  .msg.user {
+    align-self: flex-end;
+    max-width: 88%;
+    padding-left: 12px;
+    border-left: 2px solid var(--accent-ink);
+  }
+  .msg.user p {
+    font-family: var(--fs-serif);
+    font-style: italic;
+    font-size: 17px;
+    color: var(--accent-ink);
+  }
+  .msg.user .who {
+    color: var(--accent-ink);
+  }
+  .msg.assistant .who {
+    color: var(--np-pen-text);
+  }
+  .msg.event {
+    margin: 0;
+    padding-left: 12px;
+    border-left: 2px dotted var(--line-strong);
+    font-size: var(--fs-label-xs);
+    line-height: 18px;
+    color: var(--text-muted);
+  }
+  .msg.event .meta {
+    font-family: var(--font-mono);
+  }
+  .thinking .dots {
+    display: inline-block;
+    animation: blink 1.2s steps(4) infinite;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0.2;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .thinking .dots {
+      animation: none;
+    }
+    .tab {
+      transition: none;
+    }
+  }
+  .ops {
+    display: inline-block;
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent-ink);
+  }
+  .lookups {
+    margin-top: 4px;
+    font-size: var(--fs-label);
+    color: var(--text-secondary);
+  }
+  .lookups summary {
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+  }
+  .lookups ul {
+    margin: 4px 0 0;
+    padding-left: 16px;
+  }
+  .quick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 18px 0;
+  }
+  .composer {
+    padding: 10px 18px 14px;
+    border-top: 1px solid var(--line-strong);
+    background: var(--np-card);
+  }
+  .composer textarea {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 72px;
+    padding: 2px;
+    border: 0;
+    background: repeating-linear-gradient(to bottom, transparent 0 23px, var(--np-rule) 23px 24px);
+    resize: vertical;
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 24px;
+    color: var(--np-ink);
+  }
+  .composer textarea::placeholder {
+    font-family: var(--fs-serif);
+    font-style: italic;
+    color: var(--text-muted);
+  }
+  .composer textarea:focus {
+    outline: none;
+  }
+  .composer:focus-within {
+    box-shadow: inset 0 2px 0 var(--accent-ink);
+  }
+  .composer-go {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .hint {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-muted);
+  }
+
+  /* The floating "Ask the planner" pen and the sheet's scrim, only where the pad is not on screen. */
+  .talk-fab,
+  .scrim {
+    display: none;
+  }
+
   @media (max-width: 1100px) {
     .studio {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
+    /* The pad becomes a sheet that slides up over the page. */
     .talk {
-      position: static;
-      max-height: none;
+      display: none;
+      position: fixed;
+      inset: auto 0 0 0;
+      top: auto;
+      z-index: 60;
+      padding: 0;
     }
-    .messages {
-      max-height: 420px;
+    .talk.open {
+      display: block;
+      animation: rise 220ms ease-out;
+    }
+    .pad {
+      height: min(86dvh, 760px);
+      max-height: none;
+      border: 0;
+      box-shadow: 0 -20px 40px -10px rgba(26, 16, 8, 0.45);
+    }
+    .close {
+      display: inline-block;
+    }
+    .scrim {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 55;
+      border: 0;
+      padding: 0;
+      background: rgba(26, 16, 8, 0.45);
+      cursor: default;
+    }
+    .talk-fab {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      position: fixed;
+      right: 16px;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      z-index: 50;
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 100px;
+      background: var(--text-primary);
+      color: var(--bg);
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 15px;
+      box-shadow: 0 10px 24px -8px rgba(26, 16, 8, 0.55);
+      cursor: pointer;
+    }
+    .talk-fab:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+    .fab-n {
+      min-width: 22px;
+      padding: 1px 6px;
+      border-radius: 100px;
+      background: var(--accent);
+      font-family: var(--font-mono);
+      font-weight: 400;
+      font-size: var(--fs-label-xs);
+      text-align: center;
+    }
+    .hint {
+      display: none;
     }
   }
-  @media (max-width: 640px) {
-    .leg {
-      padding-left: 12px;
+  @keyframes rise {
+    from {
+      transform: translateY(40px);
+      opacity: 0;
     }
-    .stop {
-      flex-direction: column;
-      gap: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .talk.open {
+      animation: none;
+    }
+  }
+  @media (max-width: 760px) {
+    .mark-fig :global(.np-tally) {
+      display: none;
+    }
+    .fig {
+      font-size: 32px;
+    }
+    .mark-fig {
+      min-height: 38px;
+    }
+    .mark-note {
+      display: none;
+    }
+    .sheet {
+      padding-top: 18px;
+    }
+    .banner {
+      margin: 0 16px 10px calc(var(--np-margin-x) + 12px);
+    }
+    .tick-row {
+      grid-template-columns: 22px minmax(0, 1fr);
+    }
+    .c-side {
+      grid-column: 2;
+      justify-content: flex-start;
+    }
+    .journey {
+      grid-template-columns: 44px minmax(0, 1fr);
+    }
+    .journey .pen-link {
+      grid-column: 2;
+      justify-self: start;
+    }
+    .ov-map,
+    .day-map {
+      padding: 6px;
+    }
+  }
+  @media print {
+    .talk,
+    .talk-fab,
+    .tabs {
+      display: none !important;
+    }
+    .studio {
+      grid-template-columns: 1fr;
     }
   }
 </style>

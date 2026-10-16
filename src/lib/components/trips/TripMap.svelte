@@ -26,11 +26,19 @@
   import type { GeoJSONSource, Map as GLMap } from 'mapbox-gl';
   import type { Feature, FeatureCollection } from 'geojson';
   import mapboxCssUrl from 'mapbox-gl/dist/mapbox-gl.css?url';
+  import type { Snippet } from 'svelte';
   let {
     days,
     suggestions = [],
     focus = null,
-  }: { days: MapDay[]; suggestions?: Array<{ title: string; location: LatLng }>; focus?: string | null } = $props();
+    fallback,
+  }: {
+    days: MapDay[];
+    suggestions?: Array<{ title: string; location: LatLng }>;
+    focus?: string | null;
+    /** Drawn instead of the status line when there is no map (no token on this server). */
+    fallback?: Snippet;
+  } = $props();
 
   let status = $state<'loading' | 'ready' | 'unavailable'>('loading');
   let statusText = $state('Loading map…');
@@ -235,7 +243,10 @@
   <link rel="stylesheet" href={mapboxCssUrl} />
 </svelte:head>
 
-<div class="trip-map" class:unavailable={status === 'unavailable'}>
+{#if status === 'unavailable' && fallback}
+  {@render fallback()}
+{/if}
+<div class="trip-map" class:unavailable={status === 'unavailable'} class:replaced={status === 'unavailable' && !!fallback}>
   <div
     class="canvas"
     bind:this={container}
@@ -248,10 +259,10 @@
 </div>
 <ul class="legend" aria-label="Days on the map">
   {#each days as day, i (day.date)}
-    <li>
+    {#if !focus || day.date === focus}<li>
       <span class="swatch" class:dashed={i >= 4} style="--swatch: var(--chart-cat-{(i % 4) + 1})"></span>
       <span class="mono">{i + 1}</span> {day.label}
-    </li>
+    </li>{/if}
   {/each}
   {#if suggestions.length}<li><span class="swatch ring"></span> suggestion</li>{/if}
 </ul>
@@ -266,6 +277,9 @@
   .trip-map.unavailable {
     height: auto;
     min-height: 44px;
+  }
+  .trip-map.replaced {
+    display: none;
   }
   .canvas {
     position: absolute;
