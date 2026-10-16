@@ -1141,10 +1141,6 @@
   .drawer-body {
     margin-top: 14px;
   }
-  .drawer-body :global(.nm-sec) {
-    background: var(--np-card);
-    border-color: var(--line-strong);
-  }
 
   /* ── The planner: a notepad beside the sheet ── */
   .talk {
