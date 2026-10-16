@@ -19,6 +19,7 @@ import { SWEEP_METRICS, column, isEntangled, loadSeries } from '../stats/series'
 import { benjaminiHochberg, correlate as testPair, MIN_PAIRS, type TestResult } from '../stats/tests';
 import { metricHeading } from '../features/metrics';
 import { DEFAULT_SUBJECT } from '../types';
+import { freshness, staleLine, type Ledger, type LedgerEntry } from './ledger';
 
 export const CORRELATE_DEFAULT_DAYS = 90;
 export const CORRELATE_MIN_DAYS = 21;
@@ -41,6 +42,16 @@ export interface CorrelateOutcome {
   text: string;
   /** The raw tests, for BH across the cycle. Empty when refused. */
   tests: PairTest[];
+  /** Tested recently with no new data since (`ledger.ts`): a note on it would
+   *  repeat itself, and the audit refuses a correlate note resting on it. */
+  stale?: boolean;
+}
+
+/** The cycle's view of the ledger: read once at the start, and the fresh tests
+ *  it ran, which the cycle writes back at the end (`ledger.server.ts`). */
+export interface LedgerSession {
+  ledger: Ledger;
+  recorded: LedgerEntry[];
 }
 
 /**
@@ -119,7 +130,7 @@ export function correlateRows(
  * reports q across ALL of them, so the fourth pair a model tries does not read
  * as though it were the only one.
  */
-export function createCorrelator(opts: { subject?: string; now?: Date } = {}) {
+export function createCorrelator(opts: { subject?: string; now?: Date; ledger?: LedgerSession } = {}) {
   const tally: Array<{ item: string; p: number }> = [];
   return async function correlateTool(args: Record<string, unknown>): Promise<CorrelateOutcome> {
     const a = typeof args.a === 'string' ? args.a.trim() : '';
@@ -141,10 +152,25 @@ export function createCorrelator(opts: { subject?: string; now?: Date } = {}) {
     for (const t of out.tests) tally.push({ item: t.label, p: t.result.p });
     const mine = benjaminiHochberg(tally).slice(first);
     const qLine = mine.map((c) => `${c.item} q ${fmt(c.qValue, 3)}`).join(', ');
-    return {
-      ...out,
-      text: `${out.text}\nCorrected across the ${tally.length} test(s) this cycle has run (Benjamini-Hochberg): ${qLine}. Treat q above 0.1 as not established.`,
+    const text = `${out.text}\nCorrected across the ${tally.length} test(s) this cycle has run (Benjamini-Hochberg): ${qLine}. Treat q above 0.1 as not established.`;
+    if (!opts.ledger) return { ...out, text };
+
+    // Has this been asked before, with no more to learn since?
+    const n = Math.max(...out.tests.map((t) => t.result.n));
+    const now = opts.now ?? new Date();
+    const f = freshness(opts.ledger.ledger, a, b, days, n, now);
+    if (!f.fresh) return { ...out, stale: true, text: `${text}\n${staleLine(f)}` };
+    const entry: LedgerEntry = {
+      a,
+      b,
+      days,
+      n,
+      tests: out.tests.map((t) => ({ label: t.label, r: t.result.r, n: t.result.n, p: t.result.p })),
+      at: now.toISOString(),
     };
+    opts.ledger.recorded.push(entry);
+    const before = f.prior ? `\nLast tested ${f.prior.at.slice(0, 10)} over ${f.prior.n} paired days — say what moved, if anything.` : '';
+    return { ...out, text: `${text}${before}` };
   };
 }
 

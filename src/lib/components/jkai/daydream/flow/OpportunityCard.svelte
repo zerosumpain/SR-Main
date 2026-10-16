@@ -19,6 +19,7 @@
   import type { CommissionView } from '$lib/daydream/commissioning';
   import { invalidateAll } from '$app/navigation';
   import { postThought } from '$lib/daydream/feed-client';
+  import { REASON_LABEL, REASONS_AFTER, type Reason } from '$lib/daydream/reasons';
 
   type Verdict = 'useful' | 'not_useful' | 'never_kind';
   interface Props {
@@ -37,8 +38,10 @@
     /** Past its date: file it away, or keep it a fortnight longer. */
     onfile: () => void;
     onkeep: () => void;
+    /** Why, in one tap, after a verdict (`reasons.ts`). */
+    onreason: (reason: Reason) => void;
   }
-  let { n, commission, checksOn, focused = false, focusCommission = false, busy = null, onrate, onprepare, onsavenote, onruling, onunmute, onfile, onkeep }: Props = $props();
+  let { n, commission, checksOn, focused = false, focusCommission = false, busy = null, onrate, onprepare, onsavenote, onruling, onunmute, onfile, onkeep, onreason }: Props = $props();
 
   let expanded = $state(false);
   let changing = $state(false);
@@ -66,6 +69,14 @@
   const decided = $derived((!!n.verdict || !!ownerRuled || n.act?.status === 'done' || n.act?.status === 'sent') && !changing);
   const saidWrong = $derived(n.review?.verdict === 'wrong');
   const canCheck = $derived(checksOn && n.checkable && !commission);
+  // The reasons that fit his verdict, offered once, until he gives one.
+  const reasonChoices = $derived(
+    !n.reason && (n.verdict === 'useful' || n.verdict === 'not_useful') ? REASONS_AFTER[n.verdict] : ([] as readonly Reason[]),
+  );
+  function day(iso: string): string {
+    const d = new Date(`${iso}T12:00:00Z`);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Europe/London' });
+  }
 
   const VERDICT_WORDS: Record<string, string> = {
     useful: 'Worth knowing',
@@ -172,6 +183,12 @@
     </button>
   {/if}
 
+  {#if n.seenAgain.length}
+    <p class="replaces">
+      Found again {n.seenAgain.length === 1 ? 'once' : `${n.seenAgain.length} times`} since, with nothing new — last on {day(n.seenAgain[n.seenAgain.length - 1])}. It was not written up again.
+    </p>
+  {/if}
+
   {#if n.replaces.length}
     <p class="replaces">
       Replaces {n.replaces.length === 1 ? 'an earlier note' : `${n.replaces.length} earlier notes`} on the same subject:
@@ -251,7 +268,7 @@
 
   {#if decided}
     <div class="verdict">
-      <span class="v-chip" class:good={n.verdict === 'useful'}>{n.verdict ? (VERDICT_WORDS[n.verdict] ?? 'Answered') : ownerRuled === 'wrong' ? 'You said it is wrong' : ownerRuled ? 'You said it is right' : n.act?.status === 'sent' ? 'Sent for you' : n.act?.draft ? 'Drafted for you' : 'Done for you'}</span>
+      <span class="v-chip" class:good={n.verdict === 'useful'}>{n.verdict ? `${VERDICT_WORDS[n.verdict] ?? 'Answered'}${n.reason ? ` · ${REASON_LABEL[n.reason].toLowerCase()}` : ''}` : ownerRuled === 'wrong' ? 'You said it is wrong' : ownerRuled ? 'You said it is right' : n.act?.status === 'sent' ? 'Sent for you' : n.act?.draft ? 'Drafted for you' : 'Done for you'}</span>
       <span class="v-sub">{n.raised ? 'It messaged you about this' : 'It kept this to the Inbox'}{n.kindMuted ? ' · this kind is muted' : ''}</span>
       <span class="spacer"></span>
       {#if n.kindMuted}<button type="button" class="link-btn" disabled={isBusy} onclick={onunmute}>Unmute this kind</button>{/if}
@@ -259,6 +276,17 @@
       {#if canCheck}<button type="button" class="link-btn" disabled={isBusy} onclick={onprepare}>Double-check it</button>{/if}
       <button type="button" class="link-btn" onclick={() => (changing = true)}>Change</button>
     </div>
+    {#if reasonChoices.length}
+      <div class="why" role="group" aria-label="Why?">
+        <span class="why-k">Why?</span>
+        {#each reasonChoices as r (r)}
+          <button type="button" class="why-chip" disabled={isBusy} onclick={() => onreason(r)}>{REASON_LABEL[r]}</button>
+        {/each}
+        {#if n.verdict === 'not_useful' && !saidWrong}
+          <button type="button" class="why-chip" disabled={isBusy} onclick={() => startRuling('wrong')}>It's wrong</button>
+        {/if}
+      </div>
+    {/if}
   {:else}
     <div class="decide">
       <p class="decide-k">What do you want to do?</p>
@@ -674,6 +702,38 @@
   .v-chip.good {
     border-color: var(--success);
     color: var(--success);
+  }
+  /* Why, in one tap: the reasons sit under the verdict as small pills, so the
+     verdict stays one tap and the reason is a second, optional one. */
+  .why {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    margin-top: 10px;
+  }
+  .why-k {
+    font-size: var(--fs-label);
+    color: var(--text-muted);
+  }
+  .why-chip {
+    font: inherit;
+    font-size: var(--fs-label);
+    padding: 4px 12px;
+    min-height: 32px;
+    border-radius: 100px;
+    border: 1px solid var(--line-strong);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .why-chip:hover:not(:disabled) {
+    border-color: var(--accent-ink);
+    color: var(--accent-ink);
+  }
+  .why-chip:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
   .v-sub {
     font-size: var(--fs-label);

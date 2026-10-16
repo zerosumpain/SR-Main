@@ -108,6 +108,8 @@ export const daydreamThink: ActivityHandler = {
       return { outcome: 'error', summary: errMsg(err) };
     }
     const quota = await guard.end();
+    // A research cycle with no interest due asks nothing and spends nothing.
+    if (result.skipped) return { outcome: 'skipped', summary: `${result.channel} × ${result.outcome} · ${result.skipped}`, details: { quota, ...result } };
 
     let queued = { added: 0, merged: 0 };
     try {
@@ -124,6 +126,10 @@ export const daydreamThink: ActivityHandler = {
       // `merged` always shown: its absence is how ponder's repetition went
       // unseen for a month.
       `${n.proposed} note${n.proposed === 1 ? '' : 's'} (${n.created} new${n.merged ? `, ${n.merged} merged` : ''}${n.updated ? `, ${n.updated} refreshed` : ''}${n.suppressed ? `, ${n.suppressed} held` : ''}${n.muted ? `, ${n.muted} muted` : ''})`,
+      ...(result.subjects?.folded || result.subjects?.revised
+        ? [`subjects: ${result.subjects.folded} repeat${result.subjects.folded === 1 ? '' : 's'} folded, ${result.subjects.revised} revised`]
+        : []),
+      ...(result.focus ? [`on: ${result.focus.slice(0, 60)}`] : []),
       ...(result.notified ? [`${result.notified} sent`] : []),
       ...(queued.added || queued.merged
         ? [`backlog +${queued.added}${queued.merged ? ` (${queued.merged} merged)` : ''}`]

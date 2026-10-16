@@ -20,6 +20,7 @@
   import { postThought } from '$lib/daydream/feed-client';
   import { ago, clock, groupByDay, stamp } from '$lib/daydream/format';
   import type { FeedNote } from '$lib/daydream/think/notes';
+  import type { Reason } from '$lib/daydream/reasons';
   import type { Bucket, Stage } from '$lib/daydream/think/explain';
   import type { PageData } from './$types';
 
@@ -45,7 +46,9 @@
     result: byBucket.done,
   });
   const staleCount = $derived(data.notes.filter((n) => n.stale).length);
-  const visible = $derived(data.notes.filter((n) => filter === 'all' || n.bucket === filter || recent.has(n.id)));
+  // The living week plan is pinned above the list, not filed in a day.
+  const living = $derived(data.notes.find((n) => n.living) ?? null);
+  const visible = $derived(data.notes.filter((n) => !n.living && (filter === 'all' || n.bucket === filter || recent.has(n.id))));
   const groups = $derived(groupByDay(visible));
   // A card shows its note's newest check — unless a `?commission=` link named
   // an older one on the same note (a report that has since been superseded),
@@ -119,6 +122,16 @@
   async function fileStale(n: FeedNote | null) {
     const ok = await act(n ? { action: 'file_stale', thoughtId: n.id } : { action: 'file_stale', all: true }, n ? `${n.id}:file` : 'file-all');
     if (ok) say(n ? 'Filed — it is off the Inbox.' : 'Filed — the notes past their date are off the Inbox.');
+  }
+  const REASON_TOAST: Record<Reason, string> = {
+    already_knew: 'Noted — it will not tell you things you already know like this.',
+    not_my_thing: 'Noted — fewer like this.',
+    not_now: 'Filed — no verdict, so nothing like it is counted down.',
+    did_it: 'Noted — you acted on it.',
+  };
+  async function giveReason(n: FeedNote, reason: Reason) {
+    recent.add(n.id);
+    if (await act({ action: 'reason', thoughtId: n.id, reason }, `${n.id}:reason`)) say(REASON_TOAST[reason]);
   }
   async function keep(n: FeedNote) {
     if (await act({ action: 'keep_current', thoughtId: n.id }, `${n.id}:keep`)) say('Kept — it will not be flagged for another fortnight.');
@@ -208,6 +221,28 @@
     {#if data.commissionError}<p class="err" role="alert">{data.commissionError}</p>{/if}
     {#if actionError}<p class="err" role="alert">{actionError}</p>{/if}
 
+    {#if living && (filter === 'decide' || filter === 'all')}
+      <div class="living">
+        <h3 class="day">This week's plan <span class="living-s">— one plan, revised when the week changes</span></h3>
+        <OpportunityCard
+          n={living}
+          commission={commissionFor(living)}
+          checksOn={data.commissionEnabled}
+          focused={data.focus === living.id}
+          focusCommission={!!focusedCheck && focusedCheck.thoughtId === living.id}
+          {busy}
+          onrate={(v) => rate(living, v)}
+          onprepare={() => prepare(living)}
+          onsavenote={(text) => act({ action: 'add_note', thoughtId: living.id, text }, `${living.id}:note`)}
+          onruling={(verdict, why) => rule(living, verdict, why)}
+          onunmute={() => act({ action: 'unmute_kind', kind: living.kind }, `${living.id}:unmute`)}
+          onfile={() => fileStale(living)}
+          onkeep={() => keep(living)}
+          onreason={(r) => giveReason(living, r)}
+        />
+      </div>
+    {/if}
+
     {#if visible.length === 0}
       <div class="empty">
         {#if filter === 'decide'}
@@ -244,6 +279,7 @@
                 onunmute={() => act({ action: 'unmute_kind', kind: n.kind }, `${n.id}:unmute`)}
                 onfile={() => fileStale(n)}
                 onkeep={() => keep(n)}
+                onreason={(r) => giveReason(n, r)}
               />
             </li>
           {/each}
@@ -407,6 +443,10 @@
     text-transform: uppercase;
     color: var(--text-muted);
     margin: 26px 0 10px;
+  }
+  .living-s {
+    letter-spacing: 0.04em;
+    text-transform: none;
   }
   .cards {
     list-style: none;

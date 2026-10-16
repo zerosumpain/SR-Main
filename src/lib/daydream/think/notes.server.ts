@@ -21,11 +21,13 @@ import { loadNoteContexts } from './context.server';
 import { REPLACES_KIND, TOPIC_KINDS, TOPIC_WINDOW_DAYS, replacesEntry, supersededBy, type TopicCandidate } from './topics';
 import { THINK_CADENCE_MS, questionAt, type Channel, type Outcome } from './questions';
 import { dayToStored, keptUntil, sweepDue } from './shelf';
+import { PLAN_FRESH_DAYS } from './subjects';
 import {
   channelLabel,
   inScope,
   isForPhone,
   isOnFeed,
+  livingPlanId,
   outcomeLabel,
   todayNotes,
   toFeedNote,
@@ -60,6 +62,7 @@ const ROW_COLUMNS = {
   reviewModel: daydreamThoughts.reviewModel,
   proposedActions: daydreamThoughts.proposedActions,
   relevantUntil: daydreamThoughts.relevantUntil,
+  feedbackNote: daydreamThoughts.feedbackNote,
 };
 
 /** The newest think rows for the owner, before any reader's rules. */
@@ -77,7 +80,8 @@ async function loadThinkRows(opts: { since?: Date; limit: number }): Promise<Thi
 /** The phone's Today card: the newest two from the last 48 hours. */
 export async function loadTodayNotes(now = new Date()): Promise<NativeNote[]> {
   const [rows, muted] = await Promise.all([
-    loadThinkRows({ since: new Date(now.getTime() - 48 * 3_600_000), limit: 100 }),
+    // A week, not 48 hours: the living plan can be that old (`todayNotes`).
+    loadThinkRows({ since: new Date(now.getTime() - PLAN_FRESH_DAYS * 86_400_000), limit: 200 }),
     mutedKinds(),
   ]);
   return todayNotes(rows, muted, now).map(toNativeNote);
@@ -104,7 +108,8 @@ export async function loadFeedNotes(opts: { days?: number; now?: Date } = {}): P
   const [rows, muted] = await Promise.all([loadThinkRows({ since, limit: 400 }), mutedKinds()]);
   const shown = rows.filter(isOnFeed);
   const ctx = await loadNoteContexts(shown);
-  return shown.map((r) => toFeedNote(r, muted, ctx.get(r.id), now));
+  const planId = livingPlanId(shown, now);
+  return shown.map((r) => ({ ...toFeedNote(r, muted, ctx.get(r.id), now), living: r.id === planId }));
 }
 
 /** The phone's Daydream page: its notes with stage, next step and sources,
@@ -122,7 +127,8 @@ export async function loadNativeDetail(opts: { limit: number; staleOnly?: boolea
   const [rows, muted] = await Promise.all([loadThinkRows({ limit: 300 }), mutedKinds()]);
   const shown = rows.filter((r) => isForPhone(r, muted));
   const ctx = await loadNoteContexts(shown);
-  const all = shown.map((r) => toNativeDetail(r, ctx.get(r.id), now));
+  const planId = livingPlanId(shown, now);
+  const all = shown.map((r) => ({ ...toNativeDetail(r, ctx.get(r.id), now), living: r.id === planId }));
   const pipeline = { decide: 0, motion: 0, done: 0 };
   for (const n of all) pipeline[n.bucket]++;
   const past = all.filter((n) => n.stale);

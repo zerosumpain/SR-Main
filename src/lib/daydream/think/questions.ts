@@ -23,8 +23,8 @@
 // independently would pair them at random, including pairs that make no sense
 // (a build proposal out of a chat thread, money analysis of a heart rate). So
 // the pairing is a fixed schedule — each channel gets eight visits per period,
-// each outcome gets seven — and the skip table below is what the schedule is
-// checked against. Both are pinned by tests.
+// each outcome its OUTCOME_SHARE — and the skip table below is what the
+// schedule is checked against. Both are pinned by tests.
 //
 // Clock-derived, like `ponder/lens.ts`: no cursor row to drift, a restart
 // cannot reset the rotation, and two boxes agree. PURE — no db, no model.
@@ -93,21 +93,43 @@ export function isSkipped(channel: Channel, outcome: Outcome): boolean {
 /**
  * Each channel's eight visits per period, in order.
  *
- * Solved by hand as a 7 × 8 table whose rows each sum to 8 (every channel an
- * equal share) and whose columns each sum to 7 (every outcome an equal share),
- * with a zero wherever SKIP says so. The research row is forced — the research
- * outcome can only come from here, so seven of its eight visits are research —
- * and the rest follows from it. Within a row, repeats are spread apart so a
- * channel never asks the same kind of question twice running.
+ * A 7 × 8 table whose rows each sum to 8 (every channel an equal share), with
+ * a zero wherever SKIP says so. The columns were all 7 until 2026-10-16; they
+ * are now OUTCOME_SHARE. The research row is forced — the research outcome can
+ * only come from here, so seven of its eight visits are research. Within a
+ * row, repeats are spread apart so a channel never asks the same kind of
+ * question twice running.
+ *
+ * Why health_plan has 3 and not 7: a week's plan is ONE living note now
+ * (`subjects.ts`, key `plan:current`). At 7 visits the loop wrote ~50 plans in
+ * 22 days, about four versions of the same week every day — the best-rated
+ * kind (25 useful), written ten times more often than the week changes. Three
+ * visits is about one look a day; the four freed visits went to efficiency
+ * (home ×2 and health — 4 of 12 rated useful there) and money_analysis (diary).
+ * The home and diary plan visits were the ones cut; diary × health_plan stays
+ * because it was the best pair of all (7 of 23).
  */
 export const SCHEDULE: Readonly<Record<Channel, readonly Outcome[]>> = {
-  health: ['correlate', 'health_plan', 'quality_of_life', 'build', 'correlate', 'suggest', 'health_plan', 'efficiency'],
-  home: ['correlate', 'quality_of_life', 'health_plan', 'efficiency', 'correlate', 'build', 'quality_of_life', 'health_plan'],
+  health: ['correlate', 'health_plan', 'efficiency', 'quality_of_life', 'correlate', 'suggest', 'efficiency', 'build'],
+  home: ['correlate', 'efficiency', 'quality_of_life', 'efficiency', 'correlate', 'build', 'quality_of_life', 'efficiency'],
   mail: ['money_analysis', 'build', 'efficiency', 'quality_of_life', 'build', 'money_analysis', 'efficiency', 'build'],
   chat: ['suggest', 'quality_of_life', 'correlate', 'suggest', 'efficiency', 'suggest', 'quality_of_life', 'suggest'],
-  diary: ['health_plan', 'efficiency', 'money_analysis', 'correlate', 'health_plan', 'quality_of_life', 'suggest', 'health_plan'],
+  diary: ['health_plan', 'efficiency', 'money_analysis', 'correlate', 'health_plan', 'quality_of_life', 'suggest', 'money_analysis'],
   money: ['money_analysis', 'build', 'correlate', 'money_analysis', 'efficiency', 'money_analysis', 'build', 'money_analysis'],
   research: ['research', 'research', 'research', 'suggest', 'research', 'research', 'research', 'research'],
+};
+
+/** Visits per outcome per 56-slot period — the SCHEDULE's column sums,
+ *  pinned so a reshuffle cannot quietly move attention. */
+export const OUTCOME_SHARE: Readonly<Record<Outcome, number>> = {
+  correlate: 7,
+  efficiency: 10,
+  quality_of_life: 7,
+  research: 7,
+  build: 7,
+  health_plan: 3,
+  suggest: 7,
+  money_analysis: 8,
 };
 
 /** Visits per channel per period — the length of every SCHEDULE row. */

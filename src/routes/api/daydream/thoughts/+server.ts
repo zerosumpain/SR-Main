@@ -41,6 +41,19 @@ export const POST: RequestHandler = async ({ request }) => {
         return json({ ok: true, ...res });
       }
 
+      case 'reason': {
+        // His one-tap reason (`reasons.ts`). "Not now" files the note with no
+        // verdict; the others set or confirm one through the verdict writer.
+        const { isReason } = await import('$lib/daydream/reasons');
+        const thoughtId = str('thoughtId');
+        const reason = str('reason');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        if (!isReason(reason)) return json({ error: 'reason must be already_knew, not_my_thing, not_now or did_it' }, { status: 400 });
+        const { recordReason } = await import('$lib/daydream/reasons.server');
+        const res = await recordReason(thoughtId, reason);
+        return json({ ok: true, ...res });
+      }
+
       case 'add_note': {
         // Free text, because the closed feedback vocabulary carries a verdict
         // and never a reason, and the reason is the half worth having.
