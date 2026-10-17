@@ -113,9 +113,28 @@ export function wearsSharedChrome(path: string): boolean {
 }
 
 /**
+ * The jkai cell: the assistant and the two things it does without being asked
+ * to chat — it notices (Daydreams) and it plans (Trips). /trips has no strip of
+ * its own on a site page, so this menu is how it is reached from anywhere.
+ * Every nav bar renders it through `JkaiMenu.svelte`.
+ */
+export const JKAI_ITEM: NavItem = {
+  label: 'jkai',
+  href: '/jkai',
+  ownerOnly: true,
+  match: (p) => under('/jkai', p) || under('/trips', p),
+  children: [
+    { label: 'jkai', href: '/jkai', ownerOnly: true, meta: 'Ask, chat, run things', match: (p) => p === '/jkai' },
+    { label: 'Daydreams', href: '/jkai/daydreams', ownerOnly: true, meta: 'What it noticed while idle' },
+    { label: 'Trips', href: '/trips', ownerOnly: true, meta: 'Plan the days away' },
+  ],
+};
+
+/**
  * The site strip — the destinations on offer from any page that is not inside a
  * section of its own. Home is NOT here: it is the icon cell, and offering it
- * twice was the old strip's tell.
+ * twice was the old strip's tell. Nor is jkai: it is `JKAI_ITEM`, which every
+ * bar renders on its own, strip or no strip.
  */
 export const SITE_ITEMS: NavItem[] = [
   { label: 'Projects', href: '/projects' },
@@ -128,20 +147,6 @@ export const SITE_ITEMS: NavItem[] = [
   { label: 'News', href: '/news', ownerOnly: true },
   { label: 'Research', href: '/research', ownerOnly: true },
   { label: 'Drive', href: '/drive', ownerOnly: true },
-  // The assistant and the two things it does without being asked to chat: it
-  // notices (Daydreams) and it plans (Trips). /trips has no strip of its own on
-  // a site page, so this menu is how it is reached from anywhere.
-  {
-    label: 'jkai',
-    href: '/jkai',
-    ownerOnly: true,
-    match: (p) => under('/jkai', p) || under('/trips', p),
-    children: [
-      { label: 'jkai', href: '/jkai', ownerOnly: true, meta: 'Ask, chat, run things', match: (p) => p === '/jkai' },
-      { label: 'Daydreams', href: '/jkai/daydreams', ownerOnly: true, meta: 'What it noticed while idle' },
-      { label: 'Trips', href: '/trips', ownerOnly: true, meta: 'Plan the days away' },
-    ],
-  },
 ];
 
 /**

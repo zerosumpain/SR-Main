@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  JKAI_ITEM,
   SECTIONS,
   SITE_ITEMS,
   activeSection,
@@ -106,7 +107,7 @@ describe('owner filtering', () => {
 
 describe('the hidden owner-only surfaces stay hidden', () => {
   it('never emits a route that is deliberately absent from every index', () => {
-    const everyHref = [...SITE_ITEMS, ...SECTIONS.flatMap((s) => s.items)]
+    const everyHref = [...SITE_ITEMS, JKAI_ITEM, ...(JKAI_ITEM.children ?? []), ...SECTIONS.flatMap((s) => s.items)]
       .map((i) => i.href)
       .concat(SECTIONS.map((s) => s.rootHref));
     // /projects is a public PREFIX; these two are gated only inside their own
@@ -194,7 +195,7 @@ describe('the bar is never empty', () => {
 });
 
 describe('the jkai menu anchors Trips', () => {
-  const jkai = SITE_ITEMS.find((i) => i.href === '/jkai')!;
+  const jkai = JKAI_ITEM;
 
   it('offers jkai, Daydreams and Trips under the jkai cell', () => {
     expect(jkai.children?.map((c) => c.href)).toEqual(['/jkai', '/jkai/daydreams', '/trips']);
@@ -209,17 +210,17 @@ describe('the jkai menu anchors Trips', () => {
     expect(parentHref('/trips/abc')).toBe('/trips');
   });
 
-  it('shows the site strip, menu included, on a trip page', () => {
-    const cells = navCellsFor('/trips/abc', true);
-    expect(cells.find((c) => c.href === '/jkai')?.children).toHaveLength(3);
+  it('keeps jkai out of the strip: every bar renders it on its own', () => {
+    expect(navCellsFor('/trips/abc', true).map((c) => c.href)).not.toContain('/jkai');
+    expect(navCellsFor('/health', true).map((c) => c.href)).not.toContain('/jkai');
   });
 
   it('gives a member only the menu rows they can open, and none to a visitor', () => {
-    expect(visibleItems(SITE_ITEMS, false).find((i) => i.label === 'jkai')).toBeUndefined();
-    const member = visibleItems(SITE_ITEMS, false, ['/jkai/daydreams/impact']).find((i) => i.label === 'jkai');
+    expect(visibleItems([JKAI_ITEM], false)).toEqual([]);
+    const member = visibleItems([JKAI_ITEM], false, ['/jkai/daydreams/impact'])[0];
     expect(member?.href).toBe('/jkai/daydreams/impact');
     expect(member?.children?.map((c) => c.href)).toEqual(['/jkai/daydreams/impact']);
-    const noRows = visibleItems(SITE_ITEMS, false, ['/jkai/notes']).find((i) => i.label === 'jkai');
+    const noRows = visibleItems([JKAI_ITEM], false, ['/jkai/notes'])[0];
     expect(noRows?.children).toBeUndefined();
   });
 });

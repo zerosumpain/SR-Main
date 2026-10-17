@@ -2,10 +2,16 @@
   import { page } from '$app/state';
 
   import { activeSection, isSectionActive, reachableSections } from './admin-nav';
+  import JkaiMenu from '../JkaiMenu.svelte';
+  import { JKAI_ITEM, visibleItems } from '$lib/nav/site-nav';
 
   const path = $derived(page.url.pathname);
   // The owner sees every section; an admin-showcase visitor only the pages
   // their grants open (root layout's `navReach`).
+  /** The jkai cell every bar carries; a showcase visitor gets it only where their grants reach. */
+  const jkaiCell = $derived(
+    visibleItems([JKAI_ITEM], !!page.data.isOwner, (page.data.navReach as string[] | undefined) ?? [])[0] ?? null,
+  );
   const sections = $derived(reachableSections(page.data.isOwner ? null : ((page.data.navReach as string[] | undefined) ?? [])));
 
   /**
@@ -98,6 +104,10 @@
       </a>
     {/each}
   </nav>
+
+  {#if jkaiCell}
+    <JkaiMenu item={jkaiCell} path={page.url.pathname} />
+  {/if}
 
   <a href="/" class="view-site" aria-label="Back to main site">
     View site

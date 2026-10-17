@@ -25,10 +25,12 @@
    * `--accent` scores 2.6:1 on #1a1008), and cream-alpha for the hairlines.
    */
   import type { Snippet } from 'svelte';
+  import JkaiMenu from './JkaiMenu.svelte';
   import { currentPath } from '$lib/nav/page-path';
   import {
     activeSection,
     isItemActive,
+    JKAI_ITEM,
     navCellsFor,
     parentHref,
     parentLabel,
@@ -75,47 +77,13 @@
   const cells = $derived(
     items ? visibleItems(items, isOwner, reach) : navCellsFor(path, isOwner, reach),
   );
-  /** Cells that open a menu sit after the strip, outside its scroller, so the menu can drop below the bar. */
-  const stripCells = $derived(cells.filter((c) => !c.children?.length));
-  const menuCells = $derived(cells.filter((c) => c.children?.length));
-
   /**
-   * Which menu is open. A mouse opens it by hovering the cell; the caret opens
-   * it for a touch screen or a keyboard. Leaving with the mouse closes it after
-   * a beat, so the trip from the cell down into the menu does not drop it.
+   * The jkai menu is on every bar, not only where the site strip shows: on
+   * /health or /home the strip is that section's own pages, and jkai would
+   * otherwise vanish. It sits after the strip, outside its scroller, so the
+   * menu can drop below the bar. Null for anyone who can open none of it.
    */
-  let openMenu = $state<string | null>(null);
-  let closeTimer: ReturnType<typeof setTimeout> | undefined;
-  function hoverOpen(e: PointerEvent, href: string) {
-    if (e.pointerType !== 'mouse') return;
-    clearTimeout(closeTimer);
-    openMenu = href;
-  }
-  function hoverClose(e: PointerEvent) {
-    if (e.pointerType !== 'mouse') return;
-    clearTimeout(closeTimer);
-    closeTimer = setTimeout(() => (openMenu = null), 180);
-  }
-  function toggleMenu(href: string) {
-    clearTimeout(closeTimer);
-    openMenu = openMenu === href ? null : href;
-  }
-  // Moving to another page closes it.
-  $effect(() => {
-    void path;
-    openMenu = null;
-  });
-  function onWindowKey(e: KeyboardEvent) {
-    if (e.key !== 'Escape' || !openMenu) return;
-    const caret = document.querySelector<HTMLElement>(`[data-menu-caret="${openMenu}"]`);
-    openMenu = null;
-    caret?.focus();
-  }
-  function onWindowPointer(e: PointerEvent) {
-    if (!openMenu) return;
-    const t = e.target as Element | null;
-    if (!t?.closest('[data-hdr-menu]')) openMenu = null;
-  }
+  const jkaiCell = $derived(visibleItems([JKAI_ITEM], isOwner, reach)[0] ?? null);
 
   const atHome = $derived(path === '/');
   /**
@@ -143,8 +111,6 @@
     !!sectionHref && path !== sectionHref && (isOwner || !section?.ownerOnly || reach.includes(sectionHref)),
   );
 </script>
-
-<svelte:window onkeydown={onWindowKey} onpointerdown={onWindowPointer} />
 
 <header class="site-nav-bar" data-site-header>
   {#if before}
@@ -198,7 +164,7 @@
   {#if cells.length}
     <nav class="hdr-cells" aria-label="{sectionLabel ?? 'Site'} sections">
       <div class="hdr-strip">
-        {#each stripCells as item (item.href + item.label)}
+        {#each cells as item (item.href + item.label)}
           <a
             href={item.href}
             data-sveltekit-reload={item.href.startsWith('/projects/policy-analysis') ? true : undefined}
@@ -209,56 +175,13 @@
           </a>
         {/each}
       </div>
-      {#each menuCells as item (item.href + item.label)}
-        {@const open = openMenu === item.href}
-        {@const menuId = `hdr-menu-${item.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-        <div
-          class="hdr-menu"
-          class:open
-          class:here={isItemActive(item, path)}
-          data-hdr-menu
-          role="presentation"
-          onpointerenter={(e) => hoverOpen(e, item.href)}
-          onpointerleave={hoverClose}
-        >
-          <a href={item.href} class="menu-cell" aria-current={path === item.href ? 'page' : undefined}>
-            {item.label}
-          </a>
-          <button
-            type="button"
-            class="menu-caret"
-            data-menu-caret={item.href}
-            aria-expanded={open}
-            aria-controls={menuId}
-            aria-label="More in {item.label}"
-            onclick={() => toggleMenu(item.href)}
-          >
-            <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
-              <path d="M1.5 3.5 5 7l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" />
-            </svg>
-          </button>
-          {#if open}
-            <ul class="menu" id={menuId}>
-              {#each item.children ?? [] as row (row.href)}
-                <li>
-                  <a
-                    href={row.href}
-                    class="menu-row"
-                    aria-current={isItemActive(row, path) ? 'page' : undefined}
-                    onclick={() => (openMenu = null)}
-                  >
-                    <span class="menu-label">{row.label}</span>
-                    {#if row.meta}<span class="menu-meta">{row.meta}</span>{/if}
-                  </a>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        </div>
-      {/each}
     </nav>
   {:else}
     <div class="hdr-spacer"></div>
+  {/if}
+
+  {#if jkaiCell}
+    <JkaiMenu item={jkaiCell} {path} />
   {/if}
 
   {#if right}
@@ -398,127 +321,6 @@
     box-shadow: inset 0 -2px 0 var(--accent);
   }
 
-  /* jkai is not one more destination in the row: it is the assistant, and it
-     holds things (Daydreams, Trips) that have no cell of their own here. So it
-     is the one cell filled with colour — the on-dark accent, ink text on it
-     (7:1) — wearing its wordmark rather than a mono label, with a caret that
-     says there is more under it. */
-  .hdr-menu {
-    position: relative;
-    display: flex;
-    align-items: stretch;
-    flex: none;
-    background: var(--accent-on-dark);
-    color: #1a1008;
-    transition: background 0.2s var(--ease-out);
-  }
-  .menu-cell {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 4px 0 18px;
-    font-family: var(--font-display);
-    font-weight: 800;
-    font-size: var(--fs-body-sm);
-    letter-spacing: -0.01em;
-    text-decoration: none;
-    color: inherit;
-  }
-  .menu-caret {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 16px 0 6px;
-    border: 0;
-    background: none;
-    color: inherit;
-    cursor: pointer;
-  }
-  .menu-caret svg {
-    transition: transform 0.2s var(--ease-out);
-  }
-  .hdr-menu.open .menu-caret svg {
-    transform: rotate(180deg);
-  }
-  .hdr-menu:hover,
-  .hdr-menu.open {
-    background: #f09a55;
-  }
-  /* In the jkai family (Trips included): a cream seam along the bottom, the
-     filled cell's version of a current cell's accent seam. */
-  .hdr-menu.here {
-    box-shadow: inset 0 -3px 0 rgba(26, 16, 8, 0.55);
-  }
-  .menu-caret:focus-visible,
-  .menu-cell:focus-visible {
-    outline: 2px solid #1a1008;
-    outline-offset: -5px;
-  }
-
-  /* The menu is the bar carried on downwards: the same ink, the same mono
-     cells divided by the same hairlines, and the current row cut out to the
-     page ground with an accent seam — exactly as a current cell in the strip.
-     It hangs from the jkai cell by an accent edge of the same colour. */
-  .menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    z-index: 40;
-    width: 248px;
-    max-width: calc(100vw - 32px);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    background: #1a1008;
-    border: 1px solid rgba(237, 228, 212, 0.14);
-    border-top: 2px solid var(--accent-on-dark);
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45);
-  }
-  .menu li + li {
-    border-top: 1px solid rgba(237, 228, 212, 0.14);
-  }
-  .menu-row {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 12px 16px;
-    text-decoration: none;
-    color: rgba(237, 228, 212, 0.72);
-    transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
-  }
-  .menu-row:hover,
-  .menu-row:focus-visible {
-    color: #ede4d4;
-    background: rgba(237, 228, 212, 0.07);
-    outline: none;
-  }
-  .menu-label {
-    font-family: var(--font-code);
-    font-size: var(--fs-label-xs);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-label);
-  }
-  .menu-meta {
-    font-family: var(--font-code);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.04em;
-    color: rgba(237, 228, 212, 0.5);
-  }
-  .menu-row:hover .menu-label,
-  .menu-row:focus-visible .menu-label {
-    color: var(--accent-on-dark);
-  }
-  .menu-row[aria-current='page'] {
-    color: #1a1008;
-    background: #ede4d4;
-    box-shadow: inset 3px 0 0 var(--accent);
-  }
-  .menu-row[aria-current='page'] .menu-label {
-    color: #1a1008;
-  }
-  .menu-row[aria-current='page'] .menu-meta {
-    color: rgba(26, 16, 8, 0.6);
-  }
-
   .hdr-right {
     display: inline-flex;
     align-items: center;
@@ -540,12 +342,6 @@
      menu — the cells ARE the wayfinding, and a burger hides exactly the thing
      this bar exists to show. */
   @media (max-width: 640px) {
-    .menu-cell {
-      padding: 0 4px 0 12px;
-    }
-    .menu-caret {
-      padding: 0 12px 0 4px;
-    }
     .back-word {
       display: none;
     }
