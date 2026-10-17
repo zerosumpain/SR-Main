@@ -34,6 +34,14 @@ export type NavItem = {
   ownerOnly?: boolean;
   /** Custom active test; defaults to exact-or-prefix on href. */
   match?: (path: string) => boolean;
+  /**
+   * A cell that opens a menu. The cell itself still links to `href`; hovering
+   * it (or its caret, on a touch screen) offers these as well — the jkai family
+   * that has no section strip of its own on a site page.
+   */
+  children?: NavItem[];
+  /** A word or two under the label in a menu ("PLANNER"). */
+  meta?: string;
 };
 
 export type NavSection = {
@@ -120,7 +128,20 @@ export const SITE_ITEMS: NavItem[] = [
   { label: 'News', href: '/news', ownerOnly: true },
   { label: 'Research', href: '/research', ownerOnly: true },
   { label: 'Drive', href: '/drive', ownerOnly: true },
-  { label: 'jkai', href: '/jkai', ownerOnly: true },
+  // The assistant and the two things it does without being asked to chat: it
+  // notices (Daydreams) and it plans (Trips). /trips has no strip of its own on
+  // a site page, so this menu is how it is reached from anywhere.
+  {
+    label: 'jkai',
+    href: '/jkai',
+    ownerOnly: true,
+    match: (p) => under('/jkai', p) || under('/trips', p),
+    children: [
+      { label: 'jkai', href: '/jkai', ownerOnly: true, meta: 'CHAT', match: (p) => p === '/jkai' },
+      { label: 'Daydreams', href: '/jkai/daydreams', ownerOnly: true, meta: 'NOTICE · WATCH · LEARN' },
+      { label: 'Trips', href: '/trips', ownerOnly: true, meta: 'PLANNER' },
+    ],
+  },
 ];
 
 /**
@@ -203,6 +224,17 @@ export const SECTIONS: NavSection[] = [
       { label: 'Activity', href: '/jkai/activity' },
       { label: 'Prompts', href: '/jkai/prompts' },
     ],
+  },
+  {
+    // The trip planner is a jkai surface that lives at /trips, the way research
+    // lives at /research: its way up is jkai, not the home icon.
+    id: 'trips',
+    label: 'Trips',
+    rootHref: '/trips',
+    ownerOnly: true,
+    parent: '/jkai',
+    match: (p) => under('/trips', p),
+    items: [],
   },
   {
     id: 'health',
@@ -362,11 +394,22 @@ export function visibleItems(items: NavItem[], isOwner: boolean, reach: readonly
   if (isOwner) return items;
   const out: NavItem[] = [];
   for (const i of items) {
-    if (!i.ownerOnly) out.push(i);
-    else if (reach.includes(i.href)) out.push(i);
+    // A menu offers a member only the rows they can open; with none, it is a plain cell.
+    // The menu's own root row ("jkai" → /jkai) is never rewritten to a page
+    // under it: everything is under it, so it would duplicate another row.
+    const kids = i.children
+      ? visibleItems(
+          i.children.filter((c) => c.href !== i.href || reach.includes(c.href)),
+          false,
+          reach,
+        )
+      : undefined;
+    const cell = { ...i, children: kids?.length ? kids : undefined };
+    if (!i.ownerOnly) out.push(cell);
+    else if (reach.includes(i.href)) out.push(cell);
     else {
       const inside = reach.find((r) => under(i.href, r));
-      if (inside) out.push({ ...i, href: inside });
+      if (inside) out.push({ ...cell, href: inside });
     }
   }
   return out;

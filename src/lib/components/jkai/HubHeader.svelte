@@ -177,6 +177,9 @@
     // (the world vs this codebase) and neither is a subsection of the other.
     { label: 'Codegraph', href: '/jkai/codegraph', meta: 'BUILD MEMORY' },
     { label: 'Develop', href: '/jkai/develop', meta: 'AUTONOMOUS' },
+    // Lives at /trips, outside the hub, but it is jkai planning: the site bar's
+    // jkai menu offers it too.
+    { label: 'Trips', href: '/trips', meta: 'PLANNER' },
   ]);
   const library = $derived<MenuRow[]>([
     { label: 'Notes', href: '/jkai/notes', meta: 'NOTEBOOK' },

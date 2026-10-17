@@ -192,3 +192,34 @@ describe('the bar is never empty', () => {
     }
   });
 });
+
+describe('the jkai menu anchors Trips', () => {
+  const jkai = SITE_ITEMS.find((i) => i.href === '/jkai')!;
+
+  it('offers jkai, Daydreams and Trips under the jkai cell', () => {
+    expect(jkai.children?.map((c) => c.href)).toEqual(['/jkai', '/jkai/daydreams', '/trips']);
+  });
+
+  it('lights the jkai cell on a trip and walks a trip up to jkai', () => {
+    expect(isItemActive(jkai, '/trips/abc')).toBe(true);
+    expect(isItemActive(jkai, '/tripsy')).toBe(false);
+    expect(activeSection('/trips/abc')?.id).toBe('trips');
+    expect(parentHref('/trips')).toBe('/jkai');
+    expect(parentLabel('/trips')).toBe('jkai');
+    expect(parentHref('/trips/abc')).toBe('/trips');
+  });
+
+  it('shows the site strip, menu included, on a trip page', () => {
+    const cells = navCellsFor('/trips/abc', true);
+    expect(cells.find((c) => c.href === '/jkai')?.children).toHaveLength(3);
+  });
+
+  it('gives a member only the menu rows they can open, and none to a visitor', () => {
+    expect(visibleItems(SITE_ITEMS, false).find((i) => i.label === 'jkai')).toBeUndefined();
+    const member = visibleItems(SITE_ITEMS, false, ['/jkai/daydreams/impact']).find((i) => i.label === 'jkai');
+    expect(member?.href).toBe('/jkai/daydreams/impact');
+    expect(member?.children?.map((c) => c.href)).toEqual(['/jkai/daydreams/impact']);
+    const noRows = visibleItems(SITE_ITEMS, false, ['/jkai/notes']).find((i) => i.label === 'jkai');
+    expect(noRows?.children).toBeUndefined();
+  });
+});
