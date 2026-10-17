@@ -50,6 +50,7 @@ vi.mock('$env/dynamic/private', () => ({
       'sr-health': 'h'.repeat(40),
       'sr-supply-chain-monitor': 'm'.repeat(40),
       'sr-local-plan-navigator': 'l'.repeat(40),
+      'sr-wildmind': 'w'.repeat(40),
     }),
   },
 }));
@@ -223,6 +224,24 @@ describe('session authority claims', () => {
     state.shareValid = false;
     state.queue.push([]);
     expect((await (await call('sr-local-plan-navigator', 'l'.repeat(40))).json()).claims.project.access).toBe('none');
+  });
+
+  it('a Wildmind share link is checked against its own, private-by-default project', async () => {
+    state.email = null;
+    state.shareValid = true;
+    state.queue.push([]); // no visibility row: private by default
+    const body = await (await call('sr-wildmind', 'w'.repeat(40), { 'x-sr-session-share': 'wm-token' })).json();
+    expect(body.email).toBeNull();
+    expect(body.claims.project).toEqual({ key: 'wildmind', access: 'share' });
+    expect(state.shareCalls.at(-1)).toEqual(['wildmind', 'wm-token']);
+
+    state.queue.push([]);
+    await call('sr-wildmind', 'w'.repeat(40), { cookie: 'psh_wildmind=wm-cookie' });
+    expect(state.shareCalls.at(-1)).toEqual(['wildmind', 'wm-cookie']);
+
+    state.shareValid = false;
+    state.queue.push([]);
+    expect((await (await call('sr-wildmind', 'w'.repeat(40), { 'x-sr-session-share': 'stale' })).json()).claims.project.access).toBe('none');
   });
 
   it('only ever answers for the audience\'s own project, and an outage is a 503', async () => {

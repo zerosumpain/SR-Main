@@ -41,6 +41,7 @@ export const STATIC_PROJECT_KEYS = [
   'supply-chain-monitor',
   'marbler',
   'local-plan-navigator',
+  'wildmind',
 ] as const;
 
 const STATIC_KEYS: ReadonlySet<string> = new Set(STATIC_PROJECT_KEYS);
@@ -55,6 +56,7 @@ const PRIVATE_BY_DEFAULT: ReadonlySet<string> = new Set([
   'data-spine',
   'supply-chain-monitor',
   'local-plan-navigator',
+  'wildmind',
 ]);
 
 /** A /projects address: one lowercase URL segment, as `slugifyTitle` produces. */

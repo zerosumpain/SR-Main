@@ -170,6 +170,16 @@ describe('private-by-default static key (local-plan-navigator)', () => {
   });
 });
 
+describe('private-by-default static key (wildmind)', () => {
+  // Wildmind is its own app on its own host, watched by invitation; its card
+  // carries a Share button and must never publish the valley by registering.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('wildmind')).toBe(true);
+    expect(defaultsPublic('wildmind')).toBe(false);
+    expect(isProjectPublic({}, 'wildmind')).toBe(false);
+  });
+});
+
 describe('private-by-default static key (supply-chain-monitor)', () => {
   // Supply Chain Monitor is served by its own app (zerosumpain/supply-chain-monitor),
   // owner-only; the card must not publish itself on deploy.
