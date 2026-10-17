@@ -25,10 +25,12 @@
    * `--accent` scores 2.6:1 on #1a1008), and cream-alpha for the hairlines.
    */
   import type { Snippet } from 'svelte';
+  import JkaiMenu from './JkaiMenu.svelte';
   import { currentPath } from '$lib/nav/page-path';
   import {
     activeSection,
     isItemActive,
+    JKAI_ITEM,
     navCellsFor,
     parentHref,
     parentLabel,
@@ -75,6 +77,14 @@
   const cells = $derived(
     items ? visibleItems(items, isOwner, reach) : navCellsFor(path, isOwner, reach),
   );
+  /**
+   * The jkai menu is on every bar, not only where the site strip shows: on
+   * /health or /home the strip is that section's own pages, and jkai would
+   * otherwise vanish. It sits after the strip, outside its scroller, so the
+   * menu can drop below the bar. Null for anyone who can open none of it.
+   */
+  const jkaiCell = $derived(visibleItems([JKAI_ITEM], isOwner, reach)[0] ?? null);
+
   const atHome = $derived(path === '/');
   /**
    * On the home page the home icon points at the page you are already on, and
@@ -153,19 +163,25 @@
 
   {#if cells.length}
     <nav class="hdr-cells" aria-label="{sectionLabel ?? 'Site'} sections">
-      {#each cells as item (item.href + item.label)}
-        <a
-          href={item.href}
-          data-sveltekit-reload={item.href.startsWith('/projects/policy-analysis') ? true : undefined}
-          class="nav-cell"
-          aria-current={isItemActive(item, path) ? 'page' : undefined}
-        >
-          {item.label}
-        </a>
-      {/each}
+      <div class="hdr-strip">
+        {#each cells as item (item.href + item.label)}
+          <a
+            href={item.href}
+            data-sveltekit-reload={item.href.startsWith('/projects/policy-analysis') ? true : undefined}
+            class="nav-cell"
+            aria-current={isItemActive(item, path) ? 'page' : undefined}
+          >
+            {item.label}
+          </a>
+        {/each}
+      </div>
     </nav>
   {:else}
     <div class="hdr-spacer"></div>
+  {/if}
+
+  {#if jkaiCell}
+    <JkaiMenu item={jkaiCell} {path} />
   {/if}
 
   {#if right}
@@ -263,10 +279,18 @@
     align-items: stretch;
     min-width: 0;
     flex: 1;
+  }
+  /* The strip scrolls on a phone; a menu cell sits outside it, because a
+     scroller clips anything that drops below it. */
+  .hdr-strip {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    flex: 1;
     overflow-x: auto;
     scrollbar-width: none;
   }
-  .hdr-cells::-webkit-scrollbar {
+  .hdr-strip::-webkit-scrollbar {
     display: none;
   }
   .hdr-spacer {

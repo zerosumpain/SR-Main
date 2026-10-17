@@ -61,6 +61,7 @@ describe('modules shared with the extracted applications', () => {
     expect(Object.keys(manifest.files).sort()).toEqual([
       'src/lib/access/catalogue.ts',
       'src/lib/access/effective.ts',
+      'src/lib/components/JkaiMenu.svelte',
       'src/lib/components/SiteHeader.svelte',
       'src/lib/config/owner.ts',
       'src/lib/constants/apple-health-scale.ts',

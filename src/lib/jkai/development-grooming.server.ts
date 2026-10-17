@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveDefaultModel } from '$lib/server/models/settings';
 import { withActivity } from '$lib/context/activity';
-import { SECTIONS, SITE_ITEMS } from '$lib/nav/site-nav';
+import { JKAI_ITEM, SECTIONS, SITE_ITEMS } from '$lib/nav/site-nav';
 import {
   BRIEF_WORK_KINDS, STANDALONE_REPOS, normaliseGrooming, parseLane,
   type BriefWorkKind, type GroomingCandidate, type GroomingModelResult,
@@ -73,7 +73,7 @@ You have the supplied navigation manifest and verified lessons, not a code inspe
 ${BRIEF_RULES}Return one JSON object only, with summary and outcome as strings; lane as {"lane":"site|studio|other-repo","reason":"one line","repo":"owner/name when other-repo"}; and these string arrays: constraints, scope, dependencies, assumptions, questions, validation, criteria, routes, newRoutes. Prefer 3–7 criteria. routes and newRoutes contain only local URL paths. Empty arrays are valid when nothing applies, but criteria and validation must be nonempty.`;
 /** The site as a groomer sees it: its own navigation, and what it does NOT own. */
 function siteMap() {
-  const navigation = [...SITE_ITEMS, ...SECTIONS.flatMap(s => s.items)].map(({ label, href, ownerOnly }) => ({ label, href, ownerOnly }));
+  const navigation = [...SITE_ITEMS, ...(JKAI_ITEM.children ?? []), ...SECTIONS.flatMap(s => s.items)].map(({ label, href, ownerOnly }) => ({ label, href, ownerOnly }));
   // Without the second half the model only ever sees the site's own map, and
   // anything shaped like a page gets a page on it.
   const separateRepos = [

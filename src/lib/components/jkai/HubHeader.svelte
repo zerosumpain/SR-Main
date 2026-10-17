@@ -2,11 +2,12 @@
   import { page } from '$app/state';
   import { getContext, onMount } from 'svelte';
   import HubTokenStrip from './HubTokenStrip.svelte';
+  import JkaiMenu from '../JkaiMenu.svelte';
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/utils/cost-format';
   import { codexMeters, type CodexUsageView } from '$lib/llm/usage-meter';
-  import { SECTIONS, activeSection, parentHref, parentLabel } from '$lib/nav/site-nav';
+  import { JKAI_ITEM, SECTIONS, activeSection, parentHref, parentLabel, visibleItems } from '$lib/nav/site-nav';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
 
   let {
@@ -54,6 +55,9 @@
     /** The pages a member's permissions open (`reachablePages`): the menu offers only these. */
     memberReach?: readonly string[];
   } = $props();
+
+  /** The site-wide jkai cell; a member sees it only where their grants reach under it. */
+  const jkaiCell = $derived(visibleItems([JKAI_ITEM], !member, memberReach)[0] ?? null);
 
   /**
    * The model that will actually answer: the active thread's pin when the chat
@@ -177,6 +181,9 @@
     // (the world vs this codebase) and neither is a subsection of the other.
     { label: 'Codegraph', href: '/jkai/codegraph', meta: 'BUILD MEMORY' },
     { label: 'Develop', href: '/jkai/develop', meta: 'AUTONOMOUS' },
+    // Lives at /trips, outside the hub, but it is jkai planning: the site bar's
+    // jkai menu offers it too.
+    { label: 'Trips', href: '/trips', meta: 'PLANNER' },
   ]);
   const library = $derived<MenuRow[]>([
     { label: 'Notes', href: '/jkai/notes', meta: 'NOTEBOOK' },
@@ -274,11 +281,16 @@
           />
         </svg>
       </a>
-      <span class="hdr-divider" aria-hidden="true"></span>
-      <!-- `.brand` is the site-wide mark: it supplies the accent `>` via
-           ::before, so the word is all this needs to carry. -->
-      <a class="brand" href={member ? memberHome : '/jkai'} title="jkai">jkai</a>
-      <span class="hdr-divider" aria-hidden="true"></span>
+      <!-- The same jkai cell and menu every bar on the site carries (jkai,
+           Daydreams, Trips), so the mark looks and behaves the same here as on
+           /trips. A member who can open none of its rows gets the plain mark. -->
+      {#if jkaiCell}
+        <JkaiMenu item={jkaiCell} path={page.url.pathname} />
+      {:else}
+        <span class="hdr-divider" aria-hidden="true"></span>
+        <a class="brand" href={memberHome} title="jkai">jkai</a>
+        <span class="hdr-divider" aria-hidden="true"></span>
+      {/if}
       {#if !member}
       <div class="strip-slot">
         <HubTokenStrip
@@ -454,6 +466,7 @@
   .hdr-left {
     display: flex;
     align-items: center;
+    align-self: stretch;
     gap: 16px;
     min-width: 0;
   }
