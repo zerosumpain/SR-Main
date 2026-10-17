@@ -40,7 +40,7 @@
   <div class="pt-copy">
     <p class="pt-kind"><span class="pt-k">{e.kind}</span> <span class="pt-tag">{e.tag}</span></p>
     <h3 class="pt-title">
-      <a class="pt-link" href={e.href} rel={e.external ? 'noopener' : undefined}>{e.title}</a>
+      <a class="pt-link" href={e.href} data-sveltekit-reload={e.separateApp ? '' : undefined} rel={e.external ? 'noopener' : undefined}>{e.title}</a>
     </h3>
     <p class="pt-blurb">{e.blurb}</p>
     <p class="pt-sign">{e.chips}</p>

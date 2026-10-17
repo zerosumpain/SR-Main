@@ -156,4 +156,10 @@ describe('SentenceProjects (server render)', async () => {
     expect(html).toContain('Nothing here yet.');
     expect(html).toContain('2 only I can see');
   });
+
+  it('loads a separate app fresh instead of routing to it client-side', () => {
+    const html = view([card('hex', 'Game', { separateApp: true }), card('marbler', 'Game')], [], false);
+    expect(html.match(/data-sveltekit-reload/g)?.length).toBe(1);
+    expect(html).toMatch(/href="\/projects\/hex\/"\s+[^>]*data-sveltekit-reload/);
+  });
 });

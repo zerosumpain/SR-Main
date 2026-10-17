@@ -19,8 +19,8 @@ const card = (key: string, kind: string, extra: Partial<ProjectCard> = {}): Proj
 const controls = createRawSnippet((e: () => ProjectEntry) => ({ render: () => `<span class="ctl-test">${e().key}</span>` }));
 const switcher = createRawSnippet(() => ({ render: () => '<div class="switch-test"></div>' }));
 
-function page(opts: { agent?: ProjectCard[]; owner?: boolean; showAgent?: boolean; hidden?: string[] }) {
-  const hand = [card('hex', 'Game'), card('scs', 'Field Study №6', { product: true }), card('keystone', 'Tool')];
+function page(opts: { hand?: ProjectCard[]; agent?: ProjectCard[]; owner?: boolean; showAgent?: boolean; hidden?: string[] }) {
+  const hand = opts.hand ?? [card('hex', 'Game'), card('scs', 'Field Study №6', { product: true }), card('keystone', 'Tool')];
   const e = toEntries(hand, opts.agent ?? [], (k) => !(opts.hidden ?? []).includes(k));
   return render(NotesProjects, {
     props: {
@@ -75,5 +75,11 @@ describe('NotesProjects', () => {
 
   it('marks a finished product as a kind apart', () => {
     expect(page({})).toMatch(/class="pk[^"]*product" id="pn-scs"/);
+  });
+
+  it('loads a separate app fresh instead of routing to it client-side', () => {
+    const html = page({ hand: [card('hex', 'Game', { separateApp: true }), card('keystone', 'Tool')] });
+    expect(html.match(/data-sveltekit-reload/g)?.length).toBe(1);
+    expect(html).toMatch(/href="\/projects\/hex\/"[^>]*data-sveltekit-reload/);
   });
 });

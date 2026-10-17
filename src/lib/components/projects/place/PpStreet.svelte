@@ -67,6 +67,7 @@
     <a
       class="ps-b"
       href={e.href}
+      data-sveltekit-reload={e.separateApp ? '' : undefined}
       rel={e.external ? 'noopener' : undefined}
       aria-label={e.label}
       data-hang={mid > 0.62 ? 'l' : 'r'}
