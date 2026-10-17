@@ -281,16 +281,11 @@
           />
         </svg>
       </a>
-      <!-- The same jkai cell and menu every bar on the site carries (jkai,
-           Daydreams, Trips), so the mark looks and behaves the same here as on
-           /trips. A member who can open none of its rows gets the plain mark. -->
-      {#if jkaiCell}
-        <JkaiMenu item={jkaiCell} path={page.url.pathname} />
-      {:else}
-        <span class="hdr-divider" aria-hidden="true"></span>
-        <a class="brand" href={memberHome} title="jkai">jkai</a>
-        <span class="hdr-divider" aria-hidden="true"></span>
-      {/if}
+      <span class="hdr-divider" aria-hidden="true"></span>
+      <!-- `.brand` is the site-wide mark: it supplies the accent `>` via
+           ::before, so the word is all this needs to carry. -->
+      <a class="brand" href={member ? memberHome : '/jkai'} title="jkai">jkai</a>
+      <span class="hdr-divider" aria-hidden="true"></span>
       {#if !member}
       <div class="strip-slot">
         <HubTokenStrip
@@ -405,6 +400,12 @@
           </div>
         {/if}
       </div>
+      {#if jkaiCell}
+        <!-- The jkai cell every bar on the site carries (jkai, Daydreams,
+             Trips), at the right-hand end as on every other bar: its menu
+             drops from the right edge, so on the left it opened off-screen. -->
+        <span class="hub-jkai"><JkaiMenu item={jkaiCell} path={page.url.pathname} /></span>
+      {/if}
     </div>
   </div>
 
@@ -466,7 +467,6 @@
   .hdr-left {
     display: flex;
     align-items: center;
-    align-self: stretch;
     gap: 16px;
     min-width: 0;
   }
@@ -519,8 +519,15 @@
   .hdr-right {
     display: flex;
     align-items: center;
+    align-self: stretch;
     gap: 8px;
     flex: none;
+  }
+  /* Flush with the bar's right edge and its full height, like the site bar's. */
+  .hub-jkai {
+    display: flex;
+    align-self: stretch;
+    margin-right: -16px;
   }
 
   .chip {
