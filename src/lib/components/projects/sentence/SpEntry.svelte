@@ -49,6 +49,7 @@
     <h3 class="se-t" id="sp-{e.key}-t">
       <a
         href={e.href}
+        data-sveltekit-reload={e.separateApp ? '' : undefined}
         rel={e.external ? 'noopener' : undefined}
         ><span class="se-name">{t.name}</span>{#if e.external}<span class="vh"> (opens outside this site)</span><span
             class="se-go"

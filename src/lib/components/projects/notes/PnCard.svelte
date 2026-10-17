@@ -45,7 +45,7 @@
     <p class="pk-kind"><PnDot family={e.family} />{e.kind}</p>
     {#if e.tag}<p class="pk-tag">{e.tag}</p>{/if}
     <h3 class="pk-title">
-      <a class="pk-link" href={e.href} aria-label={e.label} rel={e.external ? 'noopener' : undefined}>{e.title}</a>
+      <a class="pk-link" href={e.href} data-sveltekit-reload={e.separateApp ? '' : undefined} aria-label={e.label} rel={e.external ? 'noopener' : undefined}>{e.title}</a>
     </h3>
   </div>
   <div class="pk-body">

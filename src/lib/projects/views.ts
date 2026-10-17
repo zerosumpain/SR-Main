@@ -44,6 +44,13 @@ export interface ProjectCard {
    * `owner-cards.test.ts` holds every other card to its /projects address.
    */
   external?: true;
+  /**
+   * The path is served by an independent app behind the gateway (Cloudflare
+   * routes it away from Main), so the link must load the page fresh. A
+   * client-side navigation would fetch `__data.json` from that app instead,
+   * get its 404, and show Main's error page.
+   */
+  separateApp?: true;
 }
 
 /** What kind of thing a card is, read off its eyebrow. */

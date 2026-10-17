@@ -31,6 +31,7 @@ export const PROJECT_CARDS: ProjectCard[] = [
     blurb:
       'Build a world, choose your rivals, and play for the frontier. An isometric hex conquest game with configurable maps and players, a reinforcement-learning lab, and a rule forge that turns your ideas into new game mechanics. Play a turn yourself, watch the AI compete, or let it learn through thousands of headless matches.',
     chips: 'turn-based conquest · PyTorch · custom rules · independent app',
+    separateApp: true,
   },
   {
     key: 'marbler',
