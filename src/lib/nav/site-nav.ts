@@ -40,7 +40,7 @@ export type NavItem = {
    * that has no section strip of its own on a site page.
    */
   children?: NavItem[];
-  /** A word or two under the label in a menu ("PLANNER"). */
+  /** A short line under the label in a menu ("Plan the days away"). */
   meta?: string;
 };
 
@@ -137,9 +137,9 @@ export const SITE_ITEMS: NavItem[] = [
     ownerOnly: true,
     match: (p) => under('/jkai', p) || under('/trips', p),
     children: [
-      { label: 'jkai', href: '/jkai', ownerOnly: true, meta: 'CHAT', match: (p) => p === '/jkai' },
-      { label: 'Daydreams', href: '/jkai/daydreams', ownerOnly: true, meta: 'NOTICE · WATCH · LEARN' },
-      { label: 'Trips', href: '/trips', ownerOnly: true, meta: 'PLANNER' },
+      { label: 'jkai', href: '/jkai', ownerOnly: true, meta: 'Ask, chat, run things', match: (p) => p === '/jkai' },
+      { label: 'Daydreams', href: '/jkai/daydreams', ownerOnly: true, meta: 'What it noticed while idle' },
+      { label: 'Trips', href: '/trips', ownerOnly: true, meta: 'Plan the days away' },
     ],
   },
 ];

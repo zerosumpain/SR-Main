@@ -400,35 +400,36 @@
 
   /* jkai is not one more destination in the row: it is the assistant, and it
      holds things (Daydreams, Trips) that have no cell of their own here. So it
-     wears its wordmark rather than a mono label, and a caret that says there
-     is more under it. */
+     is the one cell filled with colour — the on-dark accent, ink text on it
+     (7:1) — wearing its wordmark rather than a mono label, with a caret that
+     says there is more under it. */
   .hdr-menu {
     position: relative;
     display: flex;
     align-items: stretch;
     flex: none;
-    border-left: 1px solid rgba(237, 228, 212, 0.14);
-    border-right: 1px solid rgba(237, 228, 212, 0.14);
+    background: var(--accent-on-dark);
+    color: #1a1008;
+    transition: background 0.2s var(--ease-out);
   }
   .menu-cell {
     display: inline-flex;
     align-items: center;
-    padding: 0 6px 0 16px;
+    padding: 0 4px 0 18px;
     font-family: var(--font-display);
     font-weight: 800;
     font-size: var(--fs-body-sm);
     letter-spacing: -0.01em;
     text-decoration: none;
-    color: var(--chrome-ink, var(--bg));
-    transition: color 0.2s var(--ease-out);
+    color: inherit;
   }
   .menu-caret {
     display: inline-flex;
     align-items: center;
-    padding: 0 14px 0 6px;
+    padding: 0 16px 0 6px;
     border: 0;
     background: none;
-    color: var(--accent-on-dark);
+    color: inherit;
     cursor: pointer;
   }
   .menu-caret svg {
@@ -439,66 +440,83 @@
   }
   .hdr-menu:hover,
   .hdr-menu.open {
-    background: rgba(237, 228, 212, 0.07);
+    background: #f09a55;
   }
-  .menu-cell:hover {
-    color: var(--accent-on-dark);
-  }
-  /* In the jkai family (Trips included): the same accent seam as a current cell. */
+  /* In the jkai family (Trips included): a cream seam along the bottom, the
+     filled cell's version of a current cell's accent seam. */
   .hdr-menu.here {
-    box-shadow: inset 0 -2px 0 var(--accent-on-dark);
+    box-shadow: inset 0 -3px 0 rgba(26, 16, 8, 0.55);
   }
   .menu-caret:focus-visible,
   .menu-cell:focus-visible {
-    outline: 2px solid var(--accent-on-dark);
-    outline-offset: -4px;
+    outline: 2px solid #1a1008;
+    outline-offset: -5px;
   }
 
-  /* The dropped menu is paper, like the hub's own menu on /jkai, so the two
-     read as one object seen from either side. */
+  /* The menu is the bar carried on downwards: the same ink, the same mono
+     cells divided by the same hairlines, and the current row cut out to the
+     page ground with an accent seam — exactly as a current cell in the strip.
+     It hangs from the jkai cell by an accent edge of the same colour. */
   .menu {
     position: absolute;
     top: 100%;
-    right: -1px;
+    right: 0;
     z-index: 40;
-    width: 240px;
+    width: 248px;
     max-width: calc(100vw - 32px);
     margin: 0;
-    padding: 4px 0;
+    padding: 0;
     list-style: none;
-    background: var(--bg);
-    border: 1px solid var(--line-strong);
-    box-shadow: var(--elev-pop);
+    background: #1a1008;
+    border: 1px solid rgba(237, 228, 212, 0.14);
+    border-top: 2px solid var(--accent-on-dark);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45);
+  }
+  .menu li + li {
+    border-top: 1px solid rgba(237, 228, 212, 0.14);
   }
   .menu-row {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 9px 16px 10px 14px;
-    border-left: 2px solid transparent;
+    gap: 4px;
+    padding: 12px 16px;
     text-decoration: none;
-    transition: background 0.2s var(--ease-out);
+    color: rgba(237, 228, 212, 0.72);
+    transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
   }
   .menu-row:hover,
   .menu-row:focus-visible {
-    background: var(--accent-tint-04);
+    color: #ede4d4;
+    background: rgba(237, 228, 212, 0.07);
     outline: none;
   }
-  .menu-row[aria-current='page'] {
-    border-left-color: var(--accent);
-    background: rgba(196, 87, 10, 0.08);
-  }
   .menu-label {
-    font-family: var(--font-body);
-    font-size: var(--fs-label);
-    color: var(--text-primary);
+    font-family: var(--font-code);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
   }
   .menu-meta {
     font-family: var(--font-code);
     font-size: var(--fs-label-xs);
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    white-space: nowrap;
+    letter-spacing: 0.04em;
+    color: rgba(237, 228, 212, 0.5);
+  }
+  .menu-row:hover .menu-label,
+  .menu-row:focus-visible .menu-label {
+    color: var(--accent-on-dark);
+  }
+  .menu-row[aria-current='page'] {
+    color: #1a1008;
+    background: #ede4d4;
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .menu-row[aria-current='page'] .menu-label {
+    color: #1a1008;
+  }
+  .menu-row[aria-current='page'] .menu-meta {
+    color: rgba(26, 16, 8, 0.6);
   }
 
   .hdr-right {
