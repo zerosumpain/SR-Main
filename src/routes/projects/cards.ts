@@ -147,6 +147,23 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'GOV.UK Frontend · 2026 Regulations · NPPF · cited answers',
   },
   {
+    // Wildmind runs on its own host and is served at /wildmind/ through the
+    // site's tunnel (SR-Infra registry `wildmind`). It asks Main's session
+    // authority (audience sr-wildmind) about every request: the owner gets the
+    // whole app; a live share link from this card, or a signed-in person the
+    // owner has invited in Wildmind itself, gets a read-only view. Private by
+    // default; share it with a link.
+    key: 'wildmind',
+    href: '/wildmind/',
+    label: 'Open Wildmind',
+    kind: 'Simulation',
+    tag: 'Live · watch by invitation',
+    title: 'Wildmind — survivors who invent',
+    blurb:
+      'Two characters, JKai and a companion, whose minds are Claude, survive in an open world that grows as they explore. Every tool, building and vehicle is designed by the model, checked against what they have actually discovered, and drawn from primitive shapes in the browser. Nothing is pre-made, and spaceflight is possible but a very long way off.',
+    chips: 'Three.js · Claude · open world · independent app',
+  },
+  {
     key: 'archetype',
     href: '/projects/archetype/',
     label: 'Open Archetype',
