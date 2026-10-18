@@ -38,6 +38,7 @@ export const STATIC_PROJECT_KEYS = [
   'pulse',
   'field-study-8',
   'data-spine',
+  'spine',
   'supply-chain-monitor',
   'marbler',
   'local-plan-navigator',
@@ -54,6 +55,7 @@ const STATIC_KEYS: ReadonlySet<string> = new Set(STATIC_PROJECT_KEYS);
 const PRIVATE_BY_DEFAULT: ReadonlySet<string> = new Set([
   'field-study-8',
   'data-spine',
+  'spine',
   'supply-chain-monitor',
   'local-plan-navigator',
   'wildmind',
