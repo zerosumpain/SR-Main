@@ -115,6 +115,17 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'identity · federation · trust ledger · benchmark · cited',
   },
   {
+    key: 'spine',
+    href: '/projects/spine',
+    label: 'Open The Spine',
+    kind: 'Field study',
+    tag: 'Interactive · Identity and accredited sharing',
+    title: 'The Spine',
+    blurb:
+      'How I think we should join up what the system already knows about a child, written from inside DfE. One protected identity that borrows the NHS number rather than inventing a new one, and a network of accredited partners who ask lawful questions of records where they already sit, with a receipt the family can read. Fourteen chapters, an ink drawing of the spine and its ribs, and a lens for whoever is reading.',
+    chips: 'identity · federation · receipts · standards · vendor lock-in · cited',
+  },
+  {
     key: 'supply-chain-monitor',
     href: '/projects/supply-chain-monitor',
     label: 'Open Supply Chain Monitor',

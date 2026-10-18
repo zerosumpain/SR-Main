@@ -159,6 +159,26 @@ describe('private-by-default static key (data-spine)', () => {
   });
 });
 
+describe('private-by-default static key (spine)', () => {
+  // The Spine is served by its own app (SR-Spine) and gets its card and toggle
+  // here. Registering a static key would otherwise publish it on deploy.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('spine')).toBe(true);
+    expect(defaultsPublic('spine')).toBe(false);
+    expect(isProjectPublic({}, 'spine')).toBe(false);
+  });
+
+  it('is hidden from the public listing and shown to the owner', () => {
+    const items = [{ key: 'spine' }];
+    expect(filterForViewer(items, {}, false)).toEqual([]);
+    expect(filterForViewer(items, {}, true)).toEqual(items);
+  });
+
+  it('becomes public only through an explicit row', () => {
+    expect(isProjectPublic({ spine: true }, 'spine')).toBe(true);
+  });
+});
+
 describe('private-by-default static key (local-plan-navigator)', () => {
   // The Local Plan Navigator is its own app (zerosumpain/local-plan-navigator),
   // shared by link with people outside the site; registering its card for the
