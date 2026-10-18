@@ -51,6 +51,12 @@ export interface ProjectCard {
    * get its 404, and show Main's error page.
    */
   separateApp?: true;
+  /**
+   * The address a share link opens, when the project has its own domain: the
+   * Spine's links go to https://data-spine.com/?t=… rather than to its path here.
+   * The token is the same either way; the app's gateway takes it to Main on both hosts.
+   */
+  shareBase?: string;
 }
 
 /** What kind of thing a card is, read off its eyebrow. */

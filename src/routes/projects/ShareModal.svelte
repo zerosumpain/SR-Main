@@ -5,10 +5,11 @@
   interface Props {
     projectKey: string;
     href: string;        // the project's route path, e.g. /projects/policy-engine or /projects/terminal-descent/
+    shareBase?: string;  // the project's own domain, when it has one (https://data-spine.com/)
     title?: string;
     onClose: () => void;
   }
-  let { projectKey, href, title = '', onClose }: Props = $props();
+  let { projectKey, href, shareBase, title = '', onClose }: Props = $props();
 
   let shares = $state<PublicShare[]>([]);
   let loading = $state(true);
@@ -20,7 +21,8 @@
   let err = $state<string | null>(null);
 
   const origin = typeof location !== 'undefined' ? location.origin : 'https://strangeramblings.com';
-  const shareUrl = (token: string) => `${origin}${href}${href.includes('?') ? '&' : '?'}t=${token}`;
+  const target = shareBase ?? `${origin}${href}`;
+  const shareUrl = (token: string) => `${target}${target.includes('?') ? '&' : '?'}t=${token}`;
 
   async function load() {
     loading = true;
