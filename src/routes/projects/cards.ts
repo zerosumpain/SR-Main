@@ -117,6 +117,9 @@ export const PROJECT_CARDS: ProjectCard[] = [
   {
     key: 'spine',
     href: '/projects/spine',
+    // Recipients get the project's own domain; data-spine.com shows its holding
+    // page to anyone without a live link.
+    shareBase: 'https://data-spine.com/',
     label: 'Open The Spine',
     kind: 'Field study',
     tag: 'Interactive · Identity and accredited sharing',

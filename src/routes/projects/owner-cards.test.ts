@@ -46,3 +46,16 @@ describe('/projects owner-only cards', () => {
     expect(PROJECT_CARDS.filter((c) => c.external).map((c) => c.key)).toEqual([]);
   });
 });
+
+describe('share links on a project’s own domain', () => {
+  it('sends the Spine’s recipients to data-spine.com, which holds anyone without a link', () => {
+    const spine = PROJECT_CARDS.find((c) => c.key === 'spine');
+    expect(spine?.shareBase).toBe('https://data-spine.com/');
+  });
+
+  it('only ever uses an https root of a domain', () => {
+    for (const c of PROJECT_CARDS) {
+      if (c.shareBase) expect(c.shareBase).toMatch(/^https:\/\/[a-z0-9.-]+\/$/);
+    }
+  });
+});

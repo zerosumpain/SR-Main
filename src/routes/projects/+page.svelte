@@ -26,7 +26,7 @@
   let projects = $state(data.projects);
   let removing = $state<string | null>(null);
   // The project whose secure-share panel is open (owner-only).
-  let shareModal = $state<{ key: string; href: string; title: string } | null>(null);
+  let shareModal = $state<{ key: string; href: string; title: string; shareBase?: string } | null>(null);
 
   // Per-project public/private overlay. Seeded from the server; toggles update
   // it optimistically.
@@ -152,7 +152,7 @@
         {#if !isPub(e.key)}<span class="ctl-chip private">Private</span>{/if}
         <button
           class="ctl"
-          onclick={() => (shareModal = { key: e.key, href: e.href, title: e.title })}
+          onclick={() => (shareModal = { key: e.key, href: e.href, title: e.title, shareBase: e.shareBase })}
           title="Create a secure share link — opens this project for a recipient even while private"
         >
           Share
@@ -207,6 +207,7 @@
   <ShareModal
     projectKey={shareModal.key}
     href={shareModal.href}
+    shareBase={shareModal.shareBase}
     title={shareModal.title}
     onClose={() => (shareModal = null)}
   />
