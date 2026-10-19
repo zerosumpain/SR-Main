@@ -48,7 +48,7 @@
   <section class="w-card" data-card="trust">
     <div class="w-card-hd"><h2>After you tap Install</h2></div>
     <ol class="how">
-      <li><span class="w-num">01</span><span>Tap Install when the phone asks. The app appears on the Home Screen and fills in.</span></li>
+      <li><span class="w-num">01</span><span>Tap Install when the phone asks. Nothing happens here — iOS installs in the background. Go to the Home Screen and wait for the SR icon's progress ring to finish, up to a minute or two. An update replaces the app you have.</span></li>
       <li><span class="w-num">02</span><span>If it says “Unable to install”, this phone is not in this copy yet — wait for the next one.</span></li>
       <li><span class="w-num">03</span><span>The first time, it says “Developer Mode required”: Settings → Privacy &amp; Security → Developer Mode (at the bottom) → on, restart, then confirm Turn On.</span></li>
       <li><span class="w-num">04</span><span>Open it and sign in with your Apple ID. That is how the app knows it is yours.</span></li>

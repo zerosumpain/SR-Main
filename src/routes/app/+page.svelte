@@ -41,6 +41,11 @@
         <p>Version {data.build.version}, built {when(data.build.builtAt)}.</p>
         <div class="w-row"><a class="w-btn" href={data.install} data-action="install">Install the app</a></div>
         <p>Tap <strong>Install</strong> when the phone asks; the app appears on your Home Screen. Already have it? This updates it, and keeps you signed in. The app also tells you when a new version is ready.</p>
+        <p data-note="wait">
+          <strong>Nothing seems to happen?</strong> It is working: iOS installs in the background, with no message here.
+          Go to the Home Screen and watch the SR icon — a small progress ring, for up to a minute or two. Open it once the
+          ring has gone.
+        </p>
         <p data-note="developer-mode">
           <strong>The first time</strong>, the app says <em>Developer Mode required</em>: iOS asks that of any app not from
           the App Store or TestFlight. Open <strong>Settings → Privacy &amp; Security → Developer Mode</strong> (right at the
