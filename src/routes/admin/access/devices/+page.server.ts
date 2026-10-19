@@ -19,7 +19,7 @@ import {
 } from '$lib/home/presence/companion-accounts';
 import { mergeDeviceRows } from '$lib/access/device-rows';
 import { cleanDeviceName, cleanUdid, joinSlug, mintJoinCode, JOIN_DAYS } from '$lib/server/adhoc-install';
-import { listMembers } from '$lib/home/presence/members';
+import { listMembers, updateMember } from '$lib/home/presence/members';
 import { adhocBuildRunning, latestAdhocBuild, startAdhocBuild } from '$lib/github/adhoc-builds';
 
 // Owner-only: /admin is never in the access catalogue, so the hook's default
@@ -47,10 +47,11 @@ async function adhocState(origin: string) {
   ]);
   const members = await listMembers().catch(() => []);
   const people = [...new Set(members.map((m) => m.displayName.trim().split(/\s+/)[0]).filter(Boolean))].sort();
-  // For "pair a phone for someone": who in the household has an address.
+  // For "pair a phone for someone": everyone in the household, with their
+  // address when they have one. Someone without one is offered too — pairing
+  // them is what links them (`vouchPair`).
   const household = members
-    .filter((m) => m.email)
-    .map((m) => ({ name: m.displayName.trim(), email: m.email as string }))
+    .map((m) => ({ name: m.displayName.trim(), email: m.email ?? null }))
     .sort((a, b) => a.name.localeCompare(b.name));
   return {
     appUrl: `${origin}/app`,
@@ -89,6 +90,28 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     adhoc,
   };
 };
+
+type HouseholdLink =
+  | { state: 'already'; name: string }
+  | { state: 'linked'; name: string }
+  | { state: 'other-email'; name: string }
+  | { state: 'unlinked' };
+
+/** Put `email` on the one household person called `name` who has no address yet. */
+async function linkHousehold(name: string, email: string): Promise<HouseholdLink> {
+  const members = await listMembers();
+  const mine = members.find((m) => m.email?.toLowerCase() === email);
+  if (mine) return { state: 'already', name: mine.displayName };
+  const wanted = name.trim().toLowerCase();
+  const first = wanted.split(/\s+/)[0];
+  const byName = members.filter((m) => m.displayName.trim().toLowerCase() === wanted);
+  const candidates = byName.length ? byName : members.filter((m) => m.displayName.trim().toLowerCase().split(/\s+/)[0] === first);
+  if (candidates.length !== 1) return { state: 'unlinked' };
+  const [row] = candidates;
+  if (row.email) return { state: 'other-email', name: row.displayName };
+  await updateMember(row.subject, { email });
+  return { state: 'linked', name: row.displayName };
+}
 
 export const actions: Actions = {
   revoke: async ({ request }) => {
@@ -131,6 +154,12 @@ export const actions: Actions = {
    * They join the allow-list in Family Circle first, as a pre-registered
    * member would. Someone already on it is left alone: any write to their
    * allow-list row revokes every phone they hold (the security trigger).
+   *
+   * And their household place gets the address, when exactly one household
+   * person of that name has none yet — otherwise the account and the person
+   * on the map stay two strangers (no family tabs, no place on /home/people),
+   * which is what pairing Rory left on 2026-10-19. That write is to the
+   * household row only, never the allow-list, so it revokes nothing.
    */
   vouchPair: async ({ request, url, locals }) => {
     const form = await request.formData();
@@ -146,9 +175,13 @@ export const actions: Actions = {
       await addToAllowList({ email, note: name, addedBy: session?.user?.email ?? null });
       await joinGroups(email, [PRE_REGISTERED_GROUP]);
     }
+    const household = await linkHousehold(name, email).catch((err) => {
+      console.error('[devices] household link failed:', err);
+      return { state: 'unlinked' as const };
+    });
     const { code, expiresAt } = await createPairingCode(email);
     const qr = await QRCode.toDataURL(scanPairPayload(url.origin, code), { errorCorrectionLevel: 'M', margin: 4, scale: 6 });
-    return { vouch: { name, email, code, qr, expiresAt: expiresAt.toISOString(), admitted: !listed } };
+    return { vouch: { name, email, code, qr, expiresAt: expiresAt.toISOString(), admitted: !listed, household } };
   },
 
   /** A fresh copy now — for a UDID read off a computer, or just the newest app. */
