@@ -199,6 +199,19 @@
             {form.vouch.email}{form.vouch.admitted ? ' · added to Family Circle' : ''} · expires
             {new Date(form.vouch.expiresAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
           </span>
+          {#if form.vouch.household.state === 'linked'}
+            <span class="muted" data-household="linked">Linked to {form.vouch.household.name} on the household map.</span>
+          {:else if form.vouch.household.state === 'already'}
+            <span class="muted" data-household="already">Already {form.vouch.household.name} on the household map.</span>
+          {:else if form.vouch.household.state === 'other-email'}
+            <span class="result-bad" data-household="other-email">
+              {form.vouch.household.name} on the household map has a different address — link them on their access page.
+            </span>
+          {:else}
+            <span class="muted" data-household="unlinked">
+              Not on the household map: add them from their access page for location and the family tabs.
+            </span>
+          {/if}
         </div>
       </div>
     {/if}
@@ -207,10 +220,10 @@
         oninput={(e) => {
           const picked = data.adhoc.household.find((p) => p.name === e.currentTarget.value);
           const email = e.currentTarget.form?.elements.namedItem('email') as HTMLInputElement | null;
-          if (picked && email && !email.value) email.value = picked.email;
+          if (picked?.email && email && !email.value) email.value = picked.email;
         }} />
       <datalist id="vouch-people">
-        {#each data.adhoc.household as person (person.email)}<option value={person.name}></option>{/each}
+        {#each data.adhoc.household as person}<option value={person.name}></option>{/each}
       </datalist>
       <input class="nm-text-input" name="email" type="email" placeholder="Their email (Apple ID)" required aria-label="Email" />
       <button class="nm-save-btn">Show a code</button>
