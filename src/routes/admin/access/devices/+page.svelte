@@ -185,9 +185,10 @@
       {#if data.adhoc.running}<span class="nm-pill" data-state="connected">building</span>{/if}
     </div>
     <p class="muted">
-      For a phone that cannot use TestFlight — under 13s can't. Make a link for the phone and open it there in
-      Safari: it asks to install a profile, which tells the site the phone's ID and starts a copy of the app built for
-      it (about half an hour). Then the same phone installs from the install page.
+      For phones that cannot use TestFlight — under 13s can't. Make a link for a person and send it: on their iPhone it
+      walks them through a one-time profile that tells the site the phone's ID and starts a copy built for it (about
+      half an hour). They install, and come back for updates, at <a href={data.adhoc.appUrl}>{data.adhoc.appUrl}</a>;
+      the app also offers each new version itself.
     </p>
     {#if form?.adhocError}<p class="result-bad" role="alert">{form.adhocError}</p>{/if}
     {#if form?.adhocStarted}<p class="muted" role="status">Building a copy for {form.adhocStarted}. About half an hour.</p>{/if}
@@ -202,25 +203,27 @@
     {:else}
       <p class="muted">No copy has been built yet.</p>
     {/if}
-    {#if data.adhoc.installUrl}
-      <p class="muted">Install page, the same for every phone: <a href={data.adhoc.installUrl}>{data.adhoc.installUrl}</a></p>
-    {/if}
 
-    {#if form?.enrol}
+    {#if form?.join}
       <div class="pair">
-        <img src={form.enrol.qr} alt="Enrolment link QR code" width="200" height="200" />
+        <img src={form.join.qr} alt="Join link QR code" width="200" height="200" />
         <div class="pair-meta">
-          <span class="sr-label-tight">For {form.enrol.name} — scan with its camera, or send it</span>
-          <code class="code">{form.enrol.link}</code>
-          <span class="muted">Works until {new Date(form.enrol.expiresAt).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+          <span class="sr-label-tight">For {form.join.name} — send it, or scan it with their iPhone</span>
+          <code class="code">{form.join.link}</code>
+          <span class="muted">Works for {form.join.days} days, on any of their phones.</span>
+          <div class="add-row">
+            <button class="nm-btn-ghost" onclick={() => navigator.clipboard?.writeText(form?.join?.link ?? '')}>Copy link</button>
+          </div>
         </div>
       </div>
-    {:else}
-      <form method="POST" action="?/enrolLink" use:enhance class="add-row">
-        <input class="nm-text-input" name="name" placeholder="Rory's iPhone" maxlength="50" required aria-label="Phone name" />
-        <button class="nm-save-btn">Make a link for a phone</button>
-      </form>
     {/if}
+    <form method="POST" action="?/joinLink" use:enhance class="add-row">
+      <input class="nm-text-input" name="name" placeholder="First name" maxlength="40" required aria-label="First name" list="join-people" />
+      <datalist id="join-people">
+        {#each data.adhoc.people as person (person)}<option value={person}></option>{/each}
+      </datalist>
+      <button class="nm-save-btn">Make a link</button>
+    </form>
 
     <details class="manual">
       <summary>Have the UDID already, or just want a fresh copy?</summary>
