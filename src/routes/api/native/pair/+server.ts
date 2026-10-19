@@ -1,11 +1,14 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { redeemPairingCode } from '$lib/server/native-auth';
+import { env } from '$env/dynamic/private';
+import { identifyDevice, peekPairingCode, redeemPairingCode, revokeDevice } from '$lib/server/native-auth';
 import { isOwnerEmail } from '$lib/server/native-handler';
 import { loadMember } from '$lib/server/grants';
 import { satisfies } from '$lib/access/catalogue';
 import { rateLimit } from '$lib/server/rate-limit';
-import { isRegistrant } from '$lib/server/registration';
+import { canonicalEmail, isRegistrant } from '$lib/server/registration';
+import { verifyPairIdentity } from '$lib/server/pair-identity';
+import { memberByEmail } from '$lib/home/presence/members';
 
 /**
  * POST /api/native/pair — exchange a one-time code for a device token.
@@ -26,6 +29,14 @@ import { isRegistrant } from '$lib/server/registration';
  * Every rejection is the same sentence and the same status. "Expired" and
  * "wrong" are different facts, and telling them apart tells a guesser whether
  * to keep going.
+ *
+ * A SCANNED code (the QR at /welcome) is the exception that must say more. It
+ * was minted for whoever was signed in to the browser showing it, so the phone
+ * must prove who IT is signed in as — its own site credential as a Bearer, or
+ * an `identity` from a fresh sign-in in the app ($lib/server/pair-identity) —
+ * and be that same person. Otherwise the code stays live and the phone is told
+ * whose code it is. Only someone holding a real, live code ever reaches those
+ * answers, so they tell a guesser nothing.
  */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   let clientAddr = '';
@@ -42,7 +53,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
     );
   }
 
-  let body: { code?: unknown; label?: unknown };
+  let body: { code?: unknown; label?: unknown; identity?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -53,6 +64,33 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   const label = typeof body.label === 'string' ? body.label : null;
   if (!code) return json({ error: 'That pairing code is not valid.' }, { status: 400 });
 
+  const found = await peekPairingCode(code);
+  if (!found) return json({ error: 'That pairing code is not valid.' }, { status: 401 });
+  // The credential this phone already held, replaced once the new one exists.
+  let previousDevice: string | null = null;
+  if (found.kind === 'scan') {
+    const held = await identifyDevice(request);
+    const asserted = held ? null : verifyPairIdentity(body.identity, code, env.AUTH_SECRET);
+    const signedInAs = held?.ownerEmail ?? asserted;
+    if (!signedInAs) {
+      return json(
+        { error: 'Sign in on this phone first, so the code can check it is yours.', signIn: true },
+        { status: 428 },
+      );
+    }
+    if ((await canonicalEmail(signedInAs)) !== found.ownerEmail) {
+      const [codeFor, phoneIs] = await Promise.all([firstName(found.ownerEmail), firstName(signedInAs)]);
+      return json(
+        {
+          error: `This code is ${codeFor}’s, and this phone is signed in as ${phoneIs}, so it was not connected. ${phoneIs}: sign in at strangeramblings.com/welcome as yourself to get your own code.`,
+          wrongPerson: true,
+        },
+        { status: 409 },
+      );
+    }
+    previousDevice = held?.id ?? null;
+  }
+
   const redeemed = await redeemPairingCode(code, label);
   if (!redeemed) {
     return json({ error: 'That pairing code is not valid.' }, { status: 401 });
@@ -60,6 +98,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   if (!(await mayHoldDevice(redeemed.ownerEmail))) {
     return json({ error: 'That pairing code is not valid.' }, { status: 401 });
   }
+  // Same person, new credential: the old one would only linger in the device list.
+  if (previousDevice) await revokeDevice(redeemed.ownerEmail, previousDevice).catch(() => false);
 
   return json({
     token: redeemed.token,
@@ -67,10 +107,17 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   });
 };
 
+/** What the mismatch sentence calls someone: their household name, else their address's first part. */
+async function firstName(email: string): Promise<string> {
+  const member = await memberByEmail(email).catch(() => null);
+  const name = member?.displayName?.trim().split(/\s+/)[0];
+  return name || email.split('@')[0];
+}
+
 /**
  * Who a redeemed code may become a device for: the owner, a member who holds
- * news, chat or games right now — the areas the app opens to members — or a
- * registrant waiting on the owner ($lib/server/registration).
+ * news, chat, games or the family circle right now — the areas the app opens
+ * to members — or a registrant waiting on the owner ($lib/server/registration).
  *
  * A member's code is only ever minted by the household push, for a member who
  * held one of those when it was minted; this asks again at redemption because
@@ -88,7 +135,10 @@ async function mayHoldDevice(email: string): Promise<boolean> {
       member &&
       (satisfies(member.grants, 'news:self') ||
         satisfies(member.grants, 'jkai.chat:self') ||
-        satisfies(member.grants, 'games:self'))
+        satisfies(member.grants, 'games:self') ||
+        // The family circle pairs from the one code too: the site credential
+        // is how the phone then fetches its health & location pairing.
+        satisfies(member.grants, 'family:circle'))
     ) {
       return true;
     }

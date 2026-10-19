@@ -40,25 +40,6 @@
   const left = $derived(pair ? Math.max(0, Math.round((pair.expiresAt - now) / 1000)) : 0);
   const clock = $derived(`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`);
 
-  // Owner-only fourth card: chat & news, through the existing endpoint.
-  let sitePair = $state<{ qr: string; code: string; expiresAt: string } | null>(null);
-  let sitePairError = $state('');
-  let sitePairing = $state(false);
-  async function mintSiteCode() {
-    sitePairing = true;
-    sitePairError = '';
-    try {
-      const res = await fetch('/api/admin/native-devices', { method: 'POST' });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) sitePairError = body.error ?? 'Could not make a code';
-      else sitePair = { qr: body.qr, code: body.code, expiresAt: body.expiresAt };
-    } catch {
-      sitePairError = 'Network error';
-    } finally {
-      sitePairing = false;
-    }
-  }
-
   const firstName = $derived(data.signedIn ? data.name.split(/\s+/)[0] : '');
 
   // ── Your data: delete what the app uploaded ───────────────────────────────
@@ -97,6 +78,18 @@
       <li><span class="w-num">02</span><span>Sign in with Google, using the same address.</span></li>
       <li><span class="w-num">03</span><span>Come back here to set up the app.</span></li>
     </ol>
+
+    <section class="w-card" data-card="app-code">
+      <div class="w-card-hd"><h2>Got the app? Scan this</h2></div>
+      <p>
+        In the SR app, tap <strong>Scan the code</strong> and point the camera here. Your phone signs in with its own
+        Apple ID — if John has already added you to the family, you're straight in, health and location and all.
+        Anyone else gets the request below sent from the phone.
+      </p>
+      <div class="qr">
+        <img src={data.appQr} alt="Code for the SR app: sign in from your phone" width="260" height="260" />
+      </div>
+    </section>
 
     <section class="w-card" data-card="signin">
       <div class="w-card-hd"><h2>Invited or approved?</h2></div>
@@ -198,11 +191,19 @@
       {#if !data.canPair}
         <p>Ask John to add you to Family Circle — this step unlocks as soon as he does.</p>
       {:else}
-        <p>In the app, open <strong>Settings → Connections → Pair by QR code</strong> and point the camera at this.</p>
+        <p>
+          One code connects everything — chat, news, health and location. In the app, open
+          <strong>Settings → Connections → Pair with a code</strong> and point the camera at it.
+        </p>
+        <p class="w-note">
+          It only works on a phone signed in as you: the app checks, and anyone else's phone is turned away. Someone
+          else pairs from their own sign-in here.
+        </p>
         {#if pair && left > 0}
           <div class="qr">
-            <img src={pair.qr} alt="Pairing code for the SR app" width="260" height="260" />
+            <img src={pair.qr} alt="Pairing code for {firstName}'s phone" width="260" height="260" />
           </div>
+          <p class="w-note" data-pair-for>This code is for {firstName}'s phone.</p>
           <div class="code-row">
             <span class="w-note">Or type</span>
             <code class="code">{pair.code}</code>
@@ -283,28 +284,7 @@
     </section>
 
     {#if data.isOwner}
-      <!-- 04 Chat & news (owners) -->
-      <section class="w-card" data-step="chat">
-        <div class="w-card-hd"><span class="w-num">04</span><h2>Chat &amp; news</h2></div>
-        <p>
-          A second pairing, with this site, for the app's chat and news tabs. In the app: Settings → Connections →
-          Scan the chat &amp; news code.
-        </p>
-        {#if sitePair}
-          <div class="qr"><img src={sitePair.qr} alt="Chat and news pairing code" width="260" height="260" /></div>
-          <div class="code-row">
-            <span class="w-note">Or type</span>
-            <code class="code">{sitePair.code}</code>
-          </div>
-        {/if}
-        {#if sitePairError}<p class="w-error" role="alert">{sitePairError}</p>{/if}
-        <div class="w-row">
-          <button class={sitePair ? 'w-btn ghost' : 'w-btn'} onclick={mintSiteCode} disabled={sitePairing}>
-            {sitePairing ? 'Making a code…' : sitePair ? 'New code' : 'Show a code'}
-          </button>
-          <a class="w-note" href="/admin/access/devices">All paired devices →</a>
-        </div>
-      </section>
+      <p class="w-note"><a href="/admin/access/devices">All paired devices →</a></p>
     {/if}
 
     {#if data.hasAppAccount}
