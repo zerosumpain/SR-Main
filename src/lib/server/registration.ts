@@ -14,12 +14,11 @@ import { createHash, createPublicKey, randomBytes, verify as verifySignature, ty
 import { and, desc, eq, gt, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/db';
-import { accessRequest, accessSecurityAudit, allowedUser, nativeCredentials } from '$lib/db/schema';
+import { accessRequest, accessSecurityAudit, allowedUser, householdMember, nativeCredentials } from '$lib/db/schema';
 import { isEmailAllowedToSignIn, isOwnerEmail } from './access';
 import { addToAllowList } from './allow-list';
 import { joinGroups } from './invites';
 import { notifyOwner } from './notify';
-import { memberByEmail } from '$lib/home/presence/members';
 
 /**
  * A random nonce set by /welcome/app before Google. The Auth.js callbacks
@@ -154,7 +153,14 @@ export async function ensureAppRequest(input: {
 export async function admitPreRegistered(email: string, via: 'google' | 'apple'): Promise<boolean> {
   const e = email.trim().toLowerCase();
   if (!e || isOwnerEmail(e)) return false;
-  const member = await memberByEmail(e).catch(() => null);
+  // Queried here, not through $lib/home's memberByEmail: platform code may not
+  // import a domain. lower() on the column for the same reason that one has it.
+  const [member] = await db
+    .select({ displayName: householdMember.displayName })
+    .from(householdMember)
+    .where(sql`lower(${householdMember.email}) = ${e}`)
+    .limit(1)
+    .catch(() => []);
   if (!member) return false;
   const name = member.displayName?.trim() || nameFromEmail(e);
 
