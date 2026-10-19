@@ -179,6 +179,59 @@
       </div>
     {/if}
   </section>
+  <section class="nm-sec" data-section="install" id="install">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Install without TestFlight</span>
+      {#if data.adhoc.running}<span class="nm-pill" data-state="connected">building</span>{/if}
+    </div>
+    <p class="muted">
+      For a phone that cannot use TestFlight — under 13s can't. Make a link for the phone and open it there in
+      Safari: it asks to install a profile, which tells the site the phone's ID and starts a copy of the app built for
+      it (about half an hour). Then the same phone installs from the install page.
+    </p>
+    {#if form?.adhocError}<p class="result-bad" role="alert">{form.adhocError}</p>{/if}
+    {#if form?.adhocStarted}<p class="muted" role="status">Building a copy for {form.adhocStarted}. About half an hour.</p>{/if}
+
+    {#if !data.adhoc.readable}
+      <p class="nm-sec-error">The ad-hoc build on GitHub could not be read.</p>
+    {:else if data.adhoc.build}
+      <p class="muted">
+        Newest copy: {data.adhoc.build.version}, built {when(data.adhoc.build.builtAt)}, installs on
+        {data.adhoc.build.devices.join(', ') || 'no phones yet'}.
+      </p>
+    {:else}
+      <p class="muted">No copy has been built yet.</p>
+    {/if}
+    {#if data.adhoc.installUrl}
+      <p class="muted">Install page, the same for every phone: <a href={data.adhoc.installUrl}>{data.adhoc.installUrl}</a></p>
+    {/if}
+
+    {#if form?.enrol}
+      <div class="pair">
+        <img src={form.enrol.qr} alt="Enrolment link QR code" width="200" height="200" />
+        <div class="pair-meta">
+          <span class="sr-label-tight">For {form.enrol.name} — scan with its camera, or send it</span>
+          <code class="code">{form.enrol.link}</code>
+          <span class="muted">Works until {new Date(form.enrol.expiresAt).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+      </div>
+    {:else}
+      <form method="POST" action="?/enrolLink" use:enhance class="add-row">
+        <input class="nm-text-input" name="name" placeholder="Rory's iPhone" maxlength="50" required aria-label="Phone name" />
+        <button class="nm-save-btn">Make a link for a phone</button>
+      </form>
+    {/if}
+
+    <details class="manual">
+      <summary>Have the UDID already, or just want a fresh copy?</summary>
+      <form method="POST" action="?/adhocBuild" use:enhance class="add-row">
+        <input class="nm-text-input" name="name" placeholder="Rory's iPhone" maxlength="50" aria-label="Phone name" />
+        <input class="nm-text-input mono" name="udid" placeholder="00008110-001A2C3E0E12801E" aria-label="UDID" />
+        <button class="nm-btn-ghost">Build a copy</button>
+      </form>
+      <p class="muted">Leave the UDID empty to rebuild the newest app for the phones already listed.</p>
+    </details>
+  </section>
 </PageWrap>
 
 <style>
@@ -242,6 +295,7 @@
   .pair { display: flex; gap: 1.25rem; align-items: flex-start; flex-wrap: wrap; }
   .pair img { border: 1px solid var(--line-strong); image-rendering: pixelated; }
   .pair-meta { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+  .manual summary { cursor: pointer; font-size: var(--fs-nav); color: var(--text-secondary); margin: 0.5rem 0; }
   .code {
     font-family: var(--font-mono);
     font-size: var(--fs-label);

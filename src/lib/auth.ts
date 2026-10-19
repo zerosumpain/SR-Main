@@ -96,6 +96,12 @@ const PUBLIC_PATHS = [
   // deleted and evicted all 404 alike ($lib/family/backlog-cast). A PREFIX, so
   // check-public-routes.mjs is what stops a sibling becoming anonymous.
   '/cast',
+  // The iPhone app for a phone that cannot use TestFlight (a child's):
+  // /install/<token> and /install/enroll/<ticket>. Safari on that phone has no
+  // session here, so the URL is the permission — HMACs over AUTH_SECRET, a
+  // wrong one 404s ($lib/server/adhoc-install). A PREFIX, so
+  // check-public-routes.mjs is what stops a sibling becoming anonymous.
+  '/install',
   // The page that explains the landing page's pixel character. Public like the
   // landing page itself; only one route lives under this prefix.
   '/rambler',
