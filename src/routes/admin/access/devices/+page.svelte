@@ -179,6 +179,44 @@
       </div>
     {/if}
   </section>
+  <section class="nm-sec" data-section="vouch" id="vouch">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Pair a phone for someone</span>
+    </div>
+    <p class="muted">
+      For someone who cannot sign in on the phone — Apple does not let an under-13 account use Sign in with Apple for
+      a new app. You vouch instead: this code connects the phone that scans it <strong>as them</strong>, chat, news,
+      health and location. Show it only to their phone: in SR, Welcome → Scan the code. Good for ten minutes.
+    </p>
+    {#if form?.vouchError}<p class="result-bad" role="alert">{form.vouchError}</p>{/if}
+    {#if form?.vouch}
+      <div class="pair">
+        <img src={form.vouch.qr} alt="Pairing QR code for {form.vouch.name}" width="220" height="220" />
+        <div class="pair-meta">
+          <span class="sr-label-tight">For {form.vouch.name}'s phone only</span>
+          <code class="code">{form.vouch.code}</code>
+          <span class="muted">
+            {form.vouch.email}{form.vouch.admitted ? ' · added to Family Circle' : ''} · expires
+            {new Date(form.vouch.expiresAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+      </div>
+    {/if}
+    <form method="POST" action="?/vouchPair" use:enhance class="add-row">
+      <input class="nm-text-input" name="name" placeholder="Name" maxlength="60" required aria-label="Name" list="vouch-people"
+        oninput={(e) => {
+          const picked = data.adhoc.household.find((p) => p.name === e.currentTarget.value);
+          const email = e.currentTarget.form?.elements.namedItem('email') as HTMLInputElement | null;
+          if (picked && email && !email.value) email.value = picked.email;
+        }} />
+      <datalist id="vouch-people">
+        {#each data.adhoc.household as person (person.email)}<option value={person.name}></option>{/each}
+      </datalist>
+      <input class="nm-text-input" name="email" type="email" placeholder="Their email (Apple ID)" required aria-label="Email" />
+      <button class="nm-save-btn">Show a code</button>
+    </form>
+  </section>
+
   <section class="nm-sec" data-section="install" id="install">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Install without TestFlight</span>
