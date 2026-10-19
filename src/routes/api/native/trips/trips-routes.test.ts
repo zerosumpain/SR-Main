@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   suggestions: new Map<string, Record<string, unknown>>(),
   events: [] as string[],
   logged: [] as string[],
+  deleted: [] as string[],
 }));
 
 vi.mock('$lib/server/native-handler', () => ({
@@ -69,6 +70,7 @@ vi.mock('$lib/trips/store.server', () => ({
     return { id: 'new-trip', ownerEmail: owner };
   },
   latestPlan: async () => ({ plan: PLAN }),
+  deleteTrip: async (id: string) => void h.deleted.push(id),
   addSuggestion: async (_t: string, s: Record<string, unknown>) => {
     const row = { id: SID, tripId: TRIP_ID, status: 'pending', decidedById: null, decidedAt: null, createdAt: 'now', ...s };
     h.suggestions.set(SID, row);
@@ -114,7 +116,8 @@ vi.mock('$lib/trips/converse.server', () => ({
 }));
 vi.mock('$lib/trips/ideas.server', () => ({ findIdeas: async (_t: unknown, ask: unknown, surface: string, deps: unknown) => ({ ask, surface, deps }) }));
 vi.mock('$lib/trips/routing.server', () => ({ routeFor: async (_t: string, mode: string) => ({ line: [], durationSec: mode === 'taxi' ? 900 : 600, distanceM: 800, estimated: true }) }));
-vi.mock('$lib/trips/guidance.server', () => ({ readGuidance: async () => ({}) }));
+vi.mock('$lib/trips/guidance.server', () => ({ readGuidance: async () => ({}), deleteGuidance: async () => {} }));
+vi.mock('$lib/trips/settings-cache.server', () => ({ deleteTripSettings: async () => {} }));
 
 const list = await import('./+server');
 const one = await import('./[id]/+server');
@@ -169,12 +172,29 @@ describe('the family', () => {
     as(KID);
     expect(await (await list.GET(ev())).json()).toEqual({ trips: [{ id: TRIP_ID, title: 'Rome' }] });
     const b = await (await one.GET(ev({ id: TRIP_ID }))).json();
-    expect(b.access).toEqual({ canEdit: false, canApprove: false, canSuggest: true, role: 'member' });
+    expect(b.access).toEqual({ canEdit: false, canApprove: false, canSuggest: true, canDelete: false, role: 'member' });
     // The creator by family id and name; the bundle is built for this caller's thread.
     expect(b.trip).toEqual({ id: TRIP_ID, createdById: 'f_owner', createdByName: 'owner' });
     expect(b.viewer).toBe(KID);
     as(PARENT);
-    expect((await (await one.GET(ev({ id: TRIP_ID }))).json()).access).toEqual({ canEdit: true, canApprove: true, canSuggest: true, role: 'parent' });
+    expect((await (await one.GET(ev({ id: TRIP_ID }))).json()).access).toEqual({ canEdit: true, canApprove: true, canSuggest: true, canDelete: false, role: 'parent' });
+  });
+
+  it('only the creator deletes a trip — not a parent, not a member', async () => {
+    h.deleted = [];
+    h.creator = KID;
+    const del = (who: string) => {
+      as(who);
+      return one.DELETE(ev({ id: TRIP_ID }, { method: 'DELETE' }));
+    };
+    expect((await del(PARENT)).status).toBe(403);
+    expect((await del(OWNER)).status).toBe(403);
+    expect(h.deleted).toEqual([]);
+    const ok = await del(KID);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ deleted: true });
+    expect(h.deleted).toEqual([TRIP_ID]);
+    expect((await one.DELETE(ev({ id: 'nope' }, { method: 'DELETE' }))).status).toBe(404);
   });
 
   it('a member creates a trip and becomes its creator', async () => {

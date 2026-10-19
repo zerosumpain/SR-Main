@@ -131,6 +131,7 @@ describe('every native route gates itself', () => {
         '/family/landgrab/changes/+server.ts',
         // "msg family": the same audience, `familyCaller` in each handler.
         '/family/messages/+server.ts',
+        '/family/messages/[id]/+server.ts',
         '/family/messages/[id]/replies/+server.ts',
         '/family/tasks/+server.ts',
         '/family/tasks/[id]/+server.ts',

@@ -66,6 +66,7 @@
 /api/native/family/landgrab
 /api/native/family/landgrab/changes
 /api/native/family/messages
+/api/native/family/messages/[id]
 /api/native/family/messages/[id]/replies
 /api/native/family/steps
 /api/native/family/tasks

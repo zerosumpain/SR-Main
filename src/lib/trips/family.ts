@@ -18,9 +18,9 @@ export interface FamilyCallerLike {
 /** Creator edits freely; a parent approves (and may edit); anyone else in the family suggests. */
 export function tripAccess(creatorEmail: string, caller: FamilyCallerLike): TripAccess {
   const creator = creatorEmail.trim().toLowerCase() === caller.email.trim().toLowerCase();
-  if (creator) return { canEdit: true, canApprove: caller.parent, canSuggest: true, role: 'creator' };
-  if (caller.parent) return { canEdit: true, canApprove: true, canSuggest: true, role: 'parent' };
-  return { canEdit: false, canApprove: false, canSuggest: true, role: 'member' };
+  if (creator) return { canEdit: true, canApprove: caller.parent, canSuggest: true, canDelete: true, role: 'creator' };
+  if (caller.parent) return { canEdit: true, canApprove: true, canSuggest: true, canDelete: false, role: 'parent' };
+  return { canEdit: false, canApprove: false, canSuggest: true, canDelete: false, role: 'member' };
 }
 
 /** Bands: empty <10%, light <50%, balanced <85%, full ≤100%, overfull >100%. */

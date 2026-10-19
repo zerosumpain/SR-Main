@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   sent: [] as Array<{ email: string; body: string }>,
   replied: [] as Array<{ to: string; email: string; body: string }>,
   limited: false,
+  deleted: [] as string[],
 }));
 
 vi.mock('$lib/server/native-handler', () => ({
@@ -38,6 +39,13 @@ vi.mock('$lib/family/messages.server', () => ({
     h.sent.push({ email, body });
     return { kind: 'sent', message: row({ id: 'm-new', fromEmail: email, body }), pushed: 3, recipients: 2 };
   },
+  deleteMessage: async (id: string, email: string) => {
+    const m = h.rows.find((r) => r.id === id);
+    if (!m) return 'gone';
+    if (m.fromEmail !== email) return 'not-yours';
+    h.deleted.push(id);
+    return 'deleted';
+  },
   replyToMessage: async (message: MessageRecord, email: string, _parent: boolean, body: string) => {
     h.replied.push({ to: message.id, email, body });
     return { reply: row({ id: 'r-new', fromEmail: email, body, replyTo: message.id }), pushed: 1 };
@@ -46,6 +54,7 @@ vi.mock('$lib/family/messages.server', () => ({
 
 const list = await import('./+server');
 const replies = await import('./[id]/replies/+server');
+const one = await import('./[id]/+server');
 
 type Handler = (e: unknown) => Promise<Response>;
 function call(handler: unknown, opts: { method?: string; body?: unknown; id?: string } = {}) {
@@ -70,6 +79,7 @@ beforeEach(() => {
   h.sent = [];
   h.replied = [];
   h.limited = false;
+  h.deleted = [];
 });
 
 describe('family messages — who gets in', () => {
@@ -128,5 +138,29 @@ describe('POST /api/native/family/messages/:id/replies', () => {
     expect((await call(replies.POST, { method: 'POST', body: { body: 'x' }, id: 'r1' })).status).toBe(404);
     expect((await call(replies.POST, { method: 'POST', body: {}, id: 'm1' })).status).toBe(400);
     expect(h.replied).toEqual([]);
+  });
+});
+
+describe('DELETE /api/native/family/messages/:id', () => {
+  it('lets the sender take back their message, or their reply', async () => {
+    asMember('kid@example.test', ['family:circle']);
+    const res = await call(one.DELETE, { method: 'DELETE', id: 'm1' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deleted: true });
+    h.role = 'owner';
+    h.viewer = null;
+    expect((await call(one.DELETE, { method: 'DELETE', id: 'r1' })).status).toBe(200);
+    expect(h.deleted).toEqual(['m1', 'r1']);
+  });
+
+  it('refuses anyone else’s, and says when it has gone', async () => {
+    asMember('mum@example.test', ['family:admin']);
+    const res = await call(one.DELETE, { method: 'DELETE', id: 'm1' });
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toContain('sent it');
+    expect((await call(one.DELETE, { method: 'DELETE', id: 'nope' })).status).toBe(404);
+    asMember('guest@example.test', ['games:self']);
+    expect((await call(one.DELETE, { method: 'DELETE', id: 'm1' })).status).toBe(403);
+    expect(h.deleted).toEqual([]);
   });
 });
