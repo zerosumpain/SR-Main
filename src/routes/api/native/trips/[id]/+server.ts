@@ -3,7 +3,10 @@ import type { RequestHandler } from './$types';
 import { withNativeAccess } from '$lib/server/native-handler';
 import { etagMatches } from '$lib/trips/bundle';
 import { familyTrip, tripCreator } from '$lib/trips/family.server';
+import { deleteGuidance } from '$lib/trips/guidance.server';
 import { tripBundle } from '$lib/trips/plan.server';
+import { deleteTripSettings } from '$lib/trips/settings-cache.server';
+import { deleteTrip } from '$lib/trips/store.server';
 
 /**
  * GET /api/native/trips/:id — the whole trip for offline use (`TripBundle`)
@@ -22,4 +25,20 @@ export const GET: RequestHandler = withNativeAccess('any', async (event, identit
     return new Response(null, { status: 304, headers });
   }
   return json(bundle, { headers });
+});
+
+/**
+ * DELETE /api/native/trips/:id — the trip and everything under it, as the
+ * owner's web `DELETE /api/trips/:id` does. Only its creator (`canDelete`);
+ * a parent who may edit it still may not delete it (403). Every other phone
+ * drops it from its list, and its offline copy, on its next refresh.
+ */
+export const DELETE: RequestHandler = withNativeAccess('any', async (event, identity, role) => {
+  const ft = await familyTrip(event, identity, role, event.params.id);
+  if (ft instanceof Response) return ft;
+  if (!ft.access.canDelete) return json({ error: 'Only the person who started this trip can delete it.' }, { status: 403 });
+  await deleteTrip(ft.trip.id);
+  await deleteGuidance(ft.trip.id);
+  await deleteTripSettings(ft.trip.id, ['meals', 'images']);
+  return { deleted: true };
 });

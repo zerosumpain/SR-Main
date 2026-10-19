@@ -11,13 +11,13 @@ describe('tripAccess', () => {
   const kid = { email: 'kid@example.test', parent: false };
 
   it('the creator edits freely; a parent creator also approves', () => {
-    expect(tripAccess('dad@example.test', parent)).toEqual({ canEdit: true, canApprove: true, canSuggest: true, role: 'creator' });
-    expect(tripAccess('kid@example.test', kid)).toEqual({ canEdit: true, canApprove: false, canSuggest: true, role: 'creator' });
+    expect(tripAccess('dad@example.test', parent)).toEqual({ canEdit: true, canApprove: true, canSuggest: true, canDelete: true, role: 'creator' });
+    expect(tripAccess('kid@example.test', kid)).toEqual({ canEdit: true, canApprove: false, canSuggest: true, canDelete: true, role: 'creator' });
   });
 
   it('another parent edits and approves; anyone else in the family only suggests', () => {
-    expect(tripAccess('mum@example.test', parent)).toEqual({ canEdit: true, canApprove: true, canSuggest: true, role: 'parent' });
-    expect(tripAccess('mum@example.test', kid)).toEqual({ canEdit: false, canApprove: false, canSuggest: true, role: 'member' });
+    expect(tripAccess('mum@example.test', parent)).toEqual({ canEdit: true, canApprove: true, canSuggest: true, canDelete: false, role: 'parent' });
+    expect(tripAccess('mum@example.test', kid)).toEqual({ canEdit: false, canApprove: false, canSuggest: true, canDelete: false, role: 'member' });
   });
 });
 

@@ -121,3 +121,21 @@ async function pushAndRecord(
     return 0;
   }
 }
+
+export type DeleteOutcome = 'deleted' | 'gone' | 'not-yours';
+
+/**
+ * Take back a message or a reply — its sender only, as the list's `mine`
+ * says. A message goes with every reply under it; a reply goes alone. A push
+ * already delivered stays on the phones it reached: Apple has no recall.
+ */
+export async function deleteMessage(id: string, email: string): Promise<DeleteOutcome> {
+  const message = await getMessage(id);
+  if (!message) return 'gone';
+  if (!samePerson(message.fromEmail, email, isOwnerEmail)) return 'not-yours';
+  await db.transaction(async (tx) => {
+    if (!message.replyTo) await tx.delete(familyMessage).where(eq(familyMessage.replyTo, message.id));
+    await tx.delete(familyMessage).where(eq(familyMessage.id, message.id));
+  });
+  return 'deleted';
+}

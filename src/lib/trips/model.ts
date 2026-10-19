@@ -673,6 +673,8 @@ export interface TripAccess {
   canApprove: boolean;
   /** Any family member: may suggest something for a slot. */
   canSuggest: boolean;
+  /** Created the trip: may delete it, and everything under it. Nobody else may. */
+  canDelete: boolean;
   role: 'creator' | 'parent' | 'member';
 }
 

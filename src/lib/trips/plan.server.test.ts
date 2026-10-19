@@ -92,7 +92,7 @@ vi.mock('./routing.server', async () => {
 
 const { applyEvents, fallbackNarrative, replan, storePhoneDay, storePhoneDays, tripBundle, tripReplan } = await import('./plan.server');
 
-const OWNER_VIEW = { access: { canEdit: true, canApprove: true, canSuggest: true, role: 'creator' as const }, viewerEmail: 'owner@example.com', creator: { id: 'f_owner', name: 'Owner' } };
+const OWNER_VIEW = { access: { canEdit: true, canApprove: true, canSuggest: true, canDelete: true, role: 'creator' as const }, viewerEmail: 'owner@example.com', creator: { id: 'f_owner', name: 'Owner' } };
 
 function trip() {
   const t = romeInput().trip;
@@ -211,7 +211,7 @@ describe('the phone', () => {
       { id: 'm4', role: 'event', text: 'Added Gelato.', ops: [], planVersion: 2, surface: 'phone', createdAt: '2026-10-14T09:00:03Z', author: null },
       { id: 'm5', role: 'user', text: 'Can we get gelato?', ops: [], planVersion: null, surface: 'phone', createdAt: '2026-10-14T09:00:04Z', author: 'kid@example.test' },
     ];
-    const member = { access: { canEdit: false, canApprove: false, canSuggest: true, role: 'member' as const }, viewerEmail: 'kid@example.test', creator: { id: 'f_owner', name: 'John' } };
+    const member = { access: { canEdit: false, canApprove: false, canSuggest: true, canDelete: false, role: 'member' as const }, viewerEmail: 'kid@example.test', creator: { id: 'f_owner', name: 'John' } };
     const b = await tripBundle({ ...trip(), ownerEmail: 'o@example.test', profile }, member);
     expect(b.messages.map((m) => m.id)).toEqual(['m4', 'm5']);
     expect(b.trip).toMatchObject({ createdById: 'f_owner', createdByName: 'John' });
@@ -226,7 +226,7 @@ describe('the phone', () => {
     expect(Object.keys(b.fullness).sort()).toEqual(days.map((d) => d.date).sort());
     for (const d of days) for (const leg of d.legs) expect(leg.alternatives?.map((a) => a.mode)).toEqual(['walk', 'transit', 'taxi']);
     // The creator sees their own thread (and the rows from before authors), still with no email on the wire.
-    const own = await tripBundle({ ...trip(), ownerEmail: 'o@example.test', profile }, { ...member, viewerEmail: 'o@example.test', access: { canEdit: true, canApprove: true, canSuggest: true, role: 'creator' } });
+    const own = await tripBundle({ ...trip(), ownerEmail: 'o@example.test', profile }, { ...member, viewerEmail: 'o@example.test', access: { canEdit: true, canApprove: true, canSuggest: true, canDelete: true, role: 'creator' } });
     expect(own.messages.map((m) => m.id)).toEqual(['m1', 'm2', 'm3', 'm4']);
     expect(JSON.stringify(own)).not.toContain('@');
   });
