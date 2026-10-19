@@ -5,22 +5,20 @@ import type { Actions, PageServerLoad, RequestEvent } from './$types';
 import { getOwnerEmails } from '$lib/server/access';
 import { submitAccessRequest } from '$lib/server/access-requests';
 import { INVITE_COOKIE } from '$lib/server/invites';
+import { createScanCode } from '$lib/server/native-auth';
+import { openPairPayload, scanPairPayload } from '$lib/server/pair-payload';
 import { isOwnerRequest } from '$lib/server/owner';
 import { clientIp, hashIp } from '$lib/server/public-request-rate-limit';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
 import { loadCompanionUsers } from '$lib/home/presence/companion';
 import { deleteMyUploadedData } from '$lib/home/presence/delete-my-data';
-import {
-  pilotFailureText,
-  pilotPairCode,
-  setPilotSharing,
-  upsertPilotUser,
-} from '$lib/home/presence/companion-accounts';
+import { pilotFailureText, setPilotSharing, upsertPilotUser } from '$lib/home/presence/companion-accounts';
 
 // /welcome is PUBLIC ($lib/auth PUBLIC_PATHS): the hook lets everyone through,
 // and this file decides what each visitor gets.
 //
-//  - Signed out: the request-access form and a way to sign in.
+//  - Signed out: the request-access form, a way to sign in, and the open
+//    code for the app (scanned, the phone signs in as its own person).
 //  - Signed in (which means allowed — sign-in is the allow-list gate): the
 //    three setup steps. Pairing and sharing need `family:circle` (or owner);
 //    without it the steps say to ask John.
@@ -65,7 +63,11 @@ function testflightUrl(): string | null {
 
 export const load: PageServerLoad = async (event) => {
   const here = await whoIsHere(event);
-  if (!here) return { signedIn: false as const, testflight: testflightUrl() !== null };
+  if (!here) {
+    // Nobody's code: the phone that scans it signs in as its own person.
+    const appQr = await QRCode.toDataURL(openPairPayload(event.url.origin), { errorCorrectionLevel: 'M', margin: 2, scale: 7 });
+    return { signedIn: false as const, testflight: testflightUrl() !== null, appQr };
+  }
 
   // Signed in: whatever the invite cookie carried has done its work.
   event.cookies.delete(INVITE_COOKIE, { path: '/' });
@@ -119,19 +121,20 @@ export const actions: Actions = {
     return { requested: true };
   },
 
-  /** Step 2: make sure they exist on the app server, then mint a ten-minute code. */
+  /**
+   * Step 2: ONE ten-minute code for this person — the site, and through it
+   * health & location (`/api/native/companion-pair`), in a single scan. It is
+   * a scanned code: the phone that redeems it must be signed in as this same
+   * person, so a code read off this screen by someone else's phone connects
+   * nothing (`/api/native/pair`).
+   */
   pair: async (event) => {
     const here = await whoIsHere(event);
     if (!here) return fail(401, { pairError: 'Sign in first.' });
     if (!here.canPair) return fail(403, { pairError: 'Ask John to add you to Family Circle first.' });
-    const user = await upsertPilotUser(here.email, here.name);
-    if (!user.ok) return fail(502, { pairError: pilotFailureText(user.reason) });
-    const code = await pilotPairCode(here.email);
-    if (!code.ok) return fail(502, { pairError: pilotFailureText(code.reason) });
-    const qr = await QRCode.toDataURL(code.value.payload, { errorCorrectionLevel: 'M', margin: 2, scale: 7 });
-    return {
-      pair: { qr, code: code.value.code, expiresAt: Date.now() + code.value.expiresIn * 1000 },
-    };
+    const { code, expiresAt } = await createScanCode(here.email);
+    const qr = await QRCode.toDataURL(scanPairPayload(event.url.origin, code), { errorCorrectionLevel: 'M', margin: 2, scale: 7 });
+    return { pair: { qr, code, expiresAt: expiresAt.getTime() } };
   },
 
   /** Step 3: location sharing on or off. */

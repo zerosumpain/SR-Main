@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { and, desc, eq, gt, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { nativeCredentials, householdJourneyViewer } from '$lib/db/schema';
 
@@ -51,7 +51,15 @@ export const PAIR_CODE_TTL_MS = 10 * 60 * 1000;
 /** Ninety days. Long enough not to be a chore, short enough to be a backstop. */
 export const DEVICE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
-export type CredentialKind = 'pair' | 'device';
+/**
+ * `pair` is a code handed straight to the phone it is for — by the app's own
+ * sign-in, or the household push. `scan` is a code SHOWN, at /welcome or
+ * /admin/access/devices, for whoever is signed in to that browser: any camera
+ * in the room can read it, so it is redeemed only by a phone that proves it is
+ * signed in as that same person (`$lib/server/pair-identity`).
+ */
+export type CredentialKind = 'pair' | 'scan' | 'device';
+const CODE_KINDS = ['pair', 'scan'] as const;
 
 export interface NativeIdentity {
   id: string;
@@ -126,6 +134,56 @@ export async function createPairingCode(
 }
 
 /**
+ * Mint the one code /welcome shows as a QR. One per person at a time, like
+ * `createPairingCode`, but a kind of its own: it does not cancel a `pair` code
+ * the household push is holding for the same person, and `/api/native/pair`
+ * redeems it only for a phone signed in as them.
+ */
+export async function createScanCode(ownerEmail: string): Promise<{ code: string; expiresAt: Date }> {
+  const owner = ownerEmail.trim().toLowerCase();
+  if (!owner) throw new Error('A pairing code needs an owner.');
+
+  await db
+    .delete(nativeCredentials)
+    .where(and(eq(nativeCredentials.ownerEmail, owner), eq(nativeCredentials.kind, 'scan')));
+
+  const code = mintSecret();
+  const expiresAt = new Date(Date.now() + PAIR_CODE_TTL_MS);
+  await db.insert(nativeCredentials).values({
+    kind: 'scan',
+    ownerEmail: owner,
+    tokenHash: sha256(code),
+    label: 'Scanned pairing',
+    expiresAt,
+  });
+  return { code, expiresAt };
+}
+
+/**
+ * Whose live code this is, and which kind, without spending it — so the pair
+ * route can check who is holding a scanned code before redeeming it. A code
+ * refused here stays live for the person it belongs to.
+ */
+export async function peekPairingCode(code: string): Promise<{ kind: 'pair' | 'scan'; ownerEmail: string } | null> {
+  const presented = code.trim();
+  if (!presented) return null;
+  const [row] = await db
+    .select({ kind: nativeCredentials.kind, ownerEmail: nativeCredentials.ownerEmail, tokenHash: nativeCredentials.tokenHash })
+    .from(nativeCredentials)
+    .where(
+      and(
+        eq(nativeCredentials.tokenHash, sha256(presented)),
+        inArray(nativeCredentials.kind, CODE_KINDS),
+        gt(nativeCredentials.expiresAt, new Date()),
+        isNull(nativeCredentials.revokedAt),
+      ),
+    )
+    .limit(1);
+  if (!row || !digestsMatch(row.tokenHash, sha256(presented))) return null;
+  return { kind: row.kind === 'scan' ? 'scan' : 'pair', ownerEmail: row.ownerEmail };
+}
+
+/**
  * Is this pairing code still redeemable — unexpired, unrevoked, not yet spent?
  *
  * For the one caller that holds a code in memory between uses: the household
@@ -158,6 +216,10 @@ export async function isPairingCodeLive(code: string): Promise<boolean> {
  * The code row is DELETED before the device row is written, so a replayed code
  * cannot mint a second token even if two requests arrive together — the delete
  * reports how many rows it removed, and losing that race means removing none.
+ *
+ * Either kind of code. A `scan` code must have had its holder checked first
+ * (`peekPairingCode`, then `/api/native/pair`) — this does not ask who is
+ * redeeming it.
  */
 export async function redeemPairingCode(
   code: string,
@@ -172,7 +234,7 @@ export async function redeemPairingCode(
     .where(
       and(
         eq(nativeCredentials.tokenHash, sha256(presented)),
-        eq(nativeCredentials.kind, 'pair'),
+        inArray(nativeCredentials.kind, CODE_KINDS),
         gt(nativeCredentials.expiresAt, new Date()),
         isNull(nativeCredentials.revokedAt),
       ),
@@ -306,7 +368,7 @@ export async function pruneCredentials(): Promise<number> {
     .delete(nativeCredentials)
     .where(
       or(
-        and(eq(nativeCredentials.kind, 'pair'), lt(nativeCredentials.expiresAt, now)),
+        and(inArray(nativeCredentials.kind, CODE_KINDS), lt(nativeCredentials.expiresAt, now)),
         and(eq(nativeCredentials.kind, 'device'), lt(nativeCredentials.expiresAt, grace)),
       ),
     )

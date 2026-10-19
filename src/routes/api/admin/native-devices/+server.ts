@@ -1,7 +1,8 @@
 import { json } from '@sveltejs/kit';
 import QRCode from 'qrcode';
 import type { RequestHandler } from './$types';
-import { createPairingCode, listDevices, revokeDevice } from '$lib/server/native-auth';
+import { createScanCode, listDevices, revokeDevice } from '$lib/server/native-auth';
+import { scanPairPayload } from '$lib/server/pair-payload';
 
 /**
  * Managing the phones that may reach `/api/native/*`.
@@ -23,25 +24,20 @@ export const GET: RequestHandler = async ({ locals }) => {
 };
 
 /**
- * POST — mint a one-time pairing code.
+ * POST — mint the one-time pairing code, the same single code /welcome shows.
  *
  * The response carries the code itself; it is the only moment it exists in
- * plaintext anywhere. The QR payload is assembled here rather than in the page
- * so its shape is owned by one file, and it matches the companion pilot's
- * `sr-companion-pair` envelope so the app's existing scanner already parses it.
+ * plaintext anywhere. It is a scanned code (`createScanCode`): only a phone
+ * signed in as this owner can redeem it, so a QR left on this screen pairs no
+ * one else's phone. The payload's shape is owned by `$lib/server/pair-payload`.
  */
 export const POST: RequestHandler = async ({ locals, url }) => {
   const session = await locals.auth();
   const email = session?.user?.email;
   if (!email) return json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { code, expiresAt } = await createPairingCode(email);
-  const payload = JSON.stringify({
-    type: 'sr-native-pair',
-    version: 1,
-    server: url.origin,
-    code,
-  });
+  const { code, expiresAt } = await createScanCode(email);
+  const payload = scanPairPayload(url.origin, code);
 
   // The QR is rendered HERE, server-side, and handed over as a data URL.
   //

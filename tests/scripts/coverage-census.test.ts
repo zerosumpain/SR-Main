@@ -73,7 +73,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // The trip store (trips/store.integration, 2026-10-13) checks plan versions are
 // numbered without clashes under concurrent appends and that phone events are
 // idempotent; it creates and removes its own rows under a throwaway owner.
-const INTEGRATION_FILES = 43;
+// Approving from the app (access-requests.integration, 2026-10-19) runs the
+// real allow-list trigger — installing the release's idempotent security SQL
+// when the database lacks it — and creates and removes its own rows.
+const INTEGRATION_FILES = 44;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

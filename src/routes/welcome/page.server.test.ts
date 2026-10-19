@@ -5,7 +5,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // this checks the page wires it to the SESSION's email and to nothing else.
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
-vi.mock('qrcode', () => ({ default: { toDataURL: async () => 'data:image/png;base64,' } }));
+const qrPayloads: string[] = [];
+vi.mock('qrcode', () => ({
+  default: {
+    toDataURL: async (payload: string) => {
+      qrPayloads.push(payload);
+      return 'data:image/png;base64,';
+    },
+  },
+}));
+const createScanCode = vi.fn(async (_email: string) => ({ code: 'S'.repeat(43), expiresAt: new Date(1_900_000_000_000) }));
+vi.mock('$lib/server/native-auth', () => ({ createScanCode }));
 vi.mock('$lib/server/access', () => ({ getOwnerEmails: () => ['owner@example.test'] }));
 vi.mock('$lib/server/access-requests', () => ({ submitAccessRequest: async () => ({ status: 'ok' }) }));
 vi.mock('$lib/server/invites', () => ({ INVITE_COOKIE: 'sr_invite' }));
@@ -40,12 +50,42 @@ function event(email: string | null, form: Record<string, string> = {}) {
     getClientAddress: () => '203.0.113.9',
     cookies: { delete: vi.fn() },
     request: new Request('https://strangeramblings.com/welcome?/deleteData', { method: 'POST', body }),
+    url: new URL('https://strangeramblings.com/welcome'),
   } as never;
 }
 
 beforeEach(() => {
   deleteMyUploadedData.mockClear();
   users.mockClear();
+  createScanCode.mockClear();
+  qrPayloads.length = 0;
+});
+
+describe('/welcome — Pair your phone', () => {
+  it('shows ONE code, minted for the person signed in here', async () => {
+    const r = await actions.pair(event('Sam@Example.test'));
+    expect(createScanCode).toHaveBeenCalledWith('sam@example.test');
+    expect(qrPayloads).toHaveLength(1);
+    expect(JSON.parse(qrPayloads[0])).toEqual({
+      type: 'sr-pair',
+      version: 1,
+      server: 'https://strangeramblings.com',
+      code: 'S'.repeat(43),
+    });
+    expect(r).toMatchObject({ pair: { code: 'S'.repeat(43), expiresAt: 1_900_000_000_000 } });
+  });
+
+  it("shows a signed-out visitor nobody's code: no secret in it", async () => {
+    const r = await load(event(null));
+    expect(r).toMatchObject({ signedIn: false, appQr: 'data:image/png;base64,' });
+    expect(JSON.parse(qrPayloads.at(-1)!)).toEqual({ type: 'sr-pair', version: 1, server: 'https://strangeramblings.com' });
+    expect(createScanCode).not.toHaveBeenCalled();
+  });
+
+  it('mints nothing for a signed-out visitor', async () => {
+    expect(await actions.pair(event(null))).toMatchObject({ status: 401 });
+    expect(createScanCode).not.toHaveBeenCalled();
+  });
 });
 
 describe('/welcome — Your data', () => {
@@ -53,7 +93,7 @@ describe('/welcome — Your data', () => {
     expect(await load(event('sam@example.test'))).toMatchObject({ signedIn: true, hasAppAccount: true });
     users.mockResolvedValueOnce([]);
     expect(await load(event('sam@example.test'))).toMatchObject({ signedIn: true, hasAppAccount: false });
-    expect(await load(event(null))).toEqual({ signedIn: false, testflight: false });
+    expect(await load(event(null))).toMatchObject({ signedIn: false, testflight: false });
   });
 
   it("deletes for the session's email — an email in the form is ignored", async () => {

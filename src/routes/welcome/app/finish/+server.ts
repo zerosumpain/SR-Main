@@ -1,8 +1,10 @@
 import { redirect } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 import { isOwnerEmail } from '$lib/server/access';
 import { createPairingCode } from '$lib/server/native-auth';
-import { REGISTER_COOKIE, ensureAppRequest, isRegisterNonce } from '$lib/server/registration';
+import { isPairCodeHash, mintPairIdentity } from '$lib/server/pair-identity';
+import { PAIR_CONFIRM_COOKIE, REGISTER_COOKIE, canonicalEmail, ensureAppRequest, isRegisterNonce } from '$lib/server/registration';
 
 // Where Google hands back during a registration from the iPhone app. PUBLIC
 // (in $lib/auth PUBLIC_PATHS); it needs the session Google just made and the
@@ -10,7 +12,8 @@ import { REGISTER_COOKIE, ensureAppRequest, isRegisterNonce } from '$lib/server/
 //
 // The person's request is recorded (once — see ensureAppRequest), a one-time
 // pairing code is minted for their email, and the browser is sent to
-// `srapp://registered?code=…`, which the app's sign-in sheet catches. The web
+// `srapp://registered?code=…`, which the app's sign-in sheet catches. (Or,
+// started as /welcome/app?confirm=…, `?identity=…` — see below.) The web
 // session is then thrown away: it existed only to learn who they are, and the
 // sheet is private and closes anyway.
 
@@ -32,8 +35,19 @@ export const GET: RequestHandler = async ({ locals, cookies }) => {
   if (!isRegisterNonce(nonce) || !email || session?.registerNonce !== nonce) {
     redirect(303, back({ error: 'The sign-in did not finish. Try again.' }));
   }
+  const confirm = cookies.get(PAIR_CONFIRM_COOKIE);
   cookies.delete(REGISTER_COOKIE, { path: '/' });
+  cookies.delete(PAIR_CONFIRM_COOKIE, { path: '/' });
   for (const name of SESSION_COOKIES) cookies.delete(name, { path: '/' });
+
+  // "Who is holding this phone", for a code it scanned: say so for that one
+  // code, and register nobody. The owner too — this vouches for who signed
+  // in and opens nothing by itself; only the code it names, and only if the
+  // code is theirs (/api/native/pair), so the refusal below does not apply.
+  if (isPairCodeHash(confirm)) {
+    const identity = mintPairIdentity(await canonicalEmail(email), confirm, env.AUTH_SECRET ?? '');
+    redirect(303, back({ identity }));
+  }
 
   // Never the owner. Their phone opens every owner route and is paired from
   // an owner session by QR. Here, a page could walk the owner's signed-in

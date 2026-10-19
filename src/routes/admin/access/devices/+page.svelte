@@ -151,11 +151,11 @@
 
   <section class="nm-sec" data-section="own-pairing">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Pair your phone · chat &amp; news</span>
+      <span class="sr-label-tight">Pair your phone</span>
     </div>
     <p class="muted">
-      A one-time code for the SR app's chat and news tabs, good for ten minutes. In the app: Settings → Connections →
-      Scan the chat &amp; news code. Health &amp; location pairing is on <a href="/welcome">/welcome</a>.
+      One code for everything — chat, news, health and location — good for ten minutes. In the app: Settings →
+      Connections → Pair with a code. It only connects a phone signed in as you; anyone else's phone is refused.
     </p>
     {#if pairError}<p class="result-bad" role="alert">{pairError}</p>{/if}
     {#if pairing}

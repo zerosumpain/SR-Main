@@ -1,14 +1,17 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 import { rateLimit } from '$lib/server/rate-limit';
+import { isPairCodeHash, mintPairIdentity } from '$lib/server/pair-identity';
 import { isOwnerEmail } from '$lib/server/access';
 import { createPairingCode } from '$lib/server/native-auth';
 import { canonicalEmail, ensureAppRequest, verifyAppleIdentityToken } from '$lib/server/registration';
 
 /**
- * POST /api/native/register/apple { identityToken, nonce, name? } — Sign in with Apple
- * from the app's Welcome screen. Answers `{ code }`, a one-time pairing code
- * the phone redeems at /api/native/pair like any other.
+ * POST /api/native/register/apple { identityToken, nonce, name?, confirm? } — Sign
+ * in with Apple from the app's Welcome screen. Answers `{ code }`, a one-time
+ * pairing code the phone redeems at /api/native/pair like any other — or, with
+ * `confirm`, `{ identity }` for the scanned code it names.
  *
  * Unauthenticated, like /api/native/pair, so it carries its own ceiling per
  * address. What makes it safe is the token: signed by Apple for THIS app
@@ -27,7 +30,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   const limit = rateLimit(`native-register:${addr}`, { capacity: 6, refillPerSecond: 0.02 });
   if (!limit.allowed) return json({ error: 'Too many attempts. Wait a minute and try again.' }, { status: 429 });
 
-  let body: { identityToken?: unknown; name?: unknown; nonce?: unknown };
+  let body: { identityToken?: unknown; name?: unknown; nonce?: unknown; confirm?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -47,6 +50,12 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   // web session (a QR), never from an Apple sign-in, whatever Apple vouches.
   // A relay address whose Google address was linked is that person now.
   const email = await canonicalEmail(identity.email);
+  // `confirm`: the hash of a code the app has scanned. Not a registration —
+  // the answer is who signed in, for that one code (/api/native/pair checks
+  // it is theirs). The owner included: it opens nothing by itself.
+  if (isPairCodeHash(body.confirm)) {
+    return json({ identity: mintPairIdentity(email, body.confirm, env.AUTH_SECRET ?? '') });
+  }
   if (isOwnerEmail(email)) {
     return json({ error: 'Pair the owner’s iPhone from the website.' }, { status: 403 });
   }
