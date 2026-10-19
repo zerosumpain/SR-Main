@@ -14,7 +14,7 @@ import {
 } from '$lib/home/presence/companion-accounts';
 import { mergeDeviceRows } from '$lib/access/device-rows';
 import { cleanDeviceName, cleanUdid, installToken, mintEnrolTicket, ENROL_TTL_MS } from '$lib/server/adhoc-install';
-import { adhocBuildRunning, latestAdhocBuild, startAdhocBuild } from '$lib/server/adhoc-builds';
+import { adhocBuildRunning, latestAdhocBuild, startAdhocBuild } from '$lib/github/adhoc-builds';
 
 // Owner-only: /admin is never in the access catalogue, so the hook's default
 // deny covers this page and its actions.

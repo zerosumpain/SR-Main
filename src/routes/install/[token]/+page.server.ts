@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { PageServerLoad } from './$types';
 import { isInstallToken, itmsLink } from '$lib/server/adhoc-install';
-import { adhocBuildRunning, latestAdhocBuild } from '$lib/server/adhoc-builds';
+import { adhocBuildRunning, latestAdhocBuild } from '$lib/github/adhoc-builds';
 
 /**
  * /install/<token> — the iPhone app for a phone that cannot use TestFlight

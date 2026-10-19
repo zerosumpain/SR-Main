@@ -2,11 +2,11 @@ import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { isInstallToken } from '$lib/server/adhoc-install';
-import { adhocIpa, latestAdhocBuild } from '$lib/server/adhoc-builds';
+import { adhocIpa, latestAdhocBuild } from '$lib/github/adhoc-builds';
 
 /**
  * The app itself, streamed from the private draft release on GitHub
- * (`$lib/server/adhoc-builds`) — it has no public URL of its own.
+ * (`$lib/github/adhoc-builds`) — it has no public URL of its own.
  */
 export const GET: RequestHandler = async ({ params }) => {
   if (!isInstallToken(params.token, env.AUTH_SECRET)) throw error(404, 'Not found');

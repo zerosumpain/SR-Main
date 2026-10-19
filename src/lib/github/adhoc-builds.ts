@@ -1,8 +1,8 @@
-import { githubToken } from '$lib/github/issues';
-import { redactGitHubSecrets } from '$lib/github/redact';
+import { githubToken } from './issues';
+import { redactGitHubSecrets } from './redact';
 
 /**
- * The ad-hoc copy of the iPhone app, as GitHub holds it — see ./adhoc-install
+ * The ad-hoc copy of the iPhone app, as GitHub holds it — see $lib/server/adhoc-install
  * for why it exists.
  *
  * SR-AppleApp's `testflight.yml` exports an ad-hoc IPA beside every TestFlight

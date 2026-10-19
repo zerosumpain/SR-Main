@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { installManifest, isInstallToken } from '$lib/server/adhoc-install';
-import { latestAdhocBuild } from '$lib/server/adhoc-builds';
+import { latestAdhocBuild } from '$lib/github/adhoc-builds';
 
 /** What iOS reads before it installs: where the app is, and which app it is. */
 export const GET: RequestHandler = async ({ params, url }) => {

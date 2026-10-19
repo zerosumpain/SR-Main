@@ -4,7 +4,7 @@ import { secretsMatch } from '$lib/server/secrets';
 /**
  * Installing the iPhone app without TestFlight — the pure half: the links, the
  * enrolment profile, what a phone posts back, and the install manifest.
- * GitHub (where the build lives, and what builds it) is ./adhoc-builds.
+ * GitHub (where the build lives, and what builds it) is $lib/github/adhoc-builds.
  *
  * TestFlight needs an App Store account of 13 or over, so a younger child's
  * phone cannot use it. An ad-hoc build can go on any phone whose UDID is in the

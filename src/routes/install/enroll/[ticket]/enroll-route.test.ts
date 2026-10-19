@@ -10,7 +10,7 @@ const UDID = '00008110-001A2C3E0E12801E';
 const h = vi.hoisted(() => ({ builds: [] as unknown[], notes: [] as string[], fail: false }));
 
 vi.mock('$env/dynamic/private', () => ({ env: { AUTH_SECRET: 'enrol-route-secret'.padEnd(40, 'x') } }));
-vi.mock('$lib/server/adhoc-builds', () => ({
+vi.mock('$lib/github/adhoc-builds', () => ({
   startAdhocBuild: async (device: unknown) => {
     if (h.fail) throw new Error('GitHub down');
     h.builds.push(device);

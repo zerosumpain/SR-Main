@@ -2,7 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { enrolProfile, installToken, parseEnrolment, verifyEnrolTicket } from '$lib/server/adhoc-install';
-import { startAdhocBuild } from '$lib/server/adhoc-builds';
+import { startAdhocBuild } from '$lib/github/adhoc-builds';
 import { notifyOwner } from '$lib/server/notify';
 
 /**
