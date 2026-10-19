@@ -350,6 +350,9 @@ const GROUPING_SEGMENTS: (string | RegExp)[] = [
   '/blog/preview',
   '/blog/tag',
   '/jkai/shared',
+  // /install/<token> is the only page under /install (the iPhone app for a
+  // phone without TestFlight); the directory itself is not a page.
+  '/install',
   // A shared, read-only policy assessment lives one level under a namespace with
   // no page of its own — the same shape as /jkai/shared above it.
   '/projects/policy-analysis/shared',
