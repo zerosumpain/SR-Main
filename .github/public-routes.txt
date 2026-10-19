@@ -38,6 +38,7 @@
 /api/mcp
 /api/mcp/local
 /api/native/account
+/api/native/app-update
 /api/native/chat/attachments
 /api/native/chat/attachments/[id]
 /api/native/chat/conversations
@@ -138,6 +139,9 @@
 /api/version
 /api/vitals/state
 /api/whatsapp/inbound
+/app
+/app/[code]
+/app/[code]/profile
 /auth-error
 /blog
 /blog/[slug]
@@ -151,7 +155,6 @@
 /install/[token]
 /install/[token]/app.ipa
 /install/[token]/manifest.plist
-/install/enroll/[ticket]
 /login
 /privacy
 /projects

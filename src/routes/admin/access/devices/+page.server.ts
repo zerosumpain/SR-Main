@@ -4,8 +4,13 @@ import { env } from '$env/dynamic/private';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/db';
 import { allowedUser } from '$lib/db/schema';
-import { getOwnerEmails } from '$lib/server/access';
-import { revokeDevice } from '$lib/server/native-auth';
+import { getOwnerEmails, isOwnerEmail } from '$lib/server/access';
+import { createPairingCode, revokeDevice } from '$lib/server/native-auth';
+import { scanPairPayload } from '$lib/server/pair-payload';
+import { addToAllowList } from '$lib/server/allow-list';
+import { joinGroups } from '$lib/server/invites';
+import { PRE_REGISTERED_GROUP } from '$lib/server/registration';
+import { eq } from 'drizzle-orm';
 import { listAllSiteDevices } from '$lib/server/site-devices';
 import {
   listPilotDevices,
@@ -13,7 +18,8 @@ import {
   revokePilotDevice,
 } from '$lib/home/presence/companion-accounts';
 import { mergeDeviceRows } from '$lib/access/device-rows';
-import { cleanDeviceName, cleanUdid, installToken, mintEnrolTicket, ENROL_TTL_MS } from '$lib/server/adhoc-install';
+import { cleanDeviceName, cleanUdid, joinSlug, mintJoinCode, JOIN_DAYS } from '$lib/server/adhoc-install';
+import { listMembers } from '$lib/home/presence/members';
 import { adhocBuildRunning, latestAdhocBuild, startAdhocBuild } from '$lib/github/adhoc-builds';
 
 // Owner-only: /admin is never in the access catalogue, so the hook's default
@@ -39,8 +45,17 @@ async function adhocState(origin: string) {
     ),
     adhocBuildRunning().catch(() => false),
   ]);
+  const members = await listMembers().catch(() => []);
+  const people = [...new Set(members.map((m) => m.displayName.trim().split(/\s+/)[0]).filter(Boolean))].sort();
+  // For "pair a phone for someone": who in the household has an address.
+  const household = members
+    .filter((m) => m.email)
+    .map((m) => ({ name: m.displayName.trim(), email: m.email as string }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   return {
-    installUrl: env.AUTH_SECRET ? `${origin}/install/${installToken(env.AUTH_SECRET)}` : null,
+    appUrl: `${origin}/app`,
+    people,
+    household,
     readable: build.ok,
     build: build.ok && build.value ? { version: build.value.version, builtAt: build.value.builtAt, devices: build.value.devices } : null,
     running,
@@ -95,14 +110,45 @@ export const actions: Actions = {
     return fail(400, { error: 'Unknown pairing.' });
   },
 
-  /** A day's link for one phone: opened on it, it tells the site its UDID and starts a build. */
-  enrolLink: async ({ request, url }) => {
+  /** A week's link for one person, for any of their phones: it tells the site the phone's UDID and starts a build. */
+  joinLink: async ({ request, url }) => {
     const form = await request.formData();
-    const name = cleanDeviceName(form.get('name'));
-    if (!name) return fail(400, { adhocError: 'Give the phone a short plain name, like Rory’s iPhone.' });
-    const link = `${url.origin}/install/enroll/${mintEnrolTicket(name, env.AUTH_SECRET)}`;
+    const slug = joinSlug(form.get('name'));
+    if (!slug) return fail(400, { adhocError: 'Give their first name, like Rory.' });
+    const link = `${url.origin}/app/${mintJoinCode(slug, env.AUTH_SECRET)}`;
     const qr = await QRCode.toDataURL(link, { errorCorrectionLevel: 'M', margin: 4, scale: 5 });
-    return { enrol: { name, link, qr, expiresAt: new Date(Date.now() + ENROL_TTL_MS).toISOString() } };
+    return { join: { name: slug.charAt(0).toUpperCase() + slug.slice(1), link, qr, days: JOIN_DAYS } };
+  },
+
+  /**
+   * A pairing code the owner vouches for, for someone who cannot sign in on
+   * the phone: Apple will not let an under-13 account use Sign in with Apple
+   * for a new app, so the app's own "sign in as this phone" step can never
+   * work for a child. The code is minted FOR the named person and redeemed
+   * without a sign-in (`kind: 'pair'`), so it pairs whichever phone scans it
+   * as them — the owner shows it to that phone, and only that phone.
+   *
+   * They join the allow-list in Family Circle first, as a pre-registered
+   * member would. Someone already on it is left alone: any write to their
+   * allow-list row revokes every phone they hold (the security trigger).
+   */
+  vouchPair: async ({ request, url, locals }) => {
+    const form = await request.formData();
+    const name = String(form.get('name') ?? '').trim().slice(0, 60);
+    const email = String(form.get('email') ?? '').trim().toLowerCase();
+    if (!name) return fail(400, { vouchError: 'Whose phone is it?' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(400, { vouchError: 'Give their email address — their Apple ID’s will do.' });
+    if (isOwnerEmail(email)) return fail(400, { vouchError: 'That is your own address. Pair your phone above.' });
+
+    const [listed] = await db.select({ email: allowedUser.email }).from(allowedUser).where(eq(allowedUser.email, email)).limit(1);
+    if (!listed) {
+      const session = await locals.auth();
+      await addToAllowList({ email, note: name, addedBy: session?.user?.email ?? null });
+      await joinGroups(email, [PRE_REGISTERED_GROUP]);
+    }
+    const { code, expiresAt } = await createPairingCode(email);
+    const qr = await QRCode.toDataURL(scanPairPayload(url.origin, code), { errorCorrectionLevel: 'M', margin: 4, scale: 6 });
+    return { vouch: { name, email, code, qr, expiresAt: expiresAt.toISOString(), admitted: !listed } };
   },
 
   /** A fresh copy now — for a UDID read off a computer, or just the newest app. */

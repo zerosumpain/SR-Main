@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  appCookie,
+  buildIncludes,
   cleanDeviceName,
   cleanUdid,
-  ENROL_TTL_MS,
   enrolProfile,
   installManifest,
   installToken,
   isInstallToken,
   itmsLink,
-  mintEnrolTicket,
+  joinDeviceName,
+  joinSlug,
+  mintJoinCode,
   parseEnrolment,
-  verifyEnrolTicket,
+  readAppCookie,
+  verifyJoinCode,
 } from './adhoc-install';
 
 // The links and documents behind /install: a child's phone, which TestFlight
@@ -43,27 +47,51 @@ describe('the install link', () => {
   });
 });
 
-describe('an enrolment ticket', () => {
-  it('names its phone for a day, and no longer', () => {
+describe('a join link', () => {
+  const DAY = 86_400_000;
+
+  it('is short, names its person, and lasts a week', () => {
     const now = Date.UTC(2026, 9, 19, 12);
-    const ticket = mintEnrolTicket('Rory’s iPhone', SECRET, now);
-    expect(verifyEnrolTicket(ticket, SECRET, now + 1000)).toBe("Rory's iPhone");
-    expect(verifyEnrolTicket(ticket, SECRET, now + ENROL_TTL_MS + 1)).toBeNull();
-    expect(verifyEnrolTicket(ticket, 'other'.padEnd(40, 'z'), now)).toBeNull();
+    const code = mintJoinCode('Rory', SECRET, now);
+    expect(code).toMatch(/^rory-[A-Za-z0-9_-]{10}$/);
+    expect(verifyJoinCode(code, SECRET, now)).toBe('rory');
+    expect(verifyJoinCode(code, SECRET, now + 6 * DAY)).toBe('rory');
+    expect(verifyJoinCode(code, SECRET, now + 8 * DAY)).toBeNull();
+    expect(verifyJoinCode(code, 'other'.padEnd(40, 'z'), now)).toBeNull();
   });
 
-  it('cannot be re-signed with a different name', () => {
+  it('cannot be moved onto another name', () => {
     const now = Date.now();
-    const ticket = mintEnrolTicket('Rory', SECRET, now);
-    const forged = Buffer.from(JSON.stringify({ n: 'Mallory', x: now + 1000 })).toString('base64url');
-    expect(verifyEnrolTicket(`${forged}.${ticket.split('.')[1]}`, SECRET, now)).toBeNull();
+    const tag = mintJoinCode('Rory', SECRET, now).split('-')[1];
+    expect(verifyJoinCode(`fintan-${tag}`, SECRET, now)).toBeNull();
+    expect(verifyJoinCode('rory-0123456789', SECRET, now)).toBeNull();
   });
 
-  it('only takes names Apple will', () => {
+  it('takes a first name and makes it plain', () => {
+    expect(joinSlug('Siobhán Kelly')).toBe('siobhan');
+    expect(joinSlug('  Rory ')).toBe('rory');
+    expect(joinSlug('42')).toBeNull();
+    expect(() => mintJoinCode('', SECRET)).toThrow();
+    expect(joinDeviceName('rory', 'iPhone15,2')).toBe("Rory's iPhone");
+    expect(joinDeviceName('rory', 'iPad13,1')).toBe("Rory's iPad");
+  });
+
+  it('leaves a signed cookie that only it could have made', () => {
+    const cookie = appCookie('rory', SECRET);
+    expect(readAppCookie(cookie, SECRET)).toBe('rory');
+    expect(readAppCookie(cookie.replace('rory', 'fintan'), SECRET)).toBeNull();
+    expect(readAppCookie(cookie, 'other'.padEnd(40, 'z'))).toBeNull();
+  });
+
+  it('knows whether a copy includes one of their phones', () => {
+    expect(buildIncludes(["Porks Talking Tool", "Rory's iPhone"], 'rory')).toBe(true);
+    expect(buildIncludes(["Rory's iPhone"], 'ro')).toBe(false);
+  });
+
+  it('still only takes device names Apple will', () => {
     expect(cleanDeviceName('  Rory  iPhone ')).toBe('Rory iPhone');
     expect(cleanDeviceName('<script>')).toBeNull();
     expect(cleanDeviceName('x'.repeat(51))).toBeNull();
-    expect(() => mintEnrolTicket('', SECRET)).toThrow();
   });
 });
 

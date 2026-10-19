@@ -9,20 +9,23 @@ import { secretsMatch } from '$lib/server/secrets';
  * TestFlight needs an App Store account of 13 or over, so a younger child's
  * phone cannot use it. An ad-hoc build can go on any phone whose UDID is in the
  * developer account, and Safari installs it from an `itms-services:` link.
- * The UDID is the awkward part: no setting shows it. So the owner makes an
- * enrolment link for the phone; Safari on the phone downloads a one-time
- * "Profile Service" profile, and installing it makes iOS post the UDID back
- * here (`/install/enroll/<ticket>`). That starts a build which includes the
- * phone, and the phone is sent on to the install page (`/install/<token>`).
+ * The UDID is the awkward part: no setting shows it. So the owner makes a
+ * join link for a person (`/app/rory-<tag>`); on their phone it offers a
+ * one-time "Profile Service" profile, and installing that makes iOS post the
+ * UDID back (`/app/<code>/profile`). That starts a build which includes the
+ * phone, and Safari lands on `/app` — the one address to come back to, which
+ * the join link's cookie lets offer the install.
  *
- * Both links are HMACs over AUTH_SECRET, not rows: the enrolment ticket names
- * the phone and lasts a day; the install link has no expiry, because the same
- * page is where each new copy is fetched from. A leaked install link fetches
- * an app that installs on none but the listed phones.
+ * Everything is an HMAC over AUTH_SECRET, not a row: the join code names the
+ * person and lasts a week; the install link (`/install/<token>`, which the
+ * manifest and the app's own update prompt use) has no expiry, because it is
+ * where each new copy is fetched from. A leaked install link fetches an app
+ * that installs on none but the listed phones.
  */
 
-/** How long an enrolment link works. Long enough to hand it over by message. */
-export const ENROL_TTL_MS = 24 * 60 * 60 * 1000;
+/** How long a join link works: long enough to send to the family and for them to get round to it. */
+export const JOIN_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Bump to retire every install link handed out so far. */
 const INSTALL_LINK_VERSION = 1;
@@ -56,29 +59,79 @@ export function cleanDeviceName(name: unknown): string | null {
   return /^[\p{L}\p{N} '._-]+$/u.test(n) ? n : null;
 }
 
-/** A link for one phone, named as it will appear in the developer account. */
-export function mintEnrolTicket(name: string, secret: string | undefined, nowMs = Date.now()): string {
-  if (!secret) throw new Error('AUTH_SECRET is required for an enrolment link');
-  const n = cleanDeviceName(name);
-  if (!n) throw new Error('A phone needs a short plain name');
-  const payload = Buffer.from(JSON.stringify({ n, x: nowMs + ENROL_TTL_MS })).toString('base64url');
-  return `${payload}.${sign(secret, 'sr-adhoc-enrol', payload)}`;
+/**
+ * A first name as it appears in a join link: lower-case ASCII letters only, so
+ * the link is short and reads aloud ("strangeramblings.com/app/rory-…").
+ * "Siobhán" becomes `siobhan`.
+ */
+export function joinSlug(name: unknown): string | null {
+  if (typeof name !== 'string') return null;
+  const first = name.trim().split(/\s+/)[0] ?? '';
+  const slug = first.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z]/g, '');
+  return slug.length >= 1 && slug.length <= 20 ? slug : null;
 }
 
-/** The phone's name if the ticket is genuine and unexpired, otherwise null. */
-export function verifyEnrolTicket(ticket: unknown, secret: string | undefined, nowMs = Date.now()): string | null {
-  if (!secret || typeof ticket !== 'string' || ticket.length > 512) return null;
-  const match = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/.exec(ticket);
+/** "rory" → "Rory". */
+export function joinDisplayName(slug: string): string {
+  return slug.charAt(0).toUpperCase() + slug.slice(1);
+}
+
+/** What the developer account calls the phone: "Rory's iPhone", or "Rory's iPad". */
+export function joinDeviceName(slug: string, product: string | null): string {
+  return `${joinDisplayName(slug)}'s ${product?.startsWith('iPad') ? 'iPad' : 'iPhone'}`;
+}
+
+function joinTag(secret: string, slug: string, day: number): string {
+  return sign(secret, 'sr-app-join', `${slug}.${day}`).slice(0, 10);
+}
+
+/**
+ * The owner's say-so for one person, as a link they can be sent:
+ * `/app/<slug>-<tag>`. Stateless and short: the tag is an HMAC over the name
+ * and the day it was made, and it is checked against each of the last
+ * JOIN_DAYS days rather than carrying a date. Any phone of theirs may use it.
+ */
+export function mintJoinCode(name: string, secret: string | undefined, nowMs = Date.now()): string {
+  if (!secret) throw new Error('AUTH_SECRET is required for a join link');
+  const slug = joinSlug(name);
+  if (!slug) throw new Error('A join link needs a first name');
+  return `${slug}-${joinTag(secret, slug, Math.floor(nowMs / DAY_MS))}`;
+}
+
+/** The slug a join code names, if it is genuine and under JOIN_DAYS old. Otherwise null. */
+export function verifyJoinCode(code: unknown, secret: string | undefined, nowMs = Date.now()): string | null {
+  if (!secret || typeof code !== 'string') return null;
+  const match = /^([a-z]{1,20})-([A-Za-z0-9_-]{10})$/.exec(code);
   if (!match) return null;
-  if (!secretsMatch(sign(secret, 'sr-adhoc-enrol', match[1]), match[2])) return null;
-  let claims: { n?: unknown; x?: unknown };
-  try {
-    claims = JSON.parse(Buffer.from(match[1], 'base64url').toString('utf8'));
-  } catch {
-    return null;
+  const today = Math.floor(nowMs / DAY_MS);
+  for (let day = today; day > today - JOIN_DAYS; day--) {
+    if (secretsMatch(joinTag(secret, match[1], day), match[2])) return match[1];
   }
-  if (typeof claims.x !== 'number' || claims.x < nowMs || claims.x > nowMs + ENROL_TTL_MS) return null;
-  return cleanDeviceName(claims.n);
+  return null;
+}
+
+/**
+ * The cookie a join link leaves in that phone's Safari, so /app — the one
+ * address to come back to — knows whose phone it is and can offer the
+ * install. Signed: it is what reveals the install link.
+ */
+export const APP_COOKIE = 'sr_app';
+
+export function appCookie(slug: string, secret: string): string {
+  return `${slug}.${sign(secret, 'sr-app-cookie', slug).slice(0, 22)}`;
+}
+
+export function readAppCookie(value: unknown, secret: string | undefined): string | null {
+  if (!secret || typeof value !== 'string') return null;
+  const match = /^([a-z]{1,20})\.([A-Za-z0-9_-]{22})$/.exec(value);
+  if (!match) return null;
+  return secretsMatch(appCookie(match[1], secret), value) ? match[1] : null;
+}
+
+/** Whether a build's device list includes one of this person's phones. */
+export function buildIncludes(devices: readonly string[], slug: string): boolean {
+  const prefix = `${joinDisplayName(slug)}'s `.toLowerCase();
+  return devices.some((d) => d.toLowerCase().startsWith(prefix));
 }
 
 /**

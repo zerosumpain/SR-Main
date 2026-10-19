@@ -97,10 +97,13 @@ const PUBLIC_PATHS = [
   // check-public-routes.mjs is what stops a sibling becoming anonymous.
   '/cast',
   // The iPhone app for a phone that cannot use TestFlight (a child's):
-  // /install/<token> and /install/enroll/<ticket>. Safari on that phone has no
-  // session here, so the URL is the permission — HMACs over AUTH_SECRET, a
-  // wrong one 404s ($lib/server/adhoc-install). A PREFIX, so
+  // /app (the family's one address), /app/<code> (a join link) and
+  // /install/<token> (the manifest and the app). Safari on that phone has no
+  // session here, so the URL — or the cookie a join link left — is the
+  // permission: HMACs over AUTH_SECRET; a wrong one 404s, and a bare /app
+  // shows only "ask for your link" ($lib/server/adhoc-install). PREFIXES, so
   // check-public-routes.mjs is what stops a sibling becoming anonymous.
+  '/app',
   '/install',
   // The page that explains the landing page's pixel character. Public like the
   // landing page itself; only one route lives under this prefix.
