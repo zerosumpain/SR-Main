@@ -109,6 +109,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/pair': phone('app/api', 'Swap a one-time code for this phone’s key'),
   '/api/native/me': phone('app/api', 'Is this phone’s key still good, and what may it show'),
   '/api/native/session': phone('app/api', 'Sign this phone out'),
+  '/api/native/app-update': phone('app/api', 'Is a newer copy of the app ready, for a phone that installed it from /app'),
   '/api/native/register': phone('app/api', 'Withdraw a request to join'),
   '/api/native/register/apple': phone('app/api', 'Ask to join with Sign in with Apple'),
   '/api/native/account': phone('app/privacy', 'Delete my account and its data from the phone'),

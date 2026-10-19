@@ -65,9 +65,11 @@ describe('every native route gates itself', () => {
    * takes no credential (it is how one is got, like /pair — guarded by
    * Apple's signature and a per-address ceiling), and withdrawing resolves
    * the device itself because a registrant is no member for
-   * `withNativeAccess` to find.
+   * `withNativeAccess` to find. The update check (`app-update`) answers ANY
+   * paired phone, member or registrant — it already has the app — so it calls
+   * `identifyDevice` itself rather than owner-only `withDevice`.
    */
-  const SELF_GATED = ['native/pair/+server.ts', 'native/register/apple/+server.ts', 'native/review-demo/+server.ts', 'native/companion-policy/+server.ts', 'native/session/+server.ts'];
+  const SELF_GATED = ['native/pair/+server.ts', 'native/register/apple/+server.ts', 'native/review-demo/+server.ts', 'native/companion-policy/+server.ts', 'native/session/+server.ts', 'native/app-update/+server.ts'];
 
   it.each(handlers.filter((p) => !SELF_GATED.some((s) => p.endsWith(s))))(
     '%s resolves a device identity',
