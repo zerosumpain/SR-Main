@@ -41,6 +41,11 @@
         <p>Version {data.build.version}, built {when(data.build.builtAt)}.</p>
         <div class="w-row"><a class="w-btn" href={data.install} data-action="install">Install the app</a></div>
         <p>Tap <strong>Install</strong> when the phone asks; the app appears on your Home Screen. Already have it? This updates it, and keeps you signed in. The app also tells you when a new version is ready.</p>
+        <p data-note="developer-mode">
+          <strong>The first time</strong>, the app says <em>Developer Mode required</em>: iOS asks that of any app not from
+          the App Store or TestFlight. Open <strong>Settings → Privacy &amp; Security → Developer Mode</strong> (right at the
+          bottom), turn it on, let the phone restart, and confirm <strong>Turn On</strong>. Once is enough.
+        </p>
       {:else if data.running}
         <div class="w-card-hd"><h2>Being built</h2></div>
         <p>A copy for your phone is being built — about half an hour. Come back to this page then.</p>

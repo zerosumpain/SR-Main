@@ -44,7 +44,7 @@
         </li>
         <li>
           <span class="w-num">03</span>
-          <span>You come back here. The app takes about half an hour to build for your phone — then install it from <strong>strangeramblings.com/app</strong>.</span>
+          <span>You come back here. The app takes about half an hour to build for your phone — then install it from <strong>strangeramblings.com/app</strong>. The first time it opens, iOS asks you to turn on Developer Mode; that page says how.</span>
         </li>
       </ol>
       <div class="w-row"><a class="w-btn" href="/app/{data.code}/profile" data-action="profile">Get the profile</a></div>
