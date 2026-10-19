@@ -20,8 +20,11 @@
   let copied = $state(false);
   let err = $state<string | null>(null);
 
-  const origin = typeof location !== 'undefined' ? location.origin : 'https://strangeramblings.com';
-  const target = shareBase ?? `${origin}${href}`;
+  const LIVE = 'https://strangeramblings.com';
+  const origin = typeof location !== 'undefined' ? location.origin : LIVE;
+  // A project's own domain only knows links the live site minted, so a local
+  // preview (its own database) links to itself rather than to that domain.
+  const target = shareBase && origin === LIVE ? shareBase : `${origin}${href}`;
   const shareUrl = (token: string) => `${target}${target.includes('?') ? '&' : '?'}t=${token}`;
 
   async function load() {
@@ -53,7 +56,7 @@
       if (res.ok && data.token) {
         freshUrl = shareUrl(data.token);
         label = '';
-        copy(freshUrl);
+        void copy(freshUrl);
         await load();
       } else {
         err = data.error ?? 'Failed to create link';
@@ -76,12 +79,38 @@
     } catch { /* ignore */ }
   }
 
-  function copy(url: string) {
+  let copyFailed = $state(false);
+
+  /** Copy the link, saying "copied" only when it really was. The clipboard API
+   *  needs a secure page and a recent click, so a plain-http preview or the
+   *  copy straight after creating falls back to selecting the box and copying. */
+  async function copy(url: string) {
+    copyFailed = false;
+    let ok = false;
     try {
-      navigator.clipboard?.writeText(url);
-      copied = true;
-      setTimeout(() => (copied = false), 1600);
-    } catch { /* clipboard blocked */ }
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+        ok = true;
+      }
+    } catch { /* blocked, try the fallback */ }
+    if (!ok) ok = copyBySelection(url);
+    copied = ok;
+    copyFailed = !ok;
+    if (ok) setTimeout(() => (copied = false), 1600);
+  }
+
+  function copyBySelection(url: string): boolean {
+    const box = document.createElement('textarea');
+    box.value = url;
+    box.setAttribute('readonly', '');
+    box.style.position = 'fixed';
+    box.style.opacity = '0';
+    document.body.appendChild(box);
+    box.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    box.remove();
+    return ok;
   }
 
   const fmt = (d: string | Date | null) =>
@@ -124,6 +153,7 @@
           <input class="sh-url" readonly value={freshUrl} onclick={(e) => e.currentTarget.select()} />
           <button class="sh-copy" onclick={() => copy(freshUrl ?? '')}>{copied ? '✓ Copied' : 'Copy'}</button>
         </div>
+        {#if copyFailed}<span class="sh-err">Couldn't copy automatically — select the link above and copy it.</span>{/if}
         <span class="sh-once">Copy it now — the link itself is shown only once.</span>
       </div>
     {/if}
