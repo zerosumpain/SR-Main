@@ -102,7 +102,7 @@ export async function connect(input: ConnectInput): Promise<Connection | Connect
   if (input.channel === 'adhoc') {
     const slug = joinSlug(person.name);
     if (!slug) return { error: 'Their name needs a letter in it to make a link from.' };
-    const link = `${input.origin}/app/${mintJoinCode(slug, env.AUTH_SECRET)}`;
+    const link = `${input.origin}/app/${mintJoinCode(slug, env.AUTH_SECRET, email)}`;
     return {
       channel: 'adhoc',
       kind: 'join',

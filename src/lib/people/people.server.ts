@@ -6,7 +6,7 @@
 
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { allowedUser, nativeCredentials } from '$lib/db/schema';
+import { allowedUser, appDevice, nativeCredentials } from '$lib/db/schema';
 import { parsePermissions } from '$lib/access/catalogue';
 import { mergeDeviceRows, type DeviceRow } from '$lib/access/device-rows';
 import { listMembers, updateMember, type HouseholdMember } from '$lib/home/presence/members';
@@ -90,6 +90,8 @@ export async function removePerson(email: string): Promise<RemoveReport> {
     .set({ revokedAt: new Date() })
     .where(and(eq(nativeCredentials.ownerEmail, e), isNull(nativeCredentials.revokedAt)))
     .returning({ id: nativeCredentials.id });
+  // Their enrolled phones are forgotten here too; the next ad-hoc build drops them.
+  await db.update(appDevice).set({ removedAt: new Date() }).where(and(eq(appDevice.email, e), isNull(appDevice.removedAt)));
 
   let appPhones = 0;
   let appError: string | null = null;

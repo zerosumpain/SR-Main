@@ -96,6 +96,9 @@ describe('connect', () => {
     const link = (r as { link: string }).link;
     expect(link).toMatch(new RegExp(`^${ORIGIN}/app/katie-[A-Za-z0-9_-]{10}$`));
     expect((r as { qr: string }).qr).toBe(`qr:${link}`);
+    // Signed over HER address: a phone enrolled from it is recorded as hers.
+    const { verifyJoinCode } = await import('$lib/server/adhoc-install');
+    expect(verifyJoinCode(link.split('/app/')[1], 'connect-test-secret'.padEnd(40, 'x'), ['owner@example.test', adult.email])).toEqual({ slug: 'katie', email: adult.email });
     expect((await connect({ person: adult, channel: 'adhoc', identity: true, origin: ORIGIN, addedBy: null }) as { link: string }).link).toBe(link);
     expect(h.codes).toEqual([]);
   });

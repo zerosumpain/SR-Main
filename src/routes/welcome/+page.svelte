@@ -284,7 +284,7 @@
     </section>
 
     {#if data.isOwner}
-      <p class="w-note"><a href="/admin/access/devices">All paired devices →</a></p>
+      <p class="w-note"><a href="/admin/access/app">Every phone on the app →</a></p>
     {/if}
 
     {#if data.hasAppAccount}

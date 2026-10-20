@@ -66,6 +66,7 @@ import {
   jkaiAttachments,
   jkaiEvidenceResults,
   nativeCredentials,
+  appDevice,
   newsFavourites,
   newsReads,
   researchSessions,
@@ -111,6 +112,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   access_invite: { email: 'erase', used_by_email: 'scrub', created_by: 'scrub' },
   access_request: { email: 'erase', decided_by: 'scrub' },
   native_credentials: { owner_email: 'erase' },
+  // Phones enrolled for the ad-hoc copy: theirs, so gone with them.
+  app_device: { email: 'erase' },
   household_member: { email: 'scrub' },
   news_favourites: { owner_key: 'erase' },
   news_reads: { owner_key: 'erase' },
@@ -397,6 +400,7 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
  */
 export async function eraseAccountRecords(addresses: string[], executor: DbExecutor = db): Promise<number> {
   const creds = await executor.delete(nativeCredentials).where(inArray(nativeCredentials.ownerEmail, addresses)).returning({ id: nativeCredentials.id });
+  await executor.delete(appDevice).where(inArray(appDevice.email, addresses));
   await executor.delete(accessRequest).where(inArray(accessRequest.email, addresses));
   await executor.delete(accessInvite).where(inArray(accessInvite.email, addresses));
   await executor.delete(allowedUser).where(inArray(allowedUser.email, addresses));

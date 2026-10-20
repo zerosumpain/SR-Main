@@ -14,10 +14,11 @@ describe('phoneTelemetry', () => {
   });
 
   it('reads both headers', () => {
-    expect(phoneTelemetry(h({ 'X-SR-App': '0.1.136/136/68136470abcd', 'X-SR-Device': 'iPhone15,2/26.0.1/Rory%27s%20iPhone' }))).toEqual({
+    expect(phoneTelemetry(h({ 'X-SR-App': '0.1.136/136/68136470abcd/adhoc', 'X-SR-Device': 'iPhone15,2/26.0.1/Rory%27s%20iPhone' }))).toEqual({
       appVersion: '0.1.136',
       appBuild: 136,
       appCommit: '68136470abcd',
+      appChannel: 'adhoc',
       deviceModel: 'iPhone15,2',
       osVersion: '26.0.1',
       deviceName: "Rory's iPhone",
@@ -29,6 +30,7 @@ describe('phoneTelemetry', () => {
       appVersion: '0.1.136',
       appBuild: 136,
       appCommit: null,
+      appChannel: null,
       deviceModel: null,
       osVersion: null,
       deviceName: null,
@@ -39,6 +41,8 @@ describe('phoneTelemetry', () => {
     expect(phoneTelemetry(h({ 'X-SR-App': '1/99999999999/abcdef1' }))?.appBuild).toBeNull();
     expect(phoneTelemetry(h({ 'X-SR-App': '1/-3/abcdef1' }))?.appBuild).toBeNull();
     expect(phoneTelemetry(h({ 'X-SR-App': '1/3/notacommit' }))?.appCommit).toBeNull();
+    expect(phoneTelemetry(h({ 'X-SR-App': '1/3/abcdef1/beta' }))?.appChannel).toBeNull();
+    expect(phoneTelemetry(h({ 'X-SR-App': '1/3/abcdef1/testflight' }))?.appChannel).toBe('testflight');
     expect(phoneTelemetry(h({ 'X-SR-Device': 'not a model/26.1' }))?.deviceModel).toBeNull();
     expect(phoneTelemetry(h({ 'X-SR-Device': `iPhone15,2/26.1/${encodeURIComponent('x'.repeat(61))}` }))?.deviceName).toBeNull();
     expect(phoneTelemetry(h({ 'X-SR-Device': 'iPhone15,2/26.1/%E0%A4%A' }))?.deviceName).toBeNull();

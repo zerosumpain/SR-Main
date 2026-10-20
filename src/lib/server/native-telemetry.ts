@@ -1,8 +1,12 @@
 // What a phone says about itself, read from two request headers the app sends
 // on every call (SR-AppleApp `Access/PhoneIdentity.swift`):
 //
-//   X-SR-App:     <version>/<build>/<commit>     0.1.136/136/68136470
-//   X-SR-Device:  <model>/<os>[/<name>]          iPhone15,2/26.0.1/Rory%27s%20iPhone
+//   X-SR-App:     <version>/<build>/<commit>[/<channel>]   0.1.136/136/68136470/adhoc
+//   X-SR-Device:  <model>/<os>[/<name>]                    iPhone15,2/26.0.1/Rory%27s%20iPhone
+//
+// `channel` is how the copy got onto the phone: testflight, adhoc (a copy
+// built for its UDID) or xcode (a developer run); absent from a build older
+// than the field.
 //
 // Headers rather than body fields because the companion pilot checks every
 // JSON body with `exactKeys` — a new field 400s an upload from an old server,
@@ -14,10 +18,14 @@
 // device list prints, written by whoever holds a device token, so a value
 // that does not fit its shape is dropped rather than stored.
 
+export type AppChannel = 'testflight' | 'adhoc' | 'xcode';
+const CHANNELS: readonly string[] = ['testflight', 'adhoc', 'xcode'];
+
 export interface PhoneTelemetry {
   appVersion: string | null;
   appBuild: number | null;
   appCommit: string | null;
+  appChannel: AppChannel | null;
   osVersion: string | null;
   deviceModel: string | null;
   deviceName: string | null;
@@ -57,6 +65,7 @@ export function phoneTelemetry(headers: Headers): PhoneTelemetry | null {
     appVersion: field(app[0], VERSION),
     appBuild: /^[0-9]+$/.test(app[1] ?? '') && build > 0 && build < 2 ** 31 ? build : null,
     appCommit: field(app[2], COMMIT),
+    appChannel: CHANNELS.includes(app[3] ?? '') ? (app[3] as AppChannel) : null,
     deviceModel: field(device[0], MODEL),
     osVersion: field(device[1], VERSION),
     deviceName: decodedName(device.slice(2).join('/')),

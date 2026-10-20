@@ -6817,6 +6817,8 @@ export const nativeCredentials = pgTable('native_credentials', {
   appVersion: text('app_version'),
   appBuild: integer('app_build'),
   appCommit: text('app_commit'),
+  /** 'testflight' | 'adhoc' | 'xcode' — how the copy got onto the phone. */
+  appChannel: text('app_channel'),
   appSeenAt: timestamp('app_seen_at', { withTimezone: true }),
   osVersion: text('os_version'),
   deviceModel: text('device_model'),
@@ -6825,6 +6827,33 @@ export const nativeCredentials = pgTable('native_credentials', {
   uniqueIndex('native_credentials_token_hash_idx').on(t.tokenHash),
   index('native_credentials_owner_kind_idx').on(t.ownerEmail, t.kind),
 ]);
+
+/**
+ * A phone enrolled for the ad-hoc copy of the iPhone app: the UDID a join
+ * link's one-time profile posted back (`/app/<code>/profile`), and whose
+ * phone it is — the join link is minted for one person and signed over
+ * their address (`$lib/server/adhoc-install`). The developer account and the
+ * ad-hoc build know the phone only by `name`; this is the row that ties the
+ * name to a person. Removal is a stamp, not a delete: a UDID stays in the
+ * signing profile until the build after it is dropped.
+ */
+export const appDevice = pgTable(
+  'app_device',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    udid: text('udid').notNull(),
+    email: text('email').notNull(),
+    /** "Rory's iPhone" — what the developer account calls it (`joinDeviceName`). */
+    name: text('name').notNull(),
+    product: text('product'),
+    osVersion: text('os_version'),
+    enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
+    /** When a build including it was last started from here. */
+    lastBuildAt: timestamp('last_build_at', { withTimezone: true }),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('app_device_udid_idx').on(t.udid), index('app_device_email_idx').on(t.email)],
+);
 
 /**
  * One thing worth telling the owner about, and how it was told.

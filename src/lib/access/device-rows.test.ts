@@ -99,12 +99,12 @@ describe('mergeDeviceRows', () => {
   it('carries what each phone said it was running, from either lane, and nothing from a silent one', () => {
     const told = mergeDeviceRows(
       [{ ...site[0], appVersion: '0.1.136', appBuild: 136, appCommit: '68136470', appSeenAt: new Date('2026-09-25T08:00:00Z'), osVersion: '26.0.1', deviceModel: 'iPhone15,2', deviceName: "Rory's iPhone" }],
-      [{ ...pilot[0], app: { version: '0.1.134', build: 134, commit: null, since: '2026-09-24T08:00:00Z' }, os: '18.6', model: 'iPhone14,5', deviceName: null }],
+      [{ ...pilot[0], app: { version: '0.1.134', build: 134, commit: null, channel: 'adhoc', since: '2026-09-24T08:00:00Z' }, os: '18.6', model: 'iPhone14,5', deviceName: null }],
       names,
       NOW,
     );
     expect(told.find((r) => r.id === 's1')).toMatchObject({
-      app: { version: '0.1.136', build: 136, commit: '68136470', since: '2026-09-25T08:00:00.000Z' },
+      app: { version: '0.1.136', build: 136, commit: '68136470', channel: null, since: '2026-09-25T08:00:00.000Z' },
       os: '26.0.1',
       model: 'iPhone15,2',
       deviceName: "Rory's iPhone",
@@ -116,8 +116,8 @@ describe('mergeDeviceRows', () => {
 
 describe('labels', () => {
   it('describes the app by version and build, or nothing', () => {
-    expect(appLabel({ app: { version: '0.1.136', build: 136, commit: null, since: null } })).toBe('0.1.136 (136)');
-    expect(appLabel({ app: { version: null, build: 136, commit: null, since: null } })).toBe('build 136');
+    expect(appLabel({ app: { version: '0.1.136', build: 136, commit: null, channel: null, since: null } })).toBe('0.1.136 (136)');
+    expect(appLabel({ app: { version: null, build: 136, commit: null, channel: null, since: null } })).toBe('build 136');
     expect(appLabel({ app: null })).toBeNull();
   });
 

@@ -49,7 +49,7 @@ export interface PilotDevice {
   expires: string | null;
   lastUsed: string | null;
   /** What the phone last said it was running; null from a pilot or an app older than the headers. */
-  app: { version: string | null; build: number; commit: string | null; since: string | null } | null;
+  app: { version: string | null; build: number; commit: string | null; channel: string | null; since: string | null } | null;
   os: string | null;
   model: string | null;
   deviceName: string | null;
@@ -185,7 +185,7 @@ export async function listPilotDevices(fetchImpl: typeof fetch = fetch): Promise
       created: str(d.created),
       expires: str(d.expires),
       lastUsed: str(d.lastUsed),
-      app: build === null ? null : { version: str(app?.version), build, commit: str(app?.commit), since: str(app?.since) },
+      app: build === null ? null : { version: str(app?.version), build, commit: str(app?.commit), channel: str(app?.channel), since: str(app?.since) },
       os: str(d.os),
       model: str(d.model),
       deviceName: str(d.deviceName),

@@ -81,31 +81,54 @@ export function joinDeviceName(slug: string, product: string | null): string {
   return `${joinDisplayName(slug)}'s ${product?.startsWith('iPad') ? 'iPad' : 'iPhone'}`;
 }
 
-function joinTag(secret: string, slug: string, day: number): string {
-  return sign(secret, 'sr-app-join', `${slug}.${day}`).slice(0, 10);
+function joinTag(secret: string, slug: string, day: number, email: string): string {
+  return sign(secret, 'sr-app-join', `${slug}.${day}.${email}`).slice(0, 10);
+}
+
+export interface JoinLink {
+  slug: string;
+  /** Whose link it is — the address the lanes know them by. */
+  email: string;
 }
 
 /**
  * The owner's say-so for one person, as a link they can be sent:
- * `/app/<slug>-<tag>`. Stateless and short: the tag is an HMAC over the name
- * and the day it was made, and it is checked against each of the last
- * JOIN_DAYS days rather than carrying a date. Any phone of theirs may use it.
+ * `/app/<slug>-<tag>`. Stateless and short: the tag is an HMAC over the name,
+ * the day it was made and the PERSON's address, and it is checked against
+ * each of the last JOIN_DAYS days rather than carrying a date. Any phone of
+ * theirs may use it. The address is in the signature, not the link: a phone
+ * enrolled from it is recorded as theirs (`app_device`), not as a first
+ * name's (2026-10-20).
  */
-export function mintJoinCode(name: string, secret: string | undefined, nowMs = Date.now()): string {
+export function mintJoinCode(name: string, secret: string | undefined, email: string, nowMs = Date.now()): string {
   if (!secret) throw new Error('AUTH_SECRET is required for a join link');
   const slug = joinSlug(name);
   if (!slug) throw new Error('A join link needs a first name');
-  return `${slug}-${joinTag(secret, slug, Math.floor(nowMs / DAY_MS))}`;
+  const e = email.trim().toLowerCase();
+  if (!e) throw new Error('A join link needs its person');
+  return `${slug}-${joinTag(secret, slug, Math.floor(nowMs / DAY_MS), e)}`;
 }
 
-/** The slug a join code names, if it is genuine and under JOIN_DAYS old. Otherwise null. */
-export function verifyJoinCode(code: unknown, secret: string | undefined, nowMs = Date.now()): string | null {
+/**
+ * Whose join code this is, if it is genuine and under JOIN_DAYS old — tried
+ * against each of `candidates` (every address a link could have been minted
+ * for, `$lib/server/app-devices.joinCandidates`). Otherwise null.
+ */
+export function verifyJoinCode(
+  code: unknown,
+  secret: string | undefined,
+  candidates: readonly string[],
+  nowMs = Date.now(),
+): JoinLink | null {
   if (!secret || typeof code !== 'string') return null;
   const match = /^([a-z]{1,20})-([A-Za-z0-9_-]{10})$/.exec(code);
   if (!match) return null;
   const today = Math.floor(nowMs / DAY_MS);
   for (let day = today; day > today - JOIN_DAYS; day--) {
-    if (secretsMatch(joinTag(secret, match[1], day), match[2])) return match[1];
+    for (const candidate of candidates) {
+      const email = candidate.trim().toLowerCase();
+      if (email && secretsMatch(joinTag(secret, match[1], day, email), match[2])) return { slug: match[1], email };
+    }
   }
   return null;
 }

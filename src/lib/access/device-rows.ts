@@ -18,6 +18,8 @@ export interface AppOnPhone {
   version: string | null;
   build: number;
   commit: string | null;
+  /** 'testflight' | 'adhoc' | 'xcode', from a build that says; null from one older than the field. */
+  channel: string | null;
   /** When this build was first seen on the phone. */
   since: string | null;
 }
@@ -40,6 +42,8 @@ export interface DeviceRow {
   model: string | null;
   /** The name the phone gave itself — the one thing that tells two of a person's phones apart. */
   deviceName: string | null;
+  /** Registered for push (site lane); null where the lane does not say. */
+  push: boolean | null;
 }
 
 export interface SiteDeviceIn {
@@ -53,10 +57,12 @@ export interface SiteDeviceIn {
   appVersion?: string | null;
   appBuild?: number | null;
   appCommit?: string | null;
+  appChannel?: string | null;
   appSeenAt?: Date | string | null;
   osVersion?: string | null;
   deviceModel?: string | null;
   deviceName?: string | null;
+  hasPush?: boolean;
 }
 
 export interface PilotDeviceIn {
@@ -130,11 +136,12 @@ export function mergeDeviceRows(
         expires,
         status,
         app: d.appBuild
-          ? { version: d.appVersion ?? null, build: d.appBuild, commit: d.appCommit ?? null, since: iso(d.appSeenAt) }
+          ? { version: d.appVersion ?? null, build: d.appBuild, commit: d.appCommit ?? null, channel: d.appChannel ?? null, since: iso(d.appSeenAt) }
           : null,
         os: d.osVersion ?? null,
         model: d.deviceModel ?? null,
         deviceName: d.deviceName ?? null,
+        push: d.hasPush ?? null,
       };
     }),
     // The pilot lists live credentials only, so every row it sends is active
@@ -156,6 +163,7 @@ export function mergeDeviceRows(
         os: d.os ?? null,
         model: d.model ?? null,
         deviceName: d.deviceName ?? null,
+        push: null,
       };
     }),
   ];
