@@ -69,14 +69,14 @@ describe('/app/<code>/profile', () => {
     const res = await GET(event(code) as never);
     expect(res.headers.get('content-type')).toBe('application/x-apple-aspen-config');
     expect(await res.text()).toContain(`/app/${code}/profile`);
-    await expect(GET(event(mintJoinCode('Rory', SECRET, 'rory@example.test', Date.now() - 8 * 86_400_000)) as never)).rejects.toMatchObject({ status: 404 });
+    await expect(GET(event(mintJoinCode('Rory', SECRET, 'rory@example.test', 'identity', Date.now() - 8 * 86_400_000)) as never)).rejects.toMatchObject({ status: 404 });
   });
 
   it('builds once for the phone that posted, named for its person, then sends it to /app', async () => {
     const code = mintJoinCode('Rory', SECRET, 'rory@example.test');
     const first = await post(code);
     expect(first.status).toBe(301);
-    expect(first.location).toBe("https://strangeramblings.com/app?added=Rory's%20iPhone");
+    expect(first.location).toBe(`https://strangeramblings.com/app?added=Rory's%20iPhone&join=${code}`);
     expect(h.builds).toEqual([{ udid: UDID, name: "Rory's iPhone" }]);
     // Recorded as RORY's phone — the person the link was signed for, not a first name's.
     expect(h.enrolled).toEqual([{ udid: UDID, email: 'rory@example.test', name: "Rory's iPhone", product: 'iPhone15,2', osVersion: '23A341' }]);

@@ -92,13 +92,19 @@ describe('connect', () => {
 
   it('ad-hoc is a week’s join link for their first name, the same link all day', async () => {
     const r = await connect({ person: adult, channel: 'adhoc', identity: true, origin: ORIGIN, addedBy: null });
-    expect(r).toMatchObject({ channel: 'adhoc', kind: 'join', days: 7, admitted: false, reused: false });
+    expect(r).toMatchObject({ channel: 'adhoc', kind: 'join', mode: 'identity', days: 7, admitted: false, reused: false });
     const link = (r as { link: string }).link;
     expect(link).toMatch(new RegExp(`^${ORIGIN}/app/katie-[A-Za-z0-9_-]{10}$`));
     expect((r as { qr: string }).qr).toBe(`qr:${link}`);
     // Signed over HER address: a phone enrolled from it is recorded as hers.
     const { verifyJoinCode } = await import('$lib/server/adhoc-install');
-    expect(verifyJoinCode(link.split('/app/')[1], 'connect-test-secret'.padEnd(40, 'x'), ['owner@example.test', adult.email])).toEqual({ slug: 'katie', email: adult.email });
+    expect(verifyJoinCode(link.split('/app/')[1], 'connect-test-secret'.padEnd(40, 'x'), ['owner@example.test', adult.email])).toEqual({ slug: 'katie', email: adult.email, mode: 'identity' });
+    // Identity off: the same link, signed to pair on the owner's word.
+    const vouched = (await connect({ person: adult, channel: 'adhoc', identity: false, origin: ORIGIN, addedBy: null })) as { link: string; mode: string };
+    expect(vouched.mode).toBe('vouch');
+    expect(verifyJoinCode(vouched.link.split('/app/')[1], 'connect-test-secret'.padEnd(40, 'x'), [adult.email])?.mode).toBe('vouch');
+    // The owner's is always identity-checked.
+    expect((await connect({ person: owner, channel: 'adhoc', identity: false, origin: ORIGIN, addedBy: null }) as { mode: string }).mode).toBe('identity');
     expect((await connect({ person: adult, channel: 'adhoc', identity: true, origin: ORIGIN, addedBy: null }) as { link: string }).link).toBe(link);
     expect(h.codes).toEqual([]);
   });

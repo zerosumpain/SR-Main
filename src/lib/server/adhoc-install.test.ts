@@ -8,6 +8,7 @@ import {
   installManifest,
   installToken,
   isInstallToken,
+  isJoinCode,
   itmsLink,
   joinDeviceName,
   joinSlug,
@@ -55,17 +56,27 @@ describe('a join link', () => {
 
   it('is short, names its person, and lasts a week', () => {
     const now = Date.UTC(2026, 9, 19, 12);
-    const code = mintJoinCode('Rory', SECRET, RORY, now);
+    const code = mintJoinCode('Rory', SECRET, RORY, 'identity', now);
     expect(code).toMatch(/^rory-[A-Za-z0-9_-]{10}$/);
-    expect(verifyJoinCode(code, SECRET, KNOWN, now)).toEqual({ slug: 'rory', email: RORY });
-    expect(verifyJoinCode(code, SECRET, KNOWN, now + 6 * DAY)).toEqual({ slug: 'rory', email: RORY });
+    expect(verifyJoinCode(code, SECRET, KNOWN, now)).toEqual({ slug: 'rory', email: RORY, mode: 'identity' });
+    expect(verifyJoinCode(code, SECRET, KNOWN, now + 6 * DAY)).toEqual({ slug: 'rory', email: RORY, mode: 'identity' });
     expect(verifyJoinCode(code, SECRET, KNOWN, now + 8 * DAY)).toBeNull();
     expect(verifyJoinCode(code, 'other'.padEnd(40, 'z'), KNOWN, now)).toBeNull();
   });
 
+  it('carries, unseen, whether it pairs with a sign-in or on the owner’s word', () => {
+    const now = Date.now();
+    const vouched = mintJoinCode('Rory', SECRET, RORY, 'vouch', now);
+    expect(vouched).toMatch(/^rory-[A-Za-z0-9_-]{10}$/);
+    expect(vouched).not.toBe(mintJoinCode('Rory', SECRET, RORY, 'identity', now));
+    expect(verifyJoinCode(vouched, SECRET, KNOWN, now)).toEqual({ slug: 'rory', email: RORY, mode: 'vouch' });
+    expect(isJoinCode(vouched)).toBe(true);
+    expect(isJoinCode('C'.repeat(43))).toBe(false);
+  });
+
   it('cannot be moved onto another name, or another person', () => {
     const now = Date.now();
-    const tag = mintJoinCode('Rory', SECRET, RORY, now).split('-')[1];
+    const tag = mintJoinCode('Rory', SECRET, RORY, 'identity', now).split('-')[1];
     expect(verifyJoinCode(`fintan-${tag}`, SECRET, KNOWN, now)).toBeNull();
     expect(verifyJoinCode('rory-0123456789', SECRET, KNOWN, now)).toBeNull();
     // A person the site does not know cannot have been given a link.

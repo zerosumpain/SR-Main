@@ -255,16 +255,30 @@ export async function redeemPairingCode(
   // caller got the token; this one gets nothing.
   if (deleted.length === 0) return null;
 
+  return issueDevice(row.ownerEmail, label);
+}
+
+/**
+ * A device credential for this person, now. The step every redemption ends
+ * in; also what an install link's pairing does directly (`/api/native/pair`
+ * with `join`), there being no code row to redeem. The caller has decided
+ * the phone may be theirs — this does not ask.
+ */
+export async function issueDevice(
+  ownerEmail: string,
+  label: string | null,
+): Promise<{ token: string; ownerEmail: string; expiresAt: Date }> {
+  const owner = ownerEmail.trim().toLowerCase();
   const token = mintSecret();
   const expiresAt = new Date(Date.now() + DEVICE_TOKEN_TTL_MS);
   await db.insert(nativeCredentials).values({
     kind: 'device',
-    ownerEmail: row.ownerEmail,
+    ownerEmail: owner,
     tokenHash: sha256(token),
     label: label?.trim() ? label.trim().slice(0, 60) : 'iPhone',
     expiresAt,
   });
-  return { token, ownerEmail: row.ownerEmail, expiresAt };
+  return { token, ownerEmail: owner, expiresAt };
 }
 
 /**

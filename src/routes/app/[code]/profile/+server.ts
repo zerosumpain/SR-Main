@@ -76,5 +76,5 @@ export const POST: RequestHandler = async ({ params, request, url }) => {
 
   // iOS ends a Profile Service exchange on a redirect, and Safari follows it.
   // The join page already left the cookie that lets /app offer the install.
-  throw redirect(301, `${url.origin}/app?added=${encodeURIComponent(name)}`);
+  throw redirect(301, `${url.origin}/app?added=${encodeURIComponent(name)}&join=${encodeURIComponent(params.code)}`);
 };

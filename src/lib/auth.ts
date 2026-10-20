@@ -105,6 +105,10 @@ const PUBLIC_PATHS = [
   // check-public-routes.mjs is what stops a sibling becoming anonymous.
   '/app',
   '/install',
+  // Apple's app-site association: the file iOS fetches to let
+  // https://strangeramblings.com/app/… open the installed app. One route
+  // lives under this prefix, and it serves nothing until APPLE_TEAM_ID is set.
+  '/.well-known/apple-app-site-association',
   // The page that explains the landing page's pixel character. Public like the
   // landing page itself; only one route lives under this prefix.
   '/rambler',

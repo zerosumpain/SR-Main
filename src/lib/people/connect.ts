@@ -14,7 +14,10 @@
 //                owner's own code is always a scan code.
 //   adhoc      — a week's join link (`$lib/server/adhoc-install`): on their
 //                iPhone it reads the UDID, starts a copy built for it and
-//                installs it. For phones that cannot use TestFlight.
+//                installs it; opened in the installed app (scanned, or the
+//                "Open SR" button), the same link pairs the phone, with the
+//                identity rule above signed into it. For phones that cannot
+//                use TestFlight.
 //
 // Someone on the household map with no account yet is admitted on the way
 // (`admitToAllowList`, Family Circle) and their household row gets the
@@ -66,6 +69,8 @@ export type Connection =
   | {
       channel: 'adhoc';
       kind: 'join';
+      /** Opened in the installed app, the link pairs the phone — with a sign-in as them, or on the owner's word. */
+      mode: 'identity' | 'vouch';
       link: string;
       qr: string;
       days: number;
@@ -102,10 +107,12 @@ export async function connect(input: ConnectInput): Promise<Connection | Connect
   if (input.channel === 'adhoc') {
     const slug = joinSlug(person.name);
     if (!slug) return { error: 'Their name needs a letter in it to make a link from.' };
-    const link = `${input.origin}/app/${mintJoinCode(slug, env.AUTH_SECRET, email)}`;
+    const mode = person.kind === 'owner' || input.identity ? 'identity' : 'vouch';
+    const link = `${input.origin}/app/${mintJoinCode(slug, env.AUTH_SECRET, email, mode)}`;
     return {
       channel: 'adhoc',
       kind: 'join',
+      mode,
       link,
       qr: await qrDataUrl(link),
       days: JOIN_DAYS,

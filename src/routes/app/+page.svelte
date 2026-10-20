@@ -33,6 +33,13 @@
       </section>
     {/if}
 
+    {#if data.open}
+      <section class="w-card" data-card="open">
+        <div class="w-card-hd"><h2>Got the app?</h2></div>
+        <p>Open it from here and it connects this phone as you — the same link does both.</p>
+        <div class="w-row"><a class="w-btn" href={data.open} data-action="open">Open SR to connect</a></div>
+      </section>
+    {/if}
     <section class="w-card" data-card="install">
       {#if data.build === undefined}
         <p class="w-error" role="alert">The app cannot be fetched right now. Try again in a few minutes.</p>

@@ -4,6 +4,7 @@ import { qrDataUrl } from '$lib/server/qr';
 import type { PageServerLoad } from './$types';
 import { APP_COOKIE, appCookie, joinDisplayName, verifyJoinCode } from '$lib/server/adhoc-install';
 import { joinCandidates } from '$lib/server/app-devices';
+import { openInAppLink } from '$lib/server/app-links';
 
 /**
  * /app/<code> — the link the owner sends one person (`$lib/server/adhoc-install`).
@@ -37,5 +38,7 @@ export const load: PageServerLoad = async ({ params, url, request, cookies, setH
     device: safari ? ('safari' as const) : ios ? ('ios-other' as const) : ('elsewhere' as const),
     link: href,
     qr: ios ? null : await qrDataUrl(href),
+    // Already installed: the app opens and connects this phone as them.
+    open: openInAppLink(params.code, url.origin),
   };
 };

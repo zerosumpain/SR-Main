@@ -48,6 +48,7 @@
         </li>
       </ol>
       <div class="w-row"><a class="w-btn" href="/app/{data.code}/profile" data-action="profile">Get the profile</a></div>
+      <p>Already have the app? <a href={data.open} data-action="open">Open SR</a> and this link connects the phone as you instead.</p>
     </section>
   {/if}
 </WelcomeFrame>
