@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { isOwnerEmail } from '$lib/server/access';
-import { admitToAllowList, keepingPhones } from '$lib/server/admission';
+import { admitToAllowList } from '$lib/server/admission';
 import { listGroups, setUserAccess } from '$lib/server/grants';
 import { loadAccessPage } from '$lib/server/access-page';
 
@@ -73,10 +73,10 @@ export const PATCH: RequestHandler = async ({ request }) => {
   if (!Array.isArray(b.groups) || !Array.isArray(b.grants)) {
     return json({ error: 'groups and grants must be lists' }, { status: 400 });
   }
-  const access = { groups: b.groups, grants: b.grants };
-  // A change to what they hold revokes their phones (the security trigger);
-  // they are put back, and re-derive the new access on their next request.
-  const { result: saved } = await keepingPhones(email, () => setUserAccess(email, access));
+  // The security trigger decides what this does to their phones: more leaves
+  // them working (they re-derive the new access on their next request);
+  // anything taken away signs them out of both lanes.
+  const saved = await setUserAccess(email, { groups: b.groups, grants: b.grants });
   if (!saved) return json({ error: 'Not on the allow-list' }, { status: 404 });
   return json({ ok: true, saved, ...(await loadAccessPage()) });
 };
