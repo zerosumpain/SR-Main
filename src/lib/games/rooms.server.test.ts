@@ -424,7 +424,7 @@ describe('rooms', () => {
     type Seen = { players: { id: string; status: string; sawInvite: boolean }[]; phaseEndsAt: number | null };
 
     it('asks somebody in after the room opened, in every game', () => {
-      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory', 'boggle', 'categories', 'liars-dice', 'draw-guess'] as const) {
+      for (const game of ['tap-duel', 'wordle-race', 'anagram-blitz', 'maths-sprint', 'sequence-memory', 'boggle', 'categories', 'liars-dice', 'draw-guess', 'marble-race'] as const) {
         const { id } = createGame({ game, host: john, invite: [], difficulty: 'easy' });
         const room = inviteTo(id, 'p_john', [sam]) as unknown as Seen;
         expect(room.players.map((p) => [p.id, p.status])).toEqual([['p_john', 'joined'], ['p_sam', 'invited']]);

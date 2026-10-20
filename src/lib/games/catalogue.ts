@@ -15,6 +15,7 @@ import * as boggle from './boggle';
 import * as categories from './categories';
 import * as liarsDice from './liars-dice';
 import * as drawGuess from './draw-guess';
+import * as marbleRace from './marble-race';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -29,6 +30,7 @@ export const GAME_IDS = [
   'categories',
   'liars-dice',
   'draw-guess',
+  'marble-race',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -194,6 +196,15 @@ export const GAMES: Record<GameId, GameRules> = {
       undo: (room, playerId, _body, now) => drawGuess.undo(room as drawGuess.Room, playerId, now),
       clear: (room, playerId, _body, now) => drawGuess.clear(room as drawGuess.Room, playerId, now),
       guess: (room, playerId, body, now) => drawGuess.guess(room as drawGuess.Room, playerId, { text: body.text }, now),
+    },
+  },
+  'marble-race': {
+    ...marbleRace,
+    moves: {
+      // Raw on purpose: each checks its own fields (400 for a marble or order that cannot be).
+      course: (room, playerId, body, now) => marbleRace.chooseCourse(room as marbleRace.Room, playerId, body.course, now),
+      back: (room, playerId, body, now) => marbleRace.back(room as marbleRace.Room, playerId, body.marble, now),
+      finish: (room, playerId, body, now) => marbleRace.finish(room as marbleRace.Room, playerId, body.order, now),
     },
   },
 };
