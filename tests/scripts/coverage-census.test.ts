@@ -76,7 +76,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // Approving from the app (access-requests.integration, 2026-10-19) runs the
 // real allow-list trigger — installing the release's idempotent security SQL
 // when the database lacks it — and creates and removes its own rows.
-const INTEGRATION_FILES = 44;
+const INTEGRATION_FILES = 45;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

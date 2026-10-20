@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import type { RequestEvent } from '@sveltejs/kit';
 import { isOwnerEmail } from '$lib/server/access';
 import { isOwnerRequest } from '$lib/server/owner';
-import { admitToAllowList, keepingPhones } from '$lib/server/admission';
+import { admitToAllowList } from '$lib/server/admission';
 import { setUserAccess } from '$lib/server/grants';
 import { revokeDevice } from '$lib/server/native-auth';
 import { loadPerson, removePerson } from '$lib/people/people.server';
@@ -57,10 +57,10 @@ export const actions: Actions = {
       return fail(400, { error: 'Those permissions did not read.' });
     }
     if (!Array.isArray(grants)) return fail(400, { error: 'Those permissions did not read.' });
-    // The change revokes their phones (the security trigger); they are put
-    // back and re-derive the new access on their next request.
-    const email = person.email;
-    const { result: saved } = await keepingPhones(email, () => setUserAccess(email, { groups: role ? [role] : [], grants }));
+    // The security trigger decides what this does to their phones: more
+    // leaves them working (they re-derive the new access on their next
+    // request); anything taken away signs them out of both lanes.
+    const saved = await setUserAccess(person.email, { groups: role ? [role] : [], grants });
     if (!saved) return fail(404, { error: 'They are no longer on the allow-list.' });
     return { saved: 'access' };
   },

@@ -74,6 +74,31 @@ BEGIN
   DELETE FROM household_journey_viewer WHERE device_id IN
     (SELECT id FROM native_credentials WHERE owner_email=lower(person));
 END $$;
+-- A change that leaves every credential standing: the audit row alone, no
+-- version bump, no revocation.
+CREATE OR REPLACE FUNCTION note_person_access(person text, why text)
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO access_security_audit(email,reason) VALUES(lower(person),why);
+END $$;
+-- Did a row's access shrink? Groups and grants are jsonb arrays of names, so
+-- "nothing was taken away" is set containment of the old in the new. A legacy
+-- role ('member', 'household') implied a grant the row does not spell out, so
+-- its change is read as a narrowing — the safe reading, for the few old rows.
+CREATE OR REPLACE FUNCTION access_narrowed(old_groups jsonb, old_grants jsonb, old_role text,
+                                           new_groups jsonb, new_grants jsonb, new_role text)
+RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
+  SELECT NOT (COALESCE(new_groups,'[]'::jsonb) @> COALESCE(old_groups,'[]'::jsonb))
+      OR NOT (COALESCE(new_grants,'[]'::jsonb) @> COALESCE(old_grants,'[]'::jsonb))
+      OR (old_role IS DISTINCT FROM new_role AND COALESCE(old_role,'guest') <> 'guest')
+$$;
+-- Only a NARROWING revokes (2026-10-20). Every phone re-derives what it may do
+-- on each request from the row as it now stands, so widening it — approving
+-- a request, adding a role, pairing a child on the owner's word — must leave
+-- the phones that were working, working; revoking them on every write is
+-- what dropped an approved phone back to the start on 2026-10-19. Removal, a
+-- change of address and anything taken away still revoke, as before, and a
+-- remove/re-add is still two versions apart because the removal bumped it.
 CREATE OR REPLACE FUNCTION invalidate_user_access_trigger()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -81,24 +106,38 @@ BEGIN
     PERFORM invalidate_person_access(OLD.email,'account-removed');
     RETURN OLD;
   END IF;
-  IF TG_OP='UPDATE' THEN
-    IF (OLD.email,OLD.groups,OLD.grants,OLD.role) IS NOT DISTINCT FROM
-       (NEW.email,NEW.groups,NEW.grants,NEW.role) THEN RETURN NEW; END IF;
-    IF OLD.email<>NEW.email THEN PERFORM invalidate_person_access(OLD.email,'address-changed'); END IF;
+  IF TG_OP='INSERT' THEN
+    PERFORM note_person_access(NEW.email,'account-added');
+    RETURN NEW;
   END IF;
-  PERFORM invalidate_person_access(NEW.email,'access-changed');
+  IF (OLD.email,OLD.groups,OLD.grants,OLD.role) IS NOT DISTINCT FROM
+     (NEW.email,NEW.groups,NEW.grants,NEW.role) THEN RETURN NEW; END IF;
+  IF OLD.email<>NEW.email THEN
+    PERFORM invalidate_person_access(OLD.email,'address-changed');
+    PERFORM invalidate_person_access(NEW.email,'access-changed');
+    RETURN NEW;
+  END IF;
+  IF access_narrowed(OLD.groups,OLD.grants,OLD.role,NEW.groups,NEW.grants,NEW.role) THEN
+    PERFORM invalidate_person_access(NEW.email,'access-narrowed');
+  ELSE
+    PERFORM note_person_access(NEW.email,'access-widened');
+  END IF;
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS security_user_access ON allowed_user;
 CREATE TRIGGER security_user_access AFTER INSERT OR UPDATE OR DELETE ON allowed_user
   FOR EACH ROW EXECUTE FUNCTION invalidate_user_access_trigger();
+-- A group's grants, likewise: more for its members leaves their phones alone;
+-- less, or the group going, revokes every member's.
 CREATE OR REPLACE FUNCTION invalidate_group_access_trigger()
 RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE person record;
+DECLARE person record; widened boolean;
 BEGIN
   IF TG_OP='UPDATE' AND OLD.grants IS NOT DISTINCT FROM NEW.grants THEN RETURN NEW; END IF;
+  widened := TG_OP='UPDATE' AND (COALESCE(NEW.grants,'[]'::jsonb) @> COALESCE(OLD.grants,'[]'::jsonb));
   FOR person IN SELECT email FROM allowed_user WHERE groups ? OLD.id LOOP
-    PERFORM invalidate_person_access(person.email,'group-changed');
+    IF widened THEN PERFORM note_person_access(person.email,'group-widened');
+    ELSE PERFORM invalidate_person_access(person.email,'group-changed'); END IF;
   END LOOP;
   IF TG_OP='UPDATE' THEN RETURN NEW; END IF;
   RETURN OLD;

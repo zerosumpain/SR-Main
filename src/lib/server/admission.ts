@@ -10,12 +10,16 @@
 // or role: so approving someone, or widening what they hold, dropped their
 // app back to the start (2026-10-19, and again with vouching).
 //
-// Decision (2026-10-20): every write here is wrapped in `keepingPhones`. The
-// phones are read before the write and put back after it, whoever the person
-// is — on the list already or not. Nothing is granted by that: each phone
-// re-derives its access on every request (`withNativeAccess`), so a phone
-// carried across a change holds exactly what the row now says. Removal is the
-// one write that must still revoke, and `removePerson` does it itself.
+// Since 2026-10-20 the trigger revokes only a NARROWING (the migration's
+// `access_narrowed`): admitting someone, or giving them more, leaves their
+// phones alone on both lanes. `admitToAllowList` is still wrapped in
+// `keepingPhones` — admission is always a widening, and the wrap covers a
+// database the new trigger has not reached yet (a release installs the SQL
+// before the code switch; a local database may be behind). Nothing is granted
+// by it: each phone re-derives its access on every request
+// (`withNativeAccess`). The role editor is NOT wrapped: there the trigger
+// decides, so a narrowing signs the phone out of the site and the companion
+// pilot alike, instead of one lane carrying on while the other is cut.
 
 import { and, eq, gt, gte, isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
