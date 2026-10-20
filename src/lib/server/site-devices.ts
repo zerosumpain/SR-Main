@@ -11,6 +11,7 @@
 import { desc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { nativeCredentials } from '$lib/db/schema';
+import { DEVICE_TELEMETRY } from './native-auth';
 
 export interface SiteDevice {
   id: string;
@@ -21,6 +22,13 @@ export interface SiteDevice {
   revokedAt: Date | null;
   lastUsedAt: Date | null;
   useCount: number;
+  appVersion: string | null;
+  appBuild: number | null;
+  appCommit: string | null;
+  appSeenAt: Date | null;
+  osVersion: string | null;
+  deviceModel: string | null;
+  deviceName: string | null;
 }
 
 export async function listAllSiteDevices(): Promise<SiteDevice[]> {
@@ -34,6 +42,7 @@ export async function listAllSiteDevices(): Promise<SiteDevice[]> {
       revokedAt: nativeCredentials.revokedAt,
       lastUsedAt: nativeCredentials.lastUsedAt,
       useCount: nativeCredentials.useCount,
+      ...DEVICE_TELEMETRY,
     })
     .from(nativeCredentials)
     .where(eq(nativeCredentials.kind, 'device'))

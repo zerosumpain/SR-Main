@@ -81,9 +81,25 @@ describe('the companion accounts client', () => {
     });
     const r = await listPilotDevices(f.impl);
     expect(r.ok && r.value).toEqual([
-      { id: 'h1', email: 'jane@example.com', name: 'Jane', label: 'iPhone', created: '2026-09-01T00:00:00Z', expires: null, lastUsed: null },
+      { id: 'h1', email: 'jane@example.com', name: 'Jane', label: 'iPhone', created: '2026-09-01T00:00:00Z', expires: null, lastUsed: null, app: null, os: null, model: null, deviceName: null },
     ]);
     expect(f.calls[0].init.method).toBe('GET');
+  });
+
+  it('carries what a phone said it was running, and reads a build that is not a count as nothing said', async () => {
+    const f = fake(200, {
+      devices: [
+        { id: 'h1', email: 'jane@example.com', name: 'Jane', label: 'iPhone', created: null, expires: null, lastUsed: '2026-10-20T08:00:00Z',
+          app: { version: '0.1.137', build: 137, commit: '83c8fdb0', since: '2026-10-20T07:00:00Z' }, os: '26.0.1', model: 'iPhone15,2', deviceName: "Rory's iPhone" },
+        { id: 'h2', email: 'kid@example.com', name: 'Kid', label: null, created: null, expires: null, lastUsed: null,
+          app: { version: 'x', build: '137' }, os: 7, model: null },
+      ],
+    });
+    const r = await listPilotDevices(f.impl);
+    expect(r.ok && r.value).toEqual([
+      expect.objectContaining({ id: 'h1', lastUsed: '2026-10-20T08:00:00Z', app: { version: '0.1.137', build: 137, commit: '83c8fdb0', since: '2026-10-20T07:00:00Z' }, os: '26.0.1', model: 'iPhone15,2', deviceName: "Rory's iPhone" }),
+      expect.objectContaining({ id: 'h2', app: null, os: null, model: null, deviceName: null }),
+    ]);
   });
 
   it('revokes by id, url-encoded, and reads 204 as success', async () => {

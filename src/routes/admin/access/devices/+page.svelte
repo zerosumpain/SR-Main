@@ -5,7 +5,7 @@
   import type { PageData, ActionData } from './$types';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
-  import { LANE_LABEL } from '$lib/access/device-rows';
+  import { LANE_LABEL, appLabel, phoneLabel } from '$lib/access/device-rows';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -82,19 +82,21 @@
       <div class="table-wrap">
         <table class="devices">
           <colgroup>
-            <col style="width: 18%" />
             <col style="width: 16%" />
+            <col style="width: 14%" />
             <col style="width: 18%" />
-            <col style="width: 12%" />
-            <col style="width: 12%" />
-            <col style="width: 12%" />
-            <col style="width: 12%" />
+            <col style="width: 14%" />
+            <col style="width: 10%" />
+            <col style="width: 10%" />
+            <col style="width: 10%" />
+            <col style="width: 8%" />
           </colgroup>
           <thead>
             <tr>
               <th>Person</th>
               <th>Pairing</th>
               <th>Device</th>
+              <th>App</th>
               <th>Paired</th>
               <th>Last used</th>
               <th>Expires</th>
@@ -109,7 +111,18 @@
                   {#if row.person !== row.email}<span class="email">{row.email}</span>{/if}
                 </td>
                 <td data-label="Pairing"><span class="chip lane-{row.lane}">{LANE_LABEL[row.lane]}</span></td>
-                <td data-label="Device">{row.label ?? 'iPhone'}</td>
+                <td data-label="Device">
+                  {phoneLabel(row)}
+                  {#if row.os}<span class="email">iOS {row.os}</span>{/if}
+                </td>
+                <td data-label="App" class="mono">
+                  {#if row.app}
+                    {appLabel(row)}
+                    {#if row.app.since}<span class="email">since {when(row.app.since)}</span>{/if}
+                  {:else}
+                    <span class="muted">—</span>
+                  {/if}
+                </td>
                 <td data-label="Paired" class="mono">{when(row.paired)}</td>
                 <td data-label="Last used" class="mono">{ago(row.lastUsed)}</td>
                 <td data-label="Expires" class="mono">

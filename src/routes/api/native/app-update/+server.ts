@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
-import { identifyDevice } from '$lib/server/native-auth';
+import { identifyDevice, touchDevice } from '$lib/server/native-auth';
 import { installToken, itmsLink } from '$lib/server/adhoc-install';
 import { latestAdhocBuild } from '$lib/github/adhoc-builds';
 
@@ -16,7 +16,11 @@ import { latestAdhocBuild } from '$lib/github/adhoc-builds';
  * answer to either.
  */
 export const GET: RequestHandler = async ({ request, url }) => {
-  if (!(await identifyDevice(request))) return json({ error: 'Unauthorized' }, { status: 401 });
+  const identity = await identifyDevice(request);
+  if (!identity) return json({ error: 'Unauthorized' }, { status: 401 });
+  // The hourly check is the one call every copy makes, so it is where a
+  // phone's build and last-seen are most worth recording (native-telemetry).
+  void touchDevice(identity.id, request).catch(() => {});
   if (!env.AUTH_SECRET) return json({ build: null });
   const build = await latestAdhocBuild().catch((err) => {
     console.error('[app-update] could not read the ad-hoc build:', err);

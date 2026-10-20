@@ -3,10 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 // The update check an /app copy of the iPhone app makes: answered only for a
 // paired phone, because the answer carries the install link.
 
-const h = vi.hoisted(() => ({ paired: true, build: true as boolean }));
+const h = vi.hoisted(() => ({ paired: true, build: true as boolean, touched: [] as [string, string | null][] }));
 
 vi.mock('$env/dynamic/private', () => ({ env: { AUTH_SECRET: 'app-update-secret'.padEnd(40, 'x') } }));
-vi.mock('$lib/server/native-auth', () => ({ identifyDevice: async () => (h.paired ? { ownerEmail: 'rory@example.test' } : null) }));
+vi.mock('$lib/server/native-auth', () => ({
+  identifyDevice: async () => (h.paired ? { id: 'cred-1', ownerEmail: 'rory@example.test' } : null),
+  touchDevice: async (id: string, request?: Request) => {
+    h.touched.push([id, request?.headers.get('x-sr-app') ?? null]);
+  },
+}));
 vi.mock('$lib/github/adhoc-builds', () => ({
   latestAdhocBuild: async () =>
     h.build ? { version: '0.1.121', build: '121', commit: 'abc', builtAt: '2026-10-20T08:00:00Z', devices: [], bundleId: 'b', ipaAssetId: 1, ipaBytes: 1 } : null,
@@ -14,8 +19,8 @@ vi.mock('$lib/github/adhoc-builds', () => ({
 
 const { GET } = await import('./+server');
 
-const call = async () => {
-  const res = await GET({ request: new Request('https://strangeramblings.com/api/native/app-update'), url: new URL('https://strangeramblings.com/api/native/app-update') } as never);
+const call = async (headers: Record<string, string> = {}) => {
+  const res = await GET({ request: new Request('https://strangeramblings.com/api/native/app-update', { headers }), url: new URL('https://strangeramblings.com/api/native/app-update') } as never);
   return { status: res.status, body: await res.json() };
 };
 
@@ -36,5 +41,11 @@ describe('/api/native/app-update', () => {
   it('answers no build, not an error, when there is none', async () => {
     h.build = false;
     expect((await call()).body).toEqual({ build: null });
+  });
+
+  it('records the phone that asked, headers and all — this is the call every copy makes', async () => {
+    h.touched.length = 0;
+    await call({ 'X-SR-App': '0.1.136/136/68136470' });
+    expect(h.touched).toEqual([['cred-1', '0.1.136/136/68136470']]);
   });
 });

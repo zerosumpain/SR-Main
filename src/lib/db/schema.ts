@@ -6806,6 +6806,21 @@ export const nativeCredentials = pgTable('native_credentials', {
    */
   laStartToken: text('la_start_token'),
   laStartTokenAt: timestamp('la_start_token_at', { withTimezone: true }),
+  /**
+   * What the phone last said it was running, from the X-SR-App / X-SR-Device
+   * headers the app sends on every request (`$lib/server/native-telemetry`),
+   * stamped by `touchDevice`. Null from a build older than the headers. On
+   * the credential rather than a table of its own because a credential IS a
+   * phone here: revoking it takes the record with it. `appSeenAt` is when
+   * this build was first seen — "running 136 since Tuesday".
+   */
+  appVersion: text('app_version'),
+  appBuild: integer('app_build'),
+  appCommit: text('app_commit'),
+  appSeenAt: timestamp('app_seen_at', { withTimezone: true }),
+  osVersion: text('os_version'),
+  deviceModel: text('device_model'),
+  deviceName: text('device_name'),
 }, (t) => [
   uniqueIndex('native_credentials_token_hash_idx').on(t.tokenHash),
   index('native_credentials_owner_kind_idx').on(t.ownerEmail, t.kind),

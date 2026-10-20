@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LANE_LABEL, mergeDeviceRows } from './device-rows';
+import { LANE_LABEL, appLabel, mergeDeviceRows, phoneLabel } from './device-rows';
 
 const NOW = new Date('2026-09-26T12:00:00Z');
 
@@ -94,5 +94,37 @@ describe('mergeDeviceRows', () => {
   it('labels the lanes by what they open', () => {
     expect(LANE_LABEL.companion).toBe('Health & location');
     expect(LANE_LABEL.site).toBe('Chat & news');
+  });
+
+  it('carries what each phone said it was running, from either lane, and nothing from a silent one', () => {
+    const told = mergeDeviceRows(
+      [{ ...site[0], appVersion: '0.1.136', appBuild: 136, appCommit: '68136470', appSeenAt: new Date('2026-09-25T08:00:00Z'), osVersion: '26.0.1', deviceModel: 'iPhone15,2', deviceName: "Rory's iPhone" }],
+      [{ ...pilot[0], app: { version: '0.1.134', build: 134, commit: null, since: '2026-09-24T08:00:00Z' }, os: '18.6', model: 'iPhone14,5', deviceName: null }],
+      names,
+      NOW,
+    );
+    expect(told.find((r) => r.id === 's1')).toMatchObject({
+      app: { version: '0.1.136', build: 136, commit: '68136470', since: '2026-09-25T08:00:00.000Z' },
+      os: '26.0.1',
+      model: 'iPhone15,2',
+      deviceName: "Rory's iPhone",
+    });
+    expect(told.find((r) => r.id === 'h1')).toMatchObject({ app: { build: 134 }, os: '18.6', model: 'iPhone14,5', deviceName: null });
+    expect(rows.find((r) => r.id === 's1')).toMatchObject({ app: null, os: null, model: null, deviceName: null });
+  });
+});
+
+describe('labels', () => {
+  it('describes the app by version and build, or nothing', () => {
+    expect(appLabel({ app: { version: '0.1.136', build: 136, commit: null, since: null } })).toBe('0.1.136 (136)');
+    expect(appLabel({ app: { version: null, build: 136, commit: null, since: null } })).toBe('build 136');
+    expect(appLabel({ app: null })).toBeNull();
+  });
+
+  it('calls a phone by its own name first, with the model beside it', () => {
+    expect(phoneLabel({ label: 'SR iPhone', model: null, deviceName: null })).toBe('SR iPhone');
+    expect(phoneLabel({ label: null, model: null, deviceName: null })).toBe('iPhone');
+    expect(phoneLabel({ label: 'iPhone', model: 'iPhone15,2', deviceName: null })).toBe('iPhone · iPhone15,2');
+    expect(phoneLabel({ label: 'iPhone', model: 'iPhone15,2', deviceName: "Rory's iPhone" })).toBe("Rory's iPhone · iPhone15,2");
   });
 });

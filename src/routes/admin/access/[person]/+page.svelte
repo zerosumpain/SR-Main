@@ -10,7 +10,7 @@
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import AccessEditor from '$lib/components/admin/AccessEditor.svelte';
-  import { LANE_LABEL } from '$lib/access/device-rows';
+  import { LANE_LABEL, appLabel, phoneLabel } from '$lib/access/device-rows';
   import type { Permission } from '$lib/access/catalogue';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -265,13 +265,14 @@
       {#if person.devices.length}
         <table class="devices">
           <thead>
-            <tr><th>Pairing</th><th>Phone</th><th>Paired</th><th>Last used</th><th></th></tr>
+            <tr><th>Pairing</th><th>Phone</th><th>App</th><th>Paired</th><th>Last used</th><th></th></tr>
           </thead>
           <tbody>
             {#each person.devices as d (d.key)}
               <tr>
                 <td>{LANE_LABEL[d.lane]}</td>
-                <td>{d.label ?? 'iPhone'}</td>
+                <td>{phoneLabel(d)}{#if d.os} · iOS {d.os}{/if}</td>
+                <td>{appLabel(d) ?? '—'}</td>
                 <td>{when(d.paired)}</td>
                 <td>{when(d.lastUsed)}</td>
                 <td>
