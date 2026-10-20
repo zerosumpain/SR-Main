@@ -108,11 +108,11 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/access',
     match: (p) => p.startsWith('/admin/access'),
     items: [
-      { label: 'People', href: '/admin/access', match: (p) => p === '/admin/access' || /^\/admin\/access\/(?!devices|security)[^/]+$/.test(p) },
-      // Every person's paired phones, both lanes — the companion pilot's
-      // (health & location) and the site's (chat & news). Moved back from the
-      // companion dashboard (2026-09-26) so the dashboard can be retired.
-      { label: 'Devices', href: '/admin/access/devices' },
+      { label: 'People', href: '/admin/access', match: (p) => p === '/admin/access' || /^\/admin\/access\/(?!app|devices|security)[^/]+$/.test(p) },
+      // The fleet: every phone the household runs the app on, both lanes,
+      // what each is running, and the build they install from. Was
+      // /admin/access/devices (which redirects) until 2026-10-20.
+      { label: 'App', href: '/admin/access/app', match: (p) => p.startsWith('/admin/access/app') || p.startsWith('/admin/access/devices') },
       { label: 'Security', href: '/admin/access/security' },
     ],
   },

@@ -8,6 +8,7 @@ import {
   installManifest,
   installToken,
   isInstallToken,
+  isJoinCode,
   itmsLink,
   joinDeviceName,
   joinSlug,
@@ -50,28 +51,45 @@ describe('the install link', () => {
 describe('a join link', () => {
   const DAY = 86_400_000;
 
+  const RORY = 'rory@example.test';
+  const KNOWN = ['fintan@example.test', 'Rory@Example.test', 'owner@example.test'];
+
   it('is short, names its person, and lasts a week', () => {
     const now = Date.UTC(2026, 9, 19, 12);
-    const code = mintJoinCode('Rory', SECRET, now);
+    const code = mintJoinCode('Rory', SECRET, RORY, 'identity', now);
     expect(code).toMatch(/^rory-[A-Za-z0-9_-]{10}$/);
-    expect(verifyJoinCode(code, SECRET, now)).toBe('rory');
-    expect(verifyJoinCode(code, SECRET, now + 6 * DAY)).toBe('rory');
-    expect(verifyJoinCode(code, SECRET, now + 8 * DAY)).toBeNull();
-    expect(verifyJoinCode(code, 'other'.padEnd(40, 'z'), now)).toBeNull();
+    expect(verifyJoinCode(code, SECRET, KNOWN, now)).toEqual({ slug: 'rory', email: RORY, mode: 'identity' });
+    expect(verifyJoinCode(code, SECRET, KNOWN, now + 6 * DAY)).toEqual({ slug: 'rory', email: RORY, mode: 'identity' });
+    expect(verifyJoinCode(code, SECRET, KNOWN, now + 8 * DAY)).toBeNull();
+    expect(verifyJoinCode(code, 'other'.padEnd(40, 'z'), KNOWN, now)).toBeNull();
   });
 
-  it('cannot be moved onto another name', () => {
+  it('carries, unseen, whether it pairs with a sign-in or on the owner’s word', () => {
     const now = Date.now();
-    const tag = mintJoinCode('Rory', SECRET, now).split('-')[1];
-    expect(verifyJoinCode(`fintan-${tag}`, SECRET, now)).toBeNull();
-    expect(verifyJoinCode('rory-0123456789', SECRET, now)).toBeNull();
+    const vouched = mintJoinCode('Rory', SECRET, RORY, 'vouch', now);
+    expect(vouched).toMatch(/^rory-[A-Za-z0-9_-]{10}$/);
+    expect(vouched).not.toBe(mintJoinCode('Rory', SECRET, RORY, 'identity', now));
+    expect(verifyJoinCode(vouched, SECRET, KNOWN, now)).toEqual({ slug: 'rory', email: RORY, mode: 'vouch' });
+    expect(isJoinCode(vouched)).toBe(true);
+    expect(isJoinCode('C'.repeat(43))).toBe(false);
+  });
+
+  it('cannot be moved onto another name, or another person', () => {
+    const now = Date.now();
+    const tag = mintJoinCode('Rory', SECRET, RORY, 'identity', now).split('-')[1];
+    expect(verifyJoinCode(`fintan-${tag}`, SECRET, KNOWN, now)).toBeNull();
+    expect(verifyJoinCode('rory-0123456789', SECRET, KNOWN, now)).toBeNull();
+    // A person the site does not know cannot have been given a link.
+    expect(verifyJoinCode(`rory-${tag}`, SECRET, ['fintan@example.test'], now)).toBeNull();
+    expect(verifyJoinCode(`rory-${tag}`, SECRET, [], now)).toBeNull();
   });
 
   it('takes a first name and makes it plain', () => {
     expect(joinSlug('Siobhán Kelly')).toBe('siobhan');
     expect(joinSlug('  Rory ')).toBe('rory');
     expect(joinSlug('42')).toBeNull();
-    expect(() => mintJoinCode('', SECRET)).toThrow();
+    expect(() => mintJoinCode('', SECRET, RORY)).toThrow();
+    expect(() => mintJoinCode('Rory', SECRET, ' ')).toThrow();
     expect(joinDeviceName('rory', 'iPhone15,2')).toBe("Rory's iPhone");
     expect(joinDeviceName('rory', 'iPad13,1')).toBe("Rory's iPad");
   });

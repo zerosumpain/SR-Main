@@ -21,7 +21,7 @@ function member(subject: string, email: string | null, source: HouseholdMember['
 }
 
 function device(email: string, lane: 'site' | 'companion', status: DeviceRow['status'] = 'active'): DeviceRow {
-  return { key: `${lane}:${email}:${status}`, lane, id: `${lane}-${email}`, email, person: email, label: null, paired: null, lastUsed: null, expires: null, status };
+  return { key: `${lane}:${email}:${status}`, lane, id: `${lane}-${email}`, email, person: email, label: null, paired: null, lastUsed: null, expires: null, status, app: null, os: null, model: null, deviceName: null, push: null };
 }
 
 const at = new Date('2026-09-20T10:00:00Z');

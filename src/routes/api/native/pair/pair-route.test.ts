@@ -14,6 +14,8 @@ const h = vi.hoisted(() => ({
   held: null as null | { id: string; ownerEmail: string; label: string | null; expiresAt: Date },
   redeemed: [] as string[],
   revoked: [] as string[],
+  issued: [] as string[],
+  notes: [] as string[],
 }));
 
 vi.mock('$env/dynamic/private', () => ({ env: { AUTH_ALLOWED_EMAILS: 'john@example.test', AUTH_SECRET: 'route-test-secret'.padEnd(40, 'x') } }));
@@ -29,6 +31,17 @@ vi.mock('$lib/server/native-auth', () => ({
     h.revoked.push(id);
     return true;
   },
+  issueDevice: async (email: string) => {
+    h.issued.push(email);
+    return { token: 'j'.repeat(43), ownerEmail: email, expiresAt: new Date(Date.now() + 1000) };
+  },
+}));
+vi.mock('$lib/server/app-devices', () => ({ joinCandidates: async () => ['john@example.test', 'fintan@example.test'] }));
+vi.mock('$lib/server/notify', () => ({
+  notifyOwner: async (n: { title: string }) => {
+    h.notes.push(n.title);
+    return { raised: true };
+  },
 }));
 vi.mock('$lib/server/grants', () => ({
   loadMember: async (e: string) => (e === SON ? { principalId: 'p_son', grants: new Set(['family:circle']) } : null),
@@ -41,6 +54,7 @@ vi.mock('$lib/home/presence/members', () => ({
 
 const { POST } = await import('./+server');
 const { mintPairIdentity, pairCodeHash } = await import('$lib/server/pair-identity');
+const { mintJoinCode } = await import('$lib/server/adhoc-install');
 
 const CODE = 'C'.repeat(43);
 
@@ -56,6 +70,8 @@ beforeEach(() => {
   h.held = null;
   h.redeemed = [];
   h.revoked = [];
+  h.issued = [];
+  h.notes = [];
 });
 
 describe('a scanned code', () => {
@@ -123,5 +139,49 @@ describe('a code handed straight to its phone', () => {
     const res = await call({ code: CODE }, true);
     expect(res.status).toBe(401);
     expect((await res.json()).error).toBe('That pairing code is not valid.');
+  });
+});
+
+describe('an install link, opened in the installed app', () => {
+  it('pairs the phone as its person once signed in as them, and tells the owner', async () => {
+    const join = mintJoinCode('Fintan', SECRET, SON, 'identity');
+    expect((await call({ join })).status).toBe(428);
+    const identity = mintPairIdentity(SON, pairCodeHash(join), SECRET);
+    const res = await call({ join, identity });
+    expect(res.status).toBe(200);
+    expect((await res.json()).token).toBeTruthy();
+    expect(h.issued).toEqual([SON]);
+    expect(h.redeemed).toEqual([]);
+    expect(h.notes).toEqual(['Fintan’s phone connected from the install link']);
+  });
+
+  it('refuses a phone signed in as someone else', async () => {
+    const join = mintJoinCode('Fintan', SECRET, SON, 'identity');
+    const identity = mintPairIdentity(OWNER, pairCodeHash(join), SECRET);
+    expect((await call({ join, identity })).status).toBe(409);
+    expect(h.issued).toEqual([]);
+  });
+
+  it('pairs on the owner’s word alone when the link was made that way — for a child who cannot sign in', async () => {
+    const join = mintJoinCode('Fintan', SECRET, SON, 'vouch');
+    const res = await call({ join });
+    expect(res.status).toBe(200);
+    expect(h.issued).toEqual([SON]);
+    expect(h.notes).toEqual(['Fintan’s phone connected from the install link']);
+    // Any of their phones, for its week: the link is not spent.
+    expect((await call({ join })).status).toBe(200);
+  });
+
+  it('is nobody’s once expired, forged, or made for someone the site does not know', async () => {
+    expect((await call({ join: mintJoinCode('Fintan', SECRET, SON, 'vouch', Date.now() - 8 * 86_400_000) })).status).toBe(401);
+    expect((await call({ join: 'fintan-0123456789' })).status).toBe(401);
+    expect((await call({ join: mintJoinCode('Fintan', SECRET, 'stranger@example.test', 'vouch') })).status).toBe(401);
+    expect(h.issued).toEqual([]);
+  });
+
+  it('refuses a person who may not hold a device, even vouched', async () => {
+    expect((await call({ join: mintJoinCode('Who', SECRET, 'john@example.test', 'vouch') })).status).toBe(200); // the owner
+    const res = await call({ join: mintJoinCode('Fintan', SECRET, 'fintan@example.test', 'vouch') });
+    expect(res.status).toBe(200);
   });
 });

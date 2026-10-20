@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { nativeCredentials, householdJourneyViewer } from '$lib/db/schema';
+import { phoneTelemetry } from './native-telemetry';
 
 /**
  * The credential a paired iPhone presents, and the one-time code that mints it.
@@ -192,7 +193,7 @@ export async function peekPairingCode(code: string): Promise<{ kind: 'pair' | 's
  * (its row deleted by `redeemPairingCode`) must stop being re-sent the moment
  * it is spent, not when its clock runs out.
  */
-export async function isPairingCodeLive(code: string): Promise<boolean> {
+export async function isPairingCodeLive(code: string, kind: 'pair' | 'scan' = 'pair'): Promise<boolean> {
   const presented = code.trim();
   if (!presented) return false;
   const [row] = await db
@@ -201,7 +202,7 @@ export async function isPairingCodeLive(code: string): Promise<boolean> {
     .where(
       and(
         eq(nativeCredentials.tokenHash, sha256(presented)),
-        eq(nativeCredentials.kind, 'pair'),
+        eq(nativeCredentials.kind, kind),
         gt(nativeCredentials.expiresAt, new Date()),
         isNull(nativeCredentials.revokedAt),
       ),
@@ -254,16 +255,30 @@ export async function redeemPairingCode(
   // caller got the token; this one gets nothing.
   if (deleted.length === 0) return null;
 
+  return issueDevice(row.ownerEmail, label);
+}
+
+/**
+ * A device credential for this person, now. The step every redemption ends
+ * in; also what an install link's pairing does directly (`/api/native/pair`
+ * with `join`), there being no code row to redeem. The caller has decided
+ * the phone may be theirs — this does not ask.
+ */
+export async function issueDevice(
+  ownerEmail: string,
+  label: string | null,
+): Promise<{ token: string; ownerEmail: string; expiresAt: Date }> {
+  const owner = ownerEmail.trim().toLowerCase();
   const token = mintSecret();
   const expiresAt = new Date(Date.now() + DEVICE_TOKEN_TTL_MS);
   await db.insert(nativeCredentials).values({
     kind: 'device',
-    ownerEmail: row.ownerEmail,
+    ownerEmail: owner,
     tokenHash: sha256(token),
     label: label?.trim() ? label.trim().slice(0, 60) : 'iPhone',
     expiresAt,
   });
-  return { token, ownerEmail: row.ownerEmail, expiresAt };
+  return { token, ownerEmail: owner, expiresAt };
 }
 
 /**
@@ -307,12 +322,45 @@ export async function identifyDevice(request: Request): Promise<NativeIdentity |
  * device list, and a write failing here must never turn a good request into a
  * bad one.
  */
-export async function touchDevice(id: string): Promise<void> {
+export async function touchDevice(id: string, request?: Request): Promise<void> {
+  const t = request ? phoneTelemetry(request.headers) : null;
+  const now = new Date();
   await db
     .update(nativeCredentials)
-    .set({ lastUsedAt: new Date(), useCount: sql`${nativeCredentials.useCount} + 1` })
+    .set({
+      lastUsedAt: now,
+      useCount: sql`${nativeCredentials.useCount} + 1`,
+      // What the phone said about itself, when it said anything: an app from
+      // before the headers leaves the last description standing. `appSeenAt`
+      // moves only with the build, so it reads as "running 136 since".
+      ...(t && {
+        appSeenAt:
+          t.appBuild === null
+            ? undefined
+            : sql`case when ${nativeCredentials.appBuild} is distinct from ${t.appBuild} then ${now} else ${nativeCredentials.appSeenAt} end`,
+        appVersion: t.appVersion ?? undefined,
+        appBuild: t.appBuild ?? undefined,
+        appCommit: t.appCommit ?? undefined,
+        appChannel: t.appChannel ?? undefined,
+        osVersion: t.osVersion ?? undefined,
+        deviceModel: t.deviceModel ?? undefined,
+        deviceName: t.deviceName ?? undefined,
+      }),
+    })
     .where(eq(nativeCredentials.id, id));
 }
+
+/** The telemetry columns a device list shows, selected the same way everywhere. */
+export const DEVICE_TELEMETRY = {
+  appVersion: nativeCredentials.appVersion,
+  appBuild: nativeCredentials.appBuild,
+  appCommit: nativeCredentials.appCommit,
+  appChannel: nativeCredentials.appChannel,
+  appSeenAt: nativeCredentials.appSeenAt,
+  osVersion: nativeCredentials.osVersion,
+  deviceModel: nativeCredentials.deviceModel,
+  deviceName: nativeCredentials.deviceName,
+} as const;
 
 /** Revoke one device. Returns whether a row of this owner's actually moved. */
 export async function revokeDevice(ownerEmail: string, id: string): Promise<boolean> {
@@ -342,6 +390,7 @@ export async function listDevices(ownerEmail: string) {
       revokedAt: nativeCredentials.revokedAt,
       lastUsedAt: nativeCredentials.lastUsedAt,
       useCount: nativeCredentials.useCount,
+      ...DEVICE_TELEMETRY,
     })
     .from(nativeCredentials)
     .where(

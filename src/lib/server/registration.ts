@@ -11,13 +11,12 @@
 // Spec: docs/superpowers/specs/2026-09-28-people-and-app-registration.md (P2)
 
 import { createHash, createPublicKey, randomBytes, verify as verifySignature, type webcrypto } from 'node:crypto';
-import { and, desc, eq, gt, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/db';
-import { accessRequest, accessSecurityAudit, allowedUser, householdMember, nativeCredentials } from '$lib/db/schema';
+import { accessRequest, allowedUser, householdMember, nativeCredentials } from '$lib/db/schema';
 import { isEmailAllowedToSignIn, isOwnerEmail } from './access';
-import { addToAllowList } from './allow-list';
-import { joinGroups } from './invites';
+import { admitToAllowList } from './admission';
 import { notifyOwner } from './notify';
 
 /**
@@ -164,11 +163,7 @@ export async function admitPreRegistered(email: string, via: 'google' | 'apple')
   if (!member) return false;
   const name = member.displayName?.trim() || nameFromEmail(e);
 
-  const phones = await registrantPhones(e);
-  const since = await databaseNow();
-  await addToAllowList({ email: e, note: name, addedBy: null });
-  await joinGroups(e, [PRE_REGISTERED_GROUP]);
-  await carryRegistrantPhones(e, phones, since);
+  await admitToAllowList({ email: e, name, groups: [PRE_REGISTERED_GROUP], addedBy: null });
 
   const decided = { status: 'approved', decidedAt: new Date(), decidedBy: null };
   const waiting = await db
@@ -208,71 +203,7 @@ export async function withdrawRegistration(email: string): Promise<void> {
     .where(and(eq(nativeCredentials.ownerEmail, e), isNull(nativeCredentials.revokedAt)));
 }
 
-export type RegistrantPhone = Pick<
-  typeof nativeCredentials.$inferSelect,
-  'id' | 'apnsToken' | 'apnsTokenAt' | 'laStartToken' | 'laStartTokenAt'
->;
-
-/**
- * The live phone credentials of someone NOT on the allow-list — so,
- * registrant credentials — read just before approval adds them to it. None
- * for the owner or anyone already on the list: their phones were minted with
- * the access they have, and a change to it revokes them as designed.
- */
-export async function registrantPhones(email: string): Promise<RegistrantPhone[]> {
-  const e = email.trim().toLowerCase();
-  if (isOwnerEmail(e)) return [];
-  const [listed] = await db.select({ email: allowedUser.email }).from(allowedUser).where(eq(allowedUser.email, e)).limit(1);
-  if (listed) return [];
-  return db
-    .select({
-      id: nativeCredentials.id,
-      apnsToken: nativeCredentials.apnsToken,
-      apnsTokenAt: nativeCredentials.apnsTokenAt,
-      laStartToken: nativeCredentials.laStartToken,
-      laStartTokenAt: nativeCredentials.laStartTokenAt,
-    })
-    .from(nativeCredentials)
-    .where(
-      and(
-        eq(nativeCredentials.ownerEmail, e),
-        eq(nativeCredentials.kind, 'device'),
-        isNull(nativeCredentials.revokedAt),
-        gt(nativeCredentials.expiresAt, new Date()),
-      ),
-    );
-}
-
-/** The database's clock, which is the one the trigger stamps `revoked_at` with. */
-export async function databaseNow(): Promise<Date> {
-  const r = await db.execute<{ now: Date | string }>(sql`SELECT now() AS now`);
-  return new Date(r.rows[0].now);
-}
-
-/**
- * Approval's promise: "nothing on the phone changes". Put back exactly the
- * phones `registrantPhones` saw, and only where the revocation is the one this
- * approval caused (at or after `since`) — a phone revoked before it, or by
- * anything else, stays revoked. Recorded in the security audit beside the
- * trigger's own line. Every one of these re-derives its access per request
- * (`withNativeAccess`), so carrying it over grants nothing the allow-list
- * row does not.
- */
-export async function carryRegistrantPhones(email: string, phones: readonly RegistrantPhone[], since: Date): Promise<number> {
-  let carried = 0;
-  for (const p of phones) {
-    const rows = await db
-      .update(nativeCredentials)
-      .set({ revokedAt: null, apnsToken: p.apnsToken, apnsTokenAt: p.apnsTokenAt, laStartToken: p.laStartToken, laStartTokenAt: p.laStartTokenAt })
-      .where(and(eq(nativeCredentials.id, p.id), gte(nativeCredentials.revokedAt, since)))
-      .returning({ id: nativeCredentials.id });
-    carried += rows.length;
-  }
-  if (carried) {
-    await db.insert(accessSecurityAudit).values({ email: email.trim().toLowerCase(), reason: 'registrant-phone-carried' });
-  }
-  return carried;
-}
+// Phones across an allow-list write: `$lib/server/admission` (`keepingPhones`).
 
 // ── Sign in with Apple ──────────────────────────────────────────────────────
 

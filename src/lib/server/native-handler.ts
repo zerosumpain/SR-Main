@@ -71,7 +71,7 @@ export function withDevice<E extends RequestEvent, T>(handler: NativeHandler<E, 
     actAsDeviceOwner(event.locals, identity);
     // Telemetry for the device list. Deliberately not awaited into the response
     // path: a failed stamp must not turn a good read into a 500.
-    void touchDevice(identity.id).catch(() => {});
+    void touchDevice(identity.id, event.request).catch(() => {});
 
     try {
       const result = await handler(event, identity);
@@ -158,7 +158,7 @@ export function withNativeAccess<E extends RequestEvent, T>(
     }
 
     if (role === 'owner') actAsDeviceOwner(event.locals, identity);
-    void touchDevice(identity.id).catch(() => {});
+    void touchDevice(identity.id, event.request).catch(() => {});
 
     try {
       const result = await handler(event, identity, role);

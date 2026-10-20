@@ -1,12 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { db } from '$lib/db';
-import { allowedUser } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
 import { isOwnerEmail } from '$lib/server/access';
-import { addToAllowList } from '$lib/server/allow-list';
-import { disableMemberGmail } from '$lib/server/members';
-import { setUserAccess } from '$lib/server/grants';
+import { admitToAllowList, keepingPhones } from '$lib/server/admission';
+import { listGroups, setUserAccess } from '$lib/server/grants';
 import { loadAccessPage } from '$lib/server/access-page';
 
 // Owner-only (enforced in hooks.server.ts for /api/admin/access; on the homeserv
@@ -32,7 +28,11 @@ function emailOf(b: Record<string, unknown>): string {
 /** GET — Super Admin (read-only, from env), the people on the allow-list with their access, and the groups. */
 export const GET: RequestHandler = async () => json(await loadAccessPage());
 
-/** POST { email, note? } — add a person to the login allow-list. They start with no access. */
+/**
+ * POST { email, note?, groups? } — add a person to the login allow-list, in
+ * these roles (none = no access yet). One write (`admitToAllowList`), so the
+ * security trigger fires once and their phones are put back once.
+ */
 export const POST: RequestHandler = async ({ request, locals }) => {
   const b = await body(request);
   if (!b) return json({ error: 'Invalid JSON' }, { status: 400 });
@@ -46,13 +46,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   if (isOwnerEmail(email)) {
     return json({ error: 'That address is already the Super Admin' }, { status: 400 });
   }
+  const known = new Set((await listGroups()).map((g) => g.id));
+  const groups = (Array.isArray(b.groups) ? b.groups : []).filter((g): g is string => typeof g === 'string' && known.has(g));
 
   const session = await locals.auth();
   const addedBy = (session?.user?.email || '').toLowerCase() || null;
 
   // Upserts a supplied note; never wipes an existing person's note, addedBy or
   // createdAt when they are re-added with the field blank.
-  await addToAllowList({ email, note, addedBy });
+  await admitToAllowList({ email, name: note, groups, addedBy });
 
   return json({ ok: true, ...(await loadAccessPage()) });
 };
@@ -71,20 +73,15 @@ export const PATCH: RequestHandler = async ({ request }) => {
   if (!Array.isArray(b.groups) || !Array.isArray(b.grants)) {
     return json({ error: 'groups and grants must be lists' }, { status: 400 });
   }
-  const saved = await setUserAccess(email, { groups: b.groups, grants: b.grants });
+  const access = { groups: b.groups, grants: b.grants };
+  // A change to what they hold revokes their phones (the security trigger);
+  // they are put back, and re-derive the new access on their next request.
+  const { result: saved } = await keepingPhones(email, () => setUserAccess(email, access));
   if (!saved) return json({ error: 'Not on the allow-list' }, { status: 404 });
   return json({ ok: true, saved, ...(await loadAccessPage()) });
 };
 
-/** DELETE { email } — revoke a person's sign-in access. */
-export const DELETE: RequestHandler = async ({ request }) => {
-  const b = await body(request);
-  if (!b) return json({ error: 'Invalid JSON' }, { status: 400 });
-  const email = emailOf(b);
-  if (!email) return json({ error: 'Missing email' }, { status: 400 });
-
-  // Losing sign-in loses the mail sweep too; their material stays.
-  await disableMemberGmail(email);
-  await db.delete(allowedUser).where(eq(allowedUser.email, email));
-  return json({ ok: true, ...(await loadAccessPage()) });
-};
+// Taking someone's account away is `removePerson` ($lib/people), from their
+// page: it revokes both lanes' phones and unlinks the household row. The
+// DELETE this route once had dropped only the allow-list row and left the
+// companion phones working; it is gone (2026-10-20).

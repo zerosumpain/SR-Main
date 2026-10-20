@@ -198,7 +198,7 @@ describe('every native route gates itself', () => {
   });
 
   it('keeps credential MINTING off the bypassed tree entirely', () => {
-    // Minting lives at /api/admin/native-devices, behind the ordinary owner
+    // Minting lives under /admin/access (a person's page), behind the ordinary owner
     // gate. An endpoint that issues credentials must not sit behind the
     // exemption those credentials open.
     expect(handlers.some((p) => p.includes('devices'))).toBe(false);

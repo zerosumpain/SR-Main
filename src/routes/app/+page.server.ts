@@ -1,6 +1,8 @@
 import { env } from '$env/dynamic/private';
 import type { PageServerLoad } from './$types';
-import { APP_COOKIE, buildIncludes, installToken, itmsLink, joinDisplayName, readAppCookie } from '$lib/server/adhoc-install';
+import { APP_COOKIE, buildIncludes, installToken, isJoinCode, itmsLink, joinDisplayName, readAppCookie, verifyJoinCode } from '$lib/server/adhoc-install';
+import { joinCandidates } from '$lib/server/app-devices';
+import { openInAppLink } from '$lib/server/app-links';
 import { adhocBuildRunning, latestAdhocBuild } from '$lib/github/adhoc-builds';
 
 /**
@@ -22,7 +24,12 @@ export const load: PageServerLoad = async ({ cookies, url, setHeaders }) => {
     adhocBuildRunning().catch(() => false),
   ]);
   const manifest = `${url.origin}/install/${installToken(env.AUTH_SECRET)}/manifest.plist`;
+  // Once the app is on the phone, the same link connects it (the join code
+  // the profile step sent back here); only a genuine, live one is offered.
+  const join = url.searchParams.get('join');
+  const open = isJoinCode(join) && verifyJoinCode(join, env.AUTH_SECRET, await joinCandidates().catch(() => [])) ? openInAppLink(join, url.origin) : null;
   return {
+    open,
     known: true as const,
     name: joinDisplayName(slug),
     added: url.searchParams.get('added'),
