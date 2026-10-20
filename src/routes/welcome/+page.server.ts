@@ -1,12 +1,12 @@
 import { fail } from '@sveltejs/kit';
-import QRCode from 'qrcode';
 import { env } from '$env/dynamic/private';
 import type { Actions, PageServerLoad, RequestEvent } from './$types';
 import { getOwnerEmails } from '$lib/server/access';
 import { submitAccessRequest } from '$lib/server/access-requests';
 import { INVITE_COOKIE } from '$lib/server/invites';
-import { createScanCode } from '$lib/server/native-auth';
+import { pairingCode } from '$lib/server/pair-codes';
 import { openPairPayload, scanPairPayload } from '$lib/server/pair-payload';
+import { qrDataUrl } from '$lib/server/qr';
 import { isOwnerRequest } from '$lib/server/owner';
 import { clientIp, hashIp } from '$lib/server/public-request-rate-limit';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
@@ -65,7 +65,7 @@ export const load: PageServerLoad = async (event) => {
   const here = await whoIsHere(event);
   if (!here) {
     // Nobody's code: the phone that scans it signs in as its own person.
-    const appQr = await QRCode.toDataURL(openPairPayload(event.url.origin), { errorCorrectionLevel: 'M', margin: 2, scale: 7 });
+    const appQr = await qrDataUrl(openPairPayload(event.url.origin));
     return { signedIn: false as const, testflight: testflightUrl() !== null, appQr };
   }
 
@@ -132,8 +132,10 @@ export const actions: Actions = {
     const here = await whoIsHere(event);
     if (!here) return fail(401, { pairError: 'Sign in first.' });
     if (!here.canPair) return fail(403, { pairError: 'Ask John to add you to Family Circle first.' });
-    const { code, expiresAt } = await createScanCode(here.email);
-    const qr = await QRCode.toDataURL(scanPairPayload(event.url.origin, code), { errorCorrectionLevel: 'M', margin: 2, scale: 7 });
+    // The same held code the owner's page would show for them (`pair-codes`):
+    // reloading this page does not retire a code a phone is reading.
+    const { code, expiresAt } = await pairingCode(here.email, 'scan');
+    const qr = await qrDataUrl(scanPairPayload(event.url.origin, code));
     return { pair: { qr, code, expiresAt: expiresAt.getTime() } };
   },
 

@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
-import QRCode from 'qrcode';
 import { env } from '$env/dynamic/private';
+import { qrDataUrl } from '$lib/server/qr';
 import type { PageServerLoad } from './$types';
 import { APP_COOKIE, appCookie, joinDisplayName, verifyJoinCode } from '$lib/server/adhoc-install';
 
@@ -34,6 +34,6 @@ export const load: PageServerLoad = async ({ params, url, request, cookies, setH
     code: params.code,
     device: safari ? ('safari' as const) : ios ? ('ios-other' as const) : ('elsewhere' as const),
     link,
-    qr: ios ? null : await QRCode.toDataURL(link, { errorCorrectionLevel: 'M', margin: 4, scale: 6 }),
+    qr: ios ? null : await qrDataUrl(link),
   };
 };

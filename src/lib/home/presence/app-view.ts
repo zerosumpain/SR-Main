@@ -24,9 +24,10 @@
 // Every view also says what the app may OFFER the person beyond the family
 // (`access`: chat, news, … — `$lib/server/app-access`), and, for a member who
 // has just asked, carries the one-time code that pairs their phone with the
-// site (`sitePair`). That is the only way a member's code is ever minted: the
-// owner mints his at /api/admin/native-devices, behind his session; a member
-// has no page that could, so the push answers the app's request instead.
+// site (`sitePair`). The owner mints codes from a person's page under
+// /admin/access, behind his session; a member has no page that could, so the
+// push answers the app's request instead — with the same held code
+// (`$lib/server/pair-codes`), so neither cancels the other's.
 
 import { and, asc, gte, inArray, isNotNull, lt } from 'drizzle-orm';
 import { db } from '$lib/db';
@@ -41,7 +42,7 @@ import { nowStatus, nowSub, type NowStatus } from './now';
 import { ABSURD_SPEED_KMH, LOCAL_TZ, MAX_USABLE_ACCURACY_M, activeLabels, errMsg, localDayStart } from './types';
 import { peopleViewerForEmail, scopeHousehold, type PeopleViewer, type ScopedPresence } from './viewer';
 import { appAccessForEmail, type AppAccess } from '$lib/server/app-access';
-import { createPairingCode, isPairingCodeLive } from '$lib/server/native-auth';
+import { forgetPairingCode, pairingCode, resetPairingCodes, REUSE_FLOOR_MS } from '$lib/server/pair-codes';
 
 /** Two fixes further apart than this are not joined: the line would be a guess. */
 export const TRAIL_GAP_S = 600;
@@ -393,21 +394,12 @@ function withWatch(view: AppPeopleView, watch: WatchedPlace[] | undefined): AppP
 
 /** How recent `sitePairWanted` must be for the push to answer it. */
 export const SITE_PAIR_WANTED_MS = 15 * 60_000;
-/** A cached code with less life than this left is replaced, not re-sent. */
-export const SITE_PAIR_REUSE_FLOOR_MS = 2 * 60_000;
+/** A held code with less life than this left is replaced, not re-sent (`pair-codes`). */
+export const SITE_PAIR_REUSE_FLOOR_MS = REUSE_FLOOR_MS;
 
-/**
- * Codes minted by this process, by email, so a push every 30 s re-sends the
- * code the phone may be halfway through redeeming instead of rotating it —
- * `createPairingCode` deletes the email's previous code, so a fresh one each
- * cycle would kill the one on the screen. Lost on restart, which costs one
- * rotation, and the phone simply picks up the new code on its next read.
- */
-const sitePairCodes = new Map<string, { code: string; expiresAt: Date }>();
-
-/** For tests: forget every cached code. */
+/** For tests: forget every held code (`$lib/server/pair-codes`). */
 export function resetSitePairCache(): void {
-  sitePairCodes.clear();
+  resetPairingCodes();
 }
 
 /**
@@ -450,19 +442,14 @@ async function sitePairFor(
   now: Date,
 ): Promise<SitePair | null> {
   if (access.owner || !(access.chat || access.news || access.games) || !sitePairWanted(wanted, now)) {
-    sitePairCodes.delete(email);
+    forgetPairingCode(email, 'pair');
     return null;
   }
   try {
-    let held = sitePairCodes.get(email);
-    const reusable =
-      !!held &&
-      held.expiresAt.getTime() - now.getTime() > SITE_PAIR_REUSE_FLOOR_MS &&
-      (await isPairingCodeLive(held.code));
-    if (!held || !reusable) {
-      held = await createPairingCode(email);
-      sitePairCodes.set(email, held);
-    }
+    // The held code (`pair-codes`): a push every 30 s re-sends the code the
+    // phone may be halfway through redeeming, and the one the owner just put
+    // on his screen for them, instead of rotating it.
+    const held = await pairingCode(email, 'pair', { now });
     return { server: siteOrigin(), code: held.code, expiresAt: held.expiresAt.toISOString() };
   } catch (err) {
     console.error('[app-view] could not mint a site pairing code:', errMsg(err));

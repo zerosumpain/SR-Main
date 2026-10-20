@@ -78,11 +78,11 @@ describe.skipIf(!process.env.DATABASE_URL)('approving a request from the app', (
     expect(await state(id)).toEqual({ revokedAt: null, apnsToken: 'apns-asked' });
   });
 
-  it('carries only a registrant’s phones: someone already on the list still loses theirs', async () => {
+  it('keeps the phones of someone already on the list too: widening what they hold is not a reason to sign them out (2026-10-20)', async () => {
     await db.insert(allowedUser).values({ email: KNOWN, note: 'access-requests.integration' });
     const id = await phone(KNOWN, 'known');
     await decideRequest(await request(KNOWN), 'approve', { groups: ['family-circle'], decidedBy: 'owner@example.test' });
-    expect((await state(id))?.revokedAt).not.toBeNull();
+    expect(await state(id)).toEqual({ revokedAt: null, apnsToken: 'apns-known' });
   });
 
   it('leaves removal alone: taking the account away still revokes the phone', async () => {

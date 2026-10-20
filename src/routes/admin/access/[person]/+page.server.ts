@@ -3,10 +3,11 @@ import type { Actions, PageServerLoad } from './$types';
 import type { RequestEvent } from '@sveltejs/kit';
 import { isOwnerEmail } from '$lib/server/access';
 import { isOwnerRequest } from '$lib/server/owner';
-import { addToAllowList } from '$lib/server/allow-list';
+import { admitToAllowList, keepingPhones } from '$lib/server/admission';
 import { setUserAccess } from '$lib/server/grants';
 import { revokeDevice } from '$lib/server/native-auth';
 import { loadPerson, removePerson } from '$lib/people/people.server';
+import { connect, type Channel } from '$lib/people/connect';
 import { linkSignInEmail } from '$lib/people/link-email';
 import { setSetting } from '$lib/server/models/settings';
 import { COMPANION_CURSOR_KEY } from '$lib/home/presence/companion';
@@ -56,9 +57,39 @@ export const actions: Actions = {
       return fail(400, { error: 'Those permissions did not read.' });
     }
     if (!Array.isArray(grants)) return fail(400, { error: 'Those permissions did not read.' });
-    const saved = await setUserAccess(person.email, { groups: role ? [role] : [], grants });
+    // The change revokes their phones (the security trigger); they are put
+    // back and re-derive the new access on their next request.
+    const email = person.email;
+    const { result: saved } = await keepingPhones(email, () => setUserAccess(email, { groups: role ? [role] : [], grants }));
     if (!saved) return fail(404, { error: 'They are no longer on the allow-list.' });
     return { saved: 'access' };
+  },
+
+  /**
+   * Connect a phone to this person — a pairing QR (TestFlight) or a join link
+   * (a copy built for the phone). The rules are `$lib/people/connect`; this
+   * reads the form. Someone with no account yet is admitted on the way, with
+   * the address given here.
+   */
+  connect: async (event) => {
+    const { request, url, locals } = event;
+    const { person } = await personOr404(event);
+    const form = await request.formData();
+    const channel: Channel = form.get('channel') === 'adhoc' ? 'adhoc' : 'testflight';
+    const addedBy = ((await locals.auth())?.user?.email ?? '').toLowerCase() || null;
+    const r = await connect({
+      person: { kind: person.kind, name: person.name, email: person.email, householdSubject: person.household?.subject ?? null },
+      channel,
+      // A checkbox: absent when unticked, so the page also sends a hidden
+      // 'off' and the tick is whichever value is 'on'.
+      identity: form.getAll('identity').includes('on'),
+      email: String(form.get('email') ?? ''),
+      origin: url.origin,
+      fresh: form.get('fresh') === '1',
+      addedBy,
+    });
+    if ('error' in r) return fail(400, { error: r.error });
+    return { connect: r };
   },
 
   /** The household row's details. */
@@ -138,7 +169,7 @@ export const actions: Actions = {
     } catch {
       return fail(400, { error: 'Someone else in the household already has that email.' });
     }
-    await addToAllowList({ email, note: person.name, addedBy: owner });
+    await admitToAllowList({ email, name: person.name, addedBy: owner });
     return { saved: 'account' };
   },
 

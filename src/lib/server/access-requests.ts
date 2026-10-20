@@ -15,10 +15,8 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { accessRequest } from '$lib/db/schema';
 import { isEmailAllowedToSignIn } from './access';
-import { addToAllowList } from './allow-list';
-import { joinGroups } from './invites';
+import { admitToAllowList } from './admission';
 import { notifyOwner } from './notify';
-import { carryRegistrantPhones, databaseNow, registrantPhones } from './registration';
 import { rateLimit } from './public-request-rate-limit';
 
 export type AccessRequestRow = typeof accessRequest.$inferSelect;
@@ -195,16 +193,10 @@ export async function decideRequest(
     .returning();
   if (!row) return null;
   if (decision === 'approve') {
-    // Joining the allow-list fires the security trigger, which revokes every
-    // phone this email holds (2026-09-28-security-lifecycle.sql). For someone
-    // who signed up from the app that is the registrant credential approval
-    // is meant to turn into a member's — revoked, it dropped their phone back
-    // to the start and sent them looking for a QR (2026-10-19).
-    const phones = await registrantPhones(row.email);
-    const since = await databaseNow();
-    await addToAllowList({ email: row.email, note: row.name, addedBy: opts.decidedBy });
-    await joinGroups(row.email, opts.groups);
-    await carryRegistrantPhones(row.email, phones, since);
+    // Keeps the phone that asked: for someone who signed up from the app, the
+    // registrant credential is what approval turns into a member's
+    // (`admitToAllowList` carries it past the security trigger).
+    await admitToAllowList({ email: row.email, name: row.name, groups: opts.groups, addedBy: opts.decidedBy });
   }
   return row;
 }

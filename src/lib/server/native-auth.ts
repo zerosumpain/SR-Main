@@ -193,7 +193,7 @@ export async function peekPairingCode(code: string): Promise<{ kind: 'pair' | 's
  * (its row deleted by `redeemPairingCode`) must stop being re-sent the moment
  * it is spent, not when its clock runs out.
  */
-export async function isPairingCodeLive(code: string): Promise<boolean> {
+export async function isPairingCodeLive(code: string, kind: 'pair' | 'scan' = 'pair'): Promise<boolean> {
   const presented = code.trim();
   if (!presented) return false;
   const [row] = await db
@@ -202,7 +202,7 @@ export async function isPairingCodeLive(code: string): Promise<boolean> {
     .where(
       and(
         eq(nativeCredentials.tokenHash, sha256(presented)),
-        eq(nativeCredentials.kind, 'pair'),
+        eq(nativeCredentials.kind, kind),
         gt(nativeCredentials.expiresAt, new Date()),
         isNull(nativeCredentials.revokedAt),
       ),

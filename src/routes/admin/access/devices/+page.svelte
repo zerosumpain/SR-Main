@@ -1,7 +1,6 @@
 <svelte:head><title>Devices — Admin</title></svelte:head>
 <script lang="ts">
   import { enhance } from '$app/forms';
-  import { invalidateAll } from '$app/navigation';
   import type { PageData, ActionData } from './$types';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
@@ -11,31 +10,8 @@
 
   let busy = $state<string | null>(null);
 
-  // Minting the owner's own chat & news code, through the existing endpoint.
-  let pairing = $state<{ code: string; qr: string; expiresAt: string } | null>(null);
-  let pairError = $state('');
-  let minting = $state(false);
-
   const active = $derived(data.rows.filter((r) => r.status === 'active'));
   const inactive = $derived(data.rows.filter((r) => r.status !== 'active'));
-
-  async function mintOwnCode() {
-    minting = true;
-    pairError = '';
-    try {
-      const res = await fetch('/api/admin/native-devices', { method: 'POST' });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        pairError = body.error ?? 'Could not make a code';
-        return;
-      }
-      pairing = { code: body.code, qr: body.qr, expiresAt: body.expiresAt };
-    } catch {
-      pairError = 'Network error';
-    } finally {
-      minting = false;
-    }
-  }
 
   function when(iso: string | null): string {
     if (!iso) return '—';
@@ -77,7 +53,7 @@
     </div>
 
     {#if data.rows.length === 0}
-      <p class="muted">No phones are paired yet. People pair from <a href="/welcome">/welcome</a>.</p>
+      <p class="muted">No phones are paired yet. People pair from <a href="/welcome">/welcome</a>, or you connect one from their page under <a href="/admin/access">People</a>.</p>
     {:else}
       <div class="table-wrap">
         <table class="devices">
@@ -162,97 +138,16 @@
     {/if}
   </section>
 
-  <section class="nm-sec" data-section="own-pairing">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Pair your phone</span>
-    </div>
-    <p class="muted">
-      One code for everything — chat, news, health and location — good for ten minutes. In the app: Settings →
-      Connections → Pair with a code. It only connects a phone signed in as you; anyone else's phone is refused.
-    </p>
-    {#if pairError}<p class="result-bad" role="alert">{pairError}</p>{/if}
-    {#if pairing}
-      <div class="pair">
-        <img src={pairing.qr} alt="Pairing QR code" width="220" height="220" />
-        <div class="pair-meta">
-          <span class="sr-label-tight">Or type this code</span>
-          <code class="code">{pairing.code}</code>
-          <span class="muted">Expires {new Date(pairing.expiresAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
-          <div class="add-row">
-            <button class="nm-btn-ghost" onclick={mintOwnCode} disabled={minting}>New code</button>
-            <button class="nm-btn-ghost" onclick={() => { pairing = null; invalidateAll(); }}>Done</button>
-          </div>
-        </div>
-      </div>
-    {:else}
-      <div class="add-row">
-        <button class="nm-save-btn" onclick={mintOwnCode} disabled={minting}>
-          {minting ? 'Making a code…' : 'Show a pairing code'}
-        </button>
-      </div>
-    {/if}
-  </section>
-  <section class="nm-sec" data-section="vouch" id="vouch">
-    <div class="nm-sec-hd">
-      <span class="sr-label-tight">Pair a phone for someone</span>
-    </div>
-    <p class="muted">
-      For someone who cannot sign in on the phone — Apple does not let an under-13 account use Sign in with Apple for
-      a new app. You vouch instead: this code connects the phone that scans it <strong>as them</strong>, chat, news,
-      health and location. Show it only to their phone: in SR, Welcome → Scan the code. Good for ten minutes.
-    </p>
-    {#if form?.vouchError}<p class="result-bad" role="alert">{form.vouchError}</p>{/if}
-    {#if form?.vouch}
-      <div class="pair">
-        <img src={form.vouch.qr} alt="Pairing QR code for {form.vouch.name}" width="220" height="220" />
-        <div class="pair-meta">
-          <span class="sr-label-tight">For {form.vouch.name}'s phone only</span>
-          <code class="code">{form.vouch.code}</code>
-          <span class="muted">
-            {form.vouch.email}{form.vouch.admitted ? ' · added to Family Circle' : ''} · expires
-            {new Date(form.vouch.expiresAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-          </span>
-          {#if form.vouch.household.state === 'linked'}
-            <span class="muted" data-household="linked">Linked to {form.vouch.household.name} on the household map.</span>
-          {:else if form.vouch.household.state === 'already'}
-            <span class="muted" data-household="already">Already {form.vouch.household.name} on the household map.</span>
-          {:else if form.vouch.household.state === 'other-email'}
-            <span class="result-bad" data-household="other-email">
-              {form.vouch.household.name} on the household map has a different address — link them on their access page.
-            </span>
-          {:else}
-            <span class="muted" data-household="unlinked">
-              Not on the household map: add them from their access page for location and the family tabs.
-            </span>
-          {/if}
-        </div>
-      </div>
-    {/if}
-    <form method="POST" action="?/vouchPair" use:enhance class="add-row">
-      <input class="nm-text-input" name="name" placeholder="Name" maxlength="60" required aria-label="Name" list="vouch-people"
-        oninput={(e) => {
-          const picked = data.adhoc.household.find((p) => p.name === e.currentTarget.value);
-          const email = e.currentTarget.form?.elements.namedItem('email') as HTMLInputElement | null;
-          if (picked?.email && email && !email.value) email.value = picked.email;
-        }} />
-      <datalist id="vouch-people">
-        {#each data.adhoc.household as person}<option value={person.name}></option>{/each}
-      </datalist>
-      <input class="nm-text-input" name="email" type="email" placeholder="Their email (Apple ID)" required aria-label="Email" />
-      <button class="nm-save-btn">Show a code</button>
-    </form>
-  </section>
-
   <section class="nm-sec" data-section="install" id="install">
     <div class="nm-sec-hd">
       <span class="sr-label-tight">Install without TestFlight</span>
       {#if data.adhoc.running}<span class="nm-pill" data-state="connected">building</span>{/if}
     </div>
     <p class="muted">
-      For phones that cannot use TestFlight — under 13s can't. Make a link for a person and send it: on their iPhone it
-      walks them through a one-time profile that tells the site the phone's ID and starts a copy built for it (about
-      half an hour). They install, and come back for updates, at <a href={data.adhoc.appUrl}>{data.adhoc.appUrl}</a>;
-      the app also offers each new version itself.
+      For phones that cannot use TestFlight — under 13s can't. An install link is made from the person's page under
+      <a href="/admin/access">People</a> (Connect a phone → No TestFlight): on their iPhone it reads the phone's ID and
+      starts a copy built for it (about half an hour). They install, and come back for updates, at
+      <a href={data.adhoc.appUrl}>{data.adhoc.appUrl}</a>; the app also offers each new version itself.
     </p>
     {#if form?.adhocError}<p class="result-bad" role="alert">{form.adhocError}</p>{/if}
     {#if form?.adhocStarted}<p class="muted" role="status">Building a copy for {form.adhocStarted}. About half an hour.</p>{/if}
@@ -267,27 +162,6 @@
     {:else}
       <p class="muted">No copy has been built yet.</p>
     {/if}
-
-    {#if form?.join}
-      <div class="pair">
-        <img src={form.join.qr} alt="Join link QR code" width="200" height="200" />
-        <div class="pair-meta">
-          <span class="sr-label-tight">For {form.join.name} — send it, or scan it with their iPhone</span>
-          <code class="code">{form.join.link}</code>
-          <span class="muted">Works for {form.join.days} days, on any of their phones.</span>
-          <div class="add-row">
-            <button class="nm-btn-ghost" onclick={() => navigator.clipboard?.writeText(form?.join?.link ?? '')}>Copy link</button>
-          </div>
-        </div>
-      </div>
-    {/if}
-    <form method="POST" action="?/joinLink" use:enhance class="add-row">
-      <input class="nm-text-input" name="name" placeholder="First name" maxlength="40" required aria-label="First name" list="join-people" />
-      <datalist id="join-people">
-        {#each data.adhoc.people as person (person)}<option value={person}></option>{/each}
-      </datalist>
-      <button class="nm-save-btn">Make a link</button>
-    </form>
 
     <details class="manual">
       <summary>Have the UDID already, or just want a fresh copy?</summary>
