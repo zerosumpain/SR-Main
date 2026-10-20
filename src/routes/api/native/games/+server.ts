@@ -25,7 +25,9 @@ export const GET: RequestHandler = withNativeAccess('games', async (_event, iden
  * `size` (4 | 5 | 6), `seconds` (30 | 90 | 120 | 180) and `scoring` (classic | every)
  * for Boggle, and `categoryCount` (6 | 8 | 10) and `seconds` (90 | 120 | 180) for
  * Categories, `dice` (3 | 5) for Liar's Dice, and `turnsEach` (1 | 2) with `seconds`
- * (60 | 80 | 100) for Draw & Guess — an unknown value is that game's default.
+ * (60 | 80 | 100) for Draw & Guess, and `course` ({ id, name, marbles, seconds }, from
+ * Marbler's course pack) for Marble Race — an unknown value is that game's default
+ * (Marble Race refuses a malformed course rather than guess one).
  */
 export const POST: RequestHandler = withNativeAccess('games', async (event, identity, role) => {
   const body = await jsonBody(event.request);
