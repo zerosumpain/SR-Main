@@ -473,3 +473,70 @@ describe('rooms', () => {
     });
   });
 });
+
+describe('chess through the registry', () => {
+  /** Who has which colour once the countdown has run: the rng decides. */
+  function seats(id: string) {
+    const w = roomFor(id, 'p_john') as WireRoom & { whiteId: string; blackId: string };
+    return { white: w.whiteId, black: w.blackId };
+  }
+
+  it('plays to mate, records a win for the mater, and refuses a move after', () => {
+    const { id } = createGame({ game: 'chess', host: john, invite: [sam], difficulty: 'hard' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    expect(roomFor(id, 'p_john').phase).toBe('countdown');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    expect(roomFor(id, 'p_john').phase).toBe('playing');
+    const { white, black } = seats(id);
+    expect(new Set([white, black])).toEqual(new Set(['p_john', 'p_sam']));
+
+    // Only the side to move is sent its legal moves.
+    const mine = roomFor(id, white) as WireRoom & { legal: unknown[] };
+    const theirs = roomFor(id, black) as WireRoom & { legal: unknown[] };
+    expect(mine.legal).toHaveLength(20);
+    expect(theirs.legal).toEqual([]);
+
+    expect(() => act(id, black, 'move', { from: 'e7', to: 'e5' })).toThrow(/not your turn/);
+    act(id, white, 'move', { from: 'f2', to: 'f3' });
+    vi.advanceTimersByTime(1_000);
+    act(id, black, 'move', { from: 'e7', to: 'e5' });
+    act(id, white, 'move', { from: 'g2', to: 'g4' });
+    const last = act(id, black, 'move', { from: 'd8', to: 'h4' }) as WireRoom & {
+      moves: string[];
+      result: { outcome: string; winnerId: string };
+      winnerIds: string[];
+    };
+    expect(last.phase).toBe('finished');
+    expect(last.moves).toEqual(['f3', 'e5', 'g4', 'Qh4#']);
+    expect(last.result).toEqual({ outcome: 'checkmate', winnerId: black });
+    expect(last.winnerIds).toEqual([black]);
+    expect(() => act(id, white, 'move', { from: 'a2', to: 'a3' })).toThrow(/over/);
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].map((r) => [r.game, r.playerId, r.won, r.rank, r.score])).toEqual([
+      ['chess', black, true, 1, null],
+      ['chess', white, false, 2, null],
+    ]);
+    expect(recorded[0][0].options).toEqual({ label: '5 min each · +3 s a move' });
+  });
+
+  it('loses on time when a clock runs out, on the room\'s own timer', () => {
+    const { id } = createGame({ game: 'chess', host: john, invite: [sam], difficulty: 'hard' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const { white, black } = seats(id);
+    vi.advanceTimersByTime(5 * 60_000);
+    const w = roomFor(id, white) as WireRoom & { result: { outcome: string; winnerId: string } };
+    expect(w.phase).toBe('finished');
+    expect(w.result).toEqual({ outcome: 'timeout', winnerId: black });
+    expect(recorded[0].find((r) => r.playerId === black)?.won).toBe(true);
+  });
+
+  it('is for two: a third invitee is refused at creation', () => {
+    expect(() =>
+      createGame({ game: 'chess', host: john, invite: [sam, { id: 'p_kim', name: 'Kim' }], difficulty: 'easy' }),
+    ).toThrow(/for two/);
+  });
+});

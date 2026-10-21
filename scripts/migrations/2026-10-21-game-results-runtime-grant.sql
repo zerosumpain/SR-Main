@@ -9,10 +9,21 @@
 -- (people/erase.ts) removes a person's results in-process.
 -- Narrow on purpose. Apply as the owner:
 --   docker exec -i strange-rambling-app-db-1 psql -U app -d strange_rambling < this-file
+--
+-- The table grant alone was not enough: `id` is a serial, and an INSERT also
+-- needs USAGE on its sequence. With only the table granted (2026-10-21
+-- morning) every finish still failed, "permission denied for sequence
+-- game_results_id_seq" — seven games that evening recorded nothing. The
+-- sequence was granted by hand the same night; SR-Infra's registry renders
+-- both (`runtime-grants.py` grants every serial's sequence), so this file is
+-- the full record. Any table with a serial id needs BOTH grants.
 DO $$ BEGIN
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'sr_main_runtime') THEN
     IF to_regclass('public.game_results') IS NOT NULL THEN
       GRANT SELECT, INSERT, UPDATE, DELETE ON public.game_results TO sr_main_runtime;
+    END IF;
+    IF to_regclass('public.game_results_id_seq') IS NOT NULL THEN
+      GRANT USAGE, SELECT ON SEQUENCE public.game_results_id_seq TO sr_main_runtime;
     END IF;
   END IF;
 END $$;
