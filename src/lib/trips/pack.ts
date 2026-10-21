@@ -79,6 +79,99 @@ export function sightsQuery(anchors: LatLng[], radiusM = SIGHTS_RADIUS_M): strin
   return `[out:json][timeout:45];(\n${lines.join('\n')}\n);out center tags qt 400;`;
 }
 
+/** How far from a city's centre its famous sights are looked for, and how many always join the pack. */
+export const HIGHLIGHTS_RADIUS_M = 6000;
+export const KEEP_HIGHLIGHTS = 24;
+/** Wikipedia editions a place needs to count as one of a city's highlights. */
+export const HIGHLIGHT_SITELINKS = 25;
+
+/**
+ * The city's famous sights, wherever the trip sleeps: the radius round a stay
+ * (or one centre point) can miss the very places people go for — a Rome pack
+ * centred on the Esquiline had no Pantheon, Trevi, Navona or St Peter's.
+ * Asked of Wikidata (its geo search answers in seconds and ranks by fame;
+ * Overpass was "at capacity" for a city-wide query), restricted to kinds of
+ * place a visitor goes to — not the empires, treaties and artworks that also
+ * carry Rome's coordinates.
+ */
+export const HIGHLIGHT_CLASSES = [
+  'Q570116', // tourist attraction
+  'Q33506', // museum
+  'Q4989906', // monument
+  'Q839954', // archaeological site
+  'Q16970', // church building
+  'Q174782', // square
+  'Q483453', // fountain
+  'Q22698', // park
+  'Q23413', // castle
+  'Q16560', // palace
+  'Q12518', // tower
+  'Q12280', // bridge
+  'Q1081138', // historic site
+  'Q44539', // temple
+  'Q1107656', // garden
+  'Q57821', // fortification
+  'Q53060', // gate
+  'Q2319498', // landmark
+  'Q24398318', // religious building
+];
+
+export function highlightsSparql(centre: LatLng, radiusM = HIGHLIGHTS_RADIUS_M, minLinks = HIGHLIGHT_SITELINKS, limit = 40): string {
+  return [
+    'SELECT ?item (SAMPLE(?label) AS ?name) (SAMPLE(?loc) AS ?coord) (MAX(?links) AS ?n) (SAMPLE(?image) AS ?img) WHERE {',
+    `  SERVICE wikibase:around { ?item wdt:P625 ?loc . bd:serviceParam wikibase:center "Point(${centre.lng} ${centre.lat})"^^geo:wktLiteral . bd:serviceParam wikibase:radius "${Math.round(radiusM / 100) / 10}" . }`,
+    `  ?item wikibase:sitelinks ?links . FILTER(?links >= ${minLinks})`,
+    // Two subclass steps, not P279*: the full closure took over 20 s uncached.
+    '  ?item wdt:P31/wdt:P279?/wdt:P279? ?class .',
+    `  VALUES ?class { ${HIGHLIGHT_CLASSES.map((q) => `wd:${q}`).join(' ')} }`,
+    '  OPTIONAL { ?item wdt:P18 ?image }',
+    '  ?item rdfs:label ?label . FILTER(LANG(?label) = "en")',
+    `} GROUP BY ?item ORDER BY DESC(?n) LIMIT ${limit}`,
+  ].join('\n');
+}
+
+/** A highlight's key until it is matched to OpenStreetMap: `wd:<Q>` (never stored as an OSM id). */
+export const isWikidataKey = (id: string | null | undefined) => !!id && id.startsWith('wd:');
+
+/** Wikidata's answer → candidates (distance from the nearest anchor; sitelinks and image file filled). */
+export function readHighlights(json: unknown, anchors: LatLng[]): PackCandidate[] {
+  const rows = (json as { results?: { bindings?: Array<Record<string, { value?: string }>> } } | null)?.results?.bindings ?? [];
+  const out: PackCandidate[] = [];
+  for (const b of rows) {
+    const q = wikidataId(b.item?.value?.split('/').pop());
+    const name = b.name?.value?.trim();
+    const m = /Point\(([-\d.]+) ([-\d.]+)\)/.exec(b.coord?.value ?? '');
+    if (!q || !name || !m) continue;
+    const location = { lat: Number(m[2]), lng: Number(m[1]) };
+    const file = b.img?.value ? decodeURIComponent(b.img.value.split('/').pop() ?? '').replace(/_/g, ' ') : null;
+    const lower = name.toLowerCase();
+    const kind: PackKind = /museum|musei|gallery|galleria|chapel/.test(lower) ? 'museum' : /basilica|church|chiesa|cathedral|duomo|san |santa |santi /.test(lower) ? 'church' : /park|garden|villa /.test(lower) ? 'park' : 'sight';
+    out.push({
+      osmId: `wd:${q}`,
+      name,
+      location,
+      address: null,
+      kind,
+      tags: [],
+      openingHours: null,
+      website: null,
+      wikidata: q,
+      distanceM: Math.round(Math.min(...anchors.map((a) => metresApart(a, location)))),
+      sitelinks: Number(b.n?.value ?? 0) || null,
+      imageFile: file || null,
+    });
+  }
+  return out;
+}
+
+/** The best-known of the city-wide candidates, most Wikipedia editions first. */
+export function selectHighlights(cands: PackCandidate[], keep = KEEP_HIGHLIGHTS, exclude: Set<string> = new Set()): PackCandidate[] {
+  return cands
+    .filter((c) => !isFood(c.kind) && !exclude.has(c.osmId) && !exclude.has(c.name.toLowerCase()) && (c.sitelinks ?? 0) >= HIGHLIGHT_SITELINKS)
+    .sort((a, b) => (b.sitelinks ?? 0) - (a.sitelinks ?? 0) || a.name.localeCompare(b.name))
+    .slice(0, keep);
+}
+
 export function placesQuery(anchors: LatLng[], radiusM = SIGHTS_RADIUS_M): string {
   const lines = anchors.slice(0, 3).flatMap((a) => [
     `nwr["leisure"~"^(park|garden)$"]["name"]["wikidata"]${around(radiusM, a)};`,
@@ -494,7 +587,7 @@ export function packPlaceOf(c: PackCandidate, w: Written | null, image: PlaceIma
   const sources: Source[] = [
     ...(w?.sources ?? []),
     ...(c.wikidata ? [{ url: `https://www.wikidata.org/wiki/${c.wikidata}`, title: 'Wikidata' }] : []),
-    { url: `https://www.openstreetmap.org/${c.osmId}`, title: 'OpenStreetMap contributors' },
+    ...(isWikidataKey(c.osmId) ? [] : [{ url: `https://www.openstreetmap.org/${c.osmId}`, title: 'OpenStreetMap contributors' }]),
   ];
   const tags = [...new Set([...c.tags, ...(w?.tags ?? []), ...(indoor === true && !isFood(kind) ? ['rainy-day'] : [])])].slice(0, 8);
   const facts: Facts = {
@@ -518,7 +611,7 @@ export function packPlaceOf(c: PackCandidate, w: Written | null, image: PlaceIma
     name: c.name,
     kind,
     tags,
-    place: { name: c.name, location: c.location, osmId: c.osmId, address: c.address },
+    place: { name: c.name, location: c.location, osmId: isWikidataKey(c.osmId) ? null : c.osmId, address: c.address },
     why: w?.why ?? null,
     neighbourhood: w?.neighbourhood ?? null,
     durationMin,
@@ -767,20 +860,20 @@ function metresApart(a: LatLng, b: LatLng): number {
  * The same place under two names — OpenStreetMap often maps a monument twice
  * (the building and its site, "Colosseo" and "Colosseum") — would otherwise
  * appear twice in a day's plan. Two candidates are one place when they share
- * a Wikidata entry, or sit within 150 m with names that agree (the same, one
+ * a Wikidata entry, or sit within 300 m (a monument is big) with names that agree (the same, one
  * contained in the other as whole words, or two one-word names sharing their
  * first six letters). The better-known one is
  * kept: the most Wikipedia articles, then a Wikidata entry, then the nearer.
  */
 export function mergeSamePlaces(cands: PackCandidate[]): PackCandidate[] {
-  const rank = (c: PackCandidate) => (c.sitelinks ?? -1) * 10 + (c.wikidata ? 5 : 0) - c.distanceM / 10_000;
+  const rank = (c: PackCandidate) => (c.sitelinks ?? -1) * 10 + (c.wikidata ? 5 : 0) + (isWikidataKey(c.osmId) ? 0 : 2) - c.distanceM / 10_000;
   const sorted = [...cands].sort((a, b) => rank(b) - rank(a));
   const out: PackCandidate[] = [];
   for (const c of sorted) {
     const n = fold(c.name);
     const same = out.some((k) => {
       if (c.wikidata && k.wikidata && c.wikidata === k.wikidata) return true;
-      if (metresApart(c.location, k.location) > 150) return false;
+      if (metresApart(c.location, k.location) > 300) return false;
       const m = fold(k.name);
       if (n === m) return true;
       // Containment only for a whole-word match ("Pantheon" in "Il Pantheon"), and a
@@ -794,4 +887,19 @@ export function mergeSamePlaces(cands: PackCandidate[]): PackCandidate[] {
     if (!same) out.push(c);
   }
   return out.sort((a, b) => a.distanceM - b.distanceM);
+}
+
+/**
+ * The middle of a city's ten best-known sights (the median, so one outlier —
+ * a basilica outside the walls — does not drag it), or null with fewer than three.
+ */
+export function middleOf(cands: PackCandidate[]): LatLng | null {
+  const top = [...cands].sort((a, b) => (b.sitelinks ?? 0) - (a.sitelinks ?? 0)).slice(0, 10);
+  if (top.length < 3) return null;
+  const median = (xs: number[]) => {
+    const v = [...xs].sort((a, b) => a - b);
+    const m = Math.floor(v.length / 2);
+    return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  };
+  return { lat: median(top.map((c) => c.location.lat)), lng: median(top.map((c) => c.location.lng)) };
 }

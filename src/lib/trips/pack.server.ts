@@ -66,6 +66,11 @@ import {
   type SearchResult,
   type Written,
   mergeSamePlaces,
+  highlightsSparql,
+  readHighlights,
+  middleOf,
+  selectHighlights,
+  KEEP_HIGHLIGHTS,
 } from './pack';
 import { emptyFacts } from './research';
 import { nominatimAround, overpass, findPlace } from './research.server';
@@ -82,7 +87,7 @@ export interface PackDeps {
   overpass(query: string): Promise<unknown>;
   nominatim(term: string, viewbox: string, limit: number): Promise<unknown[]>;
   /** GET (or POST a form) and parse JSON; undefined when the service could not be asked. */
-  fetchJson(url: string, init?: { method?: 'POST'; form?: Record<string, string>; accept?: string }): Promise<unknown | undefined>;
+  fetchJson(url: string, init?: { method?: 'POST'; form?: Record<string, string>; accept?: string; timeoutMs?: number }): Promise<unknown | undefined>;
   /** True when a web search key is registered. */
   canSearch(): Promise<boolean>;
   search(query: string): Promise<SearchResult[]>;
@@ -96,13 +101,13 @@ export interface PackDeps {
   now(): Date;
 }
 
-async function fetchJson(url: string, init: { method?: 'POST'; form?: Record<string, string>; accept?: string } = {}): Promise<unknown | undefined> {
+async function fetchJson(url: string, init: { method?: 'POST'; form?: Record<string, string>; accept?: string; timeoutMs?: number } = {}): Promise<unknown | undefined> {
   try {
     const res = await fetch(url, {
       method: init.method ?? 'GET',
       headers: { 'User-Agent': USER_AGENT, Accept: init.accept ?? 'application/json', ...(init.form ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
       body: init.form ? new URLSearchParams(init.form) : undefined,
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(init.timeoutMs ?? FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return undefined;
     return await res.json();
@@ -205,8 +210,12 @@ function dedupe(cands: PackCandidate[]): PackCandidate[] {
 async function addFame(cands: PackCandidate[], deps: PackDeps): Promise<void> {
   const qs = [...new Set(cands.map((c) => c.wikidata).filter((q): q is string => !!q))];
   if (!qs.length) return;
-  const json = await deps.fetchJson('https://query.wikidata.org/sparql', { method: 'POST', form: { query: sparqlFor(qs), format: 'json' }, accept: 'application/sparql-results+json' });
-  const fame = readSparql(json);
+  // sparqlFor takes 300 ids at a time; a city's highlights can bring more.
+  const fame = new Map<string, { sitelinks: number; imageFile: string | null }>();
+  for (let i = 0; i < qs.length && i < 1500; i += 300) {
+    const json = await deps.fetchJson('https://query.wikidata.org/sparql', { method: 'POST', form: { query: sparqlFor(qs.slice(i, i + 300)), format: 'json' }, accept: 'application/sparql-results+json' }).catch(() => null);
+    for (const [k, v] of readSparql(json)) fame.set(k, v);
+  }
   for (const c of cands) {
     const f = c.wikidata ? fame.get(c.wikidata) : undefined;
     if (f) {
@@ -330,11 +339,25 @@ async function build(trip: TripRecord, handle: JobHandle | null, deps: PackDeps)
   // 1. Places
   stage('places', 'running');
   await writePack(trip.id, { status: 'building', stage: label('places') });
-  const { anchors, fromStays } = await anchorsOf(trip, deps);
-  if (!anchors.length) throw new Error(`could not place ${trip.destination} on the map`);
+  const where = await anchorsOf(trip, deps);
+  const { fromStays } = where;
+  if (!where.anchors.length) throw new Error(`could not place ${trip.destination} on the map`);
+  // The city's famous sights, wherever the trip sleeps (Wikidata; best effort —
+  // a slow answer only costs the highlights, never the build).
+  const centre = fromStays ? await deps.findCentre(trip.destination).catch(() => null) : where.anchors[0];
+  const highlightCands = centre
+    ? readHighlights(await deps.fetchJson('https://query.wikidata.org/sparql', { method: 'POST', form: { query: highlightsSparql(centre), format: 'json' }, accept: 'application/sparql-results+json', timeoutMs: 40_000 }).catch(() => null), where.anchors)
+    : [];
+  // With no stay, look round the middle of the city's best-known sights, not
+  // the geocoder's point for the name (for Rome that is by Termini, and the
+  // "nearby" places all came from the Esquiline).
+  const heart = fromStays ? null : middleOf(highlightCands);
+  const anchors = heart ? [heart] : where.anchors;
   const sightCands = await osmCandidates([sightsQuery(anchors), placesQuery(anchors)], SIGHT_TERMS, anchors, SIGHTS_RADIUS_M, false, deps);
   await addFame(sightCands, deps);
-  const sights = selectSights(mergeSamePlaces(sightCands), KEEP_SIGHTS, exclude);
+  const highlights = selectHighlights(mergeSamePlaces(highlightCands), KEEP_HIGHLIGHTS, exclude);
+  const nearby = selectSights(mergeSamePlaces(sightCands), KEEP_SIGHTS, new Set([...exclude, ...highlights.flatMap((h) => [h.osmId, h.name.toLowerCase()])]));
+  const sights = mergeSamePlaces([...highlights, ...nearby]);
   stage('places', 'done', sights.length ? `Found ${sights.length} places` : 'OpenStreetMap had nothing to add just now');
   await check(handle);
 

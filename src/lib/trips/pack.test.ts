@@ -31,6 +31,9 @@ import {
   weatherItems,
   type PackCandidate,
   mergeSamePlaces,
+  highlightsSparql,
+  readHighlights,
+  selectHighlights,
 } from './pack';
 import { emptyFacts } from './research';
 
@@ -297,5 +300,29 @@ describe('mergeSamePlaces', () => {
   it('merges by a shared Wikidata entry wherever the points are, and keeps namesakes far apart', () => {
     const out = mergeSamePlaces([c('Pantheon', 41.8986, 12.4769, { wikidata: 'Q99309' }), c('Il Pantheon', 41.9, 12.48, { wikidata: 'Q99309' }), c('Santa Maria', 41.89, 12.47), c('Santa Maria', 41.91, 12.5)]);
     expect(out.map((p) => p.name).sort()).toEqual(['Pantheon', 'Santa Maria', 'Santa Maria']);
+  });
+});
+
+describe('city highlights from Wikidata', () => {
+  it('asks for visitable kinds of place round the centre, most famous first', () => {
+    const q = highlightsSparql({ lat: 41.8933, lng: 12.4829 });
+    expect(q).toContain('"Point(12.4829 41.8933)"');
+    expect(q).toContain('wikibase:radius "6"');
+    expect(q).toContain('wd:Q570116');
+    expect(q).toMatch(/ORDER BY DESC\(\?n\) LIMIT 40/);
+  });
+  it('reads the answer into candidates keyed wd:<Q>, which never become an OpenStreetMap id', () => {
+    const json = { results: { bindings: [
+      { item: { value: 'http://www.wikidata.org/entity/Q99309' }, name: { value: 'Pantheon' }, coord: { value: 'Point(12.476944 41.898611)' }, n: { value: '81' }, img: { value: 'http://commons.wikimedia.org/wiki/Special:FilePath/Pantheon_Rome.jpg' } },
+      { item: { value: 'http://www.wikidata.org/entity/Q190' }, name: { value: 'Vatican Museums' }, coord: { value: 'Point(12.4544 41.9065)' }, n: { value: '65' } },
+      { item: { value: 'http://www.wikidata.org/entity/Q1' }, name: { value: 'No coordinates' } },
+    ] } };
+    const [pantheon, vatican, ...rest] = readHighlights(json, [{ lat: 41.8933, lng: 12.4829 }]);
+    expect(rest).toEqual([]);
+    expect(pantheon).toMatchObject({ osmId: 'wd:Q99309', wikidata: 'Q99309', sitelinks: 81, imageFile: 'Pantheon Rome.jpg', kind: 'sight' });
+    expect(pantheon.distanceM).toBeGreaterThan(700);
+    expect(vatican.kind).toBe('museum');
+    expect(selectHighlights([pantheon, vatican], 1).map((c) => c.name)).toEqual(['Pantheon']);
+    expect(packPlaceOf(pantheon, null, null, '2026-10-21T12:00:00Z').place.osmId).toBeNull();
   });
 });
