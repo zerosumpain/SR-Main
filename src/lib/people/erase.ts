@@ -57,6 +57,9 @@ import {
   trip,
   tripSuggestion,
   tripMessage,
+  tripProposal,
+  tripQuestion,
+  tripJob,
   familyBacklogPref,
   familyBacklogReaction,
   fileShareTokens,
@@ -149,6 +152,12 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   trip_suggestion: { by_email: 'erase', by_id: 'erase', decided_by_email: 'scrub', decided_by_id: 'scrub' },
   // Their own conversation with the planner goes (each person's thread is theirs alone).
   trip_message: { author_email: 'erase', author_id: 'erase' },
+  // v8: proposals and questions are the family's plan, so they stay — without
+  // their address or name (and their family-question votes go). Their planner
+  // jobs go.
+  trip_proposal: { author_email: 'scrub', decided_by_email: 'scrub' },
+  trip_question: { answered_by_email: 'scrub' },
+  trip_job: { owner_email: 'erase' },
   gmail_accounts: { email: 'erase', principal_id: 'erase' },
   activity_principals: { external_ref: 'erase' },
   jkai_conversations: { principal_id: 'erase' },
@@ -285,6 +294,21 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     await tx.delete(tripSuggestion).where(inArray(tripSuggestion.byEmail, addrs));
     await tx.delete(tripMessage).where(inArray(tripMessage.authorEmail, addrs));
     await tx.update(tripSuggestion).set({ decidedByEmail: null, decidedById: null }).where(inArray(tripSuggestion.decidedByEmail, addrs));
+    // v8: their name off proposals and answered questions; their votes out of family questions; their jobs gone.
+    await tx.update(tripProposal).set({ authorEmail: null }).where(inArray(tripProposal.authorEmail, addrs));
+    await tx.update(tripProposal).set({ decidedByEmail: null }).where(inArray(tripProposal.decidedByEmail, addrs));
+    await tx.update(tripQuestion).set({ answeredByEmail: null, answeredByName: null }).where(inArray(tripQuestion.answeredByEmail, addrs));
+    const voted = await tx
+      .select({ id: tripQuestion.id, votes: tripQuestion.votes })
+      .from(tripQuestion)
+      .where(or(...addrs.map((a) => sql`${tripQuestion.votes}::text ilike ${'%' + a + '%'}`)));
+    for (const q of voted) {
+      const votes = Object.fromEntries(
+        Object.entries((q.votes ?? {}) as Record<string, Array<{ email: string; name: string }>>).map(([k, vs]) => [k, (vs ?? []).filter((v) => !addrs.includes(v.email?.toLowerCase()))]),
+      );
+      await tx.update(tripQuestion).set({ votes }).where(eq(tripQuestion.id, q.id));
+    }
+    await tx.delete(tripJob).where(inArray(tripJob.ownerEmail, addrs));
 
     // Their games on the family leaderboard.
     await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));
