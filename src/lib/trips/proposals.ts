@@ -239,7 +239,8 @@ const PART: Record<DayStage, PartOfDay> = { morning: 'morning', lunch: 'any', af
 
 /** The wish a pack place becomes in a slot: pinned to the day, in the part of it, carrying its place. */
 export function packWish(p: PackPlace, slot: Pick<Slot, 'date' | 'stage' | 'gap' | 'replaces'>): WishDraft {
-  const meal = slot.replaces ? (slot.replaces.replacesMeal ?? null) : slot.gap.meal;
+  // Only a place to eat becomes the meal; a museum in an evening slot is not dinner.
+  const meal = EAT.includes(p.kind) ? (slot.replaces ? (slot.replaces.replacesMeal ?? null) : slot.gap.meal) : null;
   return {
     title: p.name,
     placeQuery: null,
@@ -460,7 +461,8 @@ export type DayVariant = 'lighter' | 'rainy' | 'swap-days';
 
 export interface ProposalRequest {
   kind: 'swap' | 'fill' | 'day' | 'nudge' | 'shapes';
-  target: SlotTarget & { proposalId?: string | null };
+  /** `packPlaceId` with a fill: "Add to the plan" from the research pack — that place on that day. */
+  target: SlotTarget & { proposalId?: string | null; packPlaceId?: string | null };
   nudge: Nudge | null;
   variant: DayVariant | null;
   withDate: LocalDate | null;
@@ -485,12 +487,13 @@ export function readProposalRequest(raw: unknown): { ok: true; request: Proposal
     date: isDate(t.date) ? t.date : null,
     stage: STAGES.includes(t.stage as DayStage) ? (t.stage as DayStage) : null,
     proposalId: text(t.proposalId, 80),
+    packPlaceId: text(t.packPlaceId, 80),
   };
   const nudge = NUDGE_SET.includes(raw.nudge as Nudge) ? (raw.nudge as Nudge) : null;
   const variant = raw.variant === 'lighter' || raw.variant === 'rainy' || raw.variant === 'swap-days' ? raw.variant : null;
   const withDate = isDate(raw.withDate) ? raw.withDate : null;
   if (kind === 'swap' && !target.stopId && !target.wishId) return { ok: false, error: 'Say which stop to swap.' };
-  if (kind === 'fill' && (!target.date || !target.stage)) return { ok: false, error: 'Say which day and which part of it.' };
+  if (kind === 'fill' && (!target.date || (!target.stage && !target.packPlaceId))) return { ok: false, error: 'Say which day and which part of it.' };
   if (kind === 'day' && (!target.date || !variant)) return { ok: false, error: "Say which day, and 'lighter', 'rainy' or 'swap-days'." };
   if (kind === 'nudge' && (!target.proposalId || !nudge)) return { ok: false, error: 'Say which proposal, and closer, cheaper, less-walking, quieter or more-like-this.' };
   return { ok: true, request: { kind, target, nudge, variant, withDate } };

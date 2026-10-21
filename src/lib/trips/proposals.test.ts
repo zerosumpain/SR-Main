@@ -226,8 +226,10 @@ describe('describing a change', () => {
 
 describe('reading requests', () => {
   it('POST proposals', () => {
-    expect(readProposalRequest({ kind: 'swap', target: { stopId: 's1' } })).toEqual({ ok: true, request: { kind: 'swap', target: { stopId: 's1', wishId: null, date: null, stage: null, proposalId: null }, nudge: null, variant: null, withDate: null } });
+    expect(readProposalRequest({ kind: 'swap', target: { stopId: 's1' } })).toEqual({ ok: true, request: { kind: 'swap', target: { stopId: 's1', wishId: null, date: null, stage: null, proposalId: null, packPlaceId: null }, nudge: null, variant: null, withDate: null } });
     expect(readProposalRequest({ kind: 'fill', target: { date: '2026-10-27' } })).toMatchObject({ ok: false });
+    // "Add to the plan" from the research pack: a day and a place, no part of the day needed.
+    expect(readProposalRequest({ kind: 'fill', target: { date: '2026-10-27', packPlaceId: 'pk1' } })).toMatchObject({ ok: true, request: { target: { date: '2026-10-27', stage: null, packPlaceId: 'pk1' } } });
     expect(readProposalRequest({ kind: 'nudge', target: { proposalId: 'p1' }, nudge: 'cheaper' })).toMatchObject({ ok: true, request: { nudge: 'cheaper' } });
     expect(readProposalRequest({ kind: 'day', target: { date: '2026-10-27' }, variant: 'swap-days', withDate: '2026-10-28' })).toMatchObject({ ok: true, request: { variant: 'swap-days', withDate: '2026-10-28' } });
     expect(readProposalRequest({ kind: 'teleport' })).toMatchObject({ ok: false });

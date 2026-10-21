@@ -334,7 +334,14 @@ export interface SolvedPlan {
   score: number;
 }
 
-export type PlanSource = 'site' | 'phone' | 'replan' | 'seed';
+/**
+ * Where a version came from. v8 adds what made it, for the version history:
+ * 'proposal' (one accepted on the site), 'undo' (an undo or restore on the
+ * site), 'question' (an answer), 'research' (the re-plan once research
+ * finished). A change made on the phone stays 'phone' — the running-day rule
+ * reads it.
+ */
+export type PlanSource = 'site' | 'phone' | 'replan' | 'seed' | 'proposal' | 'undo' | 'question' | 'research';
 
 export interface PlanVersion {
   id: string;

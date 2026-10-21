@@ -193,10 +193,13 @@ describe('checking drafts', () => {
     expect(out.proposals[0]).toMatchObject({ packPlaceId: 'altemps', image: { wikidata: 'Q2' }, evidence: [{ url: 'https://example.test/altemps' }], tradeoffs: { lessVisited: true, indoor: true, costText: '€10 each' } });
   });
 
-  it('never proposes a pack place that was turned down', async () => {
+  it('never proposes a pack place that was turned down — by its id, or found again by name', async () => {
     h.pack[0].status = 'rejected';
     const out = await P.checkDrafts(TRIP, [{ kind: 'fill', title: 'Palazzo Altemps', why: '', group: null, packPlaceId: 'altemps', scope: { date: '2026-10-27', stage: 'afternoon' }, ops: [{ op: 'addWish', wish: { title: 'Palazzo Altemps' } }] }]);
     expect(out.proposals).toEqual([]);
+    h.pack[2].status = 'rejected';
+    const again = await P.checkDrafts(TRIP, [{ kind: 'fill', title: "Sant'Ignazio", why: '', group: null, scope: { date: '2026-10-27', stage: 'afternoon' }, ops: [{ op: 'addWish', wish: { title: "Sant'Ignazio", placeQuery: "Sant'Ignazio, Rome", fixedDate: '2026-10-27', partOfDay: 'afternoon' } }] }]);
+    expect(again.proposals).toEqual([]);
   });
 });
 
@@ -280,6 +283,30 @@ describe('the fast path', () => {
     expect(done.proposals.map((p) => [p.kind, p.title])).toEqual([['fill', "Sant'Ignazio"]]);
   });
 
+  it('“Add to the plan” from the research pack: that place, in the part of the day where it fits', async () => {
+    const r = await P.generateProposals(TRIP, { kind: 'fill', target: { date: '2026-10-27', packPlaceId: 'spada' }, nudge: null, variant: null, withDate: null }, CALLER);
+    expect(r.status).toBe(200);
+    expect(r.body.note).toBeUndefined();
+    const list = r.body.proposals as Proposal[];
+    expect(list.map((p) => [p.kind, p.packPlaceId, p.tradeoffs.fits])).toEqual([['fill', 'spada', true]]);
+  });
+
+  it('when the chosen place does not fit, says why and offers what does', async () => {
+    h.pack[1].facts = { openingHoursText: null, hours: null, closedDates: ['2026-10-27'], bookingRequired: null, bookAheadDays: null, bookingUrl: null, officialUrl: null, priceText: null, typicalVisitSec: null, summary: null, sources: [], checkedAt: null, depth: 'brief', unknown: [] };
+    const r = await P.generateProposals(TRIP, { kind: 'fill', target: { date: '2026-10-27', packPlaceId: 'spada' }, nudge: null, variant: null, withDate: null }, CALLER);
+    expect(r.status).toBe(200);
+    expect(r.body.note).toMatch(/^Galleria Spada does not fit Tue 27 Oct: .+\.$/);
+    const list = r.body.proposals as Proposal[];
+    expect(list.length).toBeGreaterThan(0);
+    expect(list.every((p) => p.packPlaceId !== 'spada' && p.tradeoffs.fits)).toBe(true);
+  });
+
+  it('a chosen place already planned, or not in the pack, is said plainly', async () => {
+    h.pack[1].status = 'planned';
+    expect(await P.generateProposals(TRIP, { kind: 'fill', target: { date: '2026-10-27', packPlaceId: 'spada' }, nudge: null, variant: null, withDate: null }, CALLER)).toEqual({ status: 409, body: { error: 'Galleria Spada is already in the plan.' } });
+    expect(await P.generateProposals(TRIP, { kind: 'fill', target: { date: '2026-10-27', packPlaceId: 'nope' }, nudge: null, variant: null, withDate: null }, CALLER)).toMatchObject({ status: 404 });
+  });
+
   it('shapes wait for the research work', async () => {
     expect(await P.generateProposals(TRIP, { kind: 'shapes', target: {}, nudge: null, variant: null, withDate: null }, CALLER)).toMatchObject({ status: 501 });
   });
@@ -351,5 +378,15 @@ describe('accepting and turning down', () => {
     h.proposals.push({ id: 's1', groupId: 'shapes:1', kind: 'shape', title: 'Ancient Rome first', why: '', scope: {}, ops: [{ op: 'setTrip', fields: { pace: 'relaxed' } }], diff: { lines: [], changes: [], dates: [], walkDeltaM: null, dropped: [] }, tradeoffs: {}, evidence: [], place: null, image: null, packPlaceId: null, shape: null, preview: [], basedOnVersion: 4, status: 'open', reason: null });
     expect((await P.acceptProposal(TRIP, 's1', CALLER)).status).toBe(200);
     expect(h.expired).toEqual([{ kinds: ['shape'], reason: 'Chose Ancient Rome first' }]);
+  });
+});
+
+describe('inside a job', () => {
+  it('with no pack, a request already running as a job searches inline instead of starting another', async () => {
+    h.pack = [];
+    h.ideas = { gap: null, rejected: [], note: 'Nothing fits.', research: [], ideas: [] };
+    const r = await P.generateProposals(TRIP, { kind: 'fill', target: { date: '2026-10-27', stage: 'afternoon' }, nudge: null, variant: null, withDate: null }, CALLER, { inline: true });
+    expect(h.jobs).toEqual([]);
+    expect(r).toEqual({ status: 200, body: { proposals: [], note: 'Nothing fits.' } });
   });
 });

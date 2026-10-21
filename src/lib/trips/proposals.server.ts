@@ -47,7 +47,7 @@ import { findIdeas } from './ideas.server';
 import { fetchImage } from './images.server';
 import { wikidataId } from './images';
 import { startJob, type TripJob } from './jobs.server';
-import type { LocalDate, PlaceImage, SolvedPlan, Wish } from './model';
+import type { DayStage, LocalDate, PlaceImage, SolvedPlan, Wish } from './model';
 import { optionFit, type PlanOption } from './options';
 import { solverInput } from './plan.server';
 import { replan } from './plan.server';
@@ -101,6 +101,8 @@ export interface ProposalDeps {
   now?: () => number;
   /** The fast path's dry-run budget, ms. */
   budgetMs?: number;
+  /** Already running as a job (`"async": true`): a slow fallback runs here, not as a second job. */
+  inline?: boolean;
 }
 
 /** The fast path stops dry-running candidates after this long (target: under 2 s in all). */
@@ -108,6 +110,7 @@ export const FAST_PATH_MS = 1500;
 /** A photograph for a model-drafted place is looked for this long, then the card goes without. */
 const IMAGE_MS = 3000;
 
+export const NOT_READY_WAIT = 'The research for this trip is not ready yet — try again in a minute or two.';
 export const NOT_READY_NOTE = 'The research for this trip is not ready yet, so I am searching the map around that part of the day instead — this can take up to a minute.';
 
 const STATUS_WORD: Record<Proposal['status'], string> = { open: 'open', accepted: 'taken', rejected: 'turned down', superseded: 'replaced by another choice', expired: 'out of date' };
@@ -191,7 +194,11 @@ function draftSlot(base: Base, draft: ProposalDraft): Slot | null | 'refused' {
  * nothing, any op is refused, or — for a fill or swap — it neither lands in
  * its slot nor says what it would push out.
  */
-async function checkOne(base: Base, draft: ProposalDraft, opts: { trusted: boolean; groupId: string; slot?: Slot | null; deps: ProposalDeps }): Promise<Checked | null> {
+async function checkOne(
+  base: Base,
+  draft: ProposalDraft,
+  opts: { trusted: boolean; groupId: string; slot?: Slot | null; deps: ProposalDeps; onDrop?: (why: string) => void },
+): Promise<Checked | null> {
   const slot = opts.slot !== undefined ? opts.slot : draftSlot(base, draft);
   if (slot === 'refused') return null;
   const pp = draft.packPlaceId ? (base.pack.find((p) => p.id === draft.packPlaceId) ?? null) : null;
@@ -229,16 +236,29 @@ async function checkOne(base: Base, draft: ProposalDraft, opts: { trusted: boole
     console.warn('[trips/proposals] a dry run failed:', (err as Error)?.message);
     return null;
   }
+  if (r.rejected.length) {
+    opts.onDrop?.(r.rejected.map((x) => x.reason).join(' '));
+    return null;
+  }
   // Nothing to see (no stop moves, nothing added or left out) is not a proposal.
-  if (!r.changed || r.rejected.length || !r.applied.length || (!r.diff.changes.length && !r.diff.dates.length)) return null;
+  if (!r.changed || !r.applied.length || (!r.diff.changes.length && !r.diff.dates.length)) {
+    opts.onDrop?.('It would not change the plan.');
+    return null;
+  }
 
   const added = r.applied.find((o) => o.op === 'addWish') as Extract<(typeof r.applied)[number], { op: 'addWish' }> | undefined;
   const addedPlace = added?.wish.place ?? null;
-  const placePack = pp ?? (addedPlace ? packFor(base.pack, addedPlace) : null);
+  // A model's place the pack already holds: its facts and photo — unless it was turned down.
+  const known = !pp && addedPlace ? packFor(base.pack, addedPlace) : null;
+  if (known?.status === 'rejected') return null;
+  const placePack = pp ?? (known?.status === 'candidate' ? known : null);
   let verdict: Verdict | null = null;
   if (slot && (draft.kind === 'fill' || draft.kind === 'swap') && added && r.created.wishes[0]) {
     verdict = judgeIdea(r.plan, base.baseline, new Map(Object.entries(base.titles)), { id: r.created.wishes[0], facts: addedPlace ? factsFor(addedPlace) : null, replacesMeal: added.wish.replacesMeal ?? null }, slot.gap);
-    if (!verdict.fits && !verdict.pushesOut.length) return null;
+    if (!verdict.fits && !verdict.pushesOut.length) {
+      opts.onDrop?.(verdict.reason ?? 'It does not fit.');
+      return null;
+    }
   }
   const osm = addedPlace ? found.get(`${addedPlace.location.lat},${addedPlace.location.lng}`) : undefined;
   const image = placePack?.image ?? (osm ? await imageWithin(osm.wikidata, opts.deps) : null);
@@ -394,7 +414,8 @@ export async function acceptProposal(trip: TripRecord, pid: string, caller: Prop
   let changes: string[] = [];
   let made = false;
   try {
-    const solved = await replan(fresh, caller.surface === 'phone' ? 'phone' : 'site', { keepRunningDay: caller.surface !== 'phone' });
+    // On the phone a change is the phone's own version of the day (the running-day rule); on the site it is labelled a proposal.
+    const solved = await replan(fresh, caller.surface === 'phone' ? 'phone' : 'proposal', { keepRunningDay: caller.surface !== 'phone' });
     after = solved.plan;
     made = solved.created;
     changes = solved.created ? solved.plan.changes : [];
@@ -449,9 +470,11 @@ export async function generateProposals(trip: TripRecord, request: ProposalReque
   const base = await loadBase(trip);
   if (!base) return { status: 409, body: { error: 'There is no plan yet — say where you are staying and a few things you would like to do first.' } };
   switch (request.kind) {
-    case 'swap':
     case 'fill':
-      return slotGroup(base, request.kind, request.target, null, caller, deps);
+      if (request.target.packPlaceId) return chosenPlaceGroup(base, request.target.date as LocalDate, request.target.stage ?? null, request.target.packPlaceId, caller, deps);
+      return slotGroup(base, 'fill', request.target, null, caller, deps);
+    case 'swap':
+      return slotGroup(base, 'swap', request.target, null, caller, deps);
     case 'nudge':
       return nudgeGroup(base, request, caller, deps);
     case 'day':
@@ -471,6 +494,33 @@ export async function offerFromPack(trip: TripRecord, target: { date: LocalDate;
   return o.status === 200 ? { proposals: (o.body.proposals as Proposal[] | undefined) ?? [], options: o.legacy ?? [] } : { proposals: [], options: [] };
 }
 
+type Ranked = Checked & { fits: boolean; lessVisited: boolean; walkMin: number | null };
+
+/** Dry-run the slot's nearest pack places within the budget; the best that fit, in order. */
+async function bestFromPack(base: Base, slot: Slot, group: string, nudge: { nudge: Nudge; ref: NudgeRef; exclude: Set<string> } | null, deps: ProposalDeps, exclude: Set<string> = new Set()): Promise<Ranked[]> {
+  const anchor = base.state.stays[0]?.location ?? null;
+  const skip = new Set([...exclude, ...(nudge?.exclude ?? [])]);
+  let ranked = rankCandidates(base.pack, slot, base.state.wishes, { limit: nudge ? 60 : MAX_CANDIDATES, exclude: skip, anchor });
+  if (nudge) ranked = nudgeRank(ranked, nudge.nudge, nudge.ref).slice(0, MAX_CANDIDATES);
+  const now = deps.now ?? Date.now;
+  const started = now();
+  const checked: Ranked[] = [];
+  for (const c of ranked) {
+    if (now() - started > (deps.budgetMs ?? FAST_PATH_MS)) break;
+    const enough = checked.filter((x) => x.fits);
+    if (nudge?.nudge !== 'less-walking' && enough.length >= GROUP_SIZE && enough.some((x) => x.lessVisited)) break;
+    const one = await checkOne(base, packDraft(c.place, slot, group), { trusted: true, groupId: group, slot, deps });
+    if (one) checked.push({ ...one, fits: one.proposal.tradeoffs.fits, lessVisited: c.place.lessVisited, walkMin: one.proposal.tradeoffs.walkMin });
+  }
+  return pickBest(orderChecked(checked, nudge?.nudge ?? null, nudge?.ref ?? null));
+}
+
+async function store(base: Base, picked: Checked[], caller: ProposalCaller, note: string | null = null): Promise<Outcome & { legacy?: PlanOption[] }> {
+  const proposals = await addProposals(base.trip.id, picked.map((b) => b.proposal), caller.email);
+  const legacy = proposals.map((p, i) => (picked[i]?.verdict ? legacyOption(p, picked[i].verdict!, i) : null)).filter((o): o is PlanOption => !!o);
+  return { status: 200, body: note ? { proposals, note } : { proposals }, legacy };
+}
+
 async function slotGroup(
   base: Base,
   kind: 'swap' | 'fill',
@@ -483,35 +533,72 @@ async function slotGroup(
   if (!s.ok) return { status: s.status, body: { error: s.error } };
   const slot = s.slot;
   const candidates = base.pack.filter((p) => p.status === 'candidate');
-  if (!candidates.length) return deps.fallback === false ? { status: 200, body: { proposals: [], note: NOT_READY_NOTE } } : ideasFallback(base.trip, slot, caller);
+  if (!candidates.length) return deps.fallback === false ? { status: 200, body: { proposals: [], note: NOT_READY_WAIT } } : ideasFallback(base.trip, slot, caller, deps);
 
-  const anchor = base.state.stays[0]?.location ?? null;
-  let ranked = rankCandidates(base.pack, slot, base.state.wishes, { limit: nudge ? 60 : MAX_CANDIDATES, exclude: nudge?.exclude, anchor });
-  if (nudge) ranked = nudgeRank(ranked, nudge.nudge, nudge.ref).slice(0, MAX_CANDIDATES);
   const group = `${nudge ? `nudge-${nudge.nudge}` : kind}:${slot.date}:${slot.stage}:${shortId()}`;
-  const now = deps.now ?? Date.now;
-  const started = now();
-  const checked: Array<Checked & { fits: boolean; lessVisited: boolean; walkMin: number | null }> = [];
-  for (const c of ranked) {
-    if (now() - started > (deps.budgetMs ?? FAST_PATH_MS)) break;
-    const enough = checked.filter((x) => x.fits);
-    if (nudge?.nudge !== 'less-walking' && enough.length >= GROUP_SIZE && enough.some((x) => x.lessVisited)) break;
-    const one = await checkOne(base, packDraft(c.place, slot, group), { trusted: true, groupId: group, slot, deps });
-    if (one) checked.push({ ...one, fits: one.proposal.tradeoffs.fits, lessVisited: c.place.lessVisited, walkMin: one.proposal.tradeoffs.walkMin });
-  }
-  const best = pickBest(orderChecked(checked, nudge?.nudge ?? null, nudge?.ref ?? null));
+  const best = await bestFromPack(base, slot, group, nudge, deps);
   if (!best.length) {
     const pack = await readPack(base.trip.id).catch(() => null);
-    if (pack?.status !== 'ready' && deps.fallback !== false && !nudge) return ideasFallback(base.trip, slot, caller);
+    if (pack?.status !== 'ready' && deps.fallback !== false && !nudge) return ideasFallback(base.trip, slot, caller, deps);
     const where = `${dayLabel(slot.date)} ${slot.stage}`;
     return {
       status: 200,
       body: { proposals: [], note: nudge ? `Nothing ${NUDGE_LABEL[nudge.nudge].toLowerCase()} from the research fits ${where}.` : `Nothing from the research fits ${where} as the day stands — ask the planner to look further.` },
     };
   }
-  const proposals = await addProposals(base.trip.id, best.map((b) => b.proposal), caller.email);
-  const legacy = proposals.map((p, i) => (best[i]?.verdict ? legacyOption(p, best[i].verdict!, i) : null)).filter((o): o is PlanOption => !!o);
-  return { status: 200, body: { proposals }, legacy };
+  return store(base, best, caller);
+}
+
+/** The parts of a day a kind of place is tried in, best first, when no part was named. */
+function stagesFor(p: PackPlace): DayStage[] {
+  if (p.kind === 'food') return ['lunch', 'evening'];
+  if (p.kind === 'cafe') return ['morning', 'afternoon', 'lunch'];
+  if (p.kind === 'gelato' || p.tags.includes('evening')) return ['afternoon', 'evening'];
+  return ['morning', 'afternoon', 'evening'];
+}
+
+const lowerFirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+
+/**
+ * "Add to the plan" from the research pack: that place on that day, in the
+ * part of it where it fits (or the part named). When it fits, the group is
+ * the place. When it does not, the note says why and the group offers the
+ * place anyway if it only pushes something out, then the best alternatives
+ * that do fit there.
+ */
+async function chosenPlaceGroup(base: Base, date: LocalDate, stage: DayStage | null, packPlaceId: string, caller: ProposalCaller, deps: ProposalDeps): Promise<Outcome & { legacy?: PlanOption[] }> {
+  const found = base.pack.find((p) => p.id === packPlaceId);
+  if (!found) return { status: 404, body: { error: 'That place is not in the research for this trip.' } };
+  if (found.status === 'planned') return { status: 409, body: { error: `${found.name} is already in the plan.` } };
+  // Asked for by name: even a place turned down before is checked again.
+  const chosen: PackPlace = { ...found, status: 'candidate', rejectReason: null };
+  const b: Base = { ...base, pack: base.pack.map((p) => (p.id === chosen.id ? chosen : p)) };
+  const group = `fill:${date}:pick:${shortId()}`;
+  let firstSlot: Slot | null = null;
+  let landed: Checked | null = null;
+  let why: string | null = null;
+  for (const st of stage ? [stage] : stagesFor(chosen)) {
+    const s = slotFor(b.latest.plan, b.state.wishes, b.state.bookings, 'fill', { date, stage: st });
+    if (!s.ok) {
+      if (s.status === 404) return { status: 404, body: { error: s.error } };
+      continue;
+    }
+    firstSlot ??= s.slot;
+    const reasons: string[] = [];
+    const one = await checkOne(b, packDraft(chosen, s.slot, group), { trusted: true, groupId: group, slot: s.slot, deps, onDrop: (r) => reasons.push(r) });
+    if (one?.verdict?.fits) return store(b, [one], caller);
+    if (one && !landed) {
+      landed = one;
+      firstSlot = s.slot;
+    }
+    why ??= one?.verdict?.reason ?? reasons[0] ?? null;
+  }
+  if (!firstSlot) return { status: 404, body: { error: 'That day is not in the plan.' } };
+  const note = `${chosen.name} does not fit ${dayLabel(date)}${why ? `: ${lowerFirst(why)}` : ' as the day stands.'}`.replace(/\.?$/, '.');
+  const alternatives = await bestFromPack(b, firstSlot, group, null, deps, new Set([chosen.id]));
+  const picked = [...(landed ? [landed] : []), ...alternatives].slice(0, GROUP_SIZE);
+  if (!picked.length) return { status: 200, body: { proposals: [], note } };
+  return store(b, picked, caller, note);
 }
 
 async function nudgeGroup(base: Base, request: ProposalRequest, caller: ProposalCaller, deps: ProposalDeps): Promise<Outcome> {
@@ -575,14 +662,14 @@ async function dayGroup(base: Base, request: ProposalRequest, caller: ProposalCa
  * No research pack yet: the live ideas search (an agentic turn and the map,
  * up to a minute), as a job, its ideas checked into a group like any other.
  */
-function ideasFallback(trip: TripRecord, slot: Slot, caller: ProposalCaller): Outcome {
+async function ideasFallback(trip: TripRecord, slot: Slot, caller: ProposalCaller, deps: ProposalDeps = {}): Promise<Outcome> {
   const ask = {
     date: slot.date,
     stage: slot.stage,
     afterStopId: slot.replaces ? slot.gap.before.stopId : null,
     beforeStopId: slot.replaces ? slot.gap.after.stopId : null,
   };
-  const job: TripJob = startJob(caller.email, 'ideas', async () => {
+  const work = async () => {
     const r = await findIdeas(trip, ask, caller.surface, { asOwner: caller.isOwner, author: { email: caller.email, id: caller.personId ?? null } });
     const drafts: ProposalDraft[] = r.ideas
       .filter((i) => i.verdict.fits || i.verdict.pushesOut.length)
@@ -598,6 +685,8 @@ function ideasFallback(trip: TripRecord, slot: Slot, caller: ProposalCaller): Ou
     // The ideas' places were found on the map by the search: trusted.
     const out = await checkDrafts(trip, drafts, { authorEmail: caller.email, group: `${slot.kind}:${slot.date}:${slot.stage}:${shortId()}`, trusted: true });
     return { proposals: out.proposals, note: out.proposals.length ? NOT_READY_NOTE : (r.note ?? 'Nothing found fits that part of the day.') };
-  });
+  };
+  if (deps.inline) return { status: 200, body: await work() };
+  const job: TripJob = startJob(caller.email, 'ideas', work);
   return { status: 202, body: { job, note: NOT_READY_NOTE } };
 }

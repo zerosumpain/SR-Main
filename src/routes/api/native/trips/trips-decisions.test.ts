@@ -101,7 +101,7 @@ describe('v8 decision routes (phone)', () => {
     h.who = 'parent@example.test';
     const r = await proposals.POST(ev({}, body('POST', { kind: 'nudge', target: { proposalId: 'p1' }, nudge: 'closer' })));
     expect(r.status).toBe(200);
-    expect(h.calls[0]).toMatchObject({ fn: 'generate', args: [{ id: TRIP_ID }, { kind: 'nudge', nudge: 'closer', target: { proposalId: 'p1' } }, { email: 'parent@example.test', name: 'parent', surface: 'phone', isOwner: false }] });
+    expect(h.calls[0]).toMatchObject({ fn: 'generate', args: [{ id: TRIP_ID }, { kind: 'nudge', nudge: 'closer', target: { proposalId: 'p1' } }, { email: 'parent@example.test', name: 'parent', surface: 'phone', isOwner: false }, { inline: false }] });
 
     h.who = 'owner@example.test';
     await decide.POST(ev({ pid: 'p9' }, body('POST', { action: 'reject', reason: 'too-busy' })));

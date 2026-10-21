@@ -47,7 +47,7 @@ export async function undoTo(trip: TripRecord, toVersion: number | null | undefi
   await relinkPack(trip.id, actions.wishes.remove, actions.wishes.insert).catch((err) => console.warn('[trips/undo] pack not relinked:', (err as Error)?.message));
 
   const fresh = (await getTripById(trip.id)) ?? trip;
-  const solved = await replan(fresh, caller.surface === 'phone' ? 'phone' : 'site', { keepRunningDay: caller.surface !== 'phone', lead: [lead] });
+  const solved = await replan(fresh, caller.surface === 'phone' ? 'phone' : 'undo', { keepRunningDay: caller.surface !== 'phone', lead: [lead] });
   if (!solved.created) return { status: 409, body: { error: `The plan already matches version ${target}.` } };
   const titles = Object.fromEntries((await loadState(trip.id)).wishes.map((w) => [w.id, w.title]));
   const diff = planDiff(latest.plan, solved.plan.plan, titles);

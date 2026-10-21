@@ -307,7 +307,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
       onDone: async (id) => {
         const t = await getTrip(trip.ownerEmail, id);
         if (!t) return;
-        const again = await replan(t, 'site');
+        const again = await replan(t, 'research');
         // v8: nothing changes silently — a re-plan that moved things says so.
         const note = again.created ? backgroundNote(again.plan.changes) : null;
         if (note) await logEdit(id, note, [], again.plan.version);
@@ -332,7 +332,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   // act AND propose. The legacy option cards (for the family's current app,
   // which ignores proposals) are drawn from the fill and swap groups, on a
   // turn that changed nothing, as v7's options always were.
-  const caller8 = { email: author.email, name: caller.name, personId: author.id, isOwner: caller.isOwner, surface: input.surface };
+  const proposer = { email: author.email, name: caller.name, personId: author.id, isOwner: caller.isOwner, surface: input.surface };
   let proposals: Proposal[] = [];
   let legacy: PlanOption[] = [];
   const drafts = editor ? [...answer.proposals, ...optionDrafts(answer.options)] : [];
@@ -344,7 +344,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   if (editor && stillEmpty && !proposals.length && !changed) {
     // Still nothing to show: say so plainly, and offer what the pack has for the emptiest part of a day.
     const slot = latest ? openSlot(latest.plan, localDateIn(trip.timeZone, new Date())) : null;
-    const offered = slot && pack.length ? await offerFromPack(fresh, slot, caller8).catch(() => ({ proposals: [] as Proposal[], options: [] as PlanOption[] })) : { proposals: [] as Proposal[], options: [] as PlanOption[] };
+    const offered = slot && pack.length ? await offerFromPack(fresh, slot, proposer).catch(() => ({ proposals: [] as Proposal[], options: [] as PlanOption[] })) : { proposals: [] as Proposal[], options: [] as PlanOption[] };
     proposals = offered.proposals;
     legacy = offered.options;
     replyText = proposals.length ? `${COULD_NOT} — here’s what I can do:` : `${COULD_NOT}, so nothing has been changed.`;

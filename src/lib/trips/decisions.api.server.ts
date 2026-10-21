@@ -52,18 +52,21 @@ const refuse = () => json({ error: NOT_AN_EDITOR }, { status: 403 });
 const answer = (o: Outcome) => json(o.body, { status: o.status });
 const proposalCaller = (c: DecisionCaller): ProposalCaller => ({ email: c.email, name: c.name, personId: c.personId, isOwner: c.isOwner, surface: c.surface });
 
-/** Run now, or as a job when the body asks for `"async": true`. */
-async function runOrJob(body: unknown, c: DecisionCaller, run: () => Promise<Outcome>): Promise<Response> {
+/**
+ * Run now, or as a job when the body asks for `"async": true` (`run` is told
+ * it is inside the job, so a slow fallback does not start a second one).
+ */
+async function runOrJob(body: unknown, c: DecisionCaller, run: (inJob: boolean) => Promise<Outcome>): Promise<Response> {
   if (wantsAsync(body)) {
     return jobAccepted(
       // TODO(integration, S2): kind 'proposals' once the durable job kinds land; 'ideas' is today's nearest.
       startJob(c.email, 'ideas', async () => {
-        const o = await run();
+        const o = await run(true);
         return o.status === 200 ? o.body : { ...o.body, status: o.status };
       }),
     );
   }
-  return answer(await run());
+  return answer(await run(false));
 }
 
 export async function getDecisions(trip: TripRecord, c: DecisionCaller): Promise<Response> {
@@ -74,7 +77,7 @@ export async function postProposals(trip: TripRecord, c: DecisionCaller, body: u
   if (!canDecide(c.access)) return refuse();
   const parsed = readProposalRequest(body);
   if (!parsed.ok) return json({ error: parsed.error }, { status: 400 });
-  return runOrJob(body, c, () => generateProposals(trip, parsed.request, proposalCaller(c)));
+  return runOrJob(body, c, (inline) => generateProposals(trip, parsed.request, proposalCaller(c), { inline }));
 }
 
 export async function postProposalDecision(trip: TripRecord, c: DecisionCaller, pid: string, body: unknown): Promise<Response> {
