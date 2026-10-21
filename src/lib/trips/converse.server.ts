@@ -342,7 +342,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   }
   if (editor && stillEmpty && !proposals.length && !changed) {
     // Still nothing to show: say so plainly, and offer what the pack has for the emptiest part of a day.
-    const slot = latest ? openSlot(latest.plan, localDateIn(trip.timeZone)) : null;
+    const slot = latest ? openSlot(latest.plan, localDateIn(trip.timeZone, new Date())) : null;
     const offered = slot && pack.length ? await offerFromPack(fresh, slot, caller8).catch(() => ({ proposals: [] as Proposal[], options: [] as PlanOption[] })) : { proposals: [] as Proposal[], options: [] as PlanOption[] };
     proposals = offered.proposals;
     legacy = offered.options;

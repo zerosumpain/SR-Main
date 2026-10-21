@@ -451,7 +451,7 @@ export function openSlot(plan: SolvedPlan, from: LocalDate): { date: LocalDate; 
     }
     if (best) return { date: best.date, stage: best.stage };
   }
-  return best ? { date: best.date, stage: best.stage } : null;
+  return null;
 }
 
 // ── Requests (lenient readers for the routes) ──────────────────────────────

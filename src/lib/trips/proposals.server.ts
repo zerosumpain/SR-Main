@@ -229,7 +229,8 @@ async function checkOne(base: Base, draft: ProposalDraft, opts: { trusted: boole
     console.warn('[trips/proposals] a dry run failed:', (err as Error)?.message);
     return null;
   }
-  if (!r.changed || r.rejected.length || !r.applied.length) return null;
+  // Nothing to see (no stop moves, nothing added or left out) is not a proposal.
+  if (!r.changed || r.rejected.length || !r.applied.length || (!r.diff.changes.length && !r.diff.dates.length)) return null;
 
   const added = r.applied.find((o) => o.op === 'addWish') as Extract<(typeof r.applied)[number], { op: 'addWish' }> | undefined;
   const addedPlace = added?.wish.place ?? null;
