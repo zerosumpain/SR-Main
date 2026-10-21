@@ -2,8 +2,9 @@ import { json } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { identifyDevice, touchDevice } from '$lib/server/native-auth';
-import { installToken, itmsLink } from '$lib/server/adhoc-install';
+import { buildQuery, installToken, itmsLink } from '$lib/server/adhoc-install';
 import { releasedAdhocBuild } from '$lib/github/app-release';
+import { pinnedAdhocBuild } from '$lib/github/app-device-push';
 
 /**
  * GET /api/native/app-update — the RELEASED ad-hoc copy of the app (the owner
@@ -15,6 +16,11 @@ import { releasedAdhocBuild } from '$lib/github/app-release';
  * nobody else, because the answer carries the install link. `{ build: null }`
  * when there is no copy, or GitHub cannot be read: no prompt is the safe
  * answer to either.
+ *
+ * A phone the owner sent a build to (`$lib/github/app-device-push`) is
+ * answered with THAT build, `pushed: true`, installed through a link that
+ * fetches that build alone. The app offers a pushed build whatever it runs;
+ * an app from before the flag ignores it and offers it only when it is later.
  */
 export const GET: RequestHandler = async ({ request, url }) => {
   const identity = await identifyDevice(request);
@@ -23,18 +29,26 @@ export const GET: RequestHandler = async ({ request, url }) => {
   // phone's build and last-seen are most worth recording (native-telemetry).
   void touchDevice(identity.id, request).catch(() => {});
   if (!env.AUTH_SECRET) return json({ build: null });
-  const build = await releasedAdhocBuild().catch((err) => {
-    console.error('[app-update] could not read the ad-hoc build:', err);
+  const pinned = await pinnedAdhocBuild(identity.id).catch((err) => {
+    console.error('[app-update] could not read the phone’s pinned build:', err);
     return null;
   });
+  const build =
+    pinned?.build ??
+    (await releasedAdhocBuild().catch((err) => {
+      console.error('[app-update] could not read the ad-hoc build:', err);
+      return null;
+    }));
   if (!build) return json({ build: null });
+  const manifest = `${url.origin}/install/${installToken(env.AUTH_SECRET)}/manifest.plist`;
   return json({
     build: {
       version: build.version,
       build: build.build,
       commit: build.commit,
       builtAt: build.builtAt,
-      install: itmsLink(`${url.origin}/install/${installToken(env.AUTH_SECRET)}/manifest.plist`),
+      install: itmsLink(pinned ? `${manifest}?${buildQuery(env.AUTH_SECRET, pinned.run)}` : manifest),
+      ...(pinned && { pushed: true }),
     },
   });
 };

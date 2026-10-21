@@ -21,6 +21,7 @@ import {
   type AdhocDraft,
 } from '$lib/github/adhoc-builds';
 import { buildState, chooseReleased, currentRelease, releaseBuild } from '$lib/github/app-release';
+import { devicePins, sendBuildToDevice, unpinDevice } from '$lib/github/app-device-push';
 
 // Owner-only: /admin is never in the access catalogue, so the hook's default
 // deny covers this page and its actions.
@@ -30,7 +31,8 @@ import { buildState, chooseReleased, currentRelease, releaseBuild } from '$lib/g
 // and the ad-hoc copy the family install from. Nothing is minted or revoked
 // here — that is the person's page; every row links to it. The fleet's own
 // actions: rebuild the ad-hoc copy, and choose which build the family's
-// phones are offered (Releases, `$lib/github/app-release`).
+// phones are offered (Releases, `$lib/github/app-release`), and send one
+// build to one phone (`$lib/github/app-device-push`).
 
 async function namesByEmail(viewer: string | null): Promise<Map<string, string>> {
   const names = new Map<string, string>();
@@ -87,6 +89,8 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     }),
   );
   const offered = offeredDraft ? await adhocBuildOf(offeredDraft).catch(() => null) : null;
+  // Builds sent to one phone, by site credential id, still in force.
+  const pins = release.ok ? await devicePins(release.value).catch(() => ({})) : {};
   const copy = { ok: drafts.ok, value: offered };
 
   const rows = mergeDeviceRows(site.ok ? site.value : [], pilot.ok ? pilot.value : [], names, new Date());
@@ -123,6 +127,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       release: release.ok ? release.value : null,
       offered: offeredDraft?.run ?? null,
       builds,
+      pins,
       testflight: testflight.ok ? testflight.value : undefined,
       repo: 'https://github.com/zerosumpain/SR-AppleApp',
     },
@@ -171,6 +176,35 @@ export const actions: Actions = {
     });
     if (!outcome.ok) return fail(400, { releaseError: outcome.error });
     return { released: run };
+  },
+
+  /**
+   * Send build N to one phone: its update check offers that build from now
+   * on (until the next family release), and a push asks it to look now.
+   */
+  sendBuild: async ({ request, locals }) => {
+    const form = await request.formData();
+    const device = String(form.get('device') ?? '');
+    const run = Number(form.get('build'));
+    const phone = String(form.get('phone') ?? '').slice(0, 80) || 'the phone';
+    if (!device) return fail(400, { sendError: 'Which phone?', sendDevice: device });
+    if (!Number.isInteger(run) || run <= 0) return fail(400, { sendError: 'Which build?', sendDevice: device });
+    const session = await locals.auth();
+    const by = (session?.user?.email ?? '').toLowerCase() || null;
+    const outcome = await sendBuildToDevice(device, run, by).catch((err) => {
+      console.error('[fleet] send build failed:', err);
+      return { ok: false as const, error: 'The build could not be sent.' };
+    });
+    if (!outcome.ok) return fail(400, { sendError: outcome.error, sendDevice: device });
+    return { sent: { device, phone, build: run, push: outcome.pin.push } };
+  },
+
+  /** Back to the family's build for one phone. */
+  unpin: async ({ request }) => {
+    const device = String((await request.formData()).get('device') ?? '');
+    if (!device) return fail(400, { sendError: 'Which phone?', sendDevice: device });
+    await unpinDevice(device);
+    return { unpinned: device };
   },
 
   /** Forget an enrolled phone here. It stays in the signing profile until the next build drops it. */

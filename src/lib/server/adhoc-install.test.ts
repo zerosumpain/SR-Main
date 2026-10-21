@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   appCookie,
   buildIncludes,
+  buildQuery,
   cleanDeviceName,
   cleanUdid,
   enrolProfile,
@@ -15,6 +16,7 @@ import {
   mintJoinCode,
   parseEnrolment,
   readAppCookie,
+  requestedBuild,
   verifyJoinCode,
 } from './adhoc-install';
 
@@ -45,6 +47,27 @@ describe('the install link', () => {
 
   it('refuses to mint from no secret', () => {
     expect(() => installToken('')).toThrow();
+  });
+});
+
+describe('the install link for one build (a build sent to one phone)', () => {
+  const params = (q: string) => new URLSearchParams(q);
+
+  it('names the released copy when it names no build', () => {
+    expect(requestedBuild(params(''), SECRET)).toBeNull();
+  });
+
+  it('opens the build its key was signed for, and no other', () => {
+    expect(requestedBuild(params(buildQuery(SECRET, 131)), SECRET)).toBe(131);
+    const key = params(buildQuery(SECRET, 131)).get('key');
+    expect(requestedBuild(params(`build=132&key=${key}`), SECRET)).toBe(false);
+    expect(requestedBuild(params(buildQuery('another-secret'.padEnd(40, 'y'), 131)), SECRET)).toBe(false);
+  });
+
+  it('refuses a build with no key, a bad number, or no secret', () => {
+    expect(requestedBuild(params('build=131'), SECRET)).toBe(false);
+    expect(requestedBuild(params('build=abc&key=x'), SECRET)).toBe(false);
+    expect(requestedBuild(params(buildQuery(SECRET, 131)), undefined)).toBe(false);
   });
 });
 

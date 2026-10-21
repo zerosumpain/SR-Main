@@ -123,6 +123,9 @@ const ALARM_PRIVATE: Record<string, { title: string; body: string }> = {
   // message's id survives; who wrote it and what it says do not.
   'family-msg': { title: 'Family message', body: 'Someone in the family sent a message. Open the app to read it.' },
   'family-msg-reply': { title: 'Family message', body: 'Someone replied to your message. Open the app to read it.' },
+  // A build the owner sent this phone: nothing private in it, and the app asks
+  // the site which build when it opens.
+  'app-update': { title: 'A new version of SR', body: 'Open SR to install it.' },
 };
 const ALARM_KEYS = ['alarmId', 'kind', 'at', 'messageId'] as const;
 
@@ -184,6 +187,41 @@ export async function pushToOwner(message: PushMessage, send: PushSender = sendP
     console.error('[push] could not push to the owner:', (error as Error).message);
     return { reached: new Set(), sent: 0, failed: 0 };
   }
+}
+
+/**
+ * Push to ONE phone, by its site credential: a build the owner sent it from
+ * /admin/access/app. Null when the phone is not live or holds no token. The
+ * phone's own preview setting applies, as for any other push.
+ */
+export async function pushToDevice(deviceId: string, message: PushMessage, send: PushSender = sendPush): Promise<ApnsResult | null> {
+  const [row] = await db
+    .select({
+      id: nativeCredentials.id,
+      ownerEmail: nativeCredentials.ownerEmail,
+      apnsToken: nativeCredentials.apnsToken,
+      apnsEnv: nativeCredentials.apnsEnv,
+      notificationDetails: nativeCredentials.notificationDetails,
+    })
+    .from(nativeCredentials)
+    .where(
+      and(
+        eq(nativeCredentials.id, deviceId),
+        eq(nativeCredentials.kind, 'device'),
+        isNull(nativeCredentials.revokedAt),
+        gt(nativeCredentials.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  if (!row?.apnsToken) return null;
+  let result: ApnsResult | null = null;
+  await deliver(
+    [{ ...row, apnsToken: row.apnsToken }],
+    message,
+    async (token, m, env) => (result = await send(token, m, env)),
+    clearPushToken,
+  );
+  return result;
 }
 
 /** One "it works" notification to this phone. Null when it holds no token. */

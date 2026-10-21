@@ -27,6 +27,21 @@
 
   const personHref = (email: string) => `/admin/access/${encodeURIComponent(email)}`;
   const totals = $derived(data.fleet.totals);
+
+  // A build sent to one phone (`$lib/github/app-device-push`): the family's
+  // released build is the default — "push current" — and every copy GitHub
+  // holds can be chosen.
+  const pins = $derived(data.releases.pins as Record<string, { build: number; at: string; by: string | null; push: string }>);
+  const newest = $derived(data.releases.builds[0]?.run ?? null);
+  function buildOption(run: number): string {
+    const tags = [run === data.releases.offered ? 'family' : null, run === newest ? 'newest' : null].filter(Boolean);
+    return tags.length ? `${run} — ${tags.join(', ')}` : String(run);
+  }
+  const PUSH_SAID: Record<string, string> = {
+    sent: 'pushed',
+    'no-token': 'no push token — it sees it at its next hourly check',
+    refused: 'Apple refused the push — it sees it at its next hourly check',
+  };
 </script>
 
 <PageWrap>
@@ -100,7 +115,8 @@
     <p class="muted">
       The family's phones (the ad-hoc copy) are offered only the build released here — at /app, on the install page, and by
       the app's hourly "a new version is ready". A newer build waits while you try it on TestFlight. Releasing an older build
-      rolls back new installs; a phone already on a later build is not asked to go back.
+      rolls back new installs; a phone already on a later build is not asked to go back. To put one phone on a particular
+      build — ahead of the family, or back — use Send a build on its row below; releasing here ends every such send.
     </p>
     {#if data.releases.testflight}
       <p class="muted">
@@ -204,6 +220,7 @@
                 <th>Last seen</th>
                 <th>Last upload</th>
                 <th>Push</th>
+                <th>Send a build</th>
               </tr>
             </thead>
             <tbody>
@@ -226,6 +243,47 @@
                   <td data-label="Last seen" class="mono">{ago(phone.lastSeen)}</td>
                   <td data-label="Last upload" class="mono">{phone.lanes.includes('companion') ? ago(phone.lastUpload) : '—'}</td>
                   <td data-label="Push">{phone.push === null ? '—' : phone.push ? 'yes' : 'no'}</td>
+                  <td data-label="Send a build" class="send">
+                    {#if phone.ids.site && data.releases.readable && data.releases.builds.length}
+                      {@const device = phone.ids.site}
+                      {@const pin = pins[device]}
+                      {#if pin}
+                        <span class="pin mono">
+                          build {pin.build} sent {ago(pin.at)}{PUSH_SAID[pin.push] ? ` · ${PUSH_SAID[pin.push]}` : ''}
+                        </span>
+                        <form method="POST" action="?/unpin" use:enhance class="inline">
+                          <input type="hidden" name="device" value={device} />
+                          <button class="row-link" type="submit">Back to the family's build</button>
+                        </form>
+                      {/if}
+                      <form
+                        method="POST"
+                        action="?/sendBuild"
+                        class="send-row"
+                        use:enhance={({ formData, cancel }) => {
+                          if (!confirm(`Send build ${formData.get('build')} to ${phone.label}?`)) cancel();
+                        }}
+                      >
+                        <input type="hidden" name="device" value={device} />
+                        <input type="hidden" name="phone" value={phone.label} />
+                        <select class="nm-text-input mono" name="build" aria-label="Build to send to {phone.label}">
+                          {#each data.releases.builds as b (b.run)}
+                            <option value={b.run} selected={b.run === (pin?.build ?? data.releases.offered ?? newest)}>{buildOption(b.run)}</option>
+                          {/each}
+                        </select>
+                        <button class="nm-btn-ghost" type="submit">Send</button>
+                      </form>
+                      {#if form && 'sendDevice' in form && form.sendDevice === device && form.sendError}
+                        <p class="result-bad" role="alert">{form.sendError}</p>
+                      {:else if form && 'sent' in form && form.sent?.device === device}
+                        <p class="ok" role="status">Build {form.sent.build} sent to {form.sent.phone}.</p>
+                      {/if}
+                    {:else if !phone.ids.site}
+                      <span class="muted">needs the site pairing</span>
+                    {:else}
+                      <span class="muted">—</span>
+                    {/if}
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -278,4 +336,8 @@
   .enrolled { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
   .enrolled li { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline; }
   .inline { display: inline; }
+  .send { min-width: 13rem; }
+  .send-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.3rem; }
+  .send-row select { width: auto; padding: 0.2rem 0.4rem; }
+  .pin { display: block; color: var(--accent-ink); }
 </style>
