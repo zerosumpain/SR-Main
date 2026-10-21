@@ -9,7 +9,7 @@
   let { a, b, desk, onClose }: { a: Proposal; b: Proposal; desk: DecisionDesk; onClose: () => void } = $props();
 
   const rows = $derived(compareRows(a, b));
-  const differing = $derived(rows.filter((r) => r.differs).length);
+  const differing = $derived(rows.filter((r) => r.differs && r.key !== 'what').length);
   let el = $state<HTMLElement | null>(null);
   $effect(() => {
     // Bring the comparison into view and give it focus when it opens (once per pair).
@@ -33,7 +33,7 @@
     </div>
     {#each rows.filter((r) => r.key !== 'what') as r (r.key)}
       <div class="cmp-row" class:differs={r.differs} role="row">
-        <span class="cmp-label" role="rowheader">{r.label}{#if !r.differs}<span class="same"> · same</span>{/if}</span>
+        <span class="cmp-label" role="rowheader">{r.label}{#if !r.differs}<span class="same">{' · same'}</span>{/if}</span>
         <span class="cmp-cell" role="cell">{r.a}</span>
         <span class="cmp-cell" role="cell">{r.b}</span>
       </div>

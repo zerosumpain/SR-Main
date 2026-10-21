@@ -81,7 +81,7 @@
 
 <article class="pc np-card np-card--plain" class:shape class:previewing class:stale aria-labelledby="pc-{p.id}" aria-busy={working}>
   <header class="pc-hd">
-    <p class="dx-k">{legacy ? 'Option' : KIND[p.kind]}{#if p.scope.date && !shape} · {dayLabel(p.scope.date)}{/if}</p>
+    <p class="dx-k">{legacy ? 'Option' : KIND[p.kind]}{#if p.scope.date && !shape}{` · ${dayLabel(p.scope.date)}`}{/if}</p>
     <svelte:element this={tag} id="pc-{p.id}" class="pc-title">{p.shape?.headline || p.title}</svelte:element>
   </header>
 
@@ -116,7 +116,7 @@
 
   {#if p.evidence.length}
     <p class="pc-src">
-      <span class="dx-vh">Sources: </span>{#each p.evidence as s, si (s.url)}{si ? ' · ' : ''}<a href={s.url} target="_blank" rel="noopener noreferrer">{s.title ?? hostOf(s.url)}</a>{/each}
+      <span class="dx-vh">{'Sources: '}</span>{#each p.evidence as s, si (s.url)}{si ? ' · ' : ''}<a href={s.url} target="_blank" rel="noopener noreferrer">{s.title ?? hostOf(s.url)}</a>{/each}
     </p>
   {/if}
 

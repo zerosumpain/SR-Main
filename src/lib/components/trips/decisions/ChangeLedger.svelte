@@ -17,7 +17,7 @@
   $effect(() => {
     // Focus once per new card. Tracked: the card's id. Writes no state.
     const id = card.id;
-    if (!focusOnArrive || id === shownId) return;
+    if (!focusOnArrive || card.quiet || id === shownId) return;
     shownId = id;
     headEl?.focus();
   });
@@ -49,7 +49,7 @@
             <strong class="cl-what" class:struck={crossed(r.kind)}>{r.title}</strong>
             {#if r.before || r.after}
               <span class="cl-ba">
-                {#if r.before}<span class="was"><span class="dx-vh">was </span>{r.before}</span>{/if}
+                {#if r.before}<span class="was"><span class="dx-vh">{'was '}</span>{r.before}</span>{/if}
                 {#if r.before && r.after}<span class="arrow" aria-hidden="true">→</span>{/if}
                 {#if r.after}<span class="now"><span class="dx-vh">{r.before ? 'now ' : ''}</span>{r.after}</span>{/if}
               </span>

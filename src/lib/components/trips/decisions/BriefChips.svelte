@@ -177,7 +177,7 @@
         <button class="dx-link bc-x" type="button" onclick={() => close()}>Close</button>
       </header>
       {#if open.detail}<p class="bc-detail">{open.detail}</p>{/if}
-      {#if open.note}<p class="dx-aside">{open.note}{#if open.ref && /^https?:/.test(open.ref)} · <a href={open.ref} target="_blank" rel="noopener noreferrer">see it</a>{/if}</p>{/if}
+      {#if open.note}<p class="dx-aside">{open.note}{#if open.ref && /^https?:/.test(open.ref)}{' · '}<a href={open.ref} target="_blank" rel="noopener noreferrer">see it</a>{/if}</p>{/if}
 
       {#if view.editor}
         <form class="bc-form" onsubmit={(e) => { e.preventDefault(); void save(open); }}>

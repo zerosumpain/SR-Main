@@ -81,6 +81,20 @@ export class DecisionDesk {
     return this.#base();
   }
 
+  /** Start clean (the page moved to another trip without remounting). */
+  reset() {
+    this.busy = null;
+    this.local = [];
+    this.gone = new Set();
+    this.goneQuestions = new Set();
+    this.stale = {};
+    this.problem = null;
+    this.note = null;
+    this.change = null;
+    this.fresh = null;
+    this.#legacy.clear();
+  }
+
   #fail(where: string | null, text: string) {
     this.problem = { where, text };
   }
@@ -98,8 +112,8 @@ export class DecisionDesk {
   }
 
   /** Show a change card (and keep its numbering in one place). */
-  showChange(title: string, res: ChangeResponse): ChangeCard {
-    const card = changeCard(++this.#seq, title, res);
+  showChange(title: string, res: ChangeResponse, opts: { quiet?: boolean } = {}): ChangeCard {
+    const card = { ...changeCard(++this.#seq, title, res), quiet: !!opts.quiet };
     this.change = card;
     return card;
   }
@@ -174,8 +188,7 @@ export class DecisionDesk {
       // Taking one closes its alternatives (a shape closes the other shapes).
       this.#drop(p.id, `group:${p.groupId}`);
       if (p.kind === 'shape') this.#drop(...this.local.filter((x) => x.kind === 'shape').map((x) => x.id));
-      const { [p.id]: _, ...rest } = this.stale;
-      this.stale = rest;
+      if (this.stale[p.id]) this.stale = Object.fromEntries(Object.entries(this.stale).filter(([id]) => id !== p.id));
       this.showChange(`Used: ${p.title}`, r.body);
       await this.#hooks.reload();
       return true;

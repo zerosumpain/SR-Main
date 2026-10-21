@@ -171,6 +171,8 @@ export interface ChangeCard {
   remember: string | null;
   /** Undo for an undo: the version that was just undone. */
   redoTo?: number | null;
+  /** Shown without taking focus (a chat turn: the person is still typing). */
+  quiet?: boolean;
 }
 
 export interface ChangeResponse {
@@ -250,8 +252,8 @@ function compareValues(p: Proposal): Record<string, string> {
     when: t.fitText ?? (t.fits ? 'Fits' : 'Does not fit'),
     walk: t.walkMin !== null && t.walkMin !== undefined ? walkMinText(t.walkMin) : (walkDeltaText(p.diff.walkDeltaM) ?? ''),
     km: t.walkKmPerDay !== null && t.walkKmPerDay !== undefined ? `${Math.round(t.walkKmPerDay * 10) / 10} km` : '',
-    early: t.earlyStarts !== null && t.earlyStarts !== undefined ? String(t.earlyStarts) : '',
-    book: t.toBook !== null && t.toBook !== undefined ? String(t.toBook) : '',
+    early: t.earlyStarts !== null && t.earlyStarts !== undefined ? (t.earlyStarts === 0 ? 'None' : String(t.earlyStarts)) : '',
+    book: t.toBook !== null && t.toBook !== undefined ? (t.toBook === 0 ? 'Nothing' : String(t.toBook)) : '',
     cost: t.costText ?? '',
     indoor: t.indoor === true ? 'Indoors' : t.indoor === false ? 'Outdoors' : '',
     kids: yn(t.kidFriendly),

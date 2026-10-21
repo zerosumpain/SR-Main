@@ -16,7 +16,7 @@
   import ChangeLedger from '$lib/components/trips/decisions/ChangeLedger.svelte';
   import { tripName, dateSpan } from '$lib/components/trips/notes/notes';
   import { dayLabel } from '$lib/trips/changes';
-  import { api, errorText } from '$lib/trips/decisions-client';
+  import { api } from '$lib/trips/decisions-client';
   import { DecisionDesk } from '$lib/trips/decisions-desk.svelte';
   import {
     bestDayFor,
@@ -238,7 +238,7 @@
         <dl class="areas">
           {#each data.pack.neighbourhoods as n (n.name)}
             <dt><button class="dx-link" type="button" onclick={() => (area = n.name)}>{n.name}</button></dt>
-            <dd>{n.line}{#if n.places.length}<span class="dx-aside"> — {n.places.join(', ')}</span>{/if}</dd>
+            <dd>{n.line}{#if n.places.length}<span class="dx-aside">{` — ${n.places.join(', ')}`}</span>{/if}</dd>
           {/each}
         </dl>
       </MarginBlock>

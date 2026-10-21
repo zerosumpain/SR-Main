@@ -46,7 +46,7 @@ const brief = wire.decisions.brief.items as unknown as BriefItem[];
 const packPlace = wire.packPlace as unknown as PackPlace;
 const stages = wire.job.stages as unknown as JobStage[];
 
-const variant = (over: Partial<Proposal> & { tradeoffs?: Partial<Proposal['tradeoffs']> }): Proposal => ({
+const variant = (over: Omit<Partial<Proposal>, 'tradeoffs'> & { tradeoffs?: Partial<Proposal['tradeoffs']> }): Proposal => ({
   ...swap,
   ...over,
   tradeoffs: { ...swap.tradeoffs, ...(over.tradeoffs ?? {}) },

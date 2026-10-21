@@ -5,6 +5,7 @@
    * of index cards, and where the research stands. Beside the plan on a wide
    * sheet, above the days on a phone. Everything here is answered in place.
    */
+  import { tick } from 'svelte';
   import { api, errorText } from '$lib/trips/decisions-client';
   import type { PackSummary, Proposal, Question } from '$lib/trips/decisions';
   import type { ProposalGroupView } from '$lib/trips/decisions-view';
@@ -39,6 +40,10 @@
   } = $props();
 
   const open = $derived(questions.length + groups.reduce((n, g) => n + g.proposals.length, 0));
+  /** Keep the keyboard in the rail when a card leaves without a What changed. */
+  function refocus() {
+    void tick().then(() => (document.getElementById('dr-q') ?? document.getElementById('dr-h'))?.focus());
+  }
   const TILTS = [-1.4, 0.9, -0.6];
 
   let packNote = $state<string | null>(null);
@@ -54,7 +59,7 @@
 
 <div class="dr">
   <header class="dr-hd">
-    <h2 class="dr-h">Decisions</h2>
+    <h2 id="dr-h" class="dr-h" tabindex="-1">Decisions</h2>
     <span class="dr-n">{open ? `${open} open` : 'none open'}</span>
   </header>
 
@@ -67,10 +72,10 @@
 
   {#if questions.length}
     <section class="dr-sec" aria-labelledby="dr-q">
-      <h3 id="dr-q" class="dx-k">Quick questions</h3>
+      <h3 id="dr-q" class="dx-k dr-qh" tabindex="-1">Quick questions</h3>
       <p class="dx-aside dr-sub">Each one changes the plan. Skipping is fine — the plan already assumes an answer.</p>
       <div class="dr-qs">
-        {#each questions as q, qi (q.id)}<QuestionCard {q} {desk} {today} tilt={TILTS[qi % TILTS.length]} />{/each}
+        {#each questions as q, qi (q.id)}<QuestionCard {q} {desk} {today} tilt={TILTS[qi % TILTS.length]} onSettled={refocus} />{/each}
       </div>
     </section>
   {/if}
@@ -144,6 +149,18 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     color: var(--accent-on-dark);
+  }
+  .dr-h:focus,
+  .dr-qh:focus {
+    outline: none;
+  }
+  .dr-h:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 2px;
+  }
+  .dr-qh:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 2px;
   }
   .dr-sec {
     display: flex;

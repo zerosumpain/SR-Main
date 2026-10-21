@@ -18,7 +18,7 @@
   import { postAsJob } from '$lib/trips/job-client';
   import { api } from '$lib/trips/decisions-client';
   import { DecisionDesk } from '$lib/trips/decisions-desk.svelte';
-  import { affectedDates, affectedStops, ghostDays, groupProposals, mapDayOf, mergeProposals } from '$lib/trips/decisions-view';
+  import { affectedDates, affectedStops, changeLines, ghostDays, groupProposals, mapDayOf, mergeProposals } from '$lib/trips/decisions-view';
   import type { PlanDiff, Proposal, Question } from '$lib/trips/decisions';
   import type { PlanOption } from '$lib/trips/options';
   import type { DayStage } from '$lib/trips/model';
@@ -168,6 +168,21 @@
     });
   }
 
+  // v8: what the last turn brought back — proposals and questions as cards in
+  // the thread (the legacy `options`, never shown before, as cards when a turn
+  // has no proposals).
+  type TurnOut = {
+    quickReplies?: string[];
+    changes?: string[];
+    planVersion?: number | null;
+    proposals?: Proposal[];
+    questions?: Question[];
+    options?: PlanOption[];
+    diff?: PlanDiff | null;
+    undo?: { toVersion: number } | null;
+  };
+  let turn = $state<{ proposals: Proposal[]; questions: Question[] }>({ proposals: [], questions: [] });
+
   /** Reload the page's data and briefly highlight what the change moved. */
   async function reloadAndHighlight(before = data.plan?.plan ?? null) {
     await invalidateAll();
@@ -228,6 +243,7 @@
   function preview(p: Proposal | null) {
     previewId = p?.id ?? null;
     if (!p || !plan) return;
+    if (!wide) talkOpen = false; // on a phone the sheet would hide the map
     const days = affectedDates(p).filter((d) => plan.days.some((x) => x.date === d));
     selectTab(days.length === 1 ? days[0] : 'overview');
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -245,6 +261,36 @@
     });
   }
 
+  // A choice made in the planner's sheet on a phone: close the sheet so What
+  // changed (in the rail, which takes focus) is what you see next.
+  let seenChange = 0;
+  $effect(() => {
+    const c = desk.change;
+    if (!c || c.id === seenChange) return;
+    seenChange = c.id;
+    if (c.quiet) return;
+    untrack(() => {
+      if (talkOpen && !wide) talkOpen = false;
+    });
+  });
+
+  // Another trip in the same page (a client-side navigation reuses it): start clean.
+  let shownTrip = '';
+  $effect(() => {
+    const id = data.trip.id;
+    if (id === shownTrip) return;
+    const first = !shownTrip;
+    shownTrip = id;
+    if (first) return;
+    untrack(() => {
+      desk.reset();
+      previewId = null;
+      swapDays = null;
+      turn = { proposals: [], questions: [] };
+      quick = [];
+    });
+  });
+
   // While the research is still running, look again every so often; reload once it is done.
   $effect(() => {
     if (data.decisions.pack.status !== 'building') return;
@@ -258,21 +304,6 @@
     }, 10_000);
     return () => clearInterval(t);
   });
-
-  // v8: what the last turn brought back — proposals and questions as cards in
-  // the thread (the legacy `options`, never shown before, as cards when a turn
-  // has no proposals).
-  type TurnOut = {
-    quickReplies?: string[];
-    changes?: string[];
-    planVersion?: number | null;
-    proposals?: Proposal[];
-    questions?: Question[];
-    options?: PlanOption[];
-    diff?: PlanDiff | null;
-    undo?: { toVersion: number } | null;
-  };
-  let turn = $state<{ proposals: Proposal[]; questions: Question[] }>({ proposals: [], questions: [] });
 
   async function send(text: string) {
     const t = text.trim();
@@ -292,10 +323,11 @@
         draft = t;
       } else {
         quick = out.quickReplies ?? [];
-        const proposals = Array.isArray(out.proposals) ? out.proposals : [];
-        const options = !proposals.length && Array.isArray(out.options) ? desk.optionCards(out.options) : [];
-        turn = { proposals: [...proposals, ...options], questions: Array.isArray(out.questions) ? out.questions : [] };
-        if (out.changes?.length || out.diff?.changes?.length) desk.showChange('The planner changed the plan', out);
+        const ps = Array.isArray(out.proposals) ? out.proposals : [];
+        const options = !ps.length && Array.isArray(out.options) ? desk.optionCards(out.options) : [];
+        turn = { proposals: [...ps, ...options], questions: Array.isArray(out.questions) ? out.questions : [] };
+        // Shown in the rail without taking focus: the person is still in the conversation.
+        if (changeLines(out.changes).length || out.diff?.changes?.length) desk.showChange('The planner changed the plan', out, { quiet: true });
       }
       await reloadAndHighlight(before);
     } catch {
@@ -496,8 +528,14 @@
           {#if !plan}
             <MarginBlock kicker="Begin">
               <h2 class="sheet-h">Nothing on the page yet</h2>
-              <p class="np-aside">Tell the planner where you’re going, when, and where you’re staying — the days appear here as you talk.</p>
-              <button class="pen-btn" type="button" onclick={openTalk}>Talk to the planner →</button>
+              {#if grouped.shapes.length}
+                <p class="np-aside">Choose one of the ways to do the trip above, and its days appear here.</p>
+              {:else if data.decisions.pack.status === 'building'}
+                <p class="np-aside">The planner is still reading up on the place. The days appear here when it is ready — it carries on if you leave.</p>
+              {:else}
+                <p class="np-aside">Tell the planner where you’re going, when, and where you’re staying — the days appear here as you talk.</p>
+              {/if}
+              <button class="pen-btn" type="button" onclick={openTalk}>Tell the planner →</button>
             </MarginBlock>
           {:else if tab === 'overview'}
             <MarginBlock kicker="Map" aria-labelledby="map-h">

@@ -247,7 +247,7 @@
             <li>
               <label class="gs-note">
                 <input type="checkbox" checked={ticked.has(n.id)} onchange={() => tick_(n.id)} />
-                <span><strong>{n.label}</strong>{#if n.detail}<span class="dx-aside"> — {n.detail}</span>{/if}</span>
+                <span><strong>{n.label}</strong>{#if n.detail}<span class="dx-aside">{` — ${n.detail}`}</span>{/if}</span>
               </label>
             </li>
           {/each}

@@ -10,7 +10,23 @@
   import type { DecisionDesk } from '$lib/trips/decisions-desk.svelte';
   import { deadlineText } from '$lib/trips/decisions-view';
 
-  let { q, desk, today, tilt = -1.2 }: { q: Question; desk: DecisionDesk; today: string; tilt?: number } = $props();
+  let {
+    q,
+    desk,
+    today,
+    tilt = -1.2,
+    onSettled,
+  }: {
+    q: Question;
+    desk: DecisionDesk;
+    today: string;
+    tilt?: number;
+    /** After it is skipped (no What changed takes focus), so the list can keep focus. */
+    onSettled?: () => void;
+  } = $props();
+  async function skip() {
+    if (await desk.answer(q, 'skip')) onSettled?.();
+  }
 
   const key = $derived(`q:${q.id}`);
   const working = $derived(desk.busy === key);
@@ -31,7 +47,7 @@
   <div class="qc-answers" role="group" aria-label="Answers">
     {#each q.answers as a (a.id)}
       <button class="qc-chip" type="button" disabled={!!desk.busy} aria-describedby={a.summary ? `qs-${q.id}-${a.id}` : undefined} onclick={() => desk.answer(q, 'answer', a.id)}>
-        {a.label}{#if q.appliedDefault && a.id === q.defaultAnswerId}<span class="qc-now"> · in the plan now</span>{/if}
+        {a.label}{#if q.appliedDefault && a.id === q.defaultAnswerId}<span class="qc-now">{' · in the plan now'}</span>{/if}
       </button>
       {#if a.summary}<span id="qs-{q.id}-{a.id}" class="dx-vh">{a.summary}</span>{/if}
     {/each}
@@ -40,7 +56,7 @@
 
   {#if q.ifSkipped || assumed}
     <p class="qc-skip">If you skip: {q.ifSkipped ?? assumed?.label}
-      <button class="qc-link" type="button" disabled={!!desk.busy} onclick={() => desk.answer(q, 'skip')}>Skip for now</button>
+      <button class="qc-link" type="button" disabled={!!desk.busy} onclick={skip}>Skip for now</button>
     </p>
   {/if}
   {#if votes.length}
