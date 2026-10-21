@@ -23,7 +23,7 @@ vi.mock('./meals.server', () => ({
 // v8: the decisions part of the bundle reads its own tables; empty here.
 vi.mock('./decisions.store.server', () => ({
   constraintsOf: vi.fn(() => ({})),
-  planConstraints: vi.fn(async () => null),
+  planConstraints: vi.fn(async (_t: string, v: number) => ({ snapshotOf: v })),
   listQuestions: vi.fn(async () => []),
   listProposals: vi.fn(async () => []),
   readPack: vi.fn(async () => ({ status: 'none', stage: null, builtAt: null, refreshedAt: null, counts: { places: 0, food: 0, toBook: 0, lessVisited: 0, rainy: 0 }, calendar: [], neighbourhoods: [], highlights: [] })),
@@ -265,6 +265,20 @@ describe('the phone', () => {
     const stored = h.plans[h.plans.length - 1].plan as SolvedPlan;
     expect(stored.days[1].warnings).toEqual(['phone']);
     expect(JSON.stringify(stored)).not.toContain('mealOptions');
+  });
+
+  it('v8: a phone version carries the facts snapshot forward (the same facts, a different schedule), so undo can restore it', async () => {
+    await replan(trip());
+    const before = h.plans[0].plan as SolvedPlan;
+    await storePhoneDays(trip(), [{ ...before.days[0], warnings: ['phone'] }]);
+    expect(h.plans[1]).toMatchObject({ source: 'phone', constraints: { snapshotOf: 1 } });
+  });
+
+  it('v8: a re-plan can lead its "what changed" (Undone: …)', async () => {
+    await replan(trip());
+    h.wishes = h.wishes.filter((w) => w.id !== 'pantheon');
+    const r = await replan(trip(), 'site', { lead: ['Undone: back to version 1.'] });
+    expect(r.plan.changes[0]).toBe('Undone: back to version 1.');
   });
 });
 

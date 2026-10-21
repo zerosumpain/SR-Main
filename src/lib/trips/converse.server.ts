@@ -295,7 +295,8 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     : changed && finalPlan
       ? diffPlans(before, finalPlan, titles)
       : [];
-  const fresh = changed ? ((await getTrip(trip.ownerEmail, trip.id)) ?? trip) : trip;
+  // The trip as the turn left it (dates, pace — and the profile, which `remember` changes without a re-solve).
+  const fresh = applied.length ? ((await getTrip(trip.ownerEmail, trip.id)) ?? trip) : trip;
 
   // Research and suggestions run after the turn, in the background.
   const ids = [...new Set(research.flatMap((r) => r.wishIds))];
