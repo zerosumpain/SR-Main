@@ -40,6 +40,8 @@ import {
   type TripRecord,
 } from './store.server';
 import type { ReplanBody } from './intake';
+import { constraintsOf } from './decisions.store.server';
+import { decisionsWire } from './decisions.bundle.server';
 
 type SolverInput = Parameters<typeof solveTrip>[0];
 
@@ -125,7 +127,15 @@ export async function replan(
   plan = await attachLegLines(plan, previous?.plan ?? null, trip);
   const changes = [...diffPlans(previous?.plan ?? null, plan, titles), ...notes];
   if (routingNotes.some((n) => /estimated/.test(n))) changes.push(`Travel times: ${routingNotes.join('; ')}.`);
-  const stored = await appendPlan(trip.id, { source, inputHash, plan, matrix: input.matrix, changes });
+  const stored = await appendPlan(trip.id, {
+    source,
+    inputHash,
+    plan,
+    matrix: input.matrix,
+    changes,
+    // v8: the constraints it was solved from, for undo and restore.
+    constraints: constraintsOf(trip, state, input.transport ?? []) as unknown as Record<string, unknown>,
+  });
   // Guidance for today and the next day, in the background (cached per leg).
   startGuidance(trip.ownerEmail, trip.id);
   // v7: real places for the meals, and the places' photographs.
@@ -242,12 +252,14 @@ export async function tripBundle(
   opts: { access: TripAccess; viewerEmail: string; creator: { id: string; name: string } },
 ): Promise<TripBundle> {
   const { access } = opts;
-  const [state, latest, messages, transport, suggestions] = await Promise.all([
+  const [state, latest, messages, transport, suggestions, decisions] = await Promise.all([
     loadState(trip.id),
     latestPlan(trip.id),
     recentMessages(trip.id, viewerOf(trip, opts.viewerEmail), 50),
     listTransport(trip.id),
     listSuggestions(trip.id),
+    // v8: brief, questions, proposals, the pack's summary.
+    decisionsWire(trip, access, { surface: 'phone' }),
   ]);
   // Each leg carries its walk / public transport / taxi alternatives (v5),
   // and each meal with no place its real options nearby (v7).
@@ -280,6 +292,11 @@ export async function tripBundle(
     suggestions: suggestions.map(suggestionWire),
     fullness: latest ? planFullness(latest.plan, trip.pace, trip.dayLoads ?? {}, replaces) : {},
     images,
+    brief: decisions.brief,
+    questions: decisions.questions,
+    answered: decisions.answered,
+    proposals: decisions.proposals,
+    pack: decisions.pack,
   };
   return { ...body, etag: bundleEtag(body) };
 }

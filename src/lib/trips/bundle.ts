@@ -24,6 +24,7 @@ import type {
   PlaceImage,
   Wish,
 } from './model';
+import type { PackSummary, Proposal, Question, TripBrief } from './decisions';
 
 export interface TripSummary {
   id: string;
@@ -86,6 +87,18 @@ export interface TripBundle {
    * by their OSM id — from Wikimedia Commons, each with its credit.
    */
   images?: Record<string, PlaceImage>;
+  /**
+   * v8: propose, research, ask (./decisions). The brief with where each fact
+   * came from; the open questions this caller may answer (≤ 3) and those
+   * answered in the last day; the open proposals this caller may act on
+   * (editors only); the research pack's summary. Optional: a phone that
+   * predates v8 ignores them.
+   */
+  brief?: TripBrief;
+  questions?: Question[];
+  answered?: Question[];
+  proposals?: Proposal[];
+  pack?: PackSummary;
   etag: string;
 }
 

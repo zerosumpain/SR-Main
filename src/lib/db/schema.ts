@@ -7415,6 +7415,10 @@ export const trip = pgTable(
     guide: jsonb('guide').$type<Record<string, unknown>>(),
     /** v3: TravellerProfile — what the planner already knows (owner's memory, knowledge, family), with sources. */
     profile: jsonb('profile').$type<Record<string, unknown>>(),
+    /** v8: Provenance (decisions.ts) — where each fact came from: you said / from your notes / found / assumed. */
+    provenance: jsonb('provenance').$type<Record<string, unknown>>(),
+    /** v8: PackSummary (decisions.ts) — the research pack's state, date facts and neighbourhoods; its places are trip_place rows. */
+    pack: jsonb('pack').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -7508,6 +7512,8 @@ export const tripPlan = pgTable(
     plan: jsonb('plan').$type<Record<string, unknown>>().notNull(),
     matrix: jsonb('matrix').$type<Record<string, unknown>>(),
     changes: jsonb('changes').$type<string[]>().notNull().default([]),
+    /** v8: TripConstraints (decisions.store.server) — the trip, stays, wishes, bookings and journeys this version was solved from, for undo and restore. */
+    constraints: jsonb('constraints').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique('trip_plan_trip_version_key').on(t.tripId, t.version)],
@@ -7622,4 +7628,150 @@ export const tripEvent = pgTable(
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [unique('trip_event_trip_client_key').on(t.tripId, t.clientId)],
+);
+
+// v8 (2026-10-21): propose, research, ask — shapes in $lib/trips/decisions.
+// A proposal is a stored, checked change seen before it lands; accepting it
+// replays `ops` exactly. Alternatives share `group_id`.
+export const tripProposal = pgTable(
+  'trip_proposal',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    groupId: text('group_id').notNull(),
+    /** 'shape' | 'day' | 'swap' | 'fill' | 'fix' | 'change' | 'replan' */
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    why: text('why').notNull().default(''),
+    /** ProposalScope */
+    scope: jsonb('scope').$type<Record<string, unknown>>().notNull(),
+    ops: jsonb('ops').$type<unknown[]>().notNull().default([]),
+    /** PlanDiff */
+    diff: jsonb('diff').$type<Record<string, unknown>>().notNull(),
+    /** ProposalTradeoffs */
+    tradeoffs: jsonb('tradeoffs').$type<Record<string, unknown>>().notNull(),
+    evidence: jsonb('evidence').$type<Array<{ url: string; title: string | null }>>().notNull().default([]),
+    /** { name, location } | null */
+    place: jsonb('place').$type<Record<string, unknown>>(),
+    image: jsonb('image').$type<Record<string, unknown>>(),
+    packPlaceId: uuid('pack_place_id'),
+    /** ShapeSummary | null */
+    shape: jsonb('shape').$type<Record<string, unknown>>(),
+    /** PlannedDay[] — only the days it changes, as solved. */
+    preview: jsonb('preview').$type<unknown[]>().notNull().default([]),
+    basedOnVersion: integer('based_on_version'),
+    /** 'open' | 'accepted' | 'rejected' | 'superseded' | 'expired' */
+    status: text('status').notNull().default('open'),
+    reason: text('reason'),
+    /** Who it was for / made by (server-side only, never on the wire). */
+    authorEmail: text('author_email'),
+    decidedByEmail: text('decided_by_email'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_proposal_trip_idx').on(t.tripId, t.status), index('trip_proposal_group_idx').on(t.tripId, t.groupId)],
+);
+
+// v8: a short question with tap answers. Exists only when its answers solve to
+// different plans; the default is assumed (and usually applied) meanwhile.
+export const tripQuestion = pgTable(
+  'trip_question',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    /** Dedupe: one open question per key; a skipped key is not re-asked unless it changes. */
+    key: text('key').notNull(),
+    /** 'brief' | 'tie' | 'clash' | 'research' | 'reaction' | 'day' | 'after' | 'planner' */
+    source: text('source').notNull(),
+    prompt: text('prompt').notNull(),
+    why: text('why').notNull().default(''),
+    /** QuestionAnswer[] */
+    answers: jsonb('answers').$type<unknown[]>().notNull(),
+    defaultAnswerId: text('default_answer_id').notNull(),
+    appliedDefault: boolean('applied_default').notNull().default(false),
+    ifSkipped: text('if_skipped').notNull().default(''),
+    /** { dates, stops } */
+    affects: jsonb('affects').$type<Record<string, unknown>>().notNull(),
+    impact: doublePrecision('impact').notNull().default(0),
+    /** 'owner' | 'parents' | 'family' */
+    audience: text('audience').notNull().default('owner'),
+    deadline: date('deadline', { mode: 'string' }),
+    /** 'open' | 'answered' | 'skipped' | 'expired' | 'withdrawn' */
+    status: text('status').notNull().default('open'),
+    answerId: text('answer_id'),
+    answeredByEmail: text('answered_by_email'),
+    answeredByName: text('answered_by_name'),
+    /** { [answerId]: [{ email, name }] } — family votes (emails never on the wire). */
+    votes: jsonb('votes').$type<Record<string, unknown>>().notNull().default({}),
+    basedOnVersion: integer('based_on_version'),
+    /** When it was last pushed as a notification (one a day at most). */
+    pushedAt: timestamp('pushed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    answeredAt: timestamp('answered_at', { withTimezone: true }),
+  },
+  (t) => [index('trip_question_trip_idx').on(t.tripId, t.status), index('trip_question_key_idx').on(t.tripId, t.key)],
+);
+
+// v8: the research pack's places — found once when a trip starts, refreshed a
+// week before, drawn on by every proposal, swap and idea. Places from
+// OpenStreetMap only; facts carry their sources and the date checked.
+export const tripPlace = pgTable(
+  'trip_place',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    name: text('name').notNull(),
+    /** PackKind */
+    kind: text('kind').notNull(),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    /** { name, location, osmId, address } */
+    place: jsonb('place').$type<Record<string, unknown>>().notNull(),
+    why: text('why'),
+    neighbourhood: text('neighbourhood'),
+    durationMin: integer('duration_min'),
+    indoor: boolean('indoor'),
+    kidFriendly: boolean('kid_friendly'),
+    costText: text('cost_text'),
+    lessVisited: boolean('less_visited').notNull().default(false),
+    bookingRequired: boolean('booking_required'),
+    bookAheadDays: integer('book_ahead_days'),
+    /** Facts (model.ts) */
+    facts: jsonb('facts').$type<Record<string, unknown>>(),
+    /** PlaceImage */
+    image: jsonb('image').$type<Record<string, unknown>>(),
+    wikidata: text('wikidata'),
+    sources: jsonb('sources').$type<Array<{ url: string; title: string | null }>>().notNull().default([]),
+    /** 'candidate' | 'planned' | 'rejected' */
+    status: text('status').notNull().default('candidate'),
+    rejectReason: text('reject_reason'),
+    wishId: uuid('wish_id'),
+    checkedAt: timestamp('checked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_place_trip_idx').on(t.tripId, t.status)],
+);
+
+// v8: durable planner jobs. The work still runs in the process; its state,
+// stages and result are here so a poll survives a restart (an interrupted job
+// reads as failed, never as a 404) and Cancel is real (`cancel_requested`).
+export const tripJob = pgTable(
+  'trip_job',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id'),
+    ownerEmail: text('owner_email').notNull(),
+    /** TripJobKind */
+    kind: text('kind').notNull(),
+    /** 'running' | 'done' | 'failed' | 'cancelled' */
+    status: text('status').notNull().default('running'),
+    /** JobStage[] */
+    stages: jsonb('stages').$type<unknown[]>().notNull().default([]),
+    result: jsonb('result').$type<unknown>(),
+    error: text('error'),
+    cancelRequested: boolean('cancel_requested').notNull().default(false),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [index('trip_job_owner_idx').on(t.ownerEmail, t.startedAt)],
 );

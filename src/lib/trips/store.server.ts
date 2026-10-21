@@ -8,7 +8,7 @@
 
 import { and, asc, desc, eq, inArray, isNull, max, or, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { trip, tripBooking, tripEvent, tripMessage, tripPlan, tripStay, tripSuggestion, tripTransport, tripWish } from '$lib/db/schema';
+import { trip, tripBooking, tripEvent, tripJob, tripMessage, tripPlace, tripPlan, tripProposal, tripQuestion, tripStay, tripSuggestion, tripTransport, tripWish } from '$lib/db/schema';
 import type {
   Booking,
   Facts,
@@ -223,6 +223,11 @@ export async function touchTrip(id: string): Promise<void> {
 export async function deleteTrip(id: string): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.delete(tripEvent).where(eq(tripEvent.tripId, id));
+    // v8: the planner's decisions, the research pack and the trip's jobs.
+    await tx.delete(tripProposal).where(eq(tripProposal.tripId, id));
+    await tx.delete(tripQuestion).where(eq(tripQuestion.tripId, id));
+    await tx.delete(tripPlace).where(eq(tripPlace.tripId, id));
+    await tx.delete(tripJob).where(eq(tripJob.tripId, id));
     await tx.delete(tripMessage).where(eq(tripMessage.tripId, id));
     await tx.delete(tripTransport).where(eq(tripTransport.tripId, id));
     await tx.delete(tripSuggestion).where(eq(tripSuggestion.tripId, id));
@@ -431,7 +436,7 @@ export async function latestPhonePlan(tripId: string): Promise<Omit<StoredPlan, 
  */
 export async function appendPlan(
   tripId: string,
-  p: { source: PlanSource; inputHash: string; plan: SolvedPlan; matrix: TravelMatrix | null; changes: string[] },
+  p: { source: PlanSource; inputHash: string; plan: SolvedPlan; matrix: TravelMatrix | null; changes: string[]; constraints?: Record<string, unknown> | null },
 ): Promise<StoredPlan> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`trip_plan:${tripId}`}))`);
@@ -446,6 +451,8 @@ export async function appendPlan(
         plan: p.plan as unknown as Record<string, unknown>,
         matrix: p.matrix as unknown as Record<string, unknown> | null,
         changes: p.changes,
+        // v8: what this version was solved from, so undo can put it back.
+        constraints: p.constraints ?? null,
       })
       .returning();
     await tx
