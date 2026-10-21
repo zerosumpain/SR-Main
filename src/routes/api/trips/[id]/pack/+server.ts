@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { ownerTrip, readJson } from '$lib/trips/api.server';
 import { jobAccepted, wantsAsync } from '$lib/trips/jobs.server';
-import { parsePackAsk } from '$lib/trips/pack';
-import { buildPack, morePlaces, packWire, refreshPack, startPackJob } from '$lib/trips/pack.server';
+import { parsePackAsk, parsePackReject } from '$lib/trips/pack';
+import { buildPack, morePlaces, packWire, refreshPack, rejectPackPlace, startPackJob } from '$lib/trips/pack.server';
 
 /**
  * GET /api/trips/:id/pack — v8: the research pack. `?kind=` (comma list;
@@ -17,7 +17,8 @@ export const GET: RequestHandler = async (event) => {
 };
 
 /**
- * POST /api/trips/:id/pack — `{ action: 'build'|'refresh'|'more', theme?, async? }`.
+ * POST /api/trips/:id/pack — `{ action: 'build'|'refresh'|'more', theme?, async? }`,
+ * or `{ action: 'reject', placeId, reason }` → `{ place }` (turned down, with why).
  * `"async": true` → 202 `{ job }` (stages: finding places, places to eat,
  * opening hours on your dates, closures and events, writing it up); the
  * job's result is `{ pack, places }`. A build already running is joined.
@@ -25,6 +26,12 @@ export const GET: RequestHandler = async (event) => {
 export const POST: RequestHandler = async (event) => {
   const { owner, trip } = await ownerTrip(event);
   const body = await readJson(event);
+  const reject = parsePackReject(body);
+  if (reject) {
+    if (!reject.ok) return json({ error: reject.error }, { status: 400 });
+    const place = await rejectPackPlace(trip.id, reject.placeId, reject.reason);
+    return place ? json({ place }) : json({ error: 'No such place.' }, { status: 404 });
+  }
   const ask = parsePackAsk(body);
   if (!ask.ok) return json({ error: ask.error }, { status: 400 });
   if (wantsAsync(body)) {

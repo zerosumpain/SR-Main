@@ -33,6 +33,10 @@ vi.mock('./decisions.store.server', () => ({
     return before - h.places.length;
   },
   runningJob: async () => null,
+  getPackPlace: async (_t: string, id: string) => h.places.find((p) => p.id === id) ?? null,
+  updatePackPlace: async (_t: string, id: string, patch: Record<string, unknown>) => {
+    h.places = h.places.map((p) => (p.id === id ? { ...p, ...patch } : p));
+  },
 }));
 vi.mock('./store.server', () => ({
   loadState: async () => ({ stays: h.stays, wishes: h.wishes, bookings: [] }),
@@ -41,7 +45,7 @@ vi.mock('./store.server', () => ({
 vi.mock('./research.server', () => ({ overpass: vi.fn(), nominatimAround: vi.fn(), findPlace: vi.fn() }));
 vi.mock('./llm.server', () => ({ jsonCall: vi.fn(async () => { throw new Error('no model in tests'); }) }));
 
-const { buildPack, refreshPack, morePlaces, ensurePack, startPackJob, clearPackBuildsForTest, packWire } = await import('./pack.server');
+const { buildPack, refreshPack, morePlaces, ensurePack, startPackJob, clearPackBuildsForTest, packWire, rejectPackPlace } = await import('./pack.server');
 const { readJob, clearJobsForTest } = await import('./jobs.server');
 type Deps = import('./pack.server').PackDeps;
 
@@ -271,6 +275,16 @@ describe('the pack job and ensurePack', () => {
     await ensurePack(TRIP, { reason: 'read', deps: d });
     vi.useRealTimers();
     await vi.waitFor(() => expect(started.length).toBeGreaterThan(0));
+  });
+
+  it('"Not this": a place turned down with why, counted out of the summary, still listed', async () => {
+    h.pack = { ...EMPTY_PACK, status: 'ready' };
+    h.places = [{ id: 'a', name: 'Busy museum', kind: 'museum', status: 'candidate', tags: [], lessVisited: false, bookingRequired: null, indoor: true }, { id: 'b', name: 'Quiet garden', kind: 'park', status: 'candidate', tags: [], lessVisited: true, bookingRequired: null, indoor: false }];
+    expect(await rejectPackPlace('t1', 'a', 'too-busy')).toMatchObject({ id: 'a', status: 'rejected', rejectReason: 'too-busy' });
+    expect(h.places[0]).toMatchObject({ status: 'rejected', rejectReason: 'too-busy' });
+    expect((h.pack as unknown as PackSummary).counts.places).toBe(1);
+    expect((await packWire('t1')).places.map((p) => [p.id, p.status])).toEqual([['a', 'rejected'], ['b', 'candidate']]);
+    expect(await rejectPackPlace('t1', 'nope', 'other')).toBeNull();
   });
 
   it('GET pack filters', async () => {

@@ -18,7 +18,7 @@ import { localDateIn } from './routing';
 export type { PackAction } from './pack';
 import type { LatLng, PlaceImage, Wish } from './model';
 import type { PackCalendarItem, PackPlace, PackSummary } from './decisions';
-import { addPackPlaces, listPackPlaces, readPack, removePackCandidates, runningJob, writePack } from './decisions.store.server';
+import { addPackPlaces, getPackPlace, listPackPlaces, readPack, removePackCandidates, runningJob, updatePackPlace, writePack } from './decisions.store.server';
 import { newBudget, spend } from './agent';
 import { jsonCall } from './llm.server';
 import { elementsFromNominatim, viewboxAround } from './nearby-ideas';
@@ -580,4 +580,19 @@ export async function packWire(tripId: string, q: { kind?: string | null; tag?: 
 /** Tests only. */
 export function clearPackBuildsForTest(): void {
   building.clear();
+}
+
+/**
+ * "Not this", from the pack browser: the place is turned down with why (a
+ * preference signal the reaction questions read; it is never offered again).
+ * The summary's counts follow. Null when there is no such place.
+ */
+export async function rejectPackPlace(tripId: string, placeId: string, reason: NonNullable<PackPlace['rejectReason']>): Promise<PackPlace | null> {
+  const place = await getPackPlace(tripId, placeId);
+  if (!place) return null;
+  await updatePackPlace(tripId, placeId, { status: 'rejected', rejectReason: reason });
+  const all = await listPackPlaces(tripId);
+  const pack = await readPack(tripId);
+  if (pack.status !== 'none') await writePack(tripId, { counts: packCounts(all), highlights: packHighlights(all, pack.calendar) }).catch(() => {});
+  return { ...place, status: 'rejected', rejectReason: reason };
 }

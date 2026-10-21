@@ -17,6 +17,7 @@ import {
   packNeighbourhoods,
   packPlaceOf,
   parsePackAsk,
+  parsePackReject,
   placesQuery,
   rainLine,
   readSparql,
@@ -275,5 +276,10 @@ describe('research pack: dates, weather, the summary', () => {
     expect(parsePackAsk({})).toEqual({ ok: true, action: 'build', theme: null });
     expect(parsePackAsk({ action: 'nuke' }).ok).toBe(false);
     expect(parsePackAsk({ action: 'more', theme: '<script>' }).ok).toBe(false);
+    const id = 'c0ffee00-0000-4000-8000-000000000401';
+    expect(parsePackReject({ action: 'reject', placeId: id, reason: 'too-far' })).toEqual({ ok: true, placeId: id, reason: 'too-far' });
+    expect(parsePackReject({ action: 'reject', placeId: id, reason: 'meh' })).toMatchObject({ ok: false });
+    expect(parsePackReject({ action: 'reject', reason: 'too-far' })).toMatchObject({ ok: false });
+    expect(parsePackReject({ action: 'build' })).toBeNull();
   });
 });

@@ -27,7 +27,7 @@ import { windowsOn } from './solver/hours';
 import { haversineM } from './solver/estimate';
 import { dayLabel } from './changes';
 import type { Facts, LatLng, LocalDate, Neighbourhood, PlaceImage, Trip } from './model';
-import type { CalendarKind, PackCalendarItem, PackKind, PackPlace, PackSummary, Source } from './decisions';
+import type { CalendarKind, PackCalendarItem, PackKind, PackPlace, PackSummary, RejectReason, Source } from './decisions';
 import { emptyFacts, officialOnly } from './research';
 import { cleanImageUrl, imageFromCommons, wikidataId } from './images';
 import type { StageDecl } from './jobs.server';
@@ -729,11 +729,24 @@ export { isoWeekday };
 
 export type PackAction = 'build' | 'refresh' | 'more';
 
+const REJECT_REASONS: readonly RejectReason[] = ['too-far', 'too-busy', 'not-for-us', 'been-before', 'other'];
+
+/** `POST pack` `{ action: 'reject', placeId, reason }`: turn one place down, with why. */
+export function parsePackReject(body: unknown): { ok: true; placeId: string; reason: RejectReason } | { ok: false; error: string } | null {
+  const b = isObj(body) ? body : {};
+  if (b.action !== 'reject') return null;
+  const placeId = typeof b.placeId === 'string' && /^[0-9a-f-]{36}$/i.test(b.placeId) ? b.placeId : null;
+  if (!placeId) return { ok: false, error: 'Say which place (placeId).' };
+  const reason = REJECT_REASONS.includes(b.reason as RejectReason) ? (b.reason as RejectReason) : null;
+  if (!reason) return { ok: false, error: 'reason is too-far, too-busy, not-for-us, been-before or other.' };
+  return { ok: true, placeId, reason };
+}
+
 /** `POST pack` `{ action: 'build'|'refresh'|'more', theme? }`. */
 export function parsePackAsk(body: unknown): { ok: true; action: PackAction; theme: string | null } | { ok: false; error: string } {
   const b = isObj(body) ? body : {};
   const action = b.action ?? 'build';
-  if (action !== 'build' && action !== 'refresh' && action !== 'more') return { ok: false, error: 'action is build, refresh or more.' };
+  if (action !== 'build' && action !== 'refresh' && action !== 'more') return { ok: false, error: 'action is build, refresh, more or reject.' };
   const theme = text(b.theme, 60);
   if (theme && !/^[\p{L}\p{N} ,'’&-]+$/u.test(theme)) return { ok: false, error: 'Say the theme in a few words.' };
   return { ok: true, action, theme: action === 'more' ? theme : null };
