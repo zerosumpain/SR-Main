@@ -23,6 +23,7 @@ import {
   readProposalRequest,
   slotFor,
   swapDaysOps,
+  unlikeness,
 } from './proposals';
 
 const at = (lat: number, lng: number) => ({ lat, lng });
@@ -245,5 +246,14 @@ describe('reading requests', () => {
   it('v7 options as a fill group', () => {
     const [d] = optionDrafts([{ date: '2026-10-27', stage: 'evening', title: 'Roscioli', placeQuery: 'Roscioli, Rome', durationMin: 75, why: 'Deli.', indoor: true, kidFriendly: null, costText: null }]);
     expect(d).toMatchObject({ kind: 'fill', group: 'options', scope: { date: '2026-10-27', stage: 'evening' }, ops: [{ op: 'addWish', wish: { placeQuery: 'Roscioli, Rome', replacesMeal: 'dinner', partOfDay: 'any', fixedDate: '2026-10-27' } }] });
+  });
+});
+
+describe('swaps look like what they replace', () => {
+  it('ranks a museum of similar length above a nearer ten-minute column', () => {
+    const like = { kind: 'museum' as const, durationMin: 120, indoor: true };
+    expect(unlikeness({ kind: 'museum', durationMin: 90, indoor: true }, like)).toBe(0);
+    expect(unlikeness({ kind: 'sight', durationMin: 10, indoor: false }, like)).toBe(800 + 1200 + 300);
+    expect(unlikeness({ kind: 'sight', durationMin: 10, indoor: false }, null)).toBe(0);
   });
 });

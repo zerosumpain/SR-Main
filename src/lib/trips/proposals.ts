@@ -128,7 +128,32 @@ export function slotDistance(slot: Slot, at: LatLng, fallback: LatLng | null = n
  * (not planned, not turned down), not already a wish, open that day as far as
  * their facts say (unknown counts as open), and the right kind.
  */
-export function rankCandidates(places: PackPlace[], slot: Slot, wishes: Wish[], opts: { limit?: number; exclude?: Set<string>; anchor?: LatLng | null } = {}): Candidate[] {
+/**
+ * What a swap should resemble: the place it replaces. A two-hour museum swapped
+ * for a ten-minute column is not an alternative (seen on the preview: the
+ * Capitoline Museums' swaps were the Column of Phoca, the Forum of Nerva and a
+ * viewpoint, because they were nearest).
+ */
+export interface Likeness {
+  kind: PackPlace['kind'] | null;
+  durationMin: number | null;
+  indoor: boolean | null;
+}
+
+/** Metres-equivalent penalty for being unlike the replaced stop (0 when alike or unknown). */
+export function unlikeness(p: Pick<PackPlace, 'kind' | 'durationMin' | 'indoor'>, like: Likeness | null | undefined): number {
+  if (!like) return 0;
+  let pen = 0;
+  if (like.kind && p.kind !== like.kind) pen += 800;
+  if (like.durationMin && p.durationMin) {
+    const r = p.durationMin / like.durationMin;
+    if (r < 0.5 || r > 2) pen += 1200;
+  }
+  if (like.indoor !== null && p.indoor !== null && p.indoor !== like.indoor) pen += 300;
+  return pen;
+}
+
+export function rankCandidates(places: PackPlace[], slot: Slot, wishes: Wish[], opts: { limit?: number; exclude?: Set<string>; anchor?: LatLng | null; like?: Likeness | null } = {}): Candidate[] {
   const titles = new Set(wishes.filter((w) => !w.skipped).map((w) => w.title.trim().toLowerCase()));
   const osm = new Set(wishes.filter((w) => !w.skipped && w.place?.osmId).map((w) => w.place!.osmId as string));
   const meal = slot.replaces ? (slot.replaces.replacesMeal ?? null) : slot.gap.meal;
@@ -140,8 +165,9 @@ export function rankCandidates(places: PackPlace[], slot: Slot, wishes: Wish[], 
       const w = windowsOn(packFacts(p), slot.date);
       return w === null || w.length > 0;
     })
-    .map((p) => ({ place: p, distanceM: slotDistance(slot, p.place.location, opts.anchor ?? null) }))
-    .sort((a, b) => a.distanceM - b.distanceM || a.place.name.localeCompare(b.place.name))
+    .map((p) => ({ place: p, distanceM: slotDistance(slot, p.place.location, opts.anchor ?? null), pen: unlikeness(p, opts.like) }))
+    .sort((a, b) => a.distanceM + a.pen - (b.distanceM + b.pen) || a.place.name.localeCompare(b.place.name))
+    .map(({ pen: _pen, ...c }) => c)
     .slice(0, opts.limit ?? MAX_CANDIDATES);
 }
 

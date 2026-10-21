@@ -73,8 +73,7 @@ import {
   type NudgeRef,
   type ProposalRequest,
   type Slot,
-  type SlotTarget,
-} from './proposals';
+  type SlotTarget, type Likeness } from './proposals';
 import { moveProposal, updateProposalCheck } from './proposals.store.server';
 import { refreshQuestions } from './questions.server';
 import { emptyFacts, withinReach, type OsmPlace } from './research';
@@ -505,7 +504,13 @@ type Ranked = Checked & { fits: boolean; lessVisited: boolean; walkMin: number |
 async function bestFromPack(base: Base, slot: Slot, group: string, nudge: { nudge: Nudge; ref: NudgeRef; exclude: Set<string> } | null, deps: ProposalDeps, exclude: Set<string> = new Set()): Promise<Ranked[]> {
   const anchor = base.state.stays[0]?.location ?? null;
   const skip = new Set([...exclude, ...(nudge?.exclude ?? [])]);
-  let ranked = rankCandidates(base.pack, slot, base.state.wishes, { limit: nudge ? 60 : MAX_CANDIDATES, exclude: skip, anchor });
+  // A swap looks for places like the one it replaces (kind, length, indoors).
+  const replaced = slot.replaces ? base.state.wishes.find((w) => w.id === slot.replaces!.wishId) : null;
+  const replacedPlace = replaced ? base.pack.find((p) => p.wishId === replaced.id || p.name.trim().toLowerCase() === replaced.title.trim().toLowerCase()) : null;
+  const like: Likeness | null = replaced
+    ? { kind: replacedPlace?.kind ?? null, durationMin: replaced.durationSec ? Math.round(replaced.durationSec / 60) : (replacedPlace?.durationMin ?? null), indoor: replacedPlace?.indoor ?? null }
+    : null;
+  let ranked = rankCandidates(base.pack, slot, base.state.wishes, { limit: nudge ? 60 : MAX_CANDIDATES, exclude: skip, anchor, like });
   if (nudge) ranked = nudgeRank(ranked, nudge.nudge, nudge.ref).slice(0, MAX_CANDIDATES);
   const now = deps.now ?? Date.now;
   const started = now();
