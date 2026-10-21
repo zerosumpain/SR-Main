@@ -122,6 +122,9 @@ describe('every native route gates itself', () => {
         // "That's wrong" on a next move: the forecast's own audience, and only
         // a move that viewer's forecast is showing.
         '/family/forecast/feedback/+server.ts',
+        // One person's moves looked back at: the forecast's own gate and
+        // scope — a member asks after themselves and their wards, else 404.
+        '/family/forecast/history/+server.ts',
         // Family steps and tasks: the owner or a family:circle/admin grant,
         // checked by `familyCaller` in each handler; everyone else 403s.
         '/family/steps/+server.ts',
