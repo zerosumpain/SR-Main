@@ -340,6 +340,19 @@ describe('answering', () => {
     await qs.answerQuestion(trip(), tie!.id, { action: 'answer', answerId: 'a1' }, OWNER);
     expect(h.proposals.map((p) => p.status).sort()).toEqual(['accepted', 'superseded']);
   });
+
+  it('a tie whose shapes were decided elsewhere expires', async () => {
+    const add = (title: string, lat: number) => [{ op: 'addWish', wish: { title, placeQuery: null, priority: 'nice', durationMin: 60, partOfDay: 'any', fixedDate: null, fixedStartMin: null, note: null, replacesMeal: null, place: { name: title, location: { lat, lng: 12.48 }, osmId: null, address: null } } }];
+    h.proposals = [
+      { id: 's1', groupId: 'shapes:2', kind: 'shape', title: 'Quiet corners', ops: add('Quiet museum', 41.9), status: 'open', scope: { date: null } },
+      { id: 's2', groupId: 'shapes:2', kind: 'shape', title: 'Famous first', ops: add('Big museum', 41.901), status: 'open', scope: { date: null } },
+    ];
+    const tie = (await qs.refreshQuestions(trip())).find((q) => q.origin === 'tie')!;
+    // Accepted through the proposals route: the shapes are no longer open.
+    h.proposals.forEach((p) => (p.status = p.id === 's1' ? 'accepted' : 'expired'));
+    await qs.refreshQuestions(trip());
+    expect(h.questions.find((q) => q.id === tie.id)?.status).toBe('expired');
+  });
 });
 
 describe('pushes', () => {

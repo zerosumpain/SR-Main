@@ -331,8 +331,13 @@ export async function refreshQuestions(trip: TripRecord, _opts: { reason?: strin
       const base = await loadBase(fresh);
       if (!base) return [];
       const today = localDateIn(fresh.timeZone, new Date());
-      // Expire open questions whose answers now solve the same.
+      // Expire open questions whose answers now solve the same — and a tie whose alternatives were decided elsewhere.
+      const openProposals = await listProposals(fresh.id, { status: ['open'], limit: 30 }).catch(() => []);
       for (const q of await listQuestions(fresh.id, { status: ['open'], limit: 50 })) {
+        if (q.origin === 'tie' && !q.answers.some((a) => openProposals.some((p) => sameOps(p.ops, a.ops.slice(-p.ops.length))))) {
+          await closeQuestion(fresh.id, q.id, 'expired', { answerId: null, byEmail: null, byName: null });
+          continue;
+        }
         const sigs = new Set<string>();
         let usable = 0;
         for (const a of q.answers) {
@@ -474,10 +479,11 @@ export async function answerQuestion(trip: TripRecord, qid: string, act: Questio
 }
 
 /** The open proposal whose ops are this answer's: accepted; the rest of its group superseded (shapes: expired). */
+const sameOps = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 async function takeAlternative(tripId: string, answer: QuestionAnswer, email: string): Promise<void> {
   const open = await listProposals(tripId, { status: ['open'], limit: 30 });
-  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-  const hit = open.find((p) => (p.kind === 'shape' || p.kind === 'day') && same(p.ops, answer.ops.slice(-p.ops.length)));
+  const hit = open.find((p) => (p.kind === 'shape' || p.kind === 'day') && sameOps(p.ops, answer.ops.slice(-p.ops.length)));
   if (!hit) return;
   if (!(await decideProposal(tripId, hit.id, 'accepted', null, email))) return;
   await supersedeGroup(tripId, hit.groupId, hit.id, `Chose ${hit.title}`);
