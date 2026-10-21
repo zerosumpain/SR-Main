@@ -446,9 +446,8 @@ export function advance(room: Room, now: number, rng: Rng): boolean {
     case 'countdown':
       seat(room, now, rng);
       // Somebody left during the countdown: the one still here has it.
-      if (room.phase !== 'playing') {
+      if (room.players.filter((p) => p.seated).length < 2) {
         const [only] = joined(room);
-        room.phase = 'playing';
         finish(room, { outcome: 'left', winnerId: only?.id ?? null }, now);
       }
       break;
