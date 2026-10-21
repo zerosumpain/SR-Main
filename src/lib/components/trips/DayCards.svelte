@@ -4,13 +4,19 @@
    * and weekday, then its four stages in brief, each marked with that
    * stage's pencil (morning petrol, lunch orange, afternoon ochre, evening
    * ink — the same pencils as the stage bands, and always with the stage's
-   * name beside them). A card opens that day's tab.
+   * name beside them). A card opens that day's tab. v8: while a proposal is
+   * previewed, the days it would change are marked.
    */
   import { DAY_STAGES, DAY_STAGE_LABEL, type PlannedDay } from '$lib/trips/model';
   import { dayBrief } from '$lib/trips/stages';
   import { stampDate, weekday } from './notes/notes';
 
-  let { days, loadOf, onOpen }: { days: PlannedDay[]; loadOf: (date: string) => string; onOpen: (date: string) => void } = $props();
+  let {
+    days,
+    loadOf,
+    onOpen,
+    marked = new Set<string>(),
+  }: { days: PlannedDay[]; loadOf: (date: string) => string; onOpen: (date: string) => void; marked?: Set<string> } = $props();
 
   const TILTS = [-0.8, 0.6, -0.4, 0.9, -0.6, 0.5];
 </script>
@@ -19,12 +25,12 @@
   {#each days as d, di (d.date)}
     {@const brief = dayBrief(d)}
     <li>
-      <button class="day-card np-card" style:--np-tilt="{TILTS[di % TILTS.length]}deg" type="button" onclick={() => onOpen(d.date)} aria-label="Open day {di + 1}, {weekday(d.date)} {stampDate(d.date)}">
+      <button class="day-card np-card" class:marked={marked.has(d.date)} style:--np-tilt="{TILTS[di % TILTS.length]}deg" type="button" onclick={() => onOpen(d.date)} aria-label="Open day {di + 1}, {weekday(d.date)} {stampDate(d.date)}{marked.has(d.date) ? ' — the previewed proposal changes this day' : ''}">
         <span class="dc-hd">
           <span class="dc-num">{di + 1}</span>
           <span class="dc-day">{weekday(d.date)}</span>
           <span class="dc-date">{stampDate(d.date)}</span>
-          {#if loadOf(d.date) !== 'normal'}<span class="dc-load">{loadOf(d.date)} day</span>{/if}
+          {#if marked.has(d.date)}<span class="dc-load would">would change</span>{:else if loadOf(d.date) !== 'normal'}<span class="dc-load">{loadOf(d.date)} day</span>{/if}
         </span>
         {#each DAY_STAGES as st (st)}
           <span class="dc-stage" data-stage={st}>
@@ -100,6 +106,13 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--accent-ink);
+  }
+  .day-card.marked {
+    outline: 2px dashed var(--accent-ink);
+    outline-offset: 3px;
+  }
+  .would {
+    color: var(--np-pen-text, var(--accent-hover));
   }
   .dc-stage {
     --pencil: var(--accent-ink);

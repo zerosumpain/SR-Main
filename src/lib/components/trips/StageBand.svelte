@@ -8,6 +8,11 @@
    * hues. Stops show their times, the leg that brings you there (with its
    * guidance) and, for wishes, quick edits; "Ask about this stage" pre-fills
    * the conversation.
+   *
+   * v8: "Fill" asks for checked proposals for the stage (from the research
+   * pack, in seconds), and each planned stop's Adjust has "Swap" — both come
+   * back as a group of cards in the Decisions rail. While a proposal is
+   * previewed, the stops it would move or take out are marked.
    */
   import { DAY_STAGE_LABEL, type DayStage, type TravelMode, type Wish } from '$lib/trips/model';
   import type { StageItem } from '$lib/trips/stages';
@@ -29,6 +34,10 @@
     base,
     dayStopIds = [],
     onAdded = async () => {},
+    marked = new Set<string>(),
+    onSwap,
+    onFill,
+    asking = null,
   }: {
     stage: DayStage;
     items: StageItem[];
@@ -48,6 +57,14 @@
     dayStopIds?: string[];
     /** After an idea is added: reload, and highlight what moved. */
     onAdded?: () => Promise<void>;
+    /** v8: stops a previewed proposal would move or take out. */
+    marked?: Set<string>;
+    /** v8: ask for swaps for a planned stop (cards arrive in the rail). */
+    onSwap?: (stop: { id: string; wishId: string | null; title: string }) => void;
+    /** v8: ask for proposals to fill this stage. */
+    onFill?: () => void;
+    /** v8: the request key that is working (`swap:<stopId>`, `fill:<date>:<stage>`). */
+    asking?: string | null;
   } = $props();
 
   /** Stops whose quick edits (day, lock, must/nice) are open. Closed by default, so the day reads as a plan. */
@@ -97,7 +114,8 @@
     <h3>{DAY_STAGE_LABEL[stage]}</h3>
     {#if span}<span class="span mono">{span}</span>{/if}
     <span class="hd-acts">
-      {#if !tray}<button class="pen" type="button" onclick={() => (tray = { afterStopId: null, beforeStopId: null })}>Find an idea</button>{/if}
+      {#if onFill}<button class="pen" type="button" disabled={!!asking} onclick={onFill}>{asking === `fill:${date}:${stage}` ? 'Finding…' : 'Fill'}</button>{/if}
+      {#if !tray}<button class="pen" type="button" onclick={() => (tray = { afterStopId: null, beforeStopId: null })}>{onFill ? 'Search further' : 'Find an idea'}</button>{/if}
       <button class="pen" type="button" disabled={busy} onclick={() => onAsk(`For ${dayName}, ${ASK[stage]}: `)}>Ask the planner</button>
     </span>
   </header>
@@ -141,11 +159,12 @@
           </span>
         </li>
       {/if}
-      <li class="stop kind-{s.kind}" class:changed={highlight.has(s.id)}>
+      <li class="stop kind-{s.kind}" class:changed={highlight.has(s.id)} class:marked={marked.has(s.id)}>
         <span class="time mono">{hhmm(s.arriveMin)}{#if s.departMin !== s.arriveMin}<span class="t-to">–{hhmm(s.departMin)}</span>{/if}</span>
         <span class="body">
           {#if s.kind === 'transport'}<span class="tag mono">{s.id.endsWith(':arrive') ? 'Arrive' : 'Leave'}</span>{:else if s.kind === 'meal'}<span class="tag mono">Meal</span>{/if}
           <strong class="title">{s.title}</strong>
+          {#if marked.has(s.id)}<span class="tag mono would">would change</span>{/if}
           {#if s.bookingId}<span class="tag mono">booked</span>{/if}
           {#if s.waitSec >= 60}<span class="note"> · {waitText(s.waitSec)}</span>{/if}
           {#if isGap(item) && !tray}
@@ -167,6 +186,9 @@
                   </label>
                   <button type="button" disabled={busy} aria-pressed={w.locked} onclick={() => onPatch(w, { locked: !w.locked }, w.locked ? 'Unlocked.' : 'Locked to this day and time.')}>{w.locked ? 'Unlock' : 'Lock day and time'}</button>
                   <button type="button" disabled={busy} onclick={() => onPatch(w, { priority: w.priority === 'must' ? 'nice' : 'must' })}>{w.priority === 'must' ? 'Make it a nice-to-have' : 'Make it a must'}</button>
+                  {#if onSwap && !w.locked && !s.bookingId}
+                    <button type="button" class="swap" disabled={!!asking} onclick={() => onSwap({ id: s.id, wishId: s.wishId, title: s.title })}>{asking === `swap:${s.id}` ? 'Finding swaps…' : 'Swap'}</button>
+                  {/if}
                 </span>
               {/if}
               {#if w.guide}
@@ -340,6 +362,16 @@
   .stop.changed {
     animation: changed 3.5s ease-out;
   }
+  /* A previewed proposal would move or take out this stop. */
+  .stop.marked {
+    outline: 2px dashed var(--band-link);
+    outline-offset: -1px;
+  }
+  .would {
+    margin-left: 6px;
+    border-style: dashed;
+    color: var(--band-link);
+  }
   @keyframes changed {
     0%,
     40% {
@@ -452,6 +484,11 @@
     background: transparent;
     color: var(--band-ink);
     cursor: pointer;
+  }
+  .edits button.swap {
+    border-color: var(--band-link);
+    color: var(--band-link);
+    font-weight: 600;
   }
   .band-evening .edits select option {
     color: var(--text-primary);

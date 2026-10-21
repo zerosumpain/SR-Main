@@ -5,12 +5,13 @@
   // shape), each day's walk between them as a wobbly pen line in that day's
   // colour, dashed when the leg has not been routed. Not a map — no streets,
   // no scale — and it says so in its caption. Labels read day·stop, as on the
-  // real map, so colour is never the only code.
+  // real map, so colour is never the only code. v8: a proposal's preview is
+  // pencilled over it as a ghost — a dashed ink line and hollow squares.
   import { inkLine, rng } from '$lib/landing/notes-ink';
   import type { MapDay } from '../TripMap.svelte';
   import { sketchPoints } from './notes';
 
-  let { days, focus = null }: { days: MapDay[]; focus?: string | null } = $props();
+  let { days, focus = null, ghost = [] }: { days: MapDay[]; focus?: string | null; ghost?: MapDay[] } = $props();
 
   // Drawn at the figure's own width, so labels stay their real size on a phone.
   let width = $state(640);
@@ -21,7 +22,8 @@
   const sketch = $derived.by(() => {
     const shown = days.map((d, i) => ({ d, i })).filter(({ d }) => !focus || d.date === focus);
     const all = shown.flatMap(({ d }) => [...d.stops.map((s) => s.location), ...d.legs.flatMap((l) => [l.from, l.to])]);
-    const pts = sketchPoints(all, W, H, PAD);
+    const ghostAll = ghost.flatMap((d) => [...d.stops.map((s) => s.location), ...d.legs.flatMap((l) => [l.from, l.to])]);
+    const pts = sketchPoints([...all, ...ghostAll], W, H, PAD);
     let k = 0;
     const out = shown.map(({ d, i }) => {
       const stops = d.stops.map((s) => ({ ...s, p: pts[k++] }));
@@ -36,16 +38,25 @@
       for (const l of legs) for (const p of [l.a, l.b]) if (!near(p)) ends.set(`${p.x},${p.y}`, p);
       return { date: d.date, slot: (i % 4) + 1, dashed: i >= 4, n: i + 1, stops, legs, homes: [...ends.values()] };
     });
-    return out;
+    const ghosts = ghost.map((d, gi) => ({
+      key: `${d.date}:${gi}`,
+      stops: d.stops.map((s) => ({ ...s, p: pts[k++] })),
+      legs: d.legs.map((l, li) => {
+        const a = pts[k++];
+        const b = pts[k++];
+        return inkLine(rng(gi * 61 + li * 17 + 5), a.x, a.y, b.x, b.y, 0.8, 0.04);
+      }),
+    }));
+    return { days: out, ghosts };
   });
-  const count = $derived(sketch.reduce((s, d) => s + d.stops.length, 0));
-  const homes = $derived(sketch.some((d) => d.homes.length > 0));
+  const count = $derived(sketch.days.reduce((s, d) => s + d.stops.length, 0) + sketch.ghosts.reduce((s, d) => s + d.stops.length, 0));
+  const homes = $derived(sketch.days.some((d) => d.homes.length > 0));
 </script>
 
 {#if count}
   <figure class="sketch np-graph" bind:clientWidth={width}>
     <svg viewBox="0 0 {W} {H}" role="img" aria-label="A sketch of where the {count} stops are, north up. Each day has its own colour; labels read day·stop.">
-      {#each sketch as d (d.date)}
+      {#each sketch.days as d (d.date)}
         <g style:--day="var(--chart-cat-{d.slot})">
           {#each d.legs as l, li (li)}
             <path class="leg" class:unrouted={!l.routed || d.dashed} d={l.path} />
@@ -60,8 +71,20 @@
           {/each}
         </g>
       {/each}
+      {#each sketch.ghosts as g (g.key)}
+        <g class="ghost">
+          {#each g.legs as path, li (li)}<path class="leg" d={path} />{/each}
+          {#each g.stops as s (s.id)}
+            <g class="stop" transform="translate({s.p.x} {s.p.y})">
+              <rect x="-9" y="-9" width="18" height="18" />
+              <text y="4">{s.n}</text>
+              <text class="lab" class:left={s.p.x > W * 0.62} x={s.p.x > W * 0.62 ? -13 : 13} y="-9">{s.title}</text>
+            </g>
+          {/each}
+        </g>
+      {/each}
     </svg>
-    <figcaption>A sketch, not a map — where each stop is, north up{homes ? '; squares are where you stay' : ''}. The map loads where a map key is set.</figcaption>
+    <figcaption>A sketch, not a map — where each stop is, north up{homes ? '; small filled squares are where you stay' : ''}{sketch.ghosts.length ? '; the dashed ink line and hollow squares are the proposal' : ''}. The map loads where a map key is set.</figcaption>
   </figure>
 {/if}
 
@@ -96,6 +119,18 @@
     font-size: 12px;
     text-anchor: middle;
     fill: var(--text-primary);
+  }
+  .ghost .leg {
+    stroke: var(--text-primary);
+    stroke-width: 2.2;
+    stroke-dasharray: 6 5;
+    opacity: 0.9;
+  }
+  .ghost rect {
+    fill: var(--np-card, var(--surface-card));
+    stroke: var(--text-primary);
+    stroke-width: 2;
+    stroke-dasharray: 3 2;
   }
   .home {
     fill: var(--day);
