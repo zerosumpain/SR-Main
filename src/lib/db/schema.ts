@@ -7419,6 +7419,8 @@ export const trip = pgTable(
     provenance: jsonb('provenance').$type<Record<string, unknown>>(),
     /** v8: PackSummary (decisions.ts) — the research pack's state, date facts and neighbourhoods; its places are trip_place rows. */
     pack: jsonb('pack').$type<Record<string, unknown>>(),
+    /** v8.1: lower-cased emails of the people who turned this trip's question notifications off. */
+    questionPushOff: jsonb('question_push_off').$type<string[]>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

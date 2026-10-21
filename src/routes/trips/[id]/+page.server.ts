@@ -7,6 +7,7 @@ import { startGuidance, withGuidance } from '$lib/trips/guidance.server';
 import { gatherProfile } from '$lib/trips/profile.server';
 import { getTrip, latestPlan, listTransport, loadState, planVersions, recentEvents, recentMessages, viewerOf } from '$lib/trips/store.server';
 import { decisionsWire, type DecisionsWire } from '$lib/trips/decisions.bundle.server';
+import { questionPushOff } from '$lib/trips/decisions.store.server';
 import { EMPTY_PACK } from '$lib/trips/decisions';
 import { rosterNames } from '$lib/trips/roster-names.server';
 
@@ -72,6 +73,8 @@ export const load: PageServerLoad = async (event) => {
     guide: trip.guide,
     today,
     decisions,
+    // v8.1: the owner's own question notifications for this trip.
+    questionPushes: !(await questionPushOff(trip.id).catch(() => [] as string[])).includes(owner.trim().toLowerCase()),
     family,
     /** v4: the studio's open tab — ?day=YYYY-MM-DD, else the overview. */
     initialDay: (() => {

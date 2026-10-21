@@ -511,3 +511,24 @@ export async function runningJob(tripId: string, kind: string): Promise<JobRow |
     .limit(1);
   return row ? toJob(row) : null;
 }
+
+// ── v8.1: question notifications, per person per trip ─────────────────────
+
+/** Lower-cased emails of the people who turned this trip's question notifications off. */
+export async function questionPushOff(tripId: string): Promise<string[]> {
+  const [row] = await db.select({ off: trip.questionPushOff }).from(trip).where(eq(trip.id, tripId)).limit(1);
+  return (row?.off ?? []).map((e) => e.trim().toLowerCase());
+}
+
+/** Turn one person's question notifications for a trip on or off. Returns whether they are on now. */
+export async function setQuestionPush(tripId: string, email: string, on: boolean): Promise<boolean> {
+  const who = email.trim().toLowerCase();
+  await db.transaction(async (tx) => {
+    const [row] = await tx.select({ off: trip.questionPushOff }).from(trip).where(eq(trip.id, tripId)).for('update').limit(1);
+    const off = new Set((row?.off ?? []).map((e) => e.trim().toLowerCase()));
+    if (on) off.delete(who);
+    else off.add(who);
+    await tx.update(trip).set({ questionPushOff: [...off].sort() }).where(eq(trip.id, tripId));
+  });
+  return on;
+}

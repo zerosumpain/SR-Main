@@ -8,7 +8,7 @@
 import type OpenAI from 'openai';
 import { getLLMClient } from '$lib/llm/client';
 import { withActivity } from '$lib/context/activity';
-import { thinkingRequestParams } from '$lib/models/thinking';
+import { isReasoningMandatoryError, noteReasoningMandatory, reasoningIsMandatory, thinkingRequestParams } from '$lib/models/thinking';
 import { getWorkload } from '$lib/models/workloads';
 import { resolveWorkloadModel } from '$lib/server/models/workload-settings';
 import { parseLooseJson } from './research';
@@ -30,18 +30,34 @@ export async function jsonCall(
   if (!def) throw new Error(`${workload} workload is not registered`);
   const ctx = await resolveWorkloadModel(def);
   const { client, model } = await getLLMClient(ctx);
-  const call = () =>
+  const level = workload === 'trips-planner' ? 'low' : 'off';
+  const request = (extraTokens: number) =>
     client.chat.completions.create(
       {
         model,
         temperature: opts.temperature ?? 0.2,
-        max_tokens: opts.maxTokens,
+        max_tokens: opts.maxTokens + extraTokens,
         response_format: { type: 'json_object' },
         messages,
-        ...thinkingRequestParams(ctx.provider, workload === 'trips-planner' ? 'low' : 'off', ctx.modelId),
+        ...thinkingRequestParams(ctx.provider, level, ctx.modelId),
       } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
       { signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000), maxRetries: 1 },
     );
+  // A model that must reason refuses "reasoning off" with a 400 (the reader's
+  // model did, every call, for a week): ask again at low effort, with room for
+  // the reasoning in the token budget, and remember the model for next time.
+  // Reasoning tokens come out of max_tokens: a model that must reason gets room for them.
+  const ROOM = 3000;
+  const call = async () => {
+    try {
+      return await request(level === 'off' && reasoningIsMandatory(ctx.modelId) ? ROOM : 0);
+    } catch (err) {
+      if (level !== 'off' || !isReasoningMandatoryError(err)) throw err;
+      noteReasoningMandatory(ctx.modelId);
+      console.warn(`[trips/llm] ${workload}: ${ctx.modelId} must reason — asking again at low effort`);
+      return request(ROOM);
+    }
+  };
   // Literal tags, so the cost ledger's registry check can see them.
   const once = () => (workload === 'trips-planner' ? withActivity('trips-planner', call) : withActivity('trips-reader', call));
   // An answer that is not JSON (empty, cut off) is asked for once more before

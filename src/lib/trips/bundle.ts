@@ -99,6 +99,8 @@ export interface TripBundle {
   answered?: Question[];
   proposals?: Proposal[];
   pack?: PackSummary;
+  /** v8.1: whether this caller gets this trip's question notifications (off = they turned them off). */
+  questionPushes?: boolean;
   etag: string;
 }
 

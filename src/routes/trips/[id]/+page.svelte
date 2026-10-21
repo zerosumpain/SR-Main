@@ -771,6 +771,7 @@
             onPreview={preview}
             placesHref="/trips/{trip.id}/places"
             shapesOpen={grouped.shapes.length}
+            questionPushes={data.questionPushes}
           />
           {#if inThread.size}<p class="np-aside small rail-more">The planner’s last reply has {inThread.size} more {inThread.size === 1 ? 'card' : 'cards'} — below, with the conversation.</p>{/if}
         </div>
