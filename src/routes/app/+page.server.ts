@@ -4,7 +4,7 @@ import { APP_COOKIE, buildIncludes, installToken, isJoinCode, itmsLink, joinDisp
 import { joinCandidates } from '$lib/server/app-devices';
 import { openInAppLink } from '$lib/server/app-links';
 import { adhocBuildRunning } from '$lib/github/adhoc-builds';
-import { releasedAdhocBuild } from '$lib/server/app-release';
+import { releasedAdhocBuild } from '$lib/github/app-release';
 
 /**
  * /app — the one address for the family's iPhone app (`$lib/server/adhoc-install`).

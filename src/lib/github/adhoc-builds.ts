@@ -8,7 +8,7 @@ import { redactGitHubSecrets } from './redact';
  * SR-AppleApp's `testflight.yml` exports an ad-hoc IPA beside every TestFlight
  * upload from `main` and keeps the newest few as draft releases (tag
  * `adhoc-<run>`), so the owner can choose which one the family's phones get
- * (`$lib/server/app-release`) and roll back. A draft, because the repo
+ * (`$lib/github/app-release`) and roll back. A draft, because the repo
  * is public and the IPA carries the UDIDs it installs on: a draft is visible
  * only to accounts that can push. So the app is fetched here with the site's
  * GitHub token and streamed on to the phone; it never has a public URL.
@@ -139,7 +139,7 @@ export async function adhocBuildOf(draft: AdhocDraft): Promise<AdhocBuild | null
 
 /**
  * The newest ad-hoc copy, or null when none has been built yet. NOT what the
- * family are offered — that is `releasedAdhocBuild` in `$lib/server/app-release`.
+ * family are offered — that is `releasedAdhocBuild` in `$lib/github/app-release`.
  */
 export async function latestAdhocBuild(): Promise<AdhocBuild | null> {
   const [newest] = await listAdhocDrafts();

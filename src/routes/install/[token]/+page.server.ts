@@ -3,7 +3,7 @@ import { env } from '$env/dynamic/private';
 import type { PageServerLoad } from './$types';
 import { isInstallToken, itmsLink } from '$lib/server/adhoc-install';
 import { adhocBuildRunning } from '$lib/github/adhoc-builds';
-import { releasedAdhocBuild } from '$lib/server/app-release';
+import { releasedAdhocBuild } from '$lib/github/app-release';
 
 /**
  * /install/<token> — the iPhone app for a phone that cannot use TestFlight

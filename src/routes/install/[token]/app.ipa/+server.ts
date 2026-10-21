@@ -3,7 +3,7 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { isInstallToken } from '$lib/server/adhoc-install';
 import { adhocIpa } from '$lib/github/adhoc-builds';
-import { releasedAdhocBuild } from '$lib/server/app-release';
+import { releasedAdhocBuild } from '$lib/github/app-release';
 
 /**
  * The app itself, streamed from the private draft release on GitHub

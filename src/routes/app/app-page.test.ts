@@ -9,7 +9,7 @@ vi.mock('$env/dynamic/private', () => ({ env: { AUTH_SECRET: 'app-page-secret'.p
 vi.mock('$lib/github/adhoc-builds', () => ({
   adhocBuildRunning: async () => false,
 }));
-vi.mock('$lib/server/app-release', () => ({
+vi.mock('$lib/github/app-release', () => ({
   releasedAdhocBuild: async () => ({ version: '0.1.120', builtAt: null, devices: ["Rory's iPhone"], bundleId: 'b', build: '120', commit: 'c', ipaAssetId: 1, ipaBytes: 1 }),
 }));
 

@@ -19,7 +19,7 @@
 //    same, and the new phone cannot install a copy that does not list it.
 
 import { getSetting, setSetting } from '$lib/server/models/settings';
-import { adhocBuildOf, listAdhocDrafts, type AdhocBuild, type AdhocDraft } from '$lib/github/adhoc-builds';
+import { adhocBuildOf, listAdhocDrafts, type AdhocBuild, type AdhocDraft } from './adhoc-builds';
 
 export const RELEASE_KEY = 'app_release';
 /** Releases remembered on the page. */

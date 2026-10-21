@@ -3,11 +3,11 @@ import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { identifyDevice, touchDevice } from '$lib/server/native-auth';
 import { installToken, itmsLink } from '$lib/server/adhoc-install';
-import { releasedAdhocBuild } from '$lib/server/app-release';
+import { releasedAdhocBuild } from '$lib/github/app-release';
 
 /**
  * GET /api/native/app-update — the RELEASED ad-hoc copy of the app (the owner
- * chooses it on /admin/access/app, `$lib/server/app-release`), for a copy
+ * chooses it on /admin/access/app, `$lib/github/app-release`), for a copy
  * installed from /app to offer itself an update (`$lib/server/adhoc-install`).
  * TestFlight and App Store copies never ask: they update themselves.
  *

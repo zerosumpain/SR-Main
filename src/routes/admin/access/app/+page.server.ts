@@ -20,7 +20,7 @@ import {
   startAdhocBuild,
   type AdhocDraft,
 } from '$lib/github/adhoc-builds';
-import { buildState, chooseReleased, currentRelease, releaseBuild } from '$lib/server/app-release';
+import { buildState, chooseReleased, currentRelease, releaseBuild } from '$lib/github/app-release';
 
 // Owner-only: /admin is never in the access catalogue, so the hook's default
 // deny covers this page and its actions.
@@ -30,7 +30,7 @@ import { buildState, chooseReleased, currentRelease, releaseBuild } from '$lib/s
 // and the ad-hoc copy the family install from. Nothing is minted or revoked
 // here — that is the person's page; every row links to it. The fleet's own
 // actions: rebuild the ad-hoc copy, and choose which build the family's
-// phones are offered (Releases, `$lib/server/app-release`).
+// phones are offered (Releases, `$lib/github/app-release`).
 
 async function namesByEmail(viewer: string | null): Promise<Map<string, string>> {
   const names = new Map<string, string>();
@@ -69,7 +69,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
   ]);
 
   // The releases: which copy the family are offered, and every copy GitHub
-  // still holds (`$lib/server/app-release`).
+  // still holds (`$lib/github/app-release`).
   const held: AdhocDraft[] = drafts.ok ? drafts.value : [];
   const release = drafts.ok ? await attempt(currentRelease(held), 'release record') : { ok: false as const };
   const offeredDraft = release.ok && release.value ? chooseReleased(held, release.value) : null;
