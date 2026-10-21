@@ -48,7 +48,21 @@ function ctx(over: Partial<OpContext> = {}): OpContext {
 describe('readPlannerAnswer', () => {
   it('reads the JSON answer and trims quick replies', () => {
     const r = readPlannerAnswer({ reply: ' Done. ', ops: [{ op: 'research' }], quickReplies: ['Yes', 'Yes', '', 'No', 'Maybe', 'Later', 'Never'] });
-    expect(r).toEqual({ reply: 'Done.', ops: [{ op: 'research' }], quickReplies: ['Yes', 'No', 'Maybe', 'Later'], options: [] });
+    // v8 adds proposals and questions (empty when the answer has none).
+    expect(r).toEqual({ reply: 'Done.', ops: [{ op: 'research' }], quickReplies: ['Yes', 'No', 'Maybe', 'Later'], options: [], proposals: [], questions: [] });
+  });
+  it('v8: reads proposals and question cards, dropping malformed ones', () => {
+    const r = readPlannerAnswer({
+      reply: 'Two ideas.',
+      ops: [],
+      proposals: [
+        { kind: 'fill', title: 'Roscioli', why: 'Deli.', group: 'dinner', scope: { date: '2026-10-27', stage: 'evening' }, ops: [{ op: 'addWish', wish: { title: 'Roscioli' } }] },
+        { kind: 'fill', title: 'No ops', ops: [] },
+      ],
+      questions: [{ key: 'eat-late', prompt: 'Do you eat late?', answers: [{ label: 'Yes', ops: [] }, { label: 'No', ops: [] }], defaultIndex: 1 }, { prompt: 'One answer', answers: [{ label: 'Only' }] }],
+    });
+    expect(r.proposals.map((p) => [p.kind, p.title, p.group, p.scope.stage])).toEqual([['fill', 'Roscioli', 'dinner', 'evening']]);
+    expect(r.questions.map((q) => [q.key, q.defaultIndex, q.answers.length])).toEqual([['eat-late', 1, 2]]);
   });
   it('always has a reply', () => {
     expect(readPlannerAnswer(null).reply).toMatch(/say that again/);

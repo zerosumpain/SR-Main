@@ -40,6 +40,9 @@ import {
   type TripRecord,
 } from './store.server';
 import type { ReplanBody } from './intake';
+import { constraintsOf, planConstraints, readPack } from './decisions.store.server';
+import { isCentreStay, withCentreStay } from './centre-stay';
+import { decisionsWire } from './decisions.bundle.server';
 
 type SolverInput = Parameters<typeof solveTrip>[0];
 
@@ -49,7 +52,9 @@ function titlesOf(wishes: Array<{ id: string; title: string }>): Record<string, 
 
 /** The solver's input for a trip as it stands, plus the wishes left out for want of a place. */
 export async function solverInput(trip: TripRecord, previous: StoredPlan | null, opts: { reuseMatrix?: boolean } = {}) {
-  const [state, transport] = await Promise.all([loadState(trip.id), listTransport(trip.id)]);
+  const [loaded, transport, pack] = await Promise.all([loadState(trip.id), listTransport(trip.id), readPack(trip.id).catch(() => null)]);
+  // v8: with no stay, plan from the centre the research pack found (./centre-stay).
+  const state = { ...loaded, stays: withCentreStay(trip, loaded.stays, pack?.centre) };
   // Wishes with no place yet have no matrix point; the solver drops them with
   // a reason (a must with a warning), and the page says "needs a place".
   const placed = state.wishes.filter((w) => !w.suggested && !w.skipped && w.place);
@@ -97,7 +102,11 @@ export function runningDate(trip: Pick<TripRecord, 'timeZone' | 'startDate' | 'e
 export async function replan(
   trip: TripRecord,
   source: PlanSource = 'site',
-  opts: { keepRunningDay?: boolean } = {},
+  opts: {
+    keepRunningDay?: boolean;
+    /** v8: lines that lead the version's "what changed" ("Undone: …"). */
+    lead?: string[];
+  } = {},
 ): Promise<{ plan: StoredPlan; created: boolean }> {
   const previous = await latestPlan(trip.id);
   const { input, state, routingNotes } = await solverInput(trip, previous);
@@ -123,9 +132,18 @@ export async function replan(
   }
 
   plan = await attachLegLines(plan, previous?.plan ?? null, trip);
-  const changes = [...diffPlans(previous?.plan ?? null, plan, titles), ...notes];
+  const changes = [...(opts.lead ?? []), ...diffPlans(previous?.plan ?? null, plan, titles), ...notes];
   if (routingNotes.some((n) => /estimated/.test(n))) changes.push(`Travel times: ${routingNotes.join('; ')}.`);
-  const stored = await appendPlan(trip.id, { source, inputHash, plan, matrix: input.matrix, changes });
+  const stored = await appendPlan(trip.id, {
+    source,
+    inputHash,
+    plan,
+    matrix: input.matrix,
+    changes,
+    // v8: the constraints it was solved from, for undo and restore.
+    // The stand-in centre stay is never part of what undo puts back.
+    constraints: constraintsOf(trip, { ...state, stays: state.stays.filter((x) => !isCentreStay(x)) }, input.transport ?? []) as unknown as Record<string, unknown>,
+  });
   // Guidance for today and the next day, in the background (cached per leg).
   startGuidance(trip.ownerEmail, trip.id);
   // v7: real places for the meals, and the places' photographs.
@@ -159,7 +177,7 @@ export async function storePhoneDays(trip: TripRecord, days: PlannedDay[]): Prom
   // those are the bundle's decoration, not the plan's, and are not stored.
   const bare = days.map((d) => ({ ...d, stops: d.stops.map(({ mealOptions: _m, ...s }) => s) }));
   const plan = bare.reduce((p, d) => replaceDay(p, d), previous.plan);
-  const { wishes } = await loadState(trip.id);
+  const [{ wishes }, snapshot] = await Promise.all([loadState(trip.id), planConstraints(trip.id, previous.version).catch(() => null)]);
   const changes = diffPlans(previous.plan, plan, titlesOf(wishes))
     .filter((t) => t !== 'No change to the schedule.')
     .map((t) => `Changed on the phone — ${t}`);
@@ -169,6 +187,9 @@ export async function storePhoneDays(trip: TripRecord, days: PlannedDay[]): Prom
     plan,
     matrix: previous.matrix,
     changes: changes.length ? changes : ['Changed on the phone — times only.'],
+    // v8: the phone changes the schedule, not the constraints: this version
+    // was solved from the same facts as the one before, so undo can restore it.
+    constraints: snapshot as unknown as Record<string, unknown> | null,
   });
   startGuidance(trip.ownerEmail, trip.id);
   startMeals(trip, stored.plan);
@@ -242,12 +263,20 @@ export async function tripBundle(
   opts: { access: TripAccess; viewerEmail: string; creator: { id: string; name: string } },
 ): Promise<TripBundle> {
   const { access } = opts;
-  const [state, latest, messages, transport, suggestions] = await Promise.all([
+  const [state, latest, messages, transport, suggestions, decisions] = await Promise.all([
     loadState(trip.id),
     latestPlan(trip.id),
     recentMessages(trip.id, viewerOf(trip, opts.viewerEmail), 50),
     listTransport(trip.id),
     listSuggestions(trip.id),
+    // v8: brief, questions, proposals, the pack's summary. Never allowed to
+    // fail the bundle: the family's phones load the trip through here, and a
+    // new table without its runtime GRANT yet (the minutes after a release)
+    // must cost the decisions, not the trip.
+    decisionsWire(trip, access, { surface: 'phone' }).catch((err) => {
+      console.error('[trips/bundle] decisions unavailable:', (err as Error)?.message);
+      return null;
+    }),
   ]);
   // Each leg carries its walk / public transport / taxi alternatives (v5),
   // and each meal with no place its real options nearby (v7).
@@ -265,7 +294,8 @@ export async function tripBundle(
   const replaces = new Map(state.wishes.filter((w) => w.replacesMeal).map((w) => [w.id, w.replacesMeal as 'breakfast' | 'lunch' | 'dinner']));
   const body: Omit<TripBundle, 'etag'> = {
     trip: wireTrip(trip, opts.creator),
-    stays: state.stays,
+    // v8: with no stay yet, the stand-in the plan was solved from (./centre-stay).
+    stays: withCentreStay(trip, state.stays, decisions?.pack.centre),
     wishes: state.wishes,
     bookings: state.bookings,
     plan: latest && plan ? { id: latest.id, version: latest.version, createdAt: latest.createdAt, plan, changes: latest.changes } : null,
@@ -280,6 +310,9 @@ export async function tripBundle(
     suggestions: suggestions.map(suggestionWire),
     fullness: latest ? planFullness(latest.plan, trip.pace, trip.dayLoads ?? {}, replaces) : {},
     images,
+    ...(decisions
+      ? { brief: decisions.brief, questions: decisions.questions, answered: decisions.answered, proposals: decisions.proposals, pack: decisions.pack }
+      : {}),
   };
   return { ...body, etag: bundleEtag(body) };
 }

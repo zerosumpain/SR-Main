@@ -5,6 +5,8 @@
   // here once; `.np-paper` only sets its inks as custom properties, so each
   // page still decides where its cover, sheet and margin go.
   import '$lib/components/notes-paper/notes-paper.css';
+  // v8: the decision cards' shared marks (dx- classes only).
+  import '$lib/components/trips/decisions/decisions.css';
 
   let { children } = $props();
 </script>

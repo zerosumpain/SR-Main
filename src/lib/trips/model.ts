@@ -12,6 +12,7 @@
 
 /** A point. Always lat/lng objects on the wire — never an unlabelled pair. */
 import type { PlanOption } from './options';
+import type { PlanDiff, Proposal, Question, TripBrief } from './decisions';
 
 export interface LatLng {
   lat: number;
@@ -333,7 +334,14 @@ export interface SolvedPlan {
   score: number;
 }
 
-export type PlanSource = 'site' | 'phone' | 'replan' | 'seed';
+/**
+ * Where a version came from. v8 adds what made it, for the version history:
+ * 'proposal' (one accepted on the site), 'undo' (an undo or restore on the
+ * site), 'question' (an answer), 'research' (the re-plan once research
+ * finished). A change made on the phone stays 'phone' — the running-day rule
+ * reads it.
+ */
+export type PlanSource = 'site' | 'phone' | 'replan' | 'seed' | 'proposal' | 'undo' | 'question' | 'research';
 
 export interface PlanVersion {
   id: string;
@@ -541,6 +549,17 @@ export interface ConverseResult {
   research?: ResearchStep[];
   /** v7: choices offered for an open question, each checked against its day (./options). */
   options?: PlanOption[];
+  /**
+   * v8 (./decisions): the turn's proposals, stored and checked, in groups
+   * (editors only); the question cards it stored; the brief as it now
+   * stands (the phone's has no memory text); the structured difference of
+   * a turn that changed the plan, and the version Undo goes back to.
+   */
+  proposals?: Proposal[];
+  questions?: Question[];
+  brief?: TripBrief;
+  diff?: PlanDiff | null;
+  undo?: { toVersion: number } | null;
 }
 
 /** What the phone saw that made it think the person is off the plan. */

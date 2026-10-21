@@ -6,12 +6,22 @@ import { localDateIn } from '$lib/trips/routing';
 import { startGuidance, withGuidance } from '$lib/trips/guidance.server';
 import { gatherProfile } from '$lib/trips/profile.server';
 import { getTrip, latestPlan, listTransport, loadState, planVersions, recentEvents, recentMessages, viewerOf } from '$lib/trips/store.server';
+import { decisionsWire, type DecisionsWire } from '$lib/trips/decisions.bundle.server';
+import { EMPTY_PACK } from '$lib/trips/decisions';
+import { rosterNames } from '$lib/trips/roster-names.server';
 
 // One trip: the planning conversation (v2), the latest solved plan with its
 // guidance and what changed, and the constraints the conversation set (intake,
 // stays, wishes and facts, the booking checklist) as an editable view. Every edit on the page goes to
 // /api/trips/:id/… (constraints change, the plan is re-solved) and the page
 // reloads its data.
+//
+// v8: the decisions too — the brief (labelled by source), the open questions
+// and proposals, and the research pack's state — from the same loader the
+// phone bundle and the decision routes use (site surface: the owner's notes
+// labels are kept). A store that is not ready yet reads as nothing to decide.
+const NO_DECISIONS: DecisionsWire = { brief: { items: [], assumed: 0, missing: [] }, questions: [], answered: [], proposals: [], pack: EMPTY_PACK };
+
 export const load: PageServerLoad = async (event) => {
   const owner = await requireTripOwner(event);
   const trip = await getTrip(owner, event.params.id);
@@ -19,7 +29,7 @@ export const load: PageServerLoad = async (event) => {
   event.setHeaders({ 'cache-control': 'private, no-store' });
   // What I know about you (v3): gathered in the background the first time, never awaited here.
   if (!trip.profile) void gatherProfile(trip, { asOwner: true, ownerEmail: owner }).catch(() => {});
-  const [state, latest, versions, events, messages, transport] = await Promise.all([
+  const [state, latest, versions, events, messages, transport, decisions, family] = await Promise.all([
     loadState(trip.id),
     latestPlan(trip.id),
     planVersions(trip.id, 12),
@@ -27,6 +37,11 @@ export const load: PageServerLoad = async (event) => {
     // v5: the owner's own thread and the plan changes; a member's advice chat stays theirs.
     recentMessages(trip.id, viewerOf(trip, owner), 50),
     listTransport(trip.id),
+    decisionsWire(trip, { role: 'creator', canEdit: true, canApprove: true }, { surface: 'site' }).catch((err) => {
+      console.warn('[trips] decisions unavailable:', (err as Error)?.message);
+      return NO_DECISIONS;
+    }),
+    rosterNames(),
   ]);
   // Guidance for every day is made lazily, on page view, in the background.
   if (latest) startGuidance(owner, trip.id, 'all');
@@ -56,6 +71,8 @@ export const load: PageServerLoad = async (event) => {
     profile: trip.profile,
     guide: trip.guide,
     today,
+    decisions,
+    family,
     /** v4: the studio's open tab — ?day=YYYY-MM-DD, else the overview. */
     initialDay: (() => {
       const d = event.url.searchParams.get('day');

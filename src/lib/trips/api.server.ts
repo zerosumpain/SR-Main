@@ -7,9 +7,11 @@
 import { error, json, type RequestEvent } from '@sveltejs/kit';
 import { requireTripOwner } from './access.server';
 import { logEdit } from './converse.server';
+import { noteProvenance } from './decisions.store.server';
 import type { TripOp } from './model';
 import { describeOp } from './ops';
 import { replan } from './plan.server';
+import { createdFromExtra, pairDirect, provenanceFor } from './provenance';
 import { getTrip, loadState, type TripRecord } from './store.server';
 
 export async function ownerTrip(event: RequestEvent): Promise<{ owner: string; trip: TripRecord }> {
@@ -26,9 +28,15 @@ export async function readJson(event: RequestEvent): Promise<unknown> {
 /**
  * Re-plan after a direct edit and answer with the version the page should now
  * show. The edit is logged in the conversation as an `event` message with its
- * ops, so the planner sees it on its next turn.
+ * ops, so the planner sees it on its next turn. v8: every fact it touched is
+ * now the person's own ('you' in the brief), whatever it was before.
  */
 export async function replanned(trip: TripRecord, extra: Record<string, unknown> = {}, status = 200, ops: TripOp[] = []): Promise<Response> {
+  if (ops.length) {
+    await noteProvenance(trip.id, provenanceFor(pairDirect(ops, createdFromExtra(extra)), 'you')).catch((err) =>
+      console.warn('[trips] could not record where the edit came from:', (err as Error)?.message),
+    );
+  }
   const log = async (version: number | null) => {
     if (!ops.length) return;
     const titles = Object.fromEntries((await loadState(trip.id)).wishes.map((w) => [w.id, w.title]));

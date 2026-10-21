@@ -47,7 +47,7 @@ export async function ownerMemories(queries: string[] = QUERIES, limit = 25): Pr
 }
 
 /** Owner knowledge (their notes and memory) about travel — never a member reader. */
-async function ownerKnowledge(query: string): Promise<KnowledgeRow[]> {
+export async function ownerKnowledge(query: string): Promise<KnowledgeRow[]> {
   const { searchKnowledge } = await import('$lib/knowledge/search');
   const res = await searchKnowledge(query, { sources: ['notes', 'memory'], limitPerSource: 4 });
   return res.hits.map((h) => ({ source: h.source, title: h.title, passage: h.passage, ref: h.ref }));
