@@ -100,11 +100,15 @@ export type LatestAppBuild = { build: number; commit: string; at: string | null 
 /**
  * The newest build of the app that finished, whichever channel it went to:
  * every copy's build number is the `testflight.yml` run number, so the last
- * successful run IS the latest build. What the fleet view measures each
- * phone's build against.
+ * successful run on `main` IS the latest build. What the fleet view measures
+ * each phone's build against, and what the app's update prompt offers.
+ *
+ * `main` only: the owner tries a branch on TestFlight before the family get
+ * it (2026-10-21), and that run must not tell every ad-hoc phone a new
+ * version is ready — the ad-hoc copy is never published from a branch.
  */
 export async function latestAppBuild(): Promise<LatestAppBuild | null> {
-  const res = await gh(`/repos/${APP_REPO}/actions/workflows/${WORKFLOW}/runs?status=success&per_page=1`);
+  const res = await gh(`/repos/${APP_REPO}/actions/workflows/${WORKFLOW}/runs?status=success&branch=main&per_page=1`);
   const body = (await res.json()) as { workflow_runs?: Array<{ run_number?: number; head_sha?: string; updated_at?: string }> };
   const run = body.workflow_runs?.[0];
   if (!run || typeof run.run_number !== 'number' || typeof run.head_sha !== 'string') return null;
