@@ -490,7 +490,7 @@ export async function refreshPack(trip: TripRecord, handle: JobHandle | null, de
     calendar,
     highlights: packHighlights(places, calendar),
     // A pack built before it kept its centre gets one (a trip with no stay is planned from it).
-    ...(before.centre ? {} : { centre: middleOf(places.map((p) => ({ osmId: p.place.osmId ?? p.id, name: p.name, location: p.place.location, address: null, kind: p.kind, tags: p.tags, openingHours: null, website: null, wikidata: p.wikidata, distanceM: 0, sitelinks: p.lessVisited ? 1 : 50, imageFile: null }))) ?? anchors[0] ?? null }),
+    ...(before.centre ? {} : { centre: middleOf(places.filter((p) => p.place?.location).map((p) => ({ osmId: p.place.osmId ?? p.id, name: p.name, location: p.place.location, address: null, kind: p.kind, tags: p.tags, openingHours: null, website: null, wikidata: p.wikidata, distanceM: 0, sitelinks: p.lessVisited ? 1 : 50, imageFile: null }))) ?? anchors[0] ?? null }),
   });
   stage('writing', 'done', summary.highlights.find((h) => /Rain/.test(h)) ?? 'Up to date');
   return { pack: summary, places };
