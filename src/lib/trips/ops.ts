@@ -33,6 +33,7 @@ import { isLocalDate, isTimeZone, parseBookingPatch, parseTripInput, parseWishPa
 import { mergeProfile } from './profile';
 import { withinReach } from './research';
 import { readOptionDrafts, type OptionDraft } from './options';
+import { readProposalDrafts, readQuestionDrafts, type ProposalDraft, type QuestionDraft } from './decisions';
 
 /** The most ops one turn may apply. */
 export const MAX_OPS = 25;
@@ -117,8 +118,20 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const str = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() ? v.trim().replace(/\s+/g, ' ').slice(0, max) : null);
 
+export interface PlannerAnswer {
+  reply: string;
+  ops: unknown[];
+  quickReplies: string[];
+  /** v7: choices for an open question (v8 reads them as a `fill` proposal group). */
+  options: OptionDraft[];
+  /** v8: alternatives or a large change to approve, checked before anyone sees them. */
+  proposals: ProposalDraft[];
+  /** v8: a question card (the default answer already assumed). */
+  questions: QuestionDraft[];
+}
+
 /** The model's whole answer, read leniently: a reply always comes back. */
-export function readPlannerAnswer(raw: unknown): { reply: string; ops: unknown[]; quickReplies: string[]; options: OptionDraft[] } {
+export function readPlannerAnswer(raw: unknown): PlannerAnswer {
   const o = isObj(raw) ? raw : {};
   const reply = str(o.reply, 4000) ?? (typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 4000) : 'Sorry — I lost my thread there. Could you say that again?');
   const ops = Array.isArray(o.ops) ? o.ops : [];
@@ -128,7 +141,8 @@ export function readPlannerAnswer(raw: unknown): { reply: string; ops: unknown[]
     .filter((q, i, a) => a.indexOf(q) === i)
     .slice(0, 4);
   // v7: choices offered instead of a change, for an open question.
-  return { reply, ops, quickReplies, options: readOptionDrafts(o.options) };
+  // v8: proposals and questions (./decisions readers drop anything malformed).
+  return { reply, ops, quickReplies, options: readOptionDrafts(o.options), proposals: readProposalDrafts(o.proposals), questions: readQuestionDrafts(o.questions) };
 }
 
 function addDays(date: LocalDate, days: number): LocalDate {

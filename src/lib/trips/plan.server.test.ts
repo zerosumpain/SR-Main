@@ -23,6 +23,7 @@ vi.mock('./meals.server', () => ({
 // v8: the decisions part of the bundle reads its own tables; empty here.
 vi.mock('./decisions.store.server', () => ({
   constraintsOf: vi.fn(() => ({})),
+  planConstraints: vi.fn(async () => null),
   listQuestions: vi.fn(async () => []),
   listProposals: vi.fn(async () => []),
   readPack: vi.fn(async () => ({ status: 'none', stage: null, builtAt: null, refreshedAt: null, counts: { places: 0, food: 0, toBook: 0, lessVisited: 0, rainy: 0 }, calendar: [], neighbourhoods: [], highlights: [] })),

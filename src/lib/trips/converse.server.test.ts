@@ -15,6 +15,15 @@ const h = vi.hoisted(() => ({
   gathered: 0,
   remembered: [] as unknown[],
   viewers: [] as unknown[],
+  // v8
+  provenance: [] as Array<Record<string, unknown>>,
+  drafts: [] as unknown[][],
+  offered: [] as unknown[],
+  packPlaces: [] as unknown[],
+  questionDrafts: [] as unknown[],
+  ensured: [] as unknown[],
+  replanChanges: [] as string[],
+  latest: null as unknown,
 }));
 
 // The agentic first call is the same fake planner; its reply is the JSON text.
@@ -29,6 +38,34 @@ vi.mock('./options.server', () => ({
   checkOptions: async (_trip: unknown, drafts: Array<{ title: string; date: string; stage: string }>) =>
     drafts.map((d, i) => ({ id: `${d.date}:${d.stage}:${i}`, title: d.title, fit: '14:10–15:10', verdict: { fits: true } })),
 }));
+// v8: the decisions store, the proposals check and the questions check (S2's stub) are stubs here.
+vi.mock('./decisions.store.server', () => ({
+  readProvenance: async () => ({}),
+  noteProvenance: async (_t: string, p: Record<string, unknown>) => void h.provenance.push(p),
+  listPackPlaces: async () => h.packPlaces,
+  listProposals: async () => [],
+  listQuestions: async () => [],
+}));
+vi.mock('./proposals.server', () => ({
+  checkDrafts: async (_trip: unknown, drafts: Array<{ kind: string; title: string; group: string | null; scope: { date: string; stage: string } }>) => {
+    h.drafts.push(drafts);
+    const proposals = drafts.map((d, i) => ({ id: `p${i}`, groupId: d.group ?? 'g', kind: d.kind, title: d.title, status: 'open' }));
+    const options = drafts.filter((d) => d.kind === 'fill' || d.kind === 'swap').map((d, i) => ({ id: `${d.scope.date}:${d.scope.stage}:${i}`, title: d.title, fit: '14:10–15:10', verdict: { fits: true } }));
+    return { proposals, options };
+  },
+  offerFromPack: async (_trip: unknown, slot: unknown) => {
+    h.offered.push(slot);
+    return { proposals: [{ id: 'pk1', kind: 'fill', title: 'Palazzo Altemps' }], options: [{ id: 'o1', title: 'Palazzo Altemps' }] };
+  },
+}));
+vi.mock('./questions.server', () => ({
+  checkQuestionDrafts: async (_t: unknown, drafts: Array<{ key: string }>) => {
+    h.questionDrafts.push(...drafts);
+    return drafts.map((d) => ({ id: `q-${d.key}`, key: d.key }));
+  },
+  refreshQuestions: async () => [],
+}));
+vi.mock('./pack.server', () => ({ ensurePack: async (_t: unknown, opts: unknown) => void h.ensured.push(opts) }));
 vi.mock('./profile.server', () => ({
   gatherProfile: async () => {
     h.gathered++;
@@ -64,7 +101,7 @@ vi.mock('./plan.server', () => ({
   replan: async (_t: unknown, source: string, opts: unknown) => {
     h.replans.push({ source, opts });
     const plan = h.solved[Math.min(h.replans.length - 1, h.solved.length - 1)];
-    return { created: true, plan: { version: 4 + h.replans.length, changes: [], plan } };
+    return { created: true, plan: { version: 4 + h.replans.length, changes: h.replanChanges, plan } };
   },
 }));
 const TRIP = {
@@ -74,13 +111,18 @@ const TRIP = {
 } as Trip & { research: null; guide: null; updatedAt: string; profile: import('./model').TravellerProfile | null };
 vi.mock('./store.server', () => ({
   loadState: async () => ({ stays: [], wishes: h.wishes, bookings: [] }),
-  latestPlan: async () => ({ version: 4, plan: BEFORE }),
+  latestPlan: async () => ({ version: 4, plan: h.latest ?? BEFORE }),
   recentMessages: async (_t: string, viewer: unknown) => {
     h.viewers.push(viewer);
     return [];
   },
   viewerOf: (t: { ownerEmail: string }, email: string) => ({ email, isCreator: email === t.ownerEmail }),
   getTrip: async () => TRIP,
+  getTripById: async () => TRIP,
+  tripOnly: (t: Record<string, unknown>) => {
+    const { research: _r, updatedAt: _u, guide: _g, profile: _p, ...rest } = t;
+    return rest;
+  },
   addMessage: async (_t: string, m: (typeof h.messages)[number]) => {
     h.messages.push(m);
     return { id: `m${h.messages.length}`, createdAt: 'now', ...m };
@@ -88,7 +130,7 @@ vi.mock('./store.server', () => ({
   addWishes: async (_t: string, list: Array<{ title: string; place: unknown }>) =>
     list.map((w, i) => ({ id: `new${i}`, title: w.title, place: w.place, priority: 'nice', durationSec: null, partOfDay: 'any', fixedDate: null, fixedStartMin: null, locked: false, suggested: false, skipped: false, facts: null, note: null, sortHint: 0 })),
   updateTrip: async () => {},
-  addStay: async () => ({}),
+  addStay: async (_t: string, st: object) => ({ id: 'st-new', ...st }),
   updateStay: async () => {},
   deleteStay: async () => true,
   updateWish: async () => null,
@@ -114,6 +156,14 @@ beforeEach(() => {
   h.gathered = 0;
   h.remembered = [];
   h.viewers = [];
+  h.provenance = [];
+  h.drafts = [];
+  h.offered = [];
+  h.packPlaces = [];
+  h.questionDrafts = [];
+  h.ensured = [];
+  h.replanChanges = [];
+  h.latest = null;
 });
 
 /** A fake planner: the first call answers the person, a second one is the check. */
@@ -313,5 +363,170 @@ describe('v5: a family member talking to the planner', () => {
     await converse({ ...TRIP, ownerEmail: 'kid@example.test', profile: null }, { text: 'I love gelato', surface: 'phone', caller: { ...kid, canEdit: true } });
     expect(h.remembered).toEqual([]);
     expect(h.gathered).toBe(0);
+  });
+});
+
+describe('v8: act, propose, ask', () => {
+  const PACK = { id: 'c0ffee00-0000-4000-8000-000000000401', name: 'Palazzo Altemps', kind: 'museum', tags: [], place: { name: 'Palazzo Altemps', location: { lat: 41.9007, lng: 12.4728 }, osmId: 'way/3', address: null }, why: 'Quiet sculpture.', neighbourhood: 'Parione', durationMin: 75, indoor: true, kidFriendly: true, costText: '€10 each', lessVisited: true, bookingRequired: false, bookAheadDays: null, facts: null, image: null, wikidata: null, sources: [], status: 'candidate', rejectReason: null, wishId: null, checkedAt: null };
+
+  it('tells the planner the policy, the brief with origins, the pack and what is open', async () => {
+    h.packPlaces = [PACK];
+    h.model = () => ({ reply: 'Noted.', ops: [], quickReplies: [] });
+    await converse(TRIP, { text: 'Hello', surface: 'site' });
+    expect(h.seen[0][0].content).toContain('ACT, PROPOSE OR ASK');
+    expect(h.seen[0][0].content).not.toContain('Turn what they say into ops straight away');
+    const context = h.seen[0][1].content;
+    expect(context).toContain('THE BRIEF');
+    expect(context).toContain('Stay: not known yet — Planning from the centre until you add one (ASSUMED by you)');
+    expect(context).toContain('[c0ffee00-0000-4000-8000-000000000401] Palazzo Altemps (museum; Parione; indoor; good for children; less visited; €10 each; ~75 min)');
+  });
+
+  it('a fill group the planner proposes is checked, stored and returned — and drawn as legacy options for the current app', async () => {
+    h.model = () => ({
+      reply: 'Three ideas for Monday evening — pick one on the cards.',
+      ops: [],
+      quickReplies: [],
+      proposals: [
+        { kind: 'fill', title: 'Roscioli', why: 'Famous deli.', group: 'mon-dinner', scope: { date: '2026-10-27', stage: 'evening' }, ops: [{ op: 'addWish', wish: { title: 'Roscioli', placeQuery: 'Roscioli, Rome', fixedDate: '2026-10-27', replacesMeal: 'dinner' } }] },
+        { kind: 'fill', title: 'Da Enzo', why: 'Trastevere trattoria.', group: 'mon-dinner', scope: { date: '2026-10-27', stage: 'evening' }, packPlaceId: 'x', ops: [{ op: 'addWish', wish: { title: 'Da Enzo', placeQuery: 'Da Enzo, Rome' } }] },
+      ],
+    });
+    const r = await converse(TRIP, { text: 'Somewhere for dinner on Monday', surface: 'phone' });
+    expect(h.replans).toEqual([]);
+    expect(h.drafts).toHaveLength(1);
+    expect(r.proposals?.map((p) => p.title)).toEqual(['Roscioli', 'Da Enzo']);
+    // The family's current app reads only `options`: it still gets cards to tap.
+    expect(r.options?.map((o) => o.title)).toEqual(['Roscioli', 'Da Enzo']);
+    expect(r).toMatchObject({ applied: [], rejected: [], planVersion: 4, changes: [], diff: null, undo: null });
+    expect(r.brief?.items.some((i) => i.kind === 'preference')).toBe(false); // the phone's brief
+  });
+
+  it('reads v7 options as a fill group', async () => {
+    h.model = () => ({
+      reply: 'Two ideas for Wednesday afternoon:',
+      ops: [],
+      quickReplies: [],
+      options: [{ date: '2026-10-28', stage: 'lunch', title: 'Roscioli', placeQuery: 'Roscioli, Rome', durationMin: 60, why: 'Deli.' }],
+    });
+    await converse(TRIP, { text: 'Lunch on Wednesday?', surface: 'site' });
+    expect(h.drafts[0]).toEqual([
+      expect.objectContaining({ kind: 'fill', title: 'Roscioli', group: 'options', scope: expect.objectContaining({ date: '2026-10-28', stage: 'lunch' }), ops: [{ op: 'addWish', wish: expect.objectContaining({ fixedDate: '2026-10-28', replacesMeal: 'lunch', placeQuery: 'Roscioli, Rome' }) }] }),
+    ]);
+  });
+
+  it('acts AND proposes in one turn, with the difference and the undo', async () => {
+    h.model = (m) =>
+      isCheck(m)
+        ? { ok: true, reply: 'Added.', ops: [] }
+        : {
+            reply: 'Added the Pantheon; two ideas for after it are on the cards.',
+            ops: [{ op: 'addWish', wish: { title: 'Pantheon', placeQuery: 'Pantheon, Rome' }, source: 'you' }],
+            quickReplies: [],
+            proposals: [{ kind: 'fill', title: 'Sant’Ignazio', why: 'Painted ceiling.', scope: { date: '2026-10-28', stage: 'afternoon' }, ops: [{ op: 'addWish', wish: { title: 'Sant’Ignazio', placeQuery: 'Sant’Ignazio, Rome' } }] }],
+          };
+    const r = await converse(TRIP, { text: 'Add the Pantheon and something after it', surface: 'site' });
+    expect(r.planVersion).toBe(5);
+    expect(r.undo).toEqual({ toVersion: 4 });
+    expect(r.diff).toMatchObject({ lines: expect.any(Array), changes: expect.any(Array) });
+    expect(r.proposals?.map((p) => p.title)).toEqual(['Sant’Ignazio']);
+    // Legacy options only on a turn that changed nothing, as v7's always were.
+    expect(r.options).toEqual([]);
+    expect(h.provenance).toEqual([{ 'wish:new0': { source: 'you', note: null, ref: null } }]);
+  });
+
+  it('labels a fact the planner set without saying where it came from as assumed', async () => {
+    h.model = (m) =>
+      isCheck(m)
+        ? { ok: true, reply: 'ok', ops: [] }
+        : { reply: 'I have assumed you are near the Pantheon.', ops: [{ op: 'addStay', name: 'Somewhere central', placeQuery: 'Pantheon, Rome', fromDate: '2026-10-27', toDate: '2026-10-30' }, { op: 'setTrip', fields: { pace: 'relaxed' }, source: 'you' }], quickReplies: [] };
+    await converse(TRIP, { text: 'Plan it relaxed', surface: 'site' });
+    expect(h.provenance[0]).toMatchObject({ pace: { source: 'you' } });
+    expect(Object.entries(h.provenance[0]).find(([k]) => k.startsWith('stay:'))?.[1]).toEqual({ source: 'assumed', note: null, ref: null });
+  });
+
+  it('retries once when the reply promises ideas and carries nothing', async () => {
+    let calls = 0;
+    h.model = (m) => {
+      calls++;
+      if (m.at(-1)?.content.startsWith('Your reply talks about adding')) {
+        return { reply: 'Here are three ideas on the cards.', ops: [], proposals: [{ kind: 'fill', title: 'Mercato Centrale', why: 'Food hall.', scope: { date: '2026-10-28', stage: 'lunch' }, ops: [{ op: 'addWish', wish: { title: 'Mercato Centrale', placeQuery: 'Mercato Centrale, Rome' } }] }] };
+      }
+      return { reply: 'I’ve added a few easy town-centre ideas.', ops: [], quickReplies: [] };
+    };
+    const r = await converse(TRIP, { text: 'Add some ideas to the plan', surface: 'site' });
+    expect(calls).toBe(2);
+    expect(r.reply).toBe('Here are three ideas on the cards.');
+    expect(r.proposals?.map((p) => p.title)).toEqual(['Mercato Centrale']);
+  });
+
+  it('if the retry is still empty, says so plainly and offers what the pack has', async () => {
+    h.packPlaces = [PACK];
+    const flat = (id: string, min: number) => ({ id, kind: 'stay', wishId: null, title: 'Flat', location: { lat: 41.9, lng: 12.47 }, arriveMin: min, departMin: min, waitSec: 0, locked: true, bookingId: null, warnings: [] });
+    h.latest = { days: [day('2026-10-28', [flat('stay:s', 540), stop('a', 'Colosseum', 570, 750), flat('stay:e', 1140)] as never)], dropped: [], warnings: [], score: 0 };
+    h.model = () => ({ reply: 'I’ve added a few easy town-centre ideas.', ops: [], quickReplies: [] });
+    const r = await converse(TRIP, { text: 'Add some ideas to the plan', surface: 'site' });
+    expect(r.reply).toBe('I couldn’t turn that into a change — here’s what I can do:');
+    expect(h.offered).toEqual([{ date: '2026-10-28', stage: 'afternoon' }]);
+    expect(r.proposals?.map((p) => p.title)).toEqual(['Palazzo Altemps']);
+    expect(r.options?.map((o) => o.title)).toEqual(['Palazzo Altemps']);
+  });
+
+  it('with nothing to offer, says nothing was changed', async () => {
+    h.model = () => ({ reply: 'I’ve added a few easy town-centre ideas.', ops: [], quickReplies: [] });
+    const r = await converse(TRIP, { text: 'Add some ideas to the plan', surface: 'site' });
+    expect(r.reply).toBe('I couldn’t turn that into a change, so nothing has been changed.');
+    expect(r.proposals).toEqual([]);
+  });
+
+  it('passes the planner’s question cards to the check, and rebuilds the pack when the dates move', async () => {
+    h.model = (m) =>
+      isCheck(m)
+        ? { ok: true, reply: 'ok', ops: [] }
+        : {
+            reply: 'Moved the trip a day later; I have assumed dinner around 19:30.',
+            ops: [{ op: 'setTrip', fields: { startDate: '2026-10-28', endDate: '2026-10-31' } }],
+            quickReplies: [],
+            questions: [{ key: 'eat-late', prompt: 'Do you eat late?', answers: [{ label: 'Around 19:30', ops: [] }, { label: 'After 21:00', ops: [] }], defaultIndex: 0 }],
+          };
+    const r = await converse(TRIP, { text: 'Make it a day later', surface: 'site' });
+    expect(h.questionDrafts).toEqual([expect.objectContaining({ key: 'eat-late', prompt: 'Do you eat late?' })]);
+    expect(r.questions).toEqual([{ id: 'q-eat-late', key: 'eat-late' }]);
+    expect(h.ensured).toEqual([{ reason: 'changed' }]);
+  });
+
+  it('someone who cannot edit gets advice: no proposals, no questions, no retry', async () => {
+    const kid = { isOwner: false, canEdit: false, name: 'Sam', email: 'kid@example.test' };
+    h.model = () => ({
+      reply: 'I’ve added a few ideas.',
+      ops: [],
+      quickReplies: [],
+      proposals: [{ kind: 'fill', title: 'Gelato', why: 'Yum.', scope: { date: '2026-10-28', stage: 'afternoon' }, ops: [{ op: 'addWish', wish: { title: 'Gelato' } }] }],
+      questions: [{ prompt: 'Which flavour?', answers: [{ label: 'Pistachio', ops: [] }, { label: 'Lemon', ops: [] }] }],
+    });
+    const r = await converse(TRIP, { text: 'Ideas?', surface: 'phone', caller: kid });
+    expect(h.seen).toHaveLength(1);
+    expect(h.drafts).toEqual([]);
+    expect(h.questionDrafts).toEqual([]);
+    expect(r.proposals).toEqual([]);
+    expect(r.questions).toEqual([]);
+    expect(h.seen[0][1].content).not.toContain('Prefers walking to taxis');
+  });
+
+  it('a background re-plan after research that moves things says so in the conversation', async () => {
+    h.replanChanges = ['Colosseum moved from Wed 28 Oct to Thu 29 Oct (09:30).'];
+    h.model = (m) => (isCheck(m) ? { ok: true, reply: 'ok', ops: [] } : { reply: 'Added.', ops: [{ op: 'addWish', wish: { title: 'Pantheon', placeQuery: 'Pantheon, Rome' } }], quickReplies: [] });
+    await converse(TRIP, { text: 'Add the Pantheon', surface: 'site' });
+    const job = h.research[0] as { onDone: (id: string) => Promise<void> };
+    await job.onDone('t1');
+    expect(h.messages.at(-1)).toMatchObject({ role: 'event', text: 'The research finished and the plan moved: Colosseum moved from Wed 28 Oct to Thu 29 Oct (09:30).' });
+  });
+});
+
+describe('backgroundNote', () => {
+  it('is quiet when nothing moved', async () => {
+    const { backgroundNote } = await import('./converse.server');
+    expect(backgroundNote(['No change to the schedule.'])).toBeNull();
+    expect(backgroundNote(['Travel times: 3 legs estimated.'])).toBeNull();
+    expect(backgroundNote(['Trevi added on Tue 27 Oct at 15:00.'])).toBe('The research finished and the plan moved: Trevi added on Tue 27 Oct at 15:00.');
   });
 });

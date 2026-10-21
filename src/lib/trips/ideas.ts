@@ -288,7 +288,14 @@ export function verifyIdea(input: SolverInput, wish: Wish, gap: Gap, baseline: S
   }
   const matrix = wish.place ? withPoint(input.matrix, wish.id, wish.place.location, locations) : input.matrix;
   const plan = solveTrip({ ...input, wishes: [...input.wishes, wish], matrix });
-  const titles = new Map(input.wishes.map((w) => [w.id, w.title]));
+  return judgeIdea(plan, baseline, new Map(input.wishes.map((w) => [w.id, w.title])), wish, gap);
+}
+
+/**
+ * The verdict on a plan already solved with the idea in it (v8: a dry run of
+ * a proposal solves once and is judged here, as `verifyIdea` judges its own).
+ */
+export function judgeIdea(plan: SolvedPlan, baseline: SolvedPlan, titles: Map<string, string>, wish: Pick<Wish, 'id' | 'facts' | 'replacesMeal'>, gap: Gap): Verdict {
   const was = new Set(baseline.dropped.map((d) => d.wishId));
   const pushesOut = plan.dropped.filter((d) => d.wishId !== wish.id && !was.has(d.wishId)).map((d) => titles.get(d.wishId) ?? d.wishId);
   const dayOf = (p: SolvedPlan) => new Map(p.days.flatMap((d) => d.stops.filter((x) => x.wishId).map((x) => [x.wishId as string, d.date] as const)));
