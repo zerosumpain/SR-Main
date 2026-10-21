@@ -42,6 +42,7 @@ import {
   readPack,
   supersedeGroup,
   voteQuestion,
+  questionPushOff,
 } from './decisions.store.server';
 import { dryRun, planDiff, type DryRunResult } from './dryrun';
 import type { LatLng, LocalDate, SolvedPlan, TripAccess, TripOp, Wish } from './model';
@@ -540,7 +541,7 @@ export function questionPush(trip: Pick<TripRecord, 'id' | 'title'>, q: Pick<Que
  * At most one question notification per trip per day, and only before the
  * trip: the most important of the new ones, to its audience. Never throws.
  */
-export async function pushQuestions(trip: TripRecord, added: Question[], opts: { push?: typeof pushToEmails; now?: Date } = {}): Promise<number> {
+export async function pushQuestions(trip: TripRecord, added: Question[], opts: { push?: typeof pushToEmails; now?: Date; mutedFor?: (tripId: string) => Promise<string[]> } = {}): Promise<number> {
   try {
     const now = opts.now ?? new Date();
     const today = localDateIn(trip.timeZone, now);
@@ -548,7 +549,9 @@ export async function pushQuestions(trip: TripRecord, added: Question[], opts: {
     const last = await lastQuestionPush(trip.id);
     if (last && localDateIn(trip.timeZone, last) === today) return 0;
     const q = [...added].sort((a, b) => b.impact - a.impact)[0];
-    const to = await audienceEmails(trip, q.audience);
+    // v8.1: not to anyone who turned this trip's question notifications off.
+    const off = new Set(await (opts.mutedFor ?? questionPushOff)(trip.id).catch(() => [] as string[]));
+    const to = (await audienceEmails(trip, q.audience)).filter((e) => !off.has(e));
     if (!to.length) return 0;
     const sent = (await (opts.push ?? pushToEmails)(to, questionPush(trip, q))).sent;
     if (sent) await markQuestionPushed(trip.id, q.id);

@@ -190,6 +190,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/trips/[id]/brief': phone('app/api', 'Correct the trip’s facts directly: dates, who, pace, where you are staying'),
   '/api/native/trips/[id]/pack': phone('app/api', 'The trip’s research pack: places, places to eat, and what is on during the dates'),
   '/api/native/trips/[id]/questions/[qid]': phone('app/api', 'Answer a quick question about a trip with a tap, or vote on a family one'),
+  '/api/native/trips/[id]/question-pushes': phone('app/api', 'Turn a trip’s quick-question notifications on or off for yourself'),
   '/api/native/trips/notes': phone('app/api', 'What the owner’s notes already hold for a trip being started: flights, the stay, a booked tour'),
   '/api/native/games': phone('app/surfaces', 'The games lobby: who to invite and what I’m in'),
   '/api/native/games/[id]': phone('app/api', 'One game room, and making a move'),

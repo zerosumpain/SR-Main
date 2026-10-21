@@ -40,7 +40,7 @@ import {
   type TripRecord,
 } from './store.server';
 import type { ReplanBody } from './intake';
-import { constraintsOf, planConstraints, readPack } from './decisions.store.server';
+import { constraintsOf, planConstraints, questionPushOff, readPack } from './decisions.store.server';
 import { isCentreStay, withCentreStay } from './centre-stay';
 import { decisionsWire } from './decisions.bundle.server';
 
@@ -278,6 +278,7 @@ export async function tripBundle(
       return null;
     }),
   ]);
+  const pushesOff = await questionPushOff(trip.id).catch(() => [] as string[]);
   // Each leg carries its walk / public transport / taxi alternatives (v5),
   // and each meal with no place its real options nearby (v7).
   const read = latest ? await readMealOptions(trip.id, latest.plan) : { options: {}, pending: false };
@@ -313,6 +314,7 @@ export async function tripBundle(
     ...(decisions
       ? { brief: decisions.brief, questions: decisions.questions, answered: decisions.answered, proposals: decisions.proposals, pack: decisions.pack }
       : {}),
+    questionPushes: !pushesOff.includes(opts.viewerEmail.trim().toLowerCase()),
   };
   return { ...body, etag: bundleEtag(body) };
 }

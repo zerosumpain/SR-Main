@@ -174,6 +174,8 @@ describe('every native route gates itself', () => {
         // quick questions (members see and vote on family questions only).
         '/trips/[id]/pack/+server.ts',
         '/trips/[id]/questions/[qid]/+server.ts',
+        // v8.1: a person's own question notifications for a trip, on or off.
+        '/trips/[id]/question-pushes/+server.ts',
         '/trips/[id]/replan/+server.ts',
         '/trips/[id]/route/+server.ts',
         '/trips/[id]/suggestions/+server.ts',

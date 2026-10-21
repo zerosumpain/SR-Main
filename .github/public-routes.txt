@@ -118,6 +118,7 @@
 /api/native/trips/[id]/pack
 /api/native/trips/[id]/proposals
 /api/native/trips/[id]/proposals/[pid]
+/api/native/trips/[id]/question-pushes
 /api/native/trips/[id]/questions/[qid]
 /api/native/trips/[id]/replan
 /api/native/trips/[id]/route

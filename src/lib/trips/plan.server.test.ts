@@ -28,6 +28,7 @@ vi.mock('./decisions.store.server', () => ({
   listProposals: vi.fn(async () => []),
   readPack: vi.fn(async () => ({ status: 'none', stage: null, builtAt: null, refreshedAt: null, counts: { places: 0, food: 0, toBook: 0, lessVisited: 0, rainy: 0 }, calendar: [], neighbourhoods: [], highlights: [] })),
   readProvenance: vi.fn(async () => ({})),
+  questionPushOff: vi.fn(async () => []),
 }));
 vi.mock('./images.server', () => ({ tripImages: vi.fn(async () => ({ images: {}, pending: false })), startImages: vi.fn() }));
 vi.mock('./guidance.server', () => ({

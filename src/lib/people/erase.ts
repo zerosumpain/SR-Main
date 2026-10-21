@@ -148,7 +148,7 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   // v5: a family member may create a trip (a family record): it passes to the
   // site owner rather than vanishing from everyone's plans. Their suggestions go;
   // their name comes off the ones they decided.
-  trip: { owner_email: 'scrub' },
+  trip: { owner_email: 'scrub', question_push_off: 'scrub' },
   trip_suggestion: { by_email: 'erase', by_id: 'erase', decided_by_email: 'scrub', decided_by_id: 'scrub' },
   // Their own conversation with the planner goes (each person's thread is theirs alone).
   trip_message: { author_email: 'erase', author_id: 'erase' },
@@ -309,6 +309,14 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
       await tx.update(tripQuestion).set({ votes }).where(eq(tripQuestion.id, q.id));
     }
     await tx.delete(tripJob).where(inArray(tripJob.ownerEmail, addrs));
+    // v8.1: off the trips' "question notifications off" lists.
+    const muted = await tx
+      .select({ id: trip.id, off: trip.questionPushOff })
+      .from(trip)
+      .where(or(...addrs.map((a) => sql`${trip.questionPushOff}::text ilike ${'%' + a + '%'}`)));
+    for (const t of muted) {
+      await tx.update(trip).set({ questionPushOff: (t.off ?? []).filter((e) => !addrs.includes(e.toLowerCase())) }).where(eq(trip.id, t.id));
+    }
 
     // Their games on the family leaderboard.
     await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));

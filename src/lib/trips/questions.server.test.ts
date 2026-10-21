@@ -109,6 +109,7 @@ vi.mock('./decisions.store.server', () => {
   let n = 0;
   const strip = ({ votesRaw: _v, pushedAt: _p, ...q }: (typeof h.questions)[number]) => q as Question;
   return {
+    questionPushOff: async () => [],
     addQuestion: async (_t: string, q: Omit<Question, 'id'>) => {
       const row = { ...q, id: `q${++n}`, status: 'open' as QuestionStatus, answerId: null, answeredByName: null, votes: {}, createdAt: new Date().toISOString(), answeredAt: null, votesRaw: {}, pushedAt: null };
       h.questions.push(row);
@@ -384,5 +385,18 @@ describe('pushes', () => {
     expect(qs.parseQuestionAction({ action: 'answer' })).toBeNull();
     expect(qs.parseQuestionAction({ action: 'skip' })).toEqual({ action: 'skip' });
     expect(qs.parseQuestionAction({ action: 'vote', answerId: 'x' })).toBeNull();
+  });
+});
+
+describe('question notifications off, per person (v8.1)', () => {
+  it('a push skips anyone who turned this trip’s question notifications off', async () => {
+    const sentTo: string[][] = [];
+    const q = { id: 'q9', prompt: 'Keep it?', impact: 2, audience: 'owner', answers: [{ id: 'a0', label: 'Yes' }, { id: 'a1', label: 'No' }] } as unknown as Question;
+    const push = async (to: string[]) => (sentTo.push(to), { sent: to.length });
+    const t = trip() as { ownerEmail: string };
+    const before = new Date('2026-10-21T08:00:00Z');
+    expect(await qs.pushQuestions(t as never, [q], { push: push as never, now: before, mutedFor: async () => [t.ownerEmail.toLowerCase()] })).toBe(0);
+    expect(sentTo).toEqual([]);
+    expect(await qs.pushQuestions(t as never, [q], { push: push as never, now: before, mutedFor: async () => [] })).toBe(1);
   });
 });

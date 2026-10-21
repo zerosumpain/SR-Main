@@ -25,6 +25,7 @@
     onPreview,
     placesHref,
     shapesOpen = 0,
+    questionPushes = true,
   }: {
     questions: Question[];
     answered?: Question[];
@@ -37,7 +38,21 @@
     placesHref: string;
     /** Trip shapes waiting above the plan (they are drawn there, big). */
     shapesOpen?: number;
+    /** v8.1: whether the owner gets this trip's question notifications on the phone. */
+    questionPushes?: boolean;
   } = $props();
+
+  // v8.1: question notifications for this trip, on or off (the owner's own).
+  // The page's value until this rail changes it; a reload brings the server's.
+  let pushesSet = $state<boolean | null>(null);
+  const pushesOn = $derived(pushesSet ?? questionPushes ?? true);
+  let pushesBusy = $state(false);
+  async function togglePushes() {
+    pushesBusy = true;
+    const r = await api<{ on: boolean }>('PUT', `${desk.base}/question-pushes`, { on: !pushesOn });
+    pushesBusy = false;
+    if (r.ok) pushesSet = r.body.on;
+  }
 
   const open = $derived(questions.length + groups.reduce((n, g) => n + g.proposals.length, 0));
   /** Keep the keyboard in the rail when a card leaves without a What changed. */
@@ -61,6 +76,9 @@
   <header class="dr-hd">
     <h2 id="dr-h" class="dr-h" tabindex="-1">Decisions</h2>
     <span class="dr-n">{open ? `${open} open` : 'none open'}</span>
+    <button type="button" class="dr-push" aria-pressed={pushesOn} disabled={pushesBusy} onclick={togglePushes} title="Quick questions for this trip, as notifications on your phone (at most one a day)">
+      {pushesOn ? 'Notify me: on' : 'Notify me: off'}
+    </button>
   </header>
 
   {#if desk.problem && desk.problem.where === null}<p class="dx-err" role="alert">{desk.problem.text}</p>{/if}
@@ -73,7 +91,7 @@
   {#if questions.length}
     <section class="dr-sec" aria-labelledby="dr-q">
       <h3 id="dr-q" class="dx-k dr-qh" tabindex="-1">Quick questions</h3>
-      <p class="dx-aside dr-sub">Each one changes the plan. Skipping is fine — the plan already assumes an answer.</p>
+      <p class="dx-aside dr-sub">Each one changes the plan. Skipping is fine — each card says what happens if you do.</p>
       <div class="dr-qs">
         {#each questions as q, qi (q.id)}<QuestionCard {q} {desk} {today} tilt={TILTS[qi % TILTS.length]} onSettled={refocus} />{/each}
       </div>
@@ -149,6 +167,23 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     color: var(--accent-on-dark);
+  }
+  .dr-push {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--accent-on-dark);
+    background: none;
+    border: 1px dashed currentColor;
+    border-radius: 100px;
+    padding: 2px 10px;
+    cursor: pointer;
+  }
+  .dr-push[aria-pressed='false'] {
+    opacity: 0.7;
+  }
+  .dr-push:disabled {
+    cursor: progress;
   }
   .dr-h:focus,
   .dr-qh:focus {
