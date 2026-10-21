@@ -216,3 +216,29 @@ export function createdFromExtra(extra: Record<string, unknown>): CreatedIds {
 export function pairDirect(ops: TripOp[], created: CreatedIds): AppliedPair[] {
   return pairApplied(ops, { applied: ops, rejected: [] }, created).map((p) => ({ ...p, raw: null }));
 }
+
+/**
+ * A guessed stay or booking is worse than none (a stay frames every day; a
+ * booking is a hard slot): the planner may assume preferences, never these.
+ * Drops a model's `addStay`/`addBooking` marked 'assumed' (or named as a
+ * placeholder), and says which it dropped so the turn can log it. Everything
+ * else passes untouched; a stay with no source still applies (and reads as
+ * assumed, amber, for the person to correct).
+ */
+export function withoutInventedFacts(ops: unknown[]): { ops: unknown[]; dropped: string[] } {
+  const kept: unknown[] = [];
+  const dropped: string[] = [];
+  for (const raw of ops) {
+    const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+    const kind = o?.op;
+    if (o && (kind === 'addStay' || kind === 'addBooking')) {
+      const name = String(kind === 'addStay' ? (o.name ?? '') : ((o.booking as Record<string, unknown> | undefined)?.title ?? ''));
+      if (o.source === 'assumed' || /\b(approximate|assumed|placeholder|provisional|tbc|unknown)\b/i.test(name)) {
+        dropped.push(name || String(kind));
+        continue;
+      }
+    }
+    kept.push(raw);
+  }
+  return { ops: kept, dropped };
+}

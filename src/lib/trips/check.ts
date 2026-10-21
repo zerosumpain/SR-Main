@@ -123,7 +123,7 @@ Decide whether the result really does what they asked ("lighter" means less acti
 - If it does: {"ok": true, "reply": your reply to the person (you may tighten the first one so it matches what actually happened), "ops": []}.
 - If it does not and another change would fix it: {"ok": false, "reply": a reply describing what you are now doing, "ops": [one round of corrective ops, same format as before]}. You get ONE round; no further check follows.
 - If it cannot be met (a booked slot, opening hours, too little time): {"ok": false, "reply": say plainly what could not be done and why, and offer an alternative, "ops": []}.
-The reply must never claim something the schedule does not show. British English, short, no emoji.
+The reply must never claim something the schedule does not show. It is written to the person about their trip: never comment on your own process, never apologise for or criticise an earlier step ("I added X without being asked", "that was unnecessary") — if something you did should not stay, undo it with ops and describe the trip as it now is. British English, short, no emoji.
 Answer ONLY with JSON: {"ok": boolean, "reply": string, "ops": Op[]}`;
 
 export function checkPrompt(input: { request: string; firstReply: string; applied: TripOp[]; diff: TurnDiff; titles: Record<string, string> }): string {

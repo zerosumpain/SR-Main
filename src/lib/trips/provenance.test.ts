@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Trip, Wish } from './model';
 import { applyOps, type OpEffects } from './ops';
-import { captureCreated, createdFromExtra, pairApplied, pairDirect, provenanceFor } from './provenance';
+import { captureCreated, createdFromExtra, pairApplied, pairDirect, provenanceFor, withoutInventedFacts } from './provenance';
 
 const TRIP: Trip = {
   id: 't1', ownerEmail: 'o@example.test', title: 'Rome', destination: 'Rome, Italy', timeZone: 'Europe/Rome',
@@ -91,5 +91,20 @@ describe('provenance from a planner turn', () => {
     expect(createdFromExtra({ wishes: [{ id: 'a' }, { id: 'b' }] }).wishes).toEqual(['a', 'b']);
     expect(createdFromExtra({ booking: { id: 'bk' } }).bookings).toEqual(['bk']);
     expect(createdFromExtra({ deleted: true })).toEqual({ stays: [], wishes: [], bookings: [], transport: [] });
+  });
+});
+
+describe('withoutInventedFacts', () => {
+  it('drops a stay or booking the planner marked assumed or named as a placeholder, and keeps the rest', () => {
+    const ops = [
+      { op: 'addStay', name: 'Alfama accommodation — approximate base', placeQuery: 'Alfama, Lisbon', source: 'assumed' },
+      { op: 'addStay', name: 'Somewhere central (placeholder)', placeQuery: 'Lisbon' },
+      { op: 'addBooking', booking: { title: 'Fado night' }, source: 'assumed' },
+      { op: 'addStay', name: 'Airbnb, Via del Governo Vecchio', placeQuery: 'Via del Governo Vecchio 69, Rome', source: 'notes' },
+      { op: 'setTrip', fields: { pace: 'relaxed' }, source: 'assumed' },
+    ];
+    const r = withoutInventedFacts(ops);
+    expect(r.ops).toEqual([ops[3], ops[4]]);
+    expect(r.dropped).toEqual(['Alfama accommodation — approximate base', 'Somewhere central (placeholder)', 'Fado night']);
   });
 });

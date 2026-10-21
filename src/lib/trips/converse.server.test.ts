@@ -214,13 +214,14 @@ describe('converse', () => {
     expect(r.options?.map((o) => o.title)).toEqual(['Galleria Spada', 'Gianicolo walk']);
   });
 
-  it('offers no options on a turn that changed the plan', async () => {
+  it('on a turn that changed the plan, legacy option cards mirror its fill and swap proposals (an older phone sees only those)', async () => {
     h.model = (m) => (isCheck(m) ? { ok: true, reply: 'Done.', ops: [] } : {
       reply: 'Added it.', ops: [{ op: 'addWish', wish: { title: 'Gelato', placeQuery: null } }], quickReplies: [],
       options: [{ date: '2026-10-28', stage: 'afternoon', title: 'X', placeQuery: 'X, Rome' }],
     });
     const r = await converse(TRIP, { text: 'Add a gelato stop', surface: 'phone' });
-    expect(r.options).toEqual([]);
+    const offered = (r.proposals ?? []).filter((p) => p.kind === 'fill' || p.kind === 'swap').map((p) => p.title);
+    expect((r.options ?? []).map((o) => o.title)).toEqual(offered.slice(0, 3));
   });
 
   it('does not re-solve when nothing changed', async () => {
@@ -429,8 +430,8 @@ describe('v8: act, propose, ask', () => {
     expect(r.undo).toEqual({ toVersion: 4 });
     expect(r.diff).toMatchObject({ lines: expect.any(Array), changes: expect.any(Array) });
     expect(r.proposals?.map((p) => p.title)).toEqual(['Sant’Ignazio']);
-    // Legacy options only on a turn that changed nothing, as v7's always were.
-    expect(r.options).toEqual([]);
+    // Legacy option cards go with the fill/swap group even on a turn that also acted.
+    expect((r.options ?? []).map((o) => o.title)).toEqual(['Sant’Ignazio']);
     expect(h.provenance).toEqual([{ 'wish:new0': { source: 'you', note: null, ref: null } }]);
   });
 

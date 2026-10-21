@@ -42,7 +42,7 @@ import { planDiff } from './dryrun';
 import { ensurePack } from './pack.server';
 import { openSlot, optionDrafts } from './proposals';
 import { checkDrafts, offerFromPack } from './proposals.server';
-import { captureCreated, pairApplied, provenanceFor, type CreatedIds } from './provenance';
+import { captureCreated, pairApplied, provenanceFor, type CreatedIds, withoutInventedFacts } from './provenance';
 import { checkQuestionDrafts, refreshQuestions } from './questions.server';
 import { localDateIn } from './routing';
 import { replan } from './plan.server';
@@ -229,7 +229,10 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   ]);
   const memoryOwner = caller.isOwner ? (caller.email ?? trip.ownerEmail) : null;
   // Advice only (v5): a family member who cannot edit gets the reply, never the ops.
-  const firstOps = editor ? answer.ops : [];
+  // v8: never a guessed stay or booking — the brief shows "not known yet" instead.
+  const vetted = withoutInventedFacts(editor ? answer.ops : []);
+  if (vetted.dropped.length) console.info('[trips/converse] dropped invented facts:', vetted.dropped.join('; '));
+  const firstOps = vetted.ops;
   const cap = captureCreated(effectsFor(trip, userMessage.id, memoryOwner));
   const result = await applyOps(firstOps, { trip, stays: state.stays, wishes: state.wishes, bookings: state.bookings, knownUrls: known, transport, profile }, cap.fx);
   // v8: each fact the planner set is labelled with where it came from ('assumed' unless it said).
@@ -340,6 +343,15 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     const checked = await withDeadline(checkDrafts(fresh, drafts, { authorEmail: author.email }), PROPOSALS_DEADLINE_MS, { proposals: [] as Proposal[], options: [] as PlanOption[] });
     proposals = checked.proposals;
     legacy = checked.options;
+    // The reply was written before the drafts were checked: say which ideas
+    // did not survive, so the words never name a card that is not there.
+    const offered = new Set(proposals.map((p) => p.title.trim().toLowerCase()));
+    const missed = [...new Set(drafts.map((d) => d.title.trim()).filter((t) => t && !offered.has(t.toLowerCase())))];
+    if (missed.length) {
+      replyText += proposals.length
+        ? `\n\n(Not offered: ${missed.join(', ')} — ${missed.length === 1 ? 'it' : 'they'} would not fit the day or could not be found on the map.)`
+        : `\n\nI couldn’t fit ${missed.length === 1 ? 'that' : 'any of those'} into the day as it stands, so there is nothing to choose yet — try another part of the day, or ask me to look further.`;
+    }
   }
   if (editor && stillEmpty && !proposals.length && !changed) {
     // Still nothing to show: say so plainly, and offer what the pack has for the emptiest part of a day.
@@ -351,10 +363,12 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   }
   // v7: options for an open question, each checked against its day — for
   // someone who cannot edit (no proposals): at most 20 s, then the reply goes without.
-  const options = changed
-    ? []
-    : editor
-      ? legacy.slice(0, 3)
+  // Legacy cards go with every fill or swap group, whether or not the turn
+  // also changed something: an older phone shows nothing else to tap.
+  const options = editor
+    ? legacy.slice(0, 3)
+    : changed
+      ? []
       : answer.options.length
         ? await Promise.race([checkOptions(trip, answer.options).catch(() => []), new Promise<[]>((r) => setTimeout(() => r([]), OPTIONS_DEADLINE_MS))])
         : [];
