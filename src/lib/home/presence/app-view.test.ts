@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   minted: [] as Array<{ email: string; code: string; expiresAt: Date }>,
   live: new Set<string>(),
   ttlMs: 10 * 60_000,
+  hold: false,
 }));
 
 // A select chain that answers with the trail rows whatever is asked; the
@@ -60,6 +61,19 @@ vi.mock('$lib/server/native-auth', () => ({
   },
   isPairingCodeLive: async (code: string) => h.live.has(code),
 }));
+// The owner's location hold, through the real pure helper: john held at a
+// point that reads as home.
+vi.mock('./location-hold.server', async () => {
+  const { applyHold } = await import('./location-hold');
+  const hold = { lat: 51.4321, lon: -0.0567, label: 'Home', since: '2026-09-26T08:00:00.000Z', until: '2026-09-26T12:00:00.000Z' };
+  return {
+    loadHoldContext: async (_members: unknown, now: Date) =>
+      h.hold
+        ? { apply: (input: Parameters<typeof applyHold>[0]) =>
+            applyHold({ ...input, recent: input.recent ?? new Map() }, hold, ['john'], { isHome: true, placeLabel: null, distanceHomeKm: 0.02 }, now, 20_000) }
+        : null,
+  };
+});
 vi.mock('./viewer', async (orig) => {
   const real = await orig<typeof import('./viewer')>();
   return { ...real, peopleViewerForEmail: async (email: string) => h.viewers.get(email) ?? null };
@@ -124,6 +138,7 @@ beforeEach(() => {
   h.minted = [];
   h.live.clear();
   h.ttlMs = 10 * 60_000;
+  h.hold = false;
   resetSitePairCache();
   resetHistoryCache();
 });
@@ -388,6 +403,35 @@ describe('pushAppViews', () => {
     expect(preview.view.access.news).toBe(true);
     expect(preview.view.access.sitePair).toBeNull();
     expect(preview.view.watch).toBeUndefined();
+  });
+
+  it('holds the owner for everyone else — and their preview — but never in his own view', async () => {
+    h.hold = true;
+    h.users = [
+      { email: 'owner@example.test', name: 'J', sharing: true },
+      { email: 'sam@example.test', name: 'Sam', sharing: true },
+    ];
+    h.viewers.set('owner@example.test', { kind: 'owner' });
+    h.viewers.set('sam@example.test', { kind: 'household', subject: 'sam', wards: [] });
+    const withSam = [...members, { ...members[0], subject: 'sam', email: 'sam@example.test', displayName: 'Sam' }];
+    await pushAppViews(withSam, fakeFetch(), NOW);
+    type P = { subject: string; status: string; line: string; position: { lat: number; lon: number; at: string } | null; lastSeenAt: string | null; moving: unknown; batteryPct: number | null };
+    type V = { email: string; view: { people: P[]; previewAs?: Array<{ view: { people: P[] } }> } };
+    const body = h.posted[0] as { views: V[] };
+    const john = (v: { people: P[] }) => v.people.find((p) => p.subject === 'john')!;
+    const sam = body.views.find((v) => v.email === 'sam@example.test')!;
+    expect(john(sam.view)).toMatchObject({
+      status: 'home', position: { lat: 51.4321, lon: -0.0567, at: '2026-09-26T09:04:40.000Z' },
+      lastSeenAt: '2026-09-26T09:04:40.000Z', moving: null, batteryPct: 71,
+    });
+    expect(john(sam.view).line).toContain('just now');
+    const owner = body.views.find((v) => v.email === 'owner@example.test')!;
+    // His own view: the real, older fix.
+    expect(john(owner.view).position).toEqual({ lat: 51.5, lon: -0.1, at: '2026-09-26T09:00:00.000Z' });
+    // His "view as Sam" is Sam's view — held.
+    expect(john(owner.view.previewAs![0].view).position?.lat).toBe(51.4321);
+    // And nothing in what Sam is sent says so.
+    expect(JSON.stringify(sam)).not.toMatch(/"hold"|"held"|"until"/);
   });
 
   it('previews a person the site allows who is NOT on the app yet, without filing them a view', async () => {
