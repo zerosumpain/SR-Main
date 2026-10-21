@@ -757,7 +757,7 @@ export function packHighlights(places: Array<Pick<PackPlace, 'name' | 'kind' | '
   const counts = packCounts(places);
   const out: string[] = [];
   const sights = counts.places - counts.food;
-  if (sights) out.push(`Found ${plural(sights, 'place')}`);
+  if (sights) out.push(`Found ${plural(sights, 'place')} to see`);
   if (counts.food) out.push(`${plural(counts.food, 'place')} to eat near where you'll be`);
   const book = places.filter((p) => p.status !== 'rejected' && p.bookingRequired === true);
   if (book.length) {

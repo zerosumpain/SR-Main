@@ -74,7 +74,7 @@ import {
   type ProposalRequest,
   type Slot,
   type SlotTarget, type Likeness } from './proposals';
-import { moveProposal, updateProposalCheck } from './proposals.store.server';
+import { moveProposal, updateProposalCheck, supersedeSlot } from './proposals.store.server';
 import { refreshQuestions } from './questions.server';
 import { emptyFacts, withinReach, type OsmPlace } from './research';
 import { findPlaceLoosely, startResearch } from './research.server';
@@ -527,6 +527,11 @@ async function bestFromPack(base: Base, slot: Slot, group: string, nudge: { nudg
 
 async function store(base: Base, picked: Checked[], caller: ProposalCaller, note: string | null = null): Promise<Outcome & { legacy?: PlanOption[] }> {
   const proposals = await addProposals(base.trip.id, picked.map((b) => b.proposal), caller.email);
+  // The slot's older groups give way to this one (a second swap, a nudge).
+  const first = proposals[0];
+  if (first && (first.kind === 'swap' || first.kind === 'fill' || first.kind === 'day')) {
+    await supersedeSlot(base.trip.id, { date: first.scope.date, stage: first.kind === 'day' ? null : first.scope.stage, wishId: first.kind === 'swap' ? first.scope.wishId : null }, first.groupId, 'Replaced by newer choices').catch(() => {});
+  }
   const legacy = proposals.map((p, i) => (picked[i]?.verdict ? legacyOption(p, picked[i].verdict!, i) : null)).filter((o): o is PlanOption => !!o);
   return { status: 200, body: note ? { proposals, note } : { proposals }, legacy };
 }

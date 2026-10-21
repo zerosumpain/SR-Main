@@ -302,8 +302,9 @@ export function tradeoffsOf(prev: SolvedPlan, next: SolvedPlan, input: SolverInp
     fits: pushesOut.length === 0,
     walkMin: Math.round((walkSec(next) - walkSec(prev)) / 60),
     walkKmPerDay: wa !== null ? Math.round((wa / days / 1000) * 10) / 10 : wb !== null ? Math.round((wb / days / 1000) * 10) / 10 : null,
+    // A day whose first SIGHT is before 09:00 (breakfast and a flight do not count).
     earlyStarts: next.days.filter((d) => {
-      const first = d.stops.find((s) => s.kind !== 'stay');
+      const first = d.stops.find((s) => s.kind === 'wish');
       return first ? first.arriveMin < 9 * 60 : false;
     }).length,
     toBook,

@@ -155,7 +155,7 @@ describe('research pack build', () => {
     expect(pack).toMatchObject({ status: 'ready', stage: null, builtAt: '2026-10-21T10:00:00.000Z' });
     expect(pack.counts.food).toBe(12);
     expect(pack.calendar.map((c) => c.text)).toEqual(['Borghese Gallery is closed on Mon 26 Oct', 'Rain likely in the afternoon', 'Light from about 07:38 to 18:08']);
-    expect(pack.highlights[0]).toMatch(/^Found \d+ places$/);
+    expect(pack.highlights[0]).toMatch(/^Found \d+ places to see$/);
     expect(pack.highlights).toContain('Rain likely Thu afternoon');
     // The travellers (names, children's ages) shape the write-up; nothing else from the profile.
     expect(d.prompts[0]).toContain('Travelling: John, Sam (9).');

@@ -238,7 +238,7 @@ describe('research pack: dates, weather, the summary', () => {
       p({ name: 'Last Supper', bookingRequired: true, status: 'rejected', bookAheadDays: 90 }),
     ];
     const calendar = [{ date: '2026-10-29', kind: 'weather' as const, text: 'Rain likely in the afternoon', placeId: null, sources: [] }];
-    expect(packHighlights(places, calendar)).toEqual(['Found 40 places', "14 places to eat near where you'll be", '2 need booking — Colosseum underground about 14 days ahead', 'Rain likely Thu afternoon', '9 quieter places off the usual list']);
+    expect(packHighlights(places, calendar)).toEqual(['Found 40 places to see', "14 places to eat near where you'll be", '2 need booking — Colosseum underground about 14 days ahead', 'Rain likely Thu afternoon', '9 quieter places off the usual list']);
     expect(packCounts(places)).toEqual({ places: 54, food: 14, toBook: 2, lessVisited: 9, rainy: 11 });
   });
 

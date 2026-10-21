@@ -61,6 +61,12 @@ vi.mock('./proposals.store.server', () => ({
     Object.assign(h.proposals.find((p) => p.id === id) ?? {}, check);
   },
   moveProposal: async (_t: string, id: string, _from: string, to: string, reason: string) => Object.assign(h.proposals.find((p) => p.id === id) ?? {}, { status: to, reason }),
+  supersedeSlot: async (_t: string, slot: { date: string | null; stage: string | null; wishId: string | null }, keep: string) => {
+    for (const p of h.proposals) {
+      const sc = (p.scope ?? {}) as { date?: string | null; stage?: string | null; wishId?: string | null };
+      if (p.status === 'open' && ['swap', 'fill', 'day'].includes(p.kind as string) && p.groupId !== keep && sc.date === slot.date && (!slot.stage || sc.stage === slot.stage) && (!slot.wishId || sc.wishId === slot.wishId)) Object.assign(p, { status: 'superseded' });
+    }
+  },
 }));
 vi.mock('./converse.server', () => ({
   applyDirect: async (_trip: unknown, ops: Array<{ op: string }>, opts: unknown) => {

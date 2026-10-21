@@ -7,7 +7,7 @@
 // applied into an expired one (the claim is taken before applying, so two
 // taps never apply it twice).
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { tripProposal } from '$lib/db/schema';
 import type { PlanDiff, Proposal, ProposalStatus, ProposalTradeoffs } from './decisions';
@@ -35,4 +35,28 @@ export async function moveProposal(tripId: string, id: string, from: ProposalSta
     .update(tripProposal)
     .set({ status: to, reason, decidedAt: new Date() })
     .where(and(eq(tripProposal.tripId, tripId), eq(tripProposal.id, id), eq(tripProposal.status, from)));
+}
+
+/**
+ * A new group for a slot replaces the slot's older open groups (a second
+ * swap, a nudge): on the preview the rail filled with three groups for the
+ * same stop. Closes open swap/fill/day proposals with the same day and part
+ * of the day (and, for a swap, the same stop) that are not in `keep`.
+ */
+export async function supersedeSlot(tripId: string, slot: { date: string | null; stage: string | null; wishId: string | null }, keepGroup: string, reason: string): Promise<void> {
+  if (!slot.date) return;
+  await db
+    .update(tripProposal)
+    .set({ status: 'superseded', reason, decidedAt: new Date() })
+    .where(
+      and(
+        eq(tripProposal.tripId, tripId),
+        eq(tripProposal.status, 'open'),
+        inArray(tripProposal.kind, ['swap', 'fill', 'day']),
+        sql`${tripProposal.groupId} <> ${keepGroup}`,
+        sql`${tripProposal.scope}->>'date' = ${slot.date}`,
+        slot.stage ? sql`coalesce(${tripProposal.scope}->>'stage', '') = ${slot.stage}` : sql`true`,
+        slot.wishId ? sql`coalesce(${tripProposal.scope}->>'wishId', '') = ${slot.wishId}` : sql`true`,
+      ),
+    );
 }
