@@ -57,6 +57,17 @@ export const PROJECT_CARDS: ProjectCard[] = [
   },
 
   {
+    key: 'field-study-9',
+    href: '/projects/field-study-9/',
+    label: 'Open Field Study №9',
+    kind: 'Field Study №9',
+    tag: 'Private · Briefing',
+    title: 'Private briefing',
+    blurb: 'Briefing built from public records. Owner only.',
+    chips: 'public records · private',
+  },
+
+  {
     key: 'scs-earnings',
     href: '/projects/scs-earnings/',
     label: 'Open Senior Civil Servant Earnings',

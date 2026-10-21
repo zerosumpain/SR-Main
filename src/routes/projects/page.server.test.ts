@@ -61,7 +61,9 @@ describe('/projects index load', () => {
 
   it('never shows a private-by-default card to the public', async () => {
     const data = await run();
-    expect(data.cards.map((c: { key: string }) => c.key)).not.toContain('field-study-8');
+    const keys = data.cards.map((c: { key: string }) => c.key);
+    expect(keys).not.toContain('field-study-8');
+    expect(keys).not.toContain('field-study-9');
   });
 
   it('gives the owner every card', async () => {

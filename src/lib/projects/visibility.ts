@@ -37,6 +37,7 @@ export const STATIC_PROJECT_KEYS = [
   'archetype',
   'pulse',
   'field-study-8',
+  'field-study-9',
   'data-spine',
   'spine',
   'supply-chain-monitor',
@@ -54,6 +55,7 @@ const STATIC_KEYS: ReadonlySet<string> = new Set(STATIC_PROJECT_KEYS);
 // public only if the owner explicitly toggles it. Share links still work.
 const PRIVATE_BY_DEFAULT: ReadonlySet<string> = new Set([
   'field-study-8',
+  'field-study-9',
   'data-spine',
   'spine',
   'supply-chain-monitor',
