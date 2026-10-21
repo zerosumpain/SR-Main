@@ -438,6 +438,8 @@ async function build(trip: TripRecord, handle: JobHandle | null, deps: PackDeps)
     status: 'ready',
     stage: null,
     builtAt: checkedAt,
+    // Where it looked from: a trip with no stay is planned from here.
+    centre: anchors[0] ?? null,
     counts: packCounts(all),
     calendar,
     neighbourhoods: packNeighbourhoods(trip.guide?.neighbourhoods ?? [], neighbourhoods, all),

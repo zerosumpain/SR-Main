@@ -40,7 +40,8 @@ import {
   type TripRecord,
 } from './store.server';
 import type { ReplanBody } from './intake';
-import { constraintsOf, planConstraints } from './decisions.store.server';
+import { constraintsOf, planConstraints, readPack } from './decisions.store.server';
+import { isCentreStay, withCentreStay } from './centre-stay';
 import { decisionsWire } from './decisions.bundle.server';
 
 type SolverInput = Parameters<typeof solveTrip>[0];
@@ -51,7 +52,9 @@ function titlesOf(wishes: Array<{ id: string; title: string }>): Record<string, 
 
 /** The solver's input for a trip as it stands, plus the wishes left out for want of a place. */
 export async function solverInput(trip: TripRecord, previous: StoredPlan | null, opts: { reuseMatrix?: boolean } = {}) {
-  const [state, transport] = await Promise.all([loadState(trip.id), listTransport(trip.id)]);
+  const [loaded, transport, pack] = await Promise.all([loadState(trip.id), listTransport(trip.id), readPack(trip.id)]);
+  // v8: with no stay, plan from the centre the research pack found (./centre-stay).
+  const state = { ...loaded, stays: withCentreStay(trip, loaded.stays, pack.centre) };
   // Wishes with no place yet have no matrix point; the solver drops them with
   // a reason (a must with a warning), and the page says "needs a place".
   const placed = state.wishes.filter((w) => !w.suggested && !w.skipped && w.place);
@@ -138,7 +141,8 @@ export async function replan(
     matrix: input.matrix,
     changes,
     // v8: the constraints it was solved from, for undo and restore.
-    constraints: constraintsOf(trip, state, input.transport ?? []) as unknown as Record<string, unknown>,
+    // The stand-in centre stay is never part of what undo puts back.
+    constraints: constraintsOf(trip, { ...state, stays: state.stays.filter((x) => !isCentreStay(x)) }, input.transport ?? []) as unknown as Record<string, unknown>,
   });
   // Guidance for today and the next day, in the background (cached per leg).
   startGuidance(trip.ownerEmail, trip.id);
@@ -284,7 +288,8 @@ export async function tripBundle(
   const replaces = new Map(state.wishes.filter((w) => w.replacesMeal).map((w) => [w.id, w.replacesMeal as 'breakfast' | 'lunch' | 'dinner']));
   const body: Omit<TripBundle, 'etag'> = {
     trip: wireTrip(trip, opts.creator),
-    stays: state.stays,
+    // v8: with no stay yet, the stand-in the plan was solved from (./centre-stay).
+    stays: withCentreStay(trip, state.stays, decisions.pack.centre),
     wishes: state.wishes,
     bookings: state.bookings,
     plan: latest && plan ? { id: latest.id, version: latest.version, createdAt: latest.createdAt, plan, changes: latest.changes } : null,

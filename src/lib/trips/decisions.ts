@@ -413,6 +413,12 @@ export interface PackSummary {
   neighbourhoods: Neighbourhood[];
   /** The progress card's lines: "Found 38 places", "3 need booking — …". */
   highlights: string[];
+  /**
+   * Where the pack looked from: the stay, or with no stay the middle of the
+   * city's best-known sights. A trip with no stay is planned from here (a
+   * stand-in stay, never stored — ./centre-stay).
+   */
+  centre?: LatLng | null;
 }
 
 export const EMPTY_PACK: PackSummary = {
