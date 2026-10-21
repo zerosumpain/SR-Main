@@ -7,8 +7,10 @@ const SECRET = 'app-page-secret'.padEnd(40, 'x');
 
 vi.mock('$env/dynamic/private', () => ({ env: { AUTH_SECRET: 'app-page-secret'.padEnd(40, 'x') } }));
 vi.mock('$lib/github/adhoc-builds', () => ({
-  latestAdhocBuild: async () => ({ version: '0.1.120', builtAt: null, devices: ["Rory's iPhone"], bundleId: 'b', build: '120', commit: 'c', ipaAssetId: 1, ipaBytes: 1 }),
   adhocBuildRunning: async () => false,
+}));
+vi.mock('$lib/github/app-release', () => ({
+  releasedAdhocBuild: async () => ({ version: '0.1.120', builtAt: null, devices: ["Rory's iPhone"], bundleId: 'b', build: '120', commit: 'c', ipaAssetId: 1, ipaBytes: 1 }),
 }));
 
 const { load } = await import('./+page.server');

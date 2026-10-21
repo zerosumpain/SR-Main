@@ -11,16 +11,26 @@ import { listMembers } from '$lib/home/presence/members';
 import { lastFixBySubject } from '$lib/home/presence/fleet-trail';
 import { mergeDeviceRows } from '$lib/access/device-rows';
 import { buildFleet } from '$lib/access/fleet';
-import { adhocBuildRunning, latestAdhocBuild, latestAppBuild, startAdhocBuild } from '$lib/github/adhoc-builds';
+import {
+  adhocBuildOf,
+  adhocBuildRunning,
+  latestAppBuild,
+  latestTestFlightRun,
+  listAdhocDrafts,
+  startAdhocBuild,
+  type AdhocDraft,
+} from '$lib/github/adhoc-builds';
+import { buildState, chooseReleased, currentRelease, releaseBuild } from '$lib/github/app-release';
 
 // Owner-only: /admin is never in the access catalogue, so the hook's default
 // deny covers this page and its actions.
 //
 // The fleet (`$lib/access/fleet`): one row per phone, both lanes merged where
-// the phone said who it is, what it is running against the newest build, and
-// the ad-hoc copy the under-13s install from. Nothing is minted or revoked
-// here — that is the person's page; every row links to it. The one action
-// that is the fleet's own is a rebuild of the ad-hoc copy.
+// the phone said who it is, what it is running against the released build,
+// and the ad-hoc copy the family install from. Nothing is minted or revoked
+// here — that is the person's page; every row links to it. The fleet's own
+// actions: rebuild the ad-hoc copy, and choose which build the family's
+// phones are offered (Releases, `$lib/github/app-release`).
 
 async function namesByEmail(viewer: string | null): Promise<Map<string, string>> {
   const names = new Map<string, string>();
@@ -45,20 +55,44 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   // Every source on its own: GitHub, the pilot or the trail being down must
   // never take the phone list with it.
-  const [site, pilot, names, enrolled, latest, copy, running, members, fixes] = await Promise.all([
+  const [site, pilot, names, enrolled, latest, drafts, testflight, running, members, fixes] = await Promise.all([
     attempt(listAllSiteDevices(), 'site list'),
     listPilotDevices(),
     namesByEmail(viewer).catch(() => new Map<string, string>()),
     attempt(listAppDevices(), 'enrolled phones'),
     attempt(latestAppBuild(), 'latest build'),
-    attempt(latestAdhocBuild(), 'ad-hoc copy'),
+    attempt(listAdhocDrafts(), 'ad-hoc copies'),
+    attempt(latestTestFlightRun(), 'TestFlight run'),
     adhocBuildRunning().catch(() => false),
     listMembers().catch(() => []),
     lastFixBySubject().catch(() => new Map()),
   ]);
 
+  // The releases: which copy the family are offered, and every copy GitHub
+  // still holds (`$lib/github/app-release`).
+  const held: AdhocDraft[] = drafts.ok ? drafts.value : [];
+  const release = drafts.ok ? await attempt(currentRelease(held), 'release record') : { ok: false as const };
+  const offeredDraft = release.ok && release.value ? chooseReleased(held, release.value) : null;
+  const builds = await Promise.all(
+    held.map(async (d) => {
+      const meta = await adhocBuildOf(d).catch(() => null);
+      return {
+        run: d.run,
+        commit: d.commit,
+        builtAt: meta?.builtAt ?? d.createdAt,
+        version: meta?.version ?? `0.1.${d.run}`,
+        devices: meta?.devices.length ?? null,
+        state: buildState(d, release.ok ? release.value : null, offeredDraft),
+      };
+    }),
+  );
+  const offered = offeredDraft ? await adhocBuildOf(offeredDraft).catch(() => null) : null;
+  const copy = { ok: drafts.ok, value: offered };
+
   const rows = mergeDeviceRows(site.ok ? site.value : [], pilot.ok ? pilot.value : [], names, new Date());
-  const latestBuild = latest.ok && latest.value ? latest.value.build : copy.ok && copy.value ? Number(copy.value.build) || null : null;
+  // Phones are graded against what they are offered: a build the family
+  // have not been released is not one they are behind.
+  const latestBuild = offeredDraft ? offeredDraft.run : latest.ok && latest.value ? latest.value.build : null;
   const fleet = buildFleet({
     rows,
     enrolled: enrolled.ok ? enrolled.value : [],
@@ -83,6 +117,14 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       copy: copy.ok ? copy.value && { version: copy.value.version, build: copy.value.build, builtAt: copy.value.builtAt, devices: copy.value.devices } : undefined,
       running,
       appUrl: `${url.origin}/app`,
+    },
+    releases: {
+      readable: drafts.ok && release.ok,
+      release: release.ok ? release.value : null,
+      offered: offeredDraft?.run ?? null,
+      builds,
+      testflight: testflight.ok ? testflight.value : undefined,
+      repo: 'https://github.com/zerosumpain/SR-AppleApp',
     },
     warnings: [
       ...(site.ok ? [] : ['The site’s phone list could not be read.']),
@@ -112,6 +154,23 @@ export const actions: Actions = {
       return fail(502, { adhocError: 'GitHub would not start the build. Run Upload to TestFlight by hand, with testflight off.' });
     }
     return { adhocStarted: device?.name ?? 'the newest app' };
+  },
+
+  /**
+   * Offer build N to the family's phones — a newer one (release) or an older
+   * one (roll back). /app, /install and the hourly update check follow at once.
+   */
+  release: async ({ request, locals }) => {
+    const run = Number((await request.formData()).get('build'));
+    if (!Number.isInteger(run) || run <= 0) return fail(400, { releaseError: 'Which build?' });
+    const session = await locals.auth();
+    const by = (session?.user?.email ?? '').toLowerCase() || null;
+    const outcome = await releaseBuild(run, by).catch((err) => {
+      console.error('[fleet] release failed:', err);
+      return { ok: false as const, error: 'The release could not be saved.' };
+    });
+    if (!outcome.ok) return fail(400, { releaseError: outcome.error });
+    return { released: run };
   },
 
   /** Forget an enrolled phone here. It stays in the signing profile until the next build drops it. */

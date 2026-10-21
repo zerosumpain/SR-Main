@@ -33,7 +33,7 @@
   <PageHeader
     kicker="Access"
     title="App"
-    sub="Every phone the household runs the app on: what it is running, when it was last heard from, and the copy the under-13s install from. A phone is connected, and signed out, from its person's page."
+    sub="Every phone the household runs the app on: what it is running, when it was last heard from, and which build the family's phones are offered. A phone is connected, and signed out, from its person's page."
   />
 
   {#if form && 'error' in form && form.error}<p class="result-bad" role="alert">{form.error}</p>{/if}
@@ -57,7 +57,7 @@
         {/if}
       </div>
       <div class="stat">
-        <span class="sr-label-tight">Ad-hoc copy</span>
+        <span class="sr-label-tight">Released to the family</span>
         {#if data.pipeline.copy === undefined}
           <span class="result-bad">could not be read</span>
         {:else if data.pipeline.copy}
@@ -90,6 +90,88 @@
         <a href={data.pipeline.appUrl}>{data.pipeline.appUrl}</a>.
       </p>
     </details>
+  </section>
+
+  <section class="nm-sec" data-section="releases" id="releases">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Releases</span>
+      {#if data.releases.offered}<span class="nm-pill" data-state="connected">family on {data.releases.offered}</span>{/if}
+    </div>
+    <p class="muted">
+      The family's phones (the ad-hoc copy) are offered only the build released here — at /app, on the install page, and by
+      the app's hourly "a new version is ready". A newer build waits while you try it on TestFlight. Releasing an older build
+      rolls back new installs; a phone already on a later build is not asked to go back.
+    </p>
+    {#if data.releases.testflight}
+      <p class="muted">
+        Your TestFlight: build <span class="mono">{data.releases.testflight.build}</span>
+        {#if data.releases.testflight.branch && data.releases.testflight.branch !== 'main'}from the branch <span class="mono">{data.releases.testflight.branch}</span> — not releasable until it is merged{/if}
+        · {when(data.releases.testflight.at)}
+      </p>
+    {/if}
+    {#if form && 'releaseError' in form && form.releaseError}<p class="result-bad" role="alert">{form.releaseError}</p>{/if}
+    {#if form && 'released' in form && form.released}<p class="ok" role="status">Build {form.released} is released. Phones see it within the hour.</p>{/if}
+    {#if !data.releases.readable}
+      <p class="result-bad">GitHub could not be read, so the builds cannot be listed. The family keep the build they were offered.</p>
+    {:else if data.releases.builds.length === 0}
+      <p class="muted">No ad-hoc copy has been built yet.</p>
+    {:else}
+      {#if data.releases.release && !data.releases.offered}
+        <p class="result-bad">Build {data.releases.release.build} is released but GitHub no longer holds it — release one of these.</p>
+      {/if}
+      <div class="table-wrap">
+        <table class="fleet">
+          <thead><tr><th>Build</th><th>Commit</th><th>Built</th><th>Phones</th><th>State</th><th></th></tr></thead>
+          <tbody>
+            {#each data.releases.builds as b (b.run)}
+              <tr data-state={b.state}>
+                <td data-label="Build" class="mono">{b.version}</td>
+                <td data-label="Commit" class="mono">
+                  {#if b.commit}<a class="row-link" href="{data.releases.repo}/commit/{b.commit}">{b.commit.slice(0, 8)}</a>{:else}—{/if}
+                </td>
+                <td data-label="Built" class="mono">{when(b.builtAt)}</td>
+                <td data-label="Phones" class="mono">{b.devices ?? '—'}</td>
+                <td data-label="State">
+                  {#if b.state === 'released'}<span class="ok">released</span>
+                  {:else if b.state === 'waiting'}<span class="waiting">waiting for you</span>
+                  {:else}<span class="muted">older</span>{/if}
+                </td>
+                <td>
+                  {#if b.state !== 'released'}
+                    <form
+                      method="POST"
+                      action="?/release"
+                      class="inline"
+                      use:enhance={({ cancel }) => {
+                        const verb = b.state === 'waiting' ? 'Release' : 'Roll back to';
+                        if (!confirm(`${verb} build ${b.run} for the family's phones?`)) cancel();
+                      }}
+                    >
+                      <input type="hidden" name="build" value={b.run} />
+                      <button class="nm-btn-ghost" type="submit">{b.state === 'waiting' ? 'Release' : 'Roll back'}</button>
+                    </form>
+                  {/if}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+    {#if data.releases.release?.history.length}
+      <details class="manual">
+        <summary>Release history</summary>
+        <ul class="enrolled">
+          {#each data.releases.release.history as h, i (i)}
+            <li>
+              <span class="mono">{when(h.at)}</span>
+              <span>{h.kind === 'pinned' ? 'Pinned' : h.kind === 'rollback' ? 'Rolled back to' : 'Released'} build <span class="mono">{h.build}</span></span>
+              <span class="muted">{h.by ?? 'by the site, when releases began'}</span>
+            </li>
+          {/each}
+        </ul>
+      </details>
+    {/if}
   </section>
 
   {#if data.fleet.people.length === 0}
@@ -190,6 +272,7 @@
   .chip { display: inline-block; font-family: var(--font-mono); font-size: var(--fs-label-xs); padding: 0.1rem 0.4rem; border: 1px solid var(--line-strong); border-radius: 2px; margin-right: 0.3rem; }
   .state[data-build='behind'] { color: var(--error); margin-left: 0.3rem; }
   .state[data-build='current'] { color: var(--success); margin-left: 0.3rem; }
+  .waiting { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); }
   .row-link { background: none; border: none; padding: 0; font: inherit; color: var(--text-primary); text-decoration: underline; cursor: pointer; }
   .row-link.danger { color: var(--error); }
   .enrolled { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; }
