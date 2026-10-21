@@ -183,3 +183,22 @@ describe('direct edits', () => {
     expect(briefPatchOps({ field: 'confirm', key: 'preference:0' }, ctx)).toMatchObject({ ok: false });
   });
 });
+
+describe('the shared wire fixture', () => {
+  it('the builder makes the brief chips the phone’s fixture shows', async () => {
+    const fixture = (await import('./fixtures/decisions-wire.json')).default;
+    const b = buildBrief(
+      input({
+        trip: { ...TRIP, startDate: '2026-10-26', endDate: '2026-10-30' },
+        stays: [{ ...STAY, id: '7b0c5d0e-4c55-4a77-9e0a-1d2f3a4b5c6d' }],
+        transport: [{ ...FLIGHT, id: '5f0e1b2a-0000-4000-8000-000000000001', number: null, arriveMin: 690 }],
+        profile: { ...input().profile!, preferences: [], constraints: [] },
+        provenance: { 'stay:7b0c5d0e-4c55-4a77-9e0a-1d2f3a4b5c6d': { source: 'notes', note: 'Airbnb booking in your notes', ref: 'memory:812', at: 'x' } },
+      }),
+    );
+    const want = fixture.decisions.brief.items.filter((i) => i.kind !== 'assumption');
+    expect(b.items.map((i) => [i.key, i.kind, i.label, i.origin, i.editable])).toEqual(want.map((i) => [i.key, i.kind, i.label, i.origin, i.editable]));
+    expect(b.items.find((i) => i.kind === 'stay')).toMatchObject({ detail: 'Flat near Piazza Navona, 4 nights', note: 'Airbnb booking in your notes', ref: 'memory:812' });
+    expect(b.items.find((i) => i.kind === 'transport')?.detail).toBe('Mon 26 Oct, lands 11:30');
+  });
+});

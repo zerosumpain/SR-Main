@@ -174,6 +174,14 @@ describe('every native route gates itself', () => {
         '/trips/[id]/route/+server.ts',
         '/trips/[id]/suggestions/+server.ts',
         '/trips/[id]/suggestions/[sid]/+server.ts',
+        // v8 decisions: reading is any family member; proposing, deciding,
+        // undoing and editing the brief need `canEdit || canApprove` (403 otherwise).
+        '/trips/[id]/brief/+server.ts',
+        '/trips/[id]/decisions/+server.ts',
+        '/trips/[id]/proposals/+server.ts',
+        '/trips/[id]/proposals/[pid]/+server.ts',
+        '/trips/[id]/undo/+server.ts',
+        '/trips/[id]/versions/+server.ts',
         '/trips/jobs/[jobId]/+server.ts',
       ].sort(),
     );
