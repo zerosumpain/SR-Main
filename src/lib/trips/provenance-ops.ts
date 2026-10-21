@@ -12,7 +12,7 @@ export interface StateLike {
   stays: Array<Pick<Stay, 'id' | 'name'>>;
   wishes: Array<Pick<Wish, 'id' | 'title'>>;
   bookings: Array<Pick<Booking, 'id' | 'title'>>;
-  transport?: Array<Pick<TransportSegment, 'id'>>;
+  transport?: Array<Pick<TransportSegment, 'id'> & Partial<Pick<TransportSegment, 'number' | 'departDate' | 'departMin'>>>;
 }
 
 const TRIP_KEYS: Record<string, string> = {
@@ -61,9 +61,12 @@ export function provenanceKeys(ops: TripOp[], before: StateLike, after: StateLik
       case 'updateBooking':
         out.add(`booking:${op.id}`);
         break;
-      case 'addTransport':
-        for (const t of newTransport) out.add(`transport:${t.id}`);
+      case 'addTransport': {
+        const seg = op.segment;
+        const same = newTransport.filter((t) => t.departDate === undefined || (t.departDate === seg?.departDate && (t.number ?? null) === (seg?.number ?? null)));
+        for (const t of same.length ? same : newTransport) out.add(`transport:${t.id}`);
         break;
+      }
       case 'updateTransport':
         out.add(`transport:${op.id}`);
         break;

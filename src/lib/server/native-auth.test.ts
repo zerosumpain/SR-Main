@@ -170,11 +170,17 @@ describe('every native route gates itself', () => {
         '/trips/[id]/converse/+server.ts',
         '/trips/[id]/events/+server.ts',
         '/trips/[id]/ideas/+server.ts',
+        // v8: the research pack (any family member reads; editors build) and
+        // quick questions (members see and vote on family questions only).
+        '/trips/[id]/pack/+server.ts',
+        '/trips/[id]/questions/[qid]/+server.ts',
         '/trips/[id]/replan/+server.ts',
         '/trips/[id]/route/+server.ts',
         '/trips/[id]/suggestions/+server.ts',
         '/trips/[id]/suggestions/[sid]/+server.ts',
         '/trips/jobs/[jobId]/+server.ts',
+        // v8: "From your notes" — the owner's phone only; anyone else gets [].
+        '/trips/notes/+server.ts',
       ].sort(),
     );
     // And none of them keeps an owner-only handler beside it by accident.

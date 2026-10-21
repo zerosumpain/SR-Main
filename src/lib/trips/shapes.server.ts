@@ -68,7 +68,7 @@ export async function requestShapes(trip: TripRecord, caller: ShapesCaller, opts
 
   let choices: ShapeChoice[] = [];
   try {
-    const raw = await deps.model(SHAPES_SYSTEM, shapesPrompt({ trip, dates, travellers, preferences: (profile?.preferences ?? []).map((p) => p.text), fixed, places: pool, calendar: pack.calendar }));
+    const raw = await deps.model(SHAPES_SYSTEM, shapesPrompt({ trip, dates, travellers, preferences: [...(trip.notes ? [trip.notes] : []), ...(profile?.preferences ?? []).map((p) => p.text)], fixed, places: pool, calendar: pack.calendar }));
     choices = readShapes(raw, new Set(pool.map((p) => p.id)), dates);
   } catch (err) {
     console.warn('[trips/shapes] no model for shapes, offering the plain two:', (err as Error)?.message);

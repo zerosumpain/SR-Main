@@ -554,7 +554,8 @@ export function startPackJob(
  */
 export async function ensurePack(trip: TripRecord, opts: { reason?: 'created' | 'changed' | 'read'; deps?: PackDeps } = {}): Promise<void> {
   try {
-    if (building.has(trip.id)) return;
+    // The placeholder draft has nowhere to look yet.
+    if (!trip.destination || trip.destination === 'New trip' || building.has(trip.id)) return;
     // Another process (a deploy's overlap) may be building it.
     if (await runningJob(trip.id, 'pack').catch(() => null)) return;
     const stored = await readPack(trip.id);
