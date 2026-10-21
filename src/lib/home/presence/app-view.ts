@@ -41,6 +41,7 @@ import type { HouseholdMember } from './members';
 import { nowStatus, nowSub, type NowStatus } from './now';
 import { ABSURD_SPEED_KMH, LOCAL_TZ, MAX_USABLE_ACCURACY_M, activeLabels, errMsg, localDayStart } from './types';
 import { peopleViewerForEmail, scopeHousehold, type PeopleViewer, type ScopedPresence } from './viewer';
+import { loadHoldContext } from './location-hold.server';
 import { appAccessForEmail, type AppAccess } from '$lib/server/app-access';
 import { forgetPairingCode, pairingCode, resetPairingCodes, REUSE_FLOOR_MS } from '$lib/server/pair-codes';
 
@@ -662,7 +663,11 @@ export async function pushAppViews(
   }
   if (viewers.length) {
     const dayStart = localDayStart(now);
-    const [{ members: presence }, positions] = await Promise.all([loadHousehold(), livePositions().catch(() => [])]);
+    const [{ members: presence }, positions, hold] = await Promise.all([
+      loadHousehold(),
+      livePositions().catch(() => []),
+      loadHoldContext(members, now),
+    ]);
     const scopedBy = viewers.map((v) => ({ ...v, scoped: scopeHousehold(presence, v.viewer) }));
     const wanted = [...new Set(scopedBy.flatMap((v) => trailSubjects(v.scoped)))];
     const trails = await loadTodayTrails(wanted, dayStart);
@@ -672,6 +677,13 @@ export async function pushAppViews(
       positions.map((p) => p.subject),
       new Date(now.getTime() - MOVING_WINDOW_S * 1000),
     ).catch(() => new Map<string, TrailPoint[]>());
+    // The owner's location hold: everyone but the owner sees him at the held
+    // point, fresh and still (`location-hold`). Built once; the owner's own
+    // view — and so his phone's — reads the real trail.
+    const held = hold?.apply<TrailPoint>({ presence, positions, recent }) ?? null;
+    if (held) {
+      for (const v of scopedBy) if (v.viewer.kind !== 'owner') v.scoped = scopeHousehold(held.presence, v.viewer);
+    }
     const placeIds = [...new Set([...trails.values()].flat().map((p) => p.placeId).filter((x): x is string => !!x))];
     const labels = await loadLabels(placeIds);
     const history = await loadHistory(wanted, dayStart, now);
@@ -685,9 +697,9 @@ export async function pushAppViews(
           self: members.find((m) => m.email === v.email)?.subject ?? null,
           scoped: v.scoped,
           names,
-          positions,
+          positions: held && v.viewer.kind !== 'owner' ? held.positions : positions,
           trails,
-          recent,
+          recent: held && v.viewer.kind !== 'owner' ? held.recent : recent,
           labels,
           history,
           dayStart,

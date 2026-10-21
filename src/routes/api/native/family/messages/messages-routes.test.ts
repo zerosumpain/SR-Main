@@ -33,6 +33,8 @@ function row(over: Partial<MessageRecord> = {}): MessageRecord {
 
 vi.mock('$lib/family/messages.server', () => ({
   recentMessages: async () => h.rows,
+  senderSubjects: async () => (email: string) =>
+    ({ 'kid@example.test': 'kid', 'owner@example.test': 'john' })[email] ?? null,
   getMessage: async (id: string) => h.rows.find((r) => r.id === id) ?? null,
   sendMessage: async (email: string, _parent: boolean, body: string) => {
     if (h.limited) return { kind: 'limited', retryAfterSeconds: 60 };
@@ -100,8 +102,8 @@ describe('GET /api/native/family/messages', () => {
     expect(body.me).toEqual({ id: 'f_kid' });
     expect(body.reactions).toContain('👍');
     expect(body.messages).toHaveLength(1);
-    expect(body.messages[0]).toMatchObject({ id: 'm1', fromId: 'f_kid', mine: true });
-    expect(body.messages[0].replies[0]).toMatchObject({ id: 'r1', fromName: 'John', mine: false, reaction: true });
+    expect(body.messages[0]).toMatchObject({ id: 'm1', fromId: 'f_kid', fromSubject: 'kid', mine: true });
+    expect(body.messages[0].replies[0]).toMatchObject({ id: 'r1', fromName: 'John', fromSubject: 'john', mine: false, reaction: true });
     expect(JSON.stringify(body)).not.toContain('@');
   });
 });
@@ -129,7 +131,7 @@ describe('POST /api/native/family/messages/:id/replies', () => {
     asMember('kid@example.test', ['family:admin']);
     const res = await call(replies.POST, { method: 'POST', body: { body: '👍' }, id: 'm1' });
     expect(res.status).toBe(201);
-    expect(await res.json()).toMatchObject({ reply: { id: 'r-new', body: '👍', reaction: true }, pushed: 1 });
+    expect(await res.json()).toMatchObject({ reply: { id: 'r-new', body: '👍', reaction: true, fromSubject: 'kid' }, pushed: 1 });
     expect(h.replied).toEqual([{ to: 'm1', email: 'kid@example.test', body: '👍' }]);
   });
 

@@ -63,6 +63,8 @@
 /api/native/family/backlog/digest
 /api/native/family/forecast
 /api/native/family/forecast/feedback
+/api/native/family/forecast/history
+/api/native/family/hold
 /api/native/family/landgrab
 /api/native/family/landgrab/changes
 /api/native/family/messages

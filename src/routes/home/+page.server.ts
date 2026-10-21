@@ -4,6 +4,7 @@ import { getHomeAssistantService } from '$lib/integrations/homeassistant/service
 import { DEVICES_TEMPLATE, houseOnly, summariseDevices, type DevicesPayload } from '$lib/home/devices';
 import { errMsg } from '$lib/home/presence/types';
 import { loadHousehold } from '$lib/home/presence/household';
+import { loadHoldContext } from '$lib/home/presence/location-hold.server';
 import { peopleViewerOf, scopeHousehold } from '$lib/home/presence/viewer';
 import { areaAccess } from '$lib/server/area-scope';
 
@@ -39,7 +40,9 @@ async function people(event: Parameters<PageServerLoad>[0]) {
   const viewer = await peopleViewerOf(event);
   if (!viewer) return null;
   if (viewer.kind === 'owner') return (await loadHousehold()).members;
-  return scopeHousehold((await loadHousehold()).members, viewer);
+  // The owner's location hold: anyone else sees him at the held point.
+  const [{ members }, hold] = await Promise.all([loadHousehold(), loadHoldContext()]);
+  return scopeHousehold(hold ? hold.apply({ presence: members, positions: [] }).presence : members, viewer);
 }
 
 export const load: PageServerLoad = async (event) => {

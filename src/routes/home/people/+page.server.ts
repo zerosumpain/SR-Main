@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { isOwnerRequest } from '$lib/server/owner';
 import { errMsg } from '$lib/home/presence/types';
 import { livePositions, loadHousehold, type LivePosition } from '$lib/home/presence/household';
+import { loadHoldContext } from '$lib/home/presence/location-hold.server';
 import { loadFeedChecks, type FeedCheck } from '$lib/home/presence/feed-checks';
 import { listMembers } from '$lib/home/presence/members';
 import { loadPeopleMovement, type PersonMovement } from '$lib/home/presence/movement';
@@ -140,21 +141,27 @@ export const load: PageServerLoad = async (event) => {
   const ownSubject = own?.subject ?? null;
   const moving = { movement, person, ownSubject, movementDays: DEFAULT_WINDOW_DAYS, days, forecast, naming, agenda, notify };
 
+  // The owner's location hold: anyone else sees him at the held point
+  // (`location-hold`), on the map and on his card alike.
+  const hold = viewer.kind === 'owner' ? null : await loadHoldContext();
+  const shown = hold ? hold.apply({ presence: [], positions }).positions : positions;
+
   try {
-    const { members } = await loadHousehold();
+    const { members: read } = await loadHousehold();
+    const members = hold ? hold.apply({ presence: read, positions: [] }).presence : read;
     const family: Family = { members: scopeHousehold(members, viewer) };
     const feedChecks = await loadFeedChecks(family.members.filter((m) => !m.notSharing).map((m) => m.subject))
       .catch((err) => {
         console.error('[home/people] feed checks failed:', errMsg(err));
         return {} as Record<string, FeedCheck>;
       });
-    return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null, positions, feedChecks, loadedAt: new Date(), ...moving };
+    return { family, viewer, links: linksFor(family, viewer), loadError: null as string | null, positions: shown, feedChecks, loadedAt: new Date(), ...moving };
   } catch (err) {
     console.error('[home/people] household load failed:', errMsg(err));
     // The error text can name tables and queries: the owner gets it, a
     // household viewer gets the fact of the failure.
     const loadError = viewer.kind === 'owner' ? errMsg(err) : 'The household could not be read just now.';
-    return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError, positions, feedChecks: {} as Record<string, FeedCheck>, loadedAt: new Date(), ...moving };
+    return { family: EMPTY(), viewer, links: {} as Record<string, string>, loadError, positions: shown, feedChecks: {} as Record<string, FeedCheck>, loadedAt: new Date(), ...moving };
   }
 };
 
