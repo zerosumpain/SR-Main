@@ -2,7 +2,8 @@ import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { isInstallToken } from '$lib/server/adhoc-install';
-import { adhocIpa, latestAdhocBuild } from '$lib/github/adhoc-builds';
+import { adhocIpa } from '$lib/github/adhoc-builds';
+import { releasedAdhocBuild } from '$lib/server/app-release';
 
 /**
  * The app itself, streamed from the private draft release on GitHub
@@ -10,7 +11,7 @@ import { adhocIpa, latestAdhocBuild } from '$lib/github/adhoc-builds';
  */
 export const GET: RequestHandler = async ({ params }) => {
   if (!isInstallToken(params.token, env.AUTH_SECRET)) throw error(404, 'Not found');
-  const build = await latestAdhocBuild().catch(() => null);
+  const build = await releasedAdhocBuild().catch(() => null);
   if (!build) throw error(404, 'No build yet');
   const upstream = await adhocIpa(build).catch((err) => {
     console.error('[install] could not fetch the IPA:', err);

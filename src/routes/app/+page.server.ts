@@ -3,7 +3,8 @@ import type { PageServerLoad } from './$types';
 import { APP_COOKIE, buildIncludes, installToken, isJoinCode, itmsLink, joinDisplayName, readAppCookie, verifyJoinCode } from '$lib/server/adhoc-install';
 import { joinCandidates } from '$lib/server/app-devices';
 import { openInAppLink } from '$lib/server/app-links';
-import { adhocBuildRunning, latestAdhocBuild } from '$lib/github/adhoc-builds';
+import { adhocBuildRunning } from '$lib/github/adhoc-builds';
+import { releasedAdhocBuild } from '$lib/server/app-release';
 
 /**
  * /app — the one address for the family's iPhone app (`$lib/server/adhoc-install`).
@@ -17,7 +18,7 @@ export const load: PageServerLoad = async ({ cookies, url, setHeaders }) => {
   if (!slug || !env.AUTH_SECRET) return { known: false as const };
 
   const [build, running] = await Promise.all([
-    latestAdhocBuild().catch((err) => {
+    releasedAdhocBuild().catch((err) => {
       console.error('[app] could not read the ad-hoc build:', err);
       return undefined;
     }),

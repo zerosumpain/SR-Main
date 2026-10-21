@@ -12,8 +12,8 @@ vi.mock('$lib/server/native-auth', () => ({
     h.touched.push([id, request?.headers.get('x-sr-app') ?? null]);
   },
 }));
-vi.mock('$lib/github/adhoc-builds', () => ({
-  latestAdhocBuild: async () =>
+vi.mock('$lib/server/app-release', () => ({
+  releasedAdhocBuild: async () =>
     h.build ? { version: '0.1.121', build: '121', commit: 'abc', builtAt: '2026-10-20T08:00:00Z', devices: [], bundleId: 'b', ipaAssetId: 1, ipaBytes: 1 } : null,
 }));
 

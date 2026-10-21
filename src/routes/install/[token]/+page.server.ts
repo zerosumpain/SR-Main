@@ -2,7 +2,8 @@ import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import type { PageServerLoad } from './$types';
 import { isInstallToken, itmsLink } from '$lib/server/adhoc-install';
-import { adhocBuildRunning, latestAdhocBuild } from '$lib/github/adhoc-builds';
+import { adhocBuildRunning } from '$lib/github/adhoc-builds';
+import { releasedAdhocBuild } from '$lib/server/app-release';
 
 /**
  * /install/<token> — the iPhone app for a phone that cannot use TestFlight
@@ -15,7 +16,7 @@ export const load: PageServerLoad = async ({ params, url, setHeaders }) => {
   if (!isInstallToken(params.token, env.AUTH_SECRET)) throw error(404, 'Not found');
 
   const [build, running] = await Promise.all([
-    latestAdhocBuild().catch((err) => {
+    releasedAdhocBuild().catch((err) => {
       console.error('[install] could not read the ad-hoc build:', err);
       return undefined;
     }),
