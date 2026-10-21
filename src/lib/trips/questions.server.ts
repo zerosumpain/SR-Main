@@ -183,7 +183,13 @@ export async function questionsSettledForTest(): Promise<void> {
  * rank by impact, keep the top MAX_OPEN_QUESTIONS open per audience, apply
  * the assumed answer where it changes the plan, store.
  */
-async function checkDrafts(trip: TripRecord, drafts: Draft[]): Promise<Question[]> {
+/**
+ * `assume`: whether the assumed answer may be applied straight away. Only
+ * while a trip is being shaped (the guided start) or in a turn the person is
+ * having with the planner — never from a background refresh, which would
+ * change a trip already planned (days before Rome) with nobody asking.
+ */
+async function checkDrafts(trip: TripRecord, drafts: Draft[], opts: { assume: boolean } = { assume: true }): Promise<Question[]> {
   if (!drafts.length) return [];
   let base = await loadBase(trip);
   if (!base) return [];
@@ -221,7 +227,7 @@ async function checkDrafts(trip: TripRecord, drafts: Draft[]): Promise<Question[
     let appliedDefault = def.tried.signature === base.signature;
     let answers = c.answers.map((a) => ({ ...a, inverse: [] as TripOp[] }));
     // Assume-and-ask: the plan uses the assumption from now on.
-    if (!appliedDefault && c.draft.assume !== false && def.ops.length && canInvert(def.ops)) {
+    if (opts.assume && !appliedDefault && c.draft.assume !== false && def.ops.length && canInvert(def.ops)) {
       const before = base.snapshot;
       const r = await applyAndReplan(trip, def.ops, { surface: 'site', eventText: `Assumed for now: ${def.label} — ${c.draft.prompt}`, trustedPlaces: true });
       if (r.applied.length) {
@@ -262,7 +268,8 @@ async function checkDrafts(trip: TripRecord, drafts: Draft[]): Promise<Question[
       })),
       defaultAnswerId: `a${c.defaultIndex}`,
       appliedDefault,
-      ifSkipped: c.draft.ifSkipped ?? `If you skip: ${def.label.toLowerCase()}.`,
+      // Only promise the assumption when the plan already has it.
+      ifSkipped: appliedDefault ? (c.draft.ifSkipped ?? `If you skip: ${def.label.toLowerCase()}.`) : 'If you skip: the plan stays as it is.',
       affects,
       impact: c.impact,
       audience,
@@ -367,7 +374,7 @@ export async function refreshQuestions(trip: TripRecord, _opts: { reason?: strin
         alternatives: await alternativesOf(fresh.id, base),
         today,
       });
-      return checkDrafts(fresh, drafts);
+      return checkDrafts(fresh, drafts, { assume: _opts.reason === 'start' });
     });
     if (added.length) void pushQuestions(trip, added);
     return added;

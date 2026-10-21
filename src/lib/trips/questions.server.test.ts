@@ -220,11 +220,23 @@ describe('refreshQuestions', () => {
     vi.useRealTimers();
   });
 
-  it('assume-and-ask: the stay is stretched now, and "Somewhere else" puts it back', async () => {
+  it('a background refresh never applies an assumption to a planned trip: it asks, and skipping keeps the plan', async () => {
     h.stays = [{ ...FLAT, toDate: '2026-10-28' }];
     h.wishes = h.wishes.map((w) => ({ ...w, facts: null }));
     solveNow();
-    const added = await qs.refreshQuestions(trip());
+    const before = h.plans.length;
+    const added = await qs.refreshQuestions(trip(), { reason: 'turn' });
+    const q = added.find((x) => x.key.startsWith('brief:stay-nights'))!;
+    expect(q.appliedDefault).toBe(false);
+    expect(q.ifSkipped).toBe('If you skip: the plan stays as it is.');
+    expect(h.plans.length).toBe(before);
+  });
+
+  it('assume-and-ask (guided start): the stay is stretched now, and "Somewhere else" puts it back', async () => {
+    h.stays = [{ ...FLAT, toDate: '2026-10-28' }];
+    h.wishes = h.wishes.map((w) => ({ ...w, facts: null }));
+    solveNow();
+    const added = await qs.refreshQuestions(trip(), { reason: 'start' });
     const q = added.find((x) => x.key.startsWith('brief:stay-nights'))!;
     expect(q.appliedDefault).toBe(true);
     expect(h.stays[0].toDate).toBe('2026-10-30');
