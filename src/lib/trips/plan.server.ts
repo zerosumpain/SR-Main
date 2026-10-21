@@ -52,9 +52,9 @@ function titlesOf(wishes: Array<{ id: string; title: string }>): Record<string, 
 
 /** The solver's input for a trip as it stands, plus the wishes left out for want of a place. */
 export async function solverInput(trip: TripRecord, previous: StoredPlan | null, opts: { reuseMatrix?: boolean } = {}) {
-  const [loaded, transport, pack] = await Promise.all([loadState(trip.id), listTransport(trip.id), readPack(trip.id)]);
+  const [loaded, transport, pack] = await Promise.all([loadState(trip.id), listTransport(trip.id), readPack(trip.id).catch(() => null)]);
   // v8: with no stay, plan from the centre the research pack found (./centre-stay).
-  const state = { ...loaded, stays: withCentreStay(trip, loaded.stays, pack.centre) };
+  const state = { ...loaded, stays: withCentreStay(trip, loaded.stays, pack?.centre) };
   // Wishes with no place yet have no matrix point; the solver drops them with
   // a reason (a must with a warning), and the page says "needs a place".
   const placed = state.wishes.filter((w) => !w.suggested && !w.skipped && w.place);
@@ -269,8 +269,14 @@ export async function tripBundle(
     recentMessages(trip.id, viewerOf(trip, opts.viewerEmail), 50),
     listTransport(trip.id),
     listSuggestions(trip.id),
-    // v8: brief, questions, proposals, the pack's summary.
-    decisionsWire(trip, access, { surface: 'phone' }),
+    // v8: brief, questions, proposals, the pack's summary. Never allowed to
+    // fail the bundle: the family's phones load the trip through here, and a
+    // new table without its runtime GRANT yet (the minutes after a release)
+    // must cost the decisions, not the trip.
+    decisionsWire(trip, access, { surface: 'phone' }).catch((err) => {
+      console.error('[trips/bundle] decisions unavailable:', (err as Error)?.message);
+      return null;
+    }),
   ]);
   // Each leg carries its walk / public transport / taxi alternatives (v5),
   // and each meal with no place its real options nearby (v7).
@@ -289,7 +295,7 @@ export async function tripBundle(
   const body: Omit<TripBundle, 'etag'> = {
     trip: wireTrip(trip, opts.creator),
     // v8: with no stay yet, the stand-in the plan was solved from (./centre-stay).
-    stays: withCentreStay(trip, state.stays, decisions.pack.centre),
+    stays: withCentreStay(trip, state.stays, decisions?.pack.centre),
     wishes: state.wishes,
     bookings: state.bookings,
     plan: latest && plan ? { id: latest.id, version: latest.version, createdAt: latest.createdAt, plan, changes: latest.changes } : null,
@@ -304,11 +310,9 @@ export async function tripBundle(
     suggestions: suggestions.map(suggestionWire),
     fullness: latest ? planFullness(latest.plan, trip.pace, trip.dayLoads ?? {}, replaces) : {},
     images,
-    brief: decisions.brief,
-    questions: decisions.questions,
-    answered: decisions.answered,
-    proposals: decisions.proposals,
-    pack: decisions.pack,
+    ...(decisions
+      ? { brief: decisions.brief, questions: decisions.questions, answered: decisions.answered, proposals: decisions.proposals, pack: decisions.pack }
+      : {}),
   };
   return { ...body, etag: bundleEtag(body) };
 }
