@@ -122,7 +122,7 @@ describe('v8 decision routes (phone)', () => {
   it('long work as a job with "async": true', async () => {
     const r = await decide.POST(ev({ pid: 'p1' }, body('POST', { action: 'accept', async: true })));
     expect(r.status).toBe(202);
-    expect(h.jobs).toEqual(['ideas']);
+    expect(h.jobs).toEqual(['proposals']);
   });
 
   it('says what is wrong with a bad request', async () => {

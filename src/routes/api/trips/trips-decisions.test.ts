@@ -38,7 +38,7 @@ function ev(params: Record<string, string> = {}, init: RequestInit = {}) {
 }
 const body = (method: string, b: unknown) => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) });
 
-async function status(p: Promise<Response>): Promise<number> {
+async function status(p: Response | Promise<Response>): Promise<number> {
   try {
     return (await p).status;
   } catch (err) {

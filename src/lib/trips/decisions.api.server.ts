@@ -59,8 +59,7 @@ const proposalCaller = (c: DecisionCaller): ProposalCaller => ({ email: c.email,
 async function runOrJob(body: unknown, c: DecisionCaller, run: (inJob: boolean) => Promise<Outcome>): Promise<Response> {
   if (wantsAsync(body)) {
     return jobAccepted(
-      // TODO(integration, S2): kind 'proposals' once the durable job kinds land; 'ideas' is today's nearest.
-      startJob(c.email, 'ideas', async () => {
+      startJob(c.email, 'proposals', async () => {
         const o = await run(true);
         return o.status === 200 ? o.body : { ...o.body, status: o.status };
       }),

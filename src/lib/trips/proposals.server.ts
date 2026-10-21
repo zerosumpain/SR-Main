@@ -20,8 +20,9 @@
 //    no web — so a swap comes back in under two seconds. With no pack yet it
 //    falls back to the live ideas search, as a job, and says so.
 //
-// Shapes (whole-trip proposals) are S2's (./shapes.server, on its branch).
+// Shapes (whole-trip proposals) come from ./shapes.server.
 
+import { requestShapes } from './shapes.server';
 import { randomUUID } from 'node:crypto';
 import { solveTrip } from '$lib/trips/solver';
 import { dayLabel } from './changes';
@@ -464,8 +465,12 @@ export async function rejectProposal(trip: TripRecord, pid: string, reason: Reje
  */
 export async function generateProposals(trip: TripRecord, request: ProposalRequest, caller: ProposalCaller, deps: ProposalDeps & { fallback?: boolean } = {}): Promise<Outcome> {
   if (request.kind === 'shapes') {
-    // TODO(integration, S2): `import { requestShapes } from './shapes.server'` and return its group here.
-    return { status: 501, body: { error: 'Trip shapes are not ready on this server yet — they arrive with the research work.' } };
+    // Whole-trip shapes (./shapes.server): one model call choosing from the
+    // research pack, each solved as a whole. Slow, so routes run it async.
+    const shapes = await requestShapes(trip, { email: caller.email, isOwner: caller.isOwner });
+    return shapes.length
+      ? { status: 200, body: { proposals: shapes } }
+      : { status: 200, body: { proposals: [], note: 'There is not enough in the research yet to draft whole-trip plans — let it finish, or ask me to look further.' } };
   }
   const base = await loadBase(trip);
   if (!base) return { status: 409, body: { error: 'There is no plan yet — say where you are staying and a few things you would like to do first.' } };

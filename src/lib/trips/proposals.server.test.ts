@@ -78,6 +78,7 @@ vi.mock('./research.server', () => ({
   startResearch: async () => true,
 }));
 vi.mock('./questions.server', () => ({ refreshQuestions: async () => void h.questions++ }));
+vi.mock('./shapes.server', () => ({ requestShapes: async () => [] }));
 vi.mock('./images.server', () => ({ fetchImage: async () => ({ url: 'https://upload.wikimedia.org/x.jpg', width: 800, height: 600, credit: null, license: null, sourceUrl: 'https://commons.wikimedia.org/x', wikidata: 'Q1' }) }));
 vi.mock('./ideas.server', () => ({ findIdeas: async () => h.ideas }));
 vi.mock('./jobs.server', () => ({
@@ -307,8 +308,8 @@ describe('the fast path', () => {
     expect(await P.generateProposals(TRIP, { kind: 'fill', target: { date: '2026-10-27', packPlaceId: 'nope' }, nudge: null, variant: null, withDate: null }, CALLER)).toMatchObject({ status: 404 });
   });
 
-  it('shapes wait for the research work', async () => {
-    expect(await P.generateProposals(TRIP, { kind: 'shapes', target: {}, nudge: null, variant: null, withDate: null }, CALLER)).toMatchObject({ status: 501 });
+  it('shapes come from the research pack, and say so plainly when there is not enough yet', async () => {
+    expect(await P.generateProposals(TRIP, { kind: 'shapes', target: {}, nudge: null, variant: null, withDate: null }, CALLER)).toMatchObject({ status: 200, body: { proposals: [], note: expect.stringContaining('not enough in the research') } });
   });
 });
 

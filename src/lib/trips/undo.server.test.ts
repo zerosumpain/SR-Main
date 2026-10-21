@@ -57,7 +57,7 @@ beforeEach(() => {
   h.latest = { version: 5, plan: PLAN };
   h.wishes = [wish('w1', 'Pantheon'), wish('w3', 'Palazzo Altemps')];
   // Version 4: before the swap — the Capitoline, not Altemps.
-  h.snapshots = new Map([[4, constraintsOf((({ research: _r, updatedAt: _u, guide: _g, profile: _p, ...t }) => t)(TRIP as never) as never, { stays: [], wishes: [wish('w1', 'Pantheon'), wish('w2', 'Capitoline Museums')], bookings: [] }, [])]]);
+  h.snapshots = new Map([[4, constraintsOf((({ research: _r, updatedAt: _u, guide: _g, profile: _p, ...t }: Record<string, unknown>) => t)(TRIP as unknown as Record<string, unknown>) as never, { stays: [], wishes: [wish('w1', 'Pantheon'), wish('w2', 'Capitoline Museums')], bookings: [] }, [])]]);
   h.restored = [];
   h.replans = [];
   h.logged = [];

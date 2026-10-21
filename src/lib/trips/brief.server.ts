@@ -12,6 +12,7 @@ import type { BriefPatch, TripBrief } from './decisions';
 import { noteProvenance, readProvenance } from './decisions.store.server';
 import { describeOp } from './ops';
 import { ensurePack } from './pack.server';
+import { refreshQuestions } from './questions.server';
 import { replan } from './plan.server';
 import { missingInfo } from './prompt';
 import { getTripById, latestPlan, listTransport, loadState, tripOnly, type TripRecord } from './store.server';
@@ -65,6 +66,12 @@ export async function patchBrief(trip: TripRecord, patch: BriefPatch, caller: { 
     if (result.applied.some((o) => o.op === 'setTrip' && ('destination' in o.fields || 'startDate' in o.fields || 'endDate' in o.fields))) {
       void Promise.resolve()
         .then(() => ensurePack(fresh, { reason: 'changed' }))
+        .catch(() => {});
+    }
+    // A corrected fact can settle a question (or raise one).
+    if (result.changed) {
+      void Promise.resolve()
+        .then(() => refreshQuestions(fresh, { reason: 'brief' }))
         .catch(() => {});
     }
   }
