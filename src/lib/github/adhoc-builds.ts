@@ -146,6 +146,12 @@ export async function latestAdhocBuild(): Promise<AdhocBuild | null> {
   return newest ? adhocBuildOf(newest) : null;
 }
 
+/** One copy by build number, if GitHub still holds it. */
+export async function adhocBuildByRun(run: number): Promise<AdhocBuild | null> {
+  const draft = (await listAdhocDrafts()).find((d) => d.run === run);
+  return draft ? adhocBuildOf(draft) : null;
+}
+
 /** For tests: forget what was read. */
 export function resetAdhocCache(): void {
   listed = null;

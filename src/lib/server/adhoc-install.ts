@@ -51,6 +51,36 @@ export function isInstallToken(token: unknown, secret: string | undefined): bool
   return secretsMatch(installToken(secret), token);
 }
 
+/**
+ * The key that lets the install link fetch ONE named build rather than the
+ * released one: what a build pushed to a single phone is installed through
+ * (`$lib/github/app-device-push`). Signed per build, so the family's link
+ * cannot be pointed at any copy GitHub happens to hold.
+ */
+export function buildInstallKey(secret: string | undefined, build: number): string {
+  if (!secret) throw new Error('AUTH_SECRET is required for the install link');
+  return sign(secret, 'sr-adhoc-install-build', `v${INSTALL_LINK_VERSION}.${build}`).slice(0, 24);
+}
+
+/**
+ * The build a manifest or IPA request names (`?build=N&key=…`): null for the
+ * released one (no `build`), the number when the key signs it, and `false`
+ * when it names a build without a good key.
+ */
+export function requestedBuild(params: URLSearchParams, secret: string | undefined): number | null | false {
+  const raw = params.get('build');
+  if (raw === null) return null;
+  const build = Number(raw);
+  const key = params.get('key');
+  if (!secret || !Number.isInteger(build) || build <= 0 || !key || !/^[A-Za-z0-9_-]{24}$/.test(key)) return false;
+  return secretsMatch(buildInstallKey(secret, build), key) ? build : false;
+}
+
+/** The query that names one build on the install link. */
+export function buildQuery(secret: string | undefined, build: number): string {
+  return `build=${build}&key=${buildInstallKey(secret, build)}`;
+}
+
 /** A device name Apple will take, or null. Letters, digits, spaces and a little punctuation. */
 export function cleanDeviceName(name: unknown): string | null {
   if (typeof name !== 'string') return null;
