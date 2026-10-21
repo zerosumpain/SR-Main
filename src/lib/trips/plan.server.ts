@@ -40,7 +40,7 @@ import {
   type TripRecord,
 } from './store.server';
 import type { ReplanBody } from './intake';
-import { constraintsOf } from './decisions.store.server';
+import { constraintsOf, planConstraints } from './decisions.store.server';
 import { decisionsWire } from './decisions.bundle.server';
 
 type SolverInput = Parameters<typeof solveTrip>[0];
@@ -99,7 +99,11 @@ export function runningDate(trip: Pick<TripRecord, 'timeZone' | 'startDate' | 'e
 export async function replan(
   trip: TripRecord,
   source: PlanSource = 'site',
-  opts: { keepRunningDay?: boolean } = {},
+  opts: {
+    keepRunningDay?: boolean;
+    /** v8: lines that lead the version's "what changed" ("Undone: …"). */
+    lead?: string[];
+  } = {},
 ): Promise<{ plan: StoredPlan; created: boolean }> {
   const previous = await latestPlan(trip.id);
   const { input, state, routingNotes } = await solverInput(trip, previous);
@@ -125,7 +129,7 @@ export async function replan(
   }
 
   plan = await attachLegLines(plan, previous?.plan ?? null, trip);
-  const changes = [...diffPlans(previous?.plan ?? null, plan, titles), ...notes];
+  const changes = [...(opts.lead ?? []), ...diffPlans(previous?.plan ?? null, plan, titles), ...notes];
   if (routingNotes.some((n) => /estimated/.test(n))) changes.push(`Travel times: ${routingNotes.join('; ')}.`);
   const stored = await appendPlan(trip.id, {
     source,
@@ -169,7 +173,7 @@ export async function storePhoneDays(trip: TripRecord, days: PlannedDay[]): Prom
   // those are the bundle's decoration, not the plan's, and are not stored.
   const bare = days.map((d) => ({ ...d, stops: d.stops.map(({ mealOptions: _m, ...s }) => s) }));
   const plan = bare.reduce((p, d) => replaceDay(p, d), previous.plan);
-  const { wishes } = await loadState(trip.id);
+  const [{ wishes }, snapshot] = await Promise.all([loadState(trip.id), planConstraints(trip.id, previous.version).catch(() => null)]);
   const changes = diffPlans(previous.plan, plan, titlesOf(wishes))
     .filter((t) => t !== 'No change to the schedule.')
     .map((t) => `Changed on the phone — ${t}`);
@@ -179,6 +183,9 @@ export async function storePhoneDays(trip: TripRecord, days: PlannedDay[]): Prom
     plan,
     matrix: previous.matrix,
     changes: changes.length ? changes : ['Changed on the phone — times only.'],
+    // v8: the phone changes the schedule, not the constraints: this version
+    // was solved from the same facts as the one before, so undo can restore it.
+    constraints: snapshot as unknown as Record<string, unknown> | null,
   });
   startGuidance(trip.ownerEmail, trip.id);
   startMeals(trip, stored.plan);
