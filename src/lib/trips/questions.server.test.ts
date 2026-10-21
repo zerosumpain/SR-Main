@@ -346,7 +346,7 @@ describe('pushes', () => {
   const q = { id: 'q9', prompt: 'Keep it?', impact: 2, audience: 'parents', answers: [{ id: 'a0', label: 'Yes' }, { id: 'a1', label: 'No' }] } as unknown as Question;
   it('at most one a day, only before the trip, to the question’s audience', async () => {
     h.questions.push({ ...q, key: 'k', status: 'open' } as never);
-    const push = vi.fn(async (to: readonly string[]) => ({ sent: to.length, failed: 0, reached: new Set<string>() }));
+    const push = vi.fn(async (to: readonly string[], _msg: unknown) => ({ sent: to.length, failed: 0, reached: new Set<string>() }));
     expect(await qs.pushQuestions(trip(), [q], { push, now: new Date('2026-10-21T08:00:00Z') })).toBe(2);
     expect(push.mock.calls[0][0]).toEqual(['owner@example.test', 'parent@example.test']);
     expect(push.mock.calls[0][1]).toMatchObject({ category: 'trip-q-q9', userInfo: { answers: [{ id: 'a0', label: 'Yes' }, { id: 'a1', label: 'No' }], prompt: 'Keep it?' } });

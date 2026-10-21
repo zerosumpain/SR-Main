@@ -268,7 +268,7 @@ describe('the pack job and ensurePack', () => {
   it('ensurePack on a read: builds inside the week before, otherwise nothing', async () => {
     const started: string[] = [];
     const d = deps({ overpass: async () => { started.push('overpass'); return null; } });
-    await ensurePack({ ...TRIP, startDate: '2027-03-01', endDate: '2027-03-04' } as never, { reason: 'read', deps: d });
+    await ensurePack({ ...(TRIP as object), startDate: '2027-03-01', endDate: '2027-03-04' } as never, { reason: 'read', deps: d });
     expect(started).toEqual([]);
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-21T10:00:00Z'));

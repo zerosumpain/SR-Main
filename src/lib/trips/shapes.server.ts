@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { solveTrip } from '$lib/trips/solver';
 import type { Proposal, Source } from './decisions';
 import { addProposals, expireProposals, listPackPlaces, readPack, type NewProposal } from './decisions.store.server';
-import { dryRun } from './dryrun';
+import { dryRun, type DryRunResult } from './dryrun';
 import { jsonCall } from './llm.server';
 import type { LocalDate } from './model';
 import { replan, solverInput } from './plan.server';
@@ -79,7 +79,7 @@ export async function requestShapes(trip: TripRecord, caller: ShapesCaller, opts
   const base = { input, ctx: { trip: tripOnly(trip), stays: state.stays, wishes: state.wishes, bookings: state.bookings, transport, profile: trip.profile } };
   const titles = Object.fromEntries(state.wishes.map((w) => [w.id, w.title]));
   const byOsm = new Map(places.filter((p) => p.place.osmId).map((p) => [p.place.osmId!, p]));
-  const solved = [];
+  const solved: Array<{ choice: ShapeChoice; r: DryRunResult }> = [];
   for (const c of choices) {
     const ops = shapeOps(c, places, state.wishes);
     if (!ops.length) continue;
