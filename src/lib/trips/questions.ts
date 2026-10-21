@@ -164,8 +164,8 @@ export function tieQuestions(c: GenContext): Draft[] {
     out.push({
       key: `tie:${g.groupId}`,
       origin: 'tie',
-      prompt: g.kind === 'shape' ? 'Two ways to do the trip come out almost level. Which suits you?' : `Two versions of ${dayLabel(g.date ?? c.trip.startDate)} come out almost level. Which suits you?`,
-      why: g.kind === 'shape' ? 'Decides the shape of the whole trip' : `Decides ${dayLabel(g.date ?? c.trip.startDate)}`,
+      prompt: `Two versions of ${dayLabel(g.date ?? c.trip.startDate)} come out almost level. Which suits you?`,
+      why: `Decides ${dayLabel(g.date ?? c.trip.startDate)}`,
       answers: close.map((x) => ({ label: shortLabel(x.title), ops: x.ops })),
       defaultIndex: 0,
       ifSkipped: 'If you skip: nothing changes until you choose.',
