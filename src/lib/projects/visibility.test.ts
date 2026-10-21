@@ -139,6 +139,26 @@ describe('private-by-default static key (field-study-8)', () => {
   });
 });
 
+describe('private-by-default static key (field-study-9)', () => {
+  // A second private briefing, published as a static bundle like field-study-8.
+  // The neutral key keeps its subject out of this public repo.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('field-study-9')).toBe(true);
+    expect(defaultsPublic('field-study-9')).toBe(false);
+    expect(isProjectPublic({}, 'field-study-9')).toBe(false);
+  });
+
+  it('is hidden from the public listing and shown to the owner', () => {
+    const items = [{ key: 'field-study-9' }];
+    expect(filterForViewer(items, {}, false)).toEqual([]);
+    expect(filterForViewer(items, {}, true)).toEqual(items);
+  });
+
+  it('becomes public only through an explicit row', () => {
+    expect(isProjectPublic({ 'field-study-9': true }, 'field-study-9')).toBe(true);
+  });
+});
+
 describe('private-by-default static key (data-spine)', () => {
   // The Data Spine is served by its own app (SR-DataSpine) and gets its card and
   // toggle here. Registering a static key would otherwise publish it on deploy.
