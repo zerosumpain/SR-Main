@@ -334,8 +334,8 @@ export interface QuestionDraft {
 export const MAX_OPEN_QUESTIONS = 3;
 /** At most one question notification a day before a trip. */
 export const QUESTION_PUSHES_PER_DAY = 1;
-/** Answer labels are chips: keep them short. */
-export const ANSWER_LABEL_MAX = 28;
+/** Answer labels are chips that wrap (never truncate on screen): short, but a whole thought. */
+export const ANSWER_LABEL_MAX = 48;
 export const QUESTION_PROMPT_MAX = 120;
 
 // ── The research pack ──────────────────────────────────────────────────────

@@ -65,6 +65,7 @@ import {
   type PackCandidate,
   type SearchResult,
   type Written,
+  mergeSamePlaces,
 } from './pack';
 import { emptyFacts } from './research';
 import { nominatimAround, overpass, findPlace } from './research.server';
@@ -333,7 +334,7 @@ async function build(trip: TripRecord, handle: JobHandle | null, deps: PackDeps)
   if (!anchors.length) throw new Error(`could not place ${trip.destination} on the map`);
   const sightCands = await osmCandidates([sightsQuery(anchors), placesQuery(anchors)], SIGHT_TERMS, anchors, SIGHTS_RADIUS_M, false, deps);
   await addFame(sightCands, deps);
-  const sights = selectSights(sightCands, KEEP_SIGHTS, exclude);
+  const sights = selectSights(mergeSamePlaces(sightCands), KEEP_SIGHTS, exclude);
   stage('places', 'done', sights.length ? `Found ${sights.length} places` : 'OpenStreetMap had nothing to add just now');
   await check(handle);
 
@@ -342,7 +343,7 @@ async function build(trip: TripRecord, handle: JobHandle | null, deps: PackDeps)
   await writePack(trip.id, { stage: label('food') });
   const foodCands = await osmCandidates([foodQuery(anchors)], FOOD_TERMS, anchors, FOOD_RADIUS_M, true, deps);
   await addFame(foodCands.filter((c) => c.wikidata), deps);
-  const food = selectFood(foodCands, KEEP_FOOD, exclude);
+  const food = selectFood(mergeSamePlaces(foodCands), KEEP_FOOD, exclude);
   stage('food', 'done', food.length ? `${food.length} ${fromStays ? "near where you'll be" : 'near the centre'}` : 'None found nearby just now');
   await check(handle);
 
@@ -377,15 +378,22 @@ async function build(trip: TripRecord, handle: JobHandle | null, deps: PackDeps)
   const written = new Map<string, Written | null>();
   const neighbourhoods: Array<{ name: string; line: string }> = [];
   const found: Array<Omit<PackCalendarItem, 'placeId'> & { osmId: string | null }> = [];
-  for (const [i, batch] of batches.entries()) {
-    const results = [...(await budgetedSearch(batchSearchQuery(trip.destination, batch, trip.startDate), spent, can, deps)), ...(i === 0 ? calendarResults : [])];
-    const raw = await budgetedModel(synthesisPrompt({ trip, places: batch, results, travellers: travellersText(trip) }), spent, deps);
-    const read = readSynthesis(raw, batch.length, results, trip);
+  // The batches are written up side by side (each its own search and model
+  // call, within the same budget): one after another took ~2.5 min of a
+  // 4.5 min start on the preview, with the person watching.
+  const reads = await Promise.all(
+    batches.map(async (batch, i) => {
+      const results = [...(await budgetedSearch(batchSearchQuery(trip.destination, batch, trip.startDate), spent, can, deps)), ...(i === 0 ? calendarResults : [])];
+      const raw = await budgetedModel(synthesisPrompt({ trip, places: batch, results, travellers: travellersText(trip) }), spent, deps);
+      return { batch, read: readSynthesis(raw, batch.length, results, trip) };
+    }),
+  );
+  for (const { batch, read } of reads) {
     batch.forEach((c, j) => written.set(c.osmId, read.places[j]));
     neighbourhoods.push(...read.neighbourhoods);
     found.push(...read.calendar.map((c) => ({ date: c.date, kind: c.kind, text: c.text, sources: c.sources, osmId: c.ref !== null ? batch[c.ref].osmId : null })));
-    await check(handle);
   }
+  await check(handle);
   const images = await imagesFor(kept, deps);
   const rows = kept.map((c) => {
     const p = packPlaceOf(c, written.get(c.osmId) ?? null, c.wikidata ? (images.get(c.wikidata) ?? null) : null, checkedAt);

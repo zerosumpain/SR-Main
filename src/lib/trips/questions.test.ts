@@ -140,15 +140,23 @@ describe('clash, tie and reaction questions', () => {
     ]);
   });
 
-  it('two shapes within 10 %: which suits you (never applied unasked)', () => {
-    const alternatives = [{ groupId: 'shapes:1', kind: 'shape' as const, date: null, items: [
+  it('two day versions within 10 %: which suits you (never applied unasked)', () => {
+    const alternatives = [{ groupId: 'day:2026-10-27', kind: 'day' as const, date: '2026-10-27', items: [
       { id: 'p1', title: 'Ancient Rome first, slow afternoons', ops: [{ op: 'addWish' as const, wish: { title: 'A' } as never }], score: 100 },
-      { id: 'p2', title: 'Neighbourhood days', ops: [], score: 105 },
+      { id: 'p2', title: 'Neighbourhood day', ops: [], score: 105 },
       { id: 'p3', title: 'The big three', ops: [], score: 140 },
     ] }];
     const [q] = tieQuestions(ctx({ alternatives }));
-    expect(q).toMatchObject({ key: 'tie:shapes:1', origin: 'tie', assume: false, answers: [{ label: 'Ancient Rome first, slow…' }, { label: 'Neighbourhood days' }] });
+    expect(q).toMatchObject({ key: 'tie:day:2026-10-27', origin: 'tie', assume: false, answers: [{ label: 'Ancient Rome first, slow afternoons' }, { label: 'Neighbourhood day' }] });
     expect(tieQuestions(ctx({ alternatives: [{ ...alternatives[0], items: [alternatives[0].items[0], alternatives[0].items[2]] }] }))).toEqual([]);
+  });
+
+  it('never asks "which shape?" — the shapes are already a choice on screen', () => {
+    const alternatives = [{ groupId: 'shapes:1', kind: 'shape' as const, date: null, items: [
+      { id: 'p1', title: 'Ancient Rome first', ops: [], score: 100 },
+      { id: 'p2', title: 'Neighbourhood days', ops: [], score: 101 },
+    ] }];
+    expect(tieQuestions(ctx({ alternatives }))).toEqual([]);
   });
 
   it('two turn-downs for the same reason become a standing preference', () => {
@@ -192,7 +200,8 @@ describe('checking helpers', () => {
       { kind: 'retimed', wishId: 'b', title: 'B', date: '2026-10-28', fromDate: '2026-10-28', fromMin: 600, toMin: 700, reason: null },
     ] })).toBe('Wed 28 Oct: 2 stops change');
     expect(whyLine(['2026-10-28'], 3)).toBe('Changes Wed 28 Oct (3 stops)');
-    expect(shortLabel('Ancient Rome first, slow afternoons')).toBe('Ancient Rome first, slow…');
+    expect(shortLabel('Ancient Rome first, slow afternoons')).toBe('Ancient Rome first, slow afternoons');
+    expect(shortLabel('Ancient Rome first, then slow afternoons in the neighbourhoods')).toBe('Ancient Rome first, then slow afternoons in…');
     expect(shortLabel('Carry on')).toBe('Carry on');
   });
 

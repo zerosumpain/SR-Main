@@ -751,3 +751,47 @@ export function parsePackAsk(body: unknown): { ok: true; action: PackAction; the
   if (theme && !/^[\p{L}\p{N} ,'’&-]+$/u.test(theme)) return { ok: false, error: 'Say the theme in a few words.' };
   return { ok: true, action, theme: action === 'more' ? theme : null };
 }
+
+/** Folds a name for comparing: lower case, no accents, letters and digits only. */
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+function metresApart(a: LatLng, b: LatLng): number {
+  const r = 6_371_000;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * The same place under two names — OpenStreetMap often maps a monument twice
+ * (the building and its site, "Colosseo" and "Colosseum") — would otherwise
+ * appear twice in a day's plan. Two candidates are one place when they share
+ * a Wikidata entry, or sit within 150 m with names that agree (the same, one
+ * contained in the other as whole words, or two one-word names sharing their
+ * first six letters). The better-known one is
+ * kept: the most Wikipedia articles, then a Wikidata entry, then the nearer.
+ */
+export function mergeSamePlaces(cands: PackCandidate[]): PackCandidate[] {
+  const rank = (c: PackCandidate) => (c.sitelinks ?? -1) * 10 + (c.wikidata ? 5 : 0) - c.distanceM / 10_000;
+  const sorted = [...cands].sort((a, b) => rank(b) - rank(a));
+  const out: PackCandidate[] = [];
+  for (const c of sorted) {
+    const n = fold(c.name);
+    const same = out.some((k) => {
+      if (c.wikidata && k.wikidata && c.wikidata === k.wikidata) return true;
+      if (metresApart(c.location, k.location) > 150) return false;
+      const m = fold(k.name);
+      if (n === m) return true;
+      // Containment only for a whole-word match ("Pantheon" in "Il Pantheon"), and a
+      // shared start only for one-word names (Colosseo / Colosseum) — never for
+      // "Trattoria da Enzo" and "Trattoria Pizzeria", two places that share a word.
+      const words = (x: string) => x.split(' ');
+      const within = (a: string, b: string) => ` ${b} `.includes(` ${a} `);
+      const oneWord = words(n).length === 1 && words(m).length === 1;
+      return within(n, m) || within(m, n) || (oneWord && n.length >= 6 && m.length >= 6 && n.slice(0, 6) === m.slice(0, 6));
+    });
+    if (!same) out.push(c);
+  }
+  return out.sort((a, b) => a.distanceM - b.distanceM);
+}

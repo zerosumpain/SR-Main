@@ -327,11 +327,11 @@ describe('answering', () => {
     expect(h.plans.length).toBe(before);
   });
 
-  it('a tie answered here takes that shape and closes the others', async () => {
+  it('a tie between day versions answered here takes that version and closes the other', async () => {
     const add = (title: string, lat: number) => [{ op: 'addWish', wish: { title, placeQuery: null, priority: 'nice', durationMin: 60, partOfDay: 'any', fixedDate: null, fixedStartMin: null, note: null, replacesMeal: null, place: { name: title, location: { lat, lng: 12.48 }, osmId: null, address: null } } }];
     h.proposals = [
-      { id: 's1', groupId: 'shapes:1', kind: 'shape', title: 'Quiet corners', ops: add('Quiet museum', 41.9), status: 'open', scope: { date: null } },
-      { id: 's2', groupId: 'shapes:1', kind: 'shape', title: 'Famous first', ops: add('Big museum', 41.901), status: 'open', scope: { date: null } },
+      { id: 's1', groupId: 'day:shapes:1', kind: 'day', title: 'Quiet corners', ops: add('Quiet museum', 41.9), status: 'open', scope: { date: '2026-10-27' } },
+      { id: 's2', groupId: 'day:shapes:1', kind: 'day', title: 'Famous first', ops: add('Big museum', 41.901), status: 'open', scope: { date: '2026-10-27' } },
     ];
     const added = await qs.refreshQuestions(trip());
     const tie = added.find((q) => q.origin === 'tie');
@@ -341,11 +341,11 @@ describe('answering', () => {
     expect(h.proposals.map((p) => p.status).sort()).toEqual(['accepted', 'superseded']);
   });
 
-  it('a tie whose shapes were decided elsewhere expires', async () => {
+  it('a tie whose versions were decided elsewhere expires', async () => {
     const add = (title: string, lat: number) => [{ op: 'addWish', wish: { title, placeQuery: null, priority: 'nice', durationMin: 60, partOfDay: 'any', fixedDate: null, fixedStartMin: null, note: null, replacesMeal: null, place: { name: title, location: { lat, lng: 12.48 }, osmId: null, address: null } } }];
     h.proposals = [
-      { id: 's1', groupId: 'shapes:2', kind: 'shape', title: 'Quiet corners', ops: add('Quiet museum', 41.9), status: 'open', scope: { date: null } },
-      { id: 's2', groupId: 'shapes:2', kind: 'shape', title: 'Famous first', ops: add('Big museum', 41.901), status: 'open', scope: { date: null } },
+      { id: 's1', groupId: 'day:shapes:2', kind: 'day', title: 'Quiet corners', ops: add('Quiet museum', 41.9), status: 'open', scope: { date: '2026-10-27' } },
+      { id: 's2', groupId: 'day:shapes:2', kind: 'day', title: 'Famous first', ops: add('Big museum', 41.901), status: 'open', scope: { date: '2026-10-27' } },
     ];
     const tie = (await qs.refreshQuestions(trip())).find((q) => q.origin === 'tie')!;
     // Accepted through the proposals route: the shapes are no longer open.

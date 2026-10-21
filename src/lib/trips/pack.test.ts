@@ -30,6 +30,7 @@ import {
   themeQuery,
   weatherItems,
   type PackCandidate,
+  mergeSamePlaces,
 } from './pack';
 import { emptyFacts } from './research';
 
@@ -281,5 +282,20 @@ describe('research pack: dates, weather, the summary', () => {
     expect(parsePackReject({ action: 'reject', placeId: id, reason: 'meh' })).toMatchObject({ ok: false });
     expect(parsePackReject({ action: 'reject', reason: 'too-far' })).toMatchObject({ ok: false });
     expect(parsePackReject({ action: 'build' })).toBeNull();
+  });
+});
+
+describe('mergeSamePlaces', () => {
+  const c = (name: string, lat: number, lng: number, extra: Partial<PackCandidate> = {}): PackCandidate => ({
+    osmId: `node/${name}`, name, location: { lat, lng }, address: null, kind: 'sight', tags: [], openingHours: null, website: null,
+    wikidata: null, distanceM: 500, sitelinks: null, imageFile: null, ...extra,
+  });
+  it('keeps one Colosseum when OpenStreetMap maps it twice, the better-known one', () => {
+    const out = mergeSamePlaces([c('Colosseo', 41.8902, 12.4922, { sitelinks: 40 }), c('Colosseum', 41.8903, 12.4924, { sitelinks: 180, wikidata: 'Q10285' }), c('Arch of Constantine', 41.8898, 12.4906)]);
+    expect(out.map((p) => p.name).sort()).toEqual(['Arch of Constantine', 'Colosseum']);
+  });
+  it('merges by a shared Wikidata entry wherever the points are, and keeps namesakes far apart', () => {
+    const out = mergeSamePlaces([c('Pantheon', 41.8986, 12.4769, { wikidata: 'Q99309' }), c('Il Pantheon', 41.9, 12.48, { wikidata: 'Q99309' }), c('Santa Maria', 41.89, 12.47), c('Santa Maria', 41.91, 12.5)]);
+    expect(out.map((p) => p.name).sort()).toEqual(['Pantheon', 'Santa Maria', 'Santa Maria']);
   });
 });

@@ -152,6 +152,9 @@ export const TIE_SHARE = 0.1;
 export function tieQuestions(c: GenContext): Draft[] {
   const out: Draft[] = [];
   for (const g of c.alternatives) {
+    // Whole-trip shapes are already a choice on screen (the shape pager);
+    // asking "which of these two?" again only repeats it.
+    if (g.kind === 'shape') continue;
     const items = [...g.items].sort((a, b) => a.score - b.score).slice(0, 3);
     if (items.length < 2) continue;
     const [a, b] = items;
