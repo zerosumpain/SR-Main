@@ -30,6 +30,7 @@ export const TITLES: Record<GameId, string> = {
   'liars-dice': "Liar's Dice",
   'draw-guess': 'Draw & Guess',
   'marble-race': 'Marble Race',
+  chess: 'Chess',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };

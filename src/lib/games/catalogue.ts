@@ -16,6 +16,7 @@ import * as categories from './categories';
 import * as liarsDice from './liars-dice';
 import * as drawGuess from './draw-guess';
 import * as marbleRace from './marble-race';
+import * as chess from './chess';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -31,6 +32,7 @@ export const GAME_IDS = [
   'liars-dice',
   'draw-guess',
   'marble-race',
+  'chess',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -205,6 +207,16 @@ export const GAMES: Record<GameId, GameRules> = {
       course: (room, playerId, body, now) => marbleRace.chooseCourse(room as marbleRace.Room, playerId, body.course, now),
       back: (room, playerId, body, now) => marbleRace.back(room as marbleRace.Room, playerId, body.marble, now),
       finish: (room, playerId, body, now) => marbleRace.finish(room as marbleRace.Room, playerId, body.order, now),
+    },
+  },
+  chess: {
+    ...chess,
+    moves: {
+      // Raw on purpose: `move` types its own fields (400 with a sentence for a bad square or move).
+      move: (room, playerId, body, now) =>
+        chess.move(room as chess.Room, playerId, { from: body.from, to: body.to, promotion: body.promotion }, now),
+      resign: (room, playerId, _body, now) => chess.resign(room as chess.Room, playerId, now),
+      draw: (room, playerId, _body, now) => chess.draw(room as chess.Room, playerId, now),
     },
   },
 };
