@@ -11,6 +11,8 @@ import { MAX_OPEN_QUESTIONS } from './decisions';
 import { listProposals, listQuestions, readPack, readProvenance } from './decisions.store.server';
 import type { TripAccess } from './model';
 import { missingInfo } from './prompt';
+import { packDue } from './pack';
+import { localDateIn } from './routing';
 import { listTransport, loadState, type TripRecord } from './store.server';
 import { tripOnly } from './store.server';
 
@@ -59,6 +61,8 @@ export async function decisionsWire(
     access.canEdit || access.canApprove ? listProposals(trip.id, { status: ['open'] }) : Promise.resolve([] as Proposal[]),
     readPack(trip.id),
   ]);
+  // The research pack's first build, or its week-before refresh, starts on a read — in the background.
+  if (packDue(trip, pack, localDateIn(trip.timeZone, new Date()))) void import('./pack.server').then((m) => m.ensurePack(trip, { reason: 'read' })).catch(() => {});
   const audiences = new Set(audiencesFor(access));
   const dayAgo = Date.now() - 24 * 3600_000;
   const brief = buildBrief({

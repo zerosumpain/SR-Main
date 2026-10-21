@@ -173,6 +173,15 @@ export async function addPackPlaces(tripId: string, places: Array<Omit<PackPlace
   return rows.map(toPackPlace);
 }
 
+/** v8: drop a rebuilt pack's old candidates; places in the plan or turned down stay (with their history). */
+export async function removePackCandidates(tripId: string): Promise<number> {
+  const rows = await db
+    .delete(tripPlace)
+    .where(and(eq(tripPlace.tripId, tripId), eq(tripPlace.status, 'candidate')))
+    .returning({ id: tripPlace.id });
+  return rows.length;
+}
+
 export async function updatePackPlace(tripId: string, id: string, patch: Partial<Omit<PackPlace, 'id'>>): Promise<void> {
   const values = placeValues(patch);
   if (!Object.keys(values).length) return;

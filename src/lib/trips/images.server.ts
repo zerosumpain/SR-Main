@@ -164,3 +164,22 @@ export function startImages(tripId: string, wishes: Wish[], meals: MealOption[] 
     }
   })();
 }
+
+/** v8: the shared photo cache for some Wikidata entries (the research pack reads it before asking Commons). */
+export async function sharedImages(qs: string[]): Promise<Record<string, PlaceImage | null>> {
+  const shared = await readSetting<Shared>(SHARED_KEY, {});
+  const now = Date.now();
+  const out: Record<string, PlaceImage | null> = {};
+  for (const q of qs) if (shared[q] && !imageDue(shared[q], now)) out[q] = shared[q].image;
+  return out;
+}
+
+/** v8: photographs (or their absence) found in one batch, added to the shared cache. */
+export async function rememberImages(got: Record<string, PlaceImage | null>): Promise<void> {
+  if (!Object.keys(got).length) return;
+  const at = new Date().toISOString();
+  const latest = await readSetting<Shared>(SHARED_KEY, {});
+  const merged: Shared = { ...latest, ...Object.fromEntries(Object.entries(got).map(([q, image]) => [q, { image, at }])) };
+  const kept = Object.fromEntries(Object.entries(merged).sort((a, b) => (a[1].at < b[1].at ? 1 : -1)).slice(0, MAX_SHARED));
+  await writeSetting(SHARED_KEY, kept);
+}
