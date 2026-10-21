@@ -56,6 +56,8 @@ export function quote(body: string, max = 40): string {
 export interface ReplyView {
   id: string;
   fromId: string;
+  /** The sender's household subject — the phone colours their circle by it, as on the map. Null without one. */
+  fromSubject: string | null;
   fromName: string;
   mine: boolean;
   body: string;
@@ -69,14 +71,19 @@ export interface MessageView extends Omit<ReplyView, 'reaction'> {
   replies: ReplyView[];
 }
 
+/** A sender's household subject, or null — see `ReplyView.fromSubject`. */
+export type SubjectOf = (email: string) => string | null;
+const noSubject: SubjectOf = () => null;
+
 /**
  * The list the phone shows, newest message first, each with its replies
- * oldest first. People are ids and names: no email leaves the server.
+ * oldest first. People are ids, subjects and names: no email leaves the server.
  */
 export function messageViews(
   rows: readonly MessageRecord[],
   idOf: (email: string) => string,
   mine: (email: string) => boolean,
+  subjectOf: SubjectOf = noSubject,
 ): MessageView[] {
   const replies = new Map<string, MessageRecord[]>();
   for (const r of rows) {
@@ -92,20 +99,27 @@ export function messageViews(
     .map((m) => ({
       id: m.id,
       fromId: idOf(m.fromEmail),
+      fromSubject: subjectOf(m.fromEmail),
       fromName: m.fromName,
       mine: mine(m.fromEmail),
       body: m.body,
       at: m.createdAt.toISOString(),
       pushed: m.pushedCount,
       recipients: m.recipientCount,
-      replies: (replies.get(m.id) ?? []).sort(byTime).map((r) => replyView(r, idOf, mine)),
+      replies: (replies.get(m.id) ?? []).sort(byTime).map((r) => replyView(r, idOf, mine, subjectOf)),
     }));
 }
 
-export function replyView(r: MessageRecord, idOf: (email: string) => string, mine: (email: string) => boolean): ReplyView {
+export function replyView(
+  r: MessageRecord,
+  idOf: (email: string) => string,
+  mine: (email: string) => boolean,
+  subjectOf: SubjectOf = noSubject,
+): ReplyView {
   return {
     id: r.id,
     fromId: idOf(r.fromEmail),
+    fromSubject: subjectOf(r.fromEmail),
     fromName: r.fromName,
     mine: mine(r.fromEmail),
     body: r.body,

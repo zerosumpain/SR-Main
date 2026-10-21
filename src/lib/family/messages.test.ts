@@ -38,6 +38,20 @@ describe('messageViews', () => {
     expect(views[1].replies.map((r) => [r.id, r.reaction, r.mine])).toEqual([['r1', true, true], ['r2', false, false]]);
     expect(JSON.stringify(views)).not.toContain('@example.test');
   });
+
+  it('names each sender by household subject, null for somebody with none', () => {
+    const rows = [
+      row(),
+      row({ id: 'r1', fromEmail: 'owner@example.test', fromName: 'John', body: '👍', replyTo: 'm1' }),
+      row({ id: 'r2', fromEmail: 'guest@example.test', fromName: 'Guest', body: 'Ok', replyTo: 'm1' }),
+    ];
+    const subjects: Record<string, string> = { 'kid@example.test': 'kid', 'owner@example.test': 'john' };
+    const [view] = messageViews(rows, idOf, () => false, (e) => subjects[e] ?? null);
+    expect(view.fromSubject).toBe('kid');
+    expect(view.replies.map((r) => r.fromSubject)).toEqual(['john', null]);
+    // Without a lookup, nobody has one.
+    expect(messageViews(rows, idOf, () => false)[0].fromSubject).toBeNull();
+  });
 });
 
 describe('pushes', () => {

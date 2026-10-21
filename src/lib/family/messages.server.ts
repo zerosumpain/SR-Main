@@ -8,6 +8,7 @@ import { getOwnerEmails, isOwnerEmail } from '$lib/server/access';
 import { pushToEmails } from '$lib/server/push-devices';
 import { alarmRecipients, samePerson } from './alarm';
 import { familyPersonFor, familyRoster } from './roster.server';
+import { listMembers } from '$lib/home/presence/members';
 import {
   LIST_DAYS,
   LIST_LIMIT,
@@ -16,9 +17,20 @@ import {
   SEND_LIMIT,
   SEND_WINDOW_MS,
   type MessageRecord,
+  type SubjectOf,
 } from './messages';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Each sender's household subject, for the circle the phone draws beside a
+ * message: the household row whose email is theirs (any of the owner's
+ * addresses for the owner). A failed read is no subjects — plain circles.
+ */
+export async function senderSubjects(): Promise<SubjectOf> {
+  const rows = (await listMembers().catch(() => [])).filter((m) => m.email);
+  return (email) => rows.find((m) => samePerson(m.email as string, email, isOwnerEmail))?.subject ?? null;
+}
 
 /** The newest LIST_LIMIT messages of the last LIST_DAYS days, and their replies. */
 export async function recentMessages(now = new Date()): Promise<MessageRecord[]> {

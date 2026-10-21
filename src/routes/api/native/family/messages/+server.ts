@@ -6,12 +6,13 @@ import { familyCaller, NOT_FAMILY } from '$lib/family/access.server';
 import { familyId } from '$lib/family/roster.server';
 import { samePerson } from '$lib/family/alarm';
 import { messageViews, parseBody, REACTIONS } from '$lib/family/messages';
-import { recentMessages, sendMessage } from '$lib/family/messages.server';
+import { recentMessages, sendMessage, senderSubjects } from '$lib/family/messages.server';
 
 /**
  * GET /api/native/family/messages — "msg family" in the app's chat: the last
  * 30 days' messages (newest first, at most 50), each with its replies, and
- * the quick-reply emoji. People are ids and names; no email leaves the server.
+ * the quick-reply emoji. People are ids, household subjects (`fromSubject`,
+ * for the circle beside each line) and names; no email leaves the server.
  *
  * POST — `{ body }`: store it and push it to every OTHER family member's
  * site-paired phone. At most five a minute per sender (429 `retryAfter`).
@@ -27,7 +28,7 @@ export const GET: RequestHandler = withNativeAccess('any', async (event, identit
   return {
     me: { id: familyId(caller.email) },
     reactions: [...REACTIONS],
-    messages: messageViews(await recentMessages(), familyId, mine),
+    messages: messageViews(await recentMessages(), familyId, mine, await senderSubjects()),
   };
 });
 
@@ -43,6 +44,6 @@ export const POST: RequestHandler = withNativeAccess('any', async (event, identi
       { status: 429, headers: { 'retry-after': String(result.retryAfterSeconds) } },
     );
   }
-  const [message] = messageViews([result.message], familyId, () => true);
+  const [message] = messageViews([result.message], familyId, () => true, await senderSubjects());
   return json({ message, pushed: result.pushed, recipients: result.recipients }, { status: 201 });
 });
