@@ -1,9 +1,10 @@
 <script lang="ts">
   // Trips — the notebook's contents page. An ink cover ("Where next?") with
-  // the next departure stamped on it, then one ruled sheet: the opening
-  // message as an index card you write straight onto (the planner's first
-  // turn), the trips still to come as pinned cards, and the trips already
-  // been as a plain list in the margin's shadow.
+  // the next departure stamped on it, then one ruled sheet: the guided start
+  // (v8: where, when, who, pace, from your notes — then the research, as it
+  // happens), with "Or just tell the planner…" folded under it as the
+  // free-text path; the trips still to come as pinned cards, and the trips
+  // already been as a plain list in the margin's shadow.
   import { goto } from '$app/navigation';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import DateStamp from '$lib/components/notes-paper/DateStamp.svelte';
@@ -12,22 +13,13 @@
   import TripCover from '$lib/components/trips/notes/TripCover.svelte';
   import MarginBlock from '$lib/components/trips/notes/MarginBlock.svelte';
   import { countWord, dateSpan, dayCount, splitTrips, stampDate, tripName, whenFrom } from '$lib/components/trips/notes/notes';
-  import { TRAVEL_MODES, type Pace, type TravelMode } from '$lib/trips/model';
+  import GuidedStart from '$lib/components/trips/start/GuidedStart.svelte';
 
   let { data } = $props();
 
   const split = $derived(splitTrips(data.trips, data.today));
   const next = $derived(split.ahead[0] ?? null);
 
-  // New-trip form. Walk is always on; the zone defaults to the browser's own
-  // until a destination suggests otherwise (the person can type any IANA zone).
-  let destination = $state('');
-  let title = $state('');
-  let startDate = $state('');
-  let endDate = $state('');
-  let timeZone = $state(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/London');
-  let pace = $state<Pace>('normal');
-  let modes = $state<TravelMode[]>(['walk', 'transit']);
   let busy = $state(false);
   let message = $state<string | null>(null);
   let opening = $state('');
@@ -76,32 +68,6 @@
     }
   }
 
-  function toggleMode(m: TravelMode) {
-    if (m === 'walk') return;
-    modes = modes.includes(m) ? modes.filter((x) => x !== m) : [...modes, m];
-  }
-
-  async function create(e: SubmitEvent) {
-    e.preventDefault();
-    busy = true;
-    message = null;
-    try {
-      const res = await fetch('/api/trips', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ destination, title: title || undefined, startDate, endDate, timeZone, pace, modes }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        message = body.error ?? body.message ?? 'Could not create the trip.';
-        return;
-      }
-      await goto(`/trips/${body.id}`);
-    } finally {
-      busy = false;
-    }
-  }
-
   const STATUS: Record<string, string> = { draft: 'being planned', planned: 'planned', active: 'under way', done: 'done' };
   // A card's tilt, from its place in the list: a degree or so either way.
   const TILTS = [-1.1, 0.8, -0.5, 1.2, -0.9, 0.4];
@@ -138,7 +104,12 @@
   <div class="sheet np-sheet np-tear">
     <MarginBlock kicker="New" aria-labelledby="new-h">
       <h2 id="new-h" class="sheet-h">Start a trip</h2>
-      <p class="np-aside lede">Write it as you’d say it. The planner asks for whatever is missing.</p>
+      <p class="np-aside lede">Where, when, who and how busy. The planner reads up on the place, then offers a few ways to do it.</p>
+      <GuidedStart family={data.family} />
+
+      <details class="manual">
+        <summary>Or just tell the planner…</summary>
+        <p class="np-aside lede">Write it as you’d say it. The planner assumes what it must, and shows you.</p>
       <IndexCard as="div" tilt={0} pin={false} class="opening-card">
         <form class="opening" onsubmit={start}>
           <label class="vh" for="opening">Tell the planner about the trip</label>
@@ -163,36 +134,6 @@
           </div>
         </form>
       </IndexCard>
-
-      <details class="manual">
-        <summary>Or fill in the details yourself</summary>
-        <form class="grid" onsubmit={create}>
-          <label>Destination<input class="field" bind:value={destination} required placeholder="Rome, Italy" /></label>
-          <label>Name <span class="opt">(optional)</span><input class="field" bind:value={title} placeholder="Rome in October" /></label>
-          <label>First day<input class="field" type="date" bind:value={startDate} required /></label>
-          <label>Last day<input class="field" type="date" bind:value={endDate} required /></label>
-          <label>Time zone<input class="field" bind:value={timeZone} required placeholder="Europe/Rome" /></label>
-          <label
-            >Pace
-            <select class="field" bind:value={pace}>
-              <option value="relaxed">Relaxed — 9:30 to 18:30</option>
-              <option value="normal">Normal — 9:00 to 19:00</option>
-              <option value="packed">Packed — 8:00 to 21:00, with dinner</option>
-            </select>
-          </label>
-          <fieldset class="modes">
-            <legend>Getting about</legend>
-            {#each TRAVEL_MODES as m (m)}
-              <label class="check">
-                <input type="checkbox" checked={modes.includes(m)} disabled={m === 'walk'} onchange={() => toggleMode(m)} />
-                {m === 'transit' ? 'public transport' : m}
-              </label>
-            {/each}
-          </fieldset>
-          <div class="go">
-            <button class="pen-btn" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create trip'}</button>
-          </div>
-        </form>
       </details>
     </MarginBlock>
 
@@ -411,7 +352,7 @@
     font-size: var(--fs-label);
   }
 
-  /* The manual form, folded under the card. */
+  /* The free-text path, folded under the guided start. */
   .manual {
     margin-top: 18px;
     max-width: 880px;
@@ -423,69 +364,7 @@
     font-size: 17px;
     color: var(--np-pen-ink);
   }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
-    gap: 14px 18px;
-    margin-top: 14px;
-  }
-  .grid label {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--np-pen-ink);
-  }
-  .field {
-    font-family: var(--font-body);
-    font-size: 16px;
-    letter-spacing: 0;
-    text-transform: none;
-    padding: 6px 2px;
-    border: 0;
-    border-bottom: 1px solid var(--line-strong);
-    border-radius: 0;
-    background: transparent;
-    color: var(--np-ink);
-  }
-  .field:focus {
-    outline: none;
-    border-bottom: 2px solid var(--accent-ink);
-  }
-  .opt {
-    text-transform: none;
-    color: var(--text-muted);
-  }
-  .modes {
-    border: 0;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 14px;
-    align-items: center;
-  }
-  .modes legend {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--np-pen-ink);
-    margin-bottom: 4px;
-  }
-  .grid .check {
-    flex-direction: row;
-    align-items: center;
-    text-transform: none;
-    letter-spacing: 0;
-    font-family: var(--font-body);
-    font-size: var(--fs-label);
-    color: var(--np-ink);
-  }
-
+  
   /* Trips to come: pinned index cards. */
   .cards {
     list-style: none;

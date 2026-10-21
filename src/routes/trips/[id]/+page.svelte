@@ -7,7 +7,26 @@
   // four stages, each on its own kind of paper). The planner is a notepad
   // beside the sheet on a wide screen and a sheet that slides up on a phone,
   // so it is never more than one tap away.
+  //
+  // v8 (propose, research, ask): the brief sits at the top as labelled chips;
+  // open trip shapes come next, as the first thing to choose; the column
+  // beside the plan is the Decisions rail (What changed with Undo, quick
+  // questions, proposal groups, the research) with "Tell the planner…" at its
+  // foot — on a phone the rail stacks above the days and the planner is a bar
+  // that opens a sheet. Swap / Fill / day variants on the plan bring proposals
+  // into the rail; Preview draws a proposal's ghost on the map.
   import { postAsJob } from '$lib/trips/job-client';
+  import { api } from '$lib/trips/decisions-client';
+  import { DecisionDesk } from '$lib/trips/decisions-desk.svelte';
+  import { affectedDates, affectedStops, ghostDays, groupProposals, mapDayOf, mergeProposals } from '$lib/trips/decisions-view';
+  import type { PlanDiff, Proposal, Question } from '$lib/trips/decisions';
+  import type { PlanOption } from '$lib/trips/options';
+  import type { DayStage } from '$lib/trips/model';
+  import DecisionsRail from '$lib/components/trips/decisions/DecisionsRail.svelte';
+  import BriefChips from '$lib/components/trips/decisions/BriefChips.svelte';
+  import ProposalGroup from '$lib/components/trips/decisions/ProposalGroup.svelte';
+  import QuestionCard from '$lib/components/trips/decisions/QuestionCard.svelte';
+  import VersionHistory from '$lib/components/trips/decisions/VersionHistory.svelte';
   import { invalidateAll, replaceState } from '$app/navigation';
   import { tick, untrack } from 'svelte';
   import StageBand from '$lib/components/trips/StageBand.svelte';
@@ -17,7 +36,7 @@
   import PageHeader from '$lib/components/PageHeader.svelte';
   import TripMap, { type MapDay } from '$lib/components/trips/TripMap.svelte';
   import { dayLabel } from '$lib/trips/changes';
-  import { type LatLng, type PlannedDay, type TravelMode, type Wish } from '$lib/trips/model';
+  import { type PlannedDay, type TravelMode, type Wish } from '$lib/trips/model';
   import DateStamp from '$lib/components/notes-paper/DateStamp.svelte';
   import InkRing from '$lib/components/notes-paper/InkRing.svelte';
   import Tally from '$lib/components/notes-paper/Tally.svelte';
@@ -40,6 +59,7 @@
     busy = true;
     problem = null;
     notice = null;
+    const before = data.plan?.plan ?? null;
     try {
       const res = await fetch(url, {
         method,
@@ -52,8 +72,12 @@
         return null;
       }
       if (typeof out.warning === 'string') problem = out.warning;
-      else if (done) notice = out.replanned ? `${done} Re-planned as version ${out.planVersion}.` : done;
-      await invalidateAll();
+      else if (done && !out.replanned) notice = done;
+      await reloadAndHighlight(before);
+      // v8: a direct edit shows What changed, with Undo, like every other change.
+      if (out.replanned && typeof out.planVersion === 'number') {
+        desk.showChange(done ? `Changed directly: ${done.replace(/\.$/, '').toLowerCase()}` : 'Changed directly', { planVersion: out.planVersion, changes: data.versions[0]?.changes ?? [] });
+      }
       return out;
     } catch {
       problem = 'The site did not answer. Try again.';
@@ -152,6 +176,104 @@
     setTimeout(() => (highlight = new Set()), 4000);
   }
 
+  // ── v8: decisions ──
+  const desk = new DecisionDesk(() => base, {
+    reload: async () => {
+      const was = data.plan?.version ?? null;
+      await reloadAndHighlight();
+      const now = data.plan?.version ?? null;
+      return now !== null && now !== was ? { planVersion: now, changes: data.versions[0]?.changes ?? [] } : undefined;
+    },
+    tell: ask,
+  });
+  const proposals = $derived(mergeProposals(data.decisions.proposals, desk.local, desk.gone));
+  const grouped = $derived(groupProposals(proposals));
+  const questions = $derived(data.decisions.questions.filter((q) => !desk.goneQuestions.has(q.id)));
+  const turnProposals = $derived(turn.proposals.filter((p) => !desk.gone.has(p.id) && !desk.gone.has(`group:${p.groupId}`)));
+  const turnGroups = $derived.by(() => {
+    const g = groupProposals(turnProposals);
+    return g.shapes.length ? [{ groupId: 'turn-shapes', kind: 'shape' as const, heading: 'Ways to do the trip', proposals: g.shapes }, ...g.groups] : g.groups;
+  });
+  const turnQuestions = $derived(turn.questions.filter((q) => !desk.goneQuestions.has(q.id)));
+  const travellers = $derived(
+    (data.profile?.travellers ?? []).map((t) => ({ name: t.name, age: t.age ?? null, personId: t.personId ?? null })),
+  );
+
+  // The conversation is the escape hatch, not the page: the latest exchange
+  // shows, the whole thread on request.
+  const THREAD_TAIL = 2;
+  let showAll = $state(false);
+  // On a wide sheet the planner's pad is always beside the rail; on a phone it
+  // is a sheet. Cards the last reply brought sit in the thread, and leave the
+  // rail while the thread is on screen (never shown twice side by side).
+  let wide = $state(false);
+  $effect(() => {
+    const mq = window.matchMedia?.('(min-width: 1101px)');
+    if (!mq) return;
+    wide = mq.matches;
+    const on = () => (wide = mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  });
+  const inThread = $derived(new Set(wide || talkOpen ? [...turnProposals.map((p) => p.id), ...turnQuestions.map((q) => q.id)] : []));
+  const railQuestions = $derived(questions.filter((q) => !inThread.has(q.id)));
+  const railGroups = $derived(grouped.groups.map((g) => ({ ...g, proposals: g.proposals.filter((p) => !inThread.has(p.id)) })).filter((g) => g.proposals.length));
+
+  // Preview: the proposal drawn as a ghost on the map, its days and stops marked.
+  let previewId = $state<string | null>(null);
+  const previewing = $derived(previewId ? (proposals.find((p) => p.id === previewId) ?? turnProposals.find((p) => p.id === previewId) ?? null) : null);
+  const ghost = $derived(previewing ? ghostDays(previewing) : []);
+  const markedStops = $derived(previewing ? affectedStops(previewing) : new Set<string>());
+  const markedDates = $derived(new Set(previewing ? affectedDates(previewing) : []));
+  function preview(p: Proposal | null) {
+    previewId = p?.id ?? null;
+    if (!p || !plan) return;
+    const days = affectedDates(p).filter((d) => plan.days.some((x) => x.date === d));
+    selectTab(days.length === 1 ? days[0] : 'overview');
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    void tick().then(() => document.getElementById('studio-panel')?.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' }));
+  }
+
+  // Swap, Fill and day variants: proposals arrive in the rail as a group.
+  const swapFor = (date: string, stage: DayStage) => (stop: { id: string; wishId: string | null }) =>
+    void desk.request({ kind: 'swap', target: { stopId: stop.id, wishId: stop.wishId, date, stage } }, `swap:${stop.id}`, 'plan');
+  const fillFor = (date: string, stage: DayStage) => () => void desk.request({ kind: 'fill', target: { date, stage } }, `fill:${date}:${stage}`, 'plan');
+  let swapDays = $state<{ date: string; with: string } | null>(null);
+  function dayVariant(date: string, variant: 'lighter' | 'rainy' | 'swap-days', withDate: string | null = null) {
+    void desk.request({ kind: 'day', target: { date }, variant, ...(withDate ? { withDate } : {}) }, `day:${date}:${variant}`, 'plan').then((ps) => {
+      if (ps.length) swapDays = null;
+    });
+  }
+
+  // While the research is still running, look again every so often; reload once it is done.
+  $effect(() => {
+    if (data.decisions.pack.status !== 'building') return;
+    const url = `${base}/decisions`;
+    const t = setInterval(async () => {
+      const r = await api<{ pack?: { status?: string } }>('GET', url);
+      if (!r.ok || r.body.pack?.status !== 'building') {
+        clearInterval(t);
+        await invalidateAll();
+      }
+    }, 10_000);
+    return () => clearInterval(t);
+  });
+
+  // v8: what the last turn brought back — proposals and questions as cards in
+  // the thread (the legacy `options`, never shown before, as cards when a turn
+  // has no proposals).
+  type TurnOut = {
+    quickReplies?: string[];
+    changes?: string[];
+    planVersion?: number | null;
+    proposals?: Proposal[];
+    questions?: Question[];
+    options?: PlanOption[];
+    diff?: PlanDiff | null;
+    undo?: { toVersion: number } | null;
+  };
+  let turn = $state<{ proposals: Proposal[]; questions: Question[] }>({ proposals: [], questions: [] });
+
   async function send(text: string) {
     const t = text.trim();
     if (!t || sending) return;
@@ -161,15 +283,19 @@
     draft = '';
     quick = [];
     problem = null;
+    turn = { proposals: [], questions: [] };
     try {
       // v6: as a job, polled, so a long turn is not cut off by a proxy timeout.
-      const { ok, body: out } = await postAsJob<{ quickReplies?: string[]; changes?: string[]; planVersion?: number | null }>(`${base}/converse`, { text: t });
+      const { ok, body: out } = await postAsJob<TurnOut>(`${base}/converse`, { text: t });
       if (!ok) {
         problem = out.error ?? 'The planner did not answer.';
         draft = t;
       } else {
         quick = out.quickReplies ?? [];
-        if (out.changes?.length) notice = `Re-planned as version ${out.planVersion}.`;
+        const proposals = Array.isArray(out.proposals) ? out.proposals : [];
+        const options = !proposals.length && Array.isArray(out.options) ? desk.optionCards(out.options) : [];
+        turn = { proposals: [...proposals, ...options], questions: Array.isArray(out.questions) ? out.questions : [] };
+        if (out.changes?.length || out.diff?.changes?.length) desk.showChange('The planner changed the plan', out);
       }
       await reloadAndHighlight(before);
     } catch {
@@ -229,23 +355,7 @@
       .filter(([, v]) => v)
       .map(([m]) => MODE_LABEL[m as TravelMode] ?? m),
   );
-  const mapDays = $derived.by((): MapDay[] => {
-    if (!plan) return [];
-    return plan.days.map((day) => {
-      let n = 0;
-      const loc = new Map(day.stops.map((s) => [s.id, s.location]));
-      return {
-        date: day.date,
-        label: dayLabel(day.date),
-        stops: day.stops
-          .filter((s) => s.kind === 'wish' && s.location)
-          .map((s) => ({ id: s.id, title: s.title, location: s.location as LatLng, n: ++n })),
-        legs: day.legs
-          .filter((l) => loc.get(l.fromStopId) && loc.get(l.toStopId))
-          .map((l) => ({ line: l.line, from: loc.get(l.fromStopId) as LatLng, to: loc.get(l.toStopId) as LatLng })),
-      };
-    });
-  });
+  const mapDays = $derived.by((): MapDay[] => (plan ? plan.days.map(mapDayOf) : []));
   const mapSuggestions = $derived(suggestions.filter((w) => w.place).map((w) => ({ title: w.title, location: w.place!.location })));
 
   let live = $state<Record<string, number | null>>({});
@@ -301,6 +411,7 @@
   {#snippet actions()}
     <a href="/trips">← All trips</a>
     <button type="button" disabled={busy} onclick={() => call('POST', `${base}/plan`, undefined, 'Plan checked.')}>{busy ? 'Working…' : 'Re-plan now'}</button>
+    <a href="/trips/{trip.id}/places">The places</a>
     <a href="#details">The details</a>
   {/snippet}
   {#snippet marks()}
@@ -325,6 +436,21 @@
   <div class="sheet np-sheet np-tear">
     {#if problem}<p class="banner error" role="alert">{problem}</p>{/if}
     {#if notice}<p class="banner" role="status">{notice}</p>{/if}
+
+    {#if data.decisions.brief.items.length}
+      <MarginBlock kicker="Brief" aria-labelledby="brief-h">
+        <h2 id="brief-h" class="sheet-h small">What the planner knows</h2>
+        <p class="np-aside lede">Each fact says where it came from. Anything assumed is marked — say Right, or change it.</p>
+        <BriefChips brief={data.decisions.brief} trip={data.trip} stays={data.stays} {travellers} family={data.family} {desk} />
+      </MarginBlock>
+    {/if}
+
+    {#if grouped.shapes.length}
+      <MarginBlock kicker="Choose" aria-label="Ways to do the trip">
+        <p class="np-aside lede">Each is a whole plan, checked against opening times and the walks between. Pick one — you can change anything after.</p>
+        <ProposalGroup heading="Ways to do the trip" groupId="shapes" proposals={grouped.shapes} {desk} {previewId} onPreview={preview} grid headingLevel={2} />
+      </MarginBlock>
+    {/if}
 
     <div class="studio">
       <div class="canvas">
@@ -353,6 +479,20 @@
         </MarginBlock>
 
         <div id="studio-panel" class="panel" role="tabpanel" aria-labelledby="tab-{tab}" tabindex="-1">
+          {#if previewing}
+            <div class="preview-bar" role="status">
+              <p><strong>Previewing: {previewing.title}.</strong> The dashed ink line and hollow pins show how it would go{markedStops.size ? '; stops marked “would change” move or go' : ''}. Nothing has changed yet.</p>
+              <span class="preview-acts">
+                <button class="dx-btn small" type="button" disabled={!!desk.busy} onclick={() => desk.accept(previewing).then((ok) => ok && (previewId = null))}>Use this</button>
+                <button class="dx-link" type="button" onclick={() => preview(null)}>Stop preview</button>
+              </span>
+            </div>
+          {/if}
+          {#if desk.problem?.where === 'plan'}<p class="banner error inset" role="alert">{desk.problem.text}</p>{/if}
+          {#if desk.note?.where === 'plan'}<p class="banner inset" role="status">{desk.note.text}</p>{/if}
+          {#if desk.busy?.startsWith('swap:') || desk.busy?.startsWith('fill:') || desk.busy?.startsWith('day:')}
+            <p class="banner inset" role="status"><span class="dx-pulse" aria-hidden="true"></span> Finding checked alternatives — they will appear under Decisions.</p>
+          {/if}
           {#if !plan}
             <MarginBlock kicker="Begin">
               <h2 class="sheet-h">Nothing on the page yet</h2>
@@ -363,8 +503,8 @@
             <MarginBlock kicker="Map" aria-labelledby="map-h">
               <h2 id="map-h" class="vh">Where everything is</h2>
               <div class="ov-map np-taped">
-                <TripMap days={mapDays} suggestions={mapSuggestions} focus={null}>
-                  {#snippet fallback()}<RouteSketch days={mapDays} />{/snippet}
+                <TripMap days={mapDays} suggestions={mapSuggestions} focus={null} {ghost}>
+                  {#snippet fallback()}<RouteSketch days={mapDays} {ghost} />{/snippet}
                 </TripMap>
               </div>
               {#if estimatedModes.length}<p class="np-aside small">Some travel times are estimated from distance ({estimatedModes.join(', ')}).</p>{/if}
@@ -373,7 +513,7 @@
             <MarginBlock kicker="Days" aria-labelledby="days-h">
               <h2 id="days-h" class="sheet-h">Day by day</h2>
               <p class="np-aside lede">Each day in four parts. Open one to see the times, the walks between and what to do when you get there.</p>
-              <DayCards days={plan.days} {loadOf} onOpen={(d) => selectTab(d, true)} />
+              <DayCards days={plan.days} {loadOf} onOpen={(d) => selectTab(d, true)} marked={markedDates} />
             </MarginBlock>
 
             {#if plan.warnings.length || plan.dropped.length}
@@ -475,17 +615,10 @@
                   {#each allChanges ? latest.changes : latestShown.shown as c, ci (ci)}<li>{c}</li>{/each}
                 </ul>
                 {#if latestShown.more && !allChanges}<button class="pen-link" type="button" onclick={() => (allChanges = true)}>and {latestShown.more} more</button>{/if}
-                {#if data.versions.length > 1}
-                  <details class="earlier">
-                    <summary>Earlier versions ({data.versions.length - 1})</summary>
-                    {#each data.versions.slice(1) as v (v.version)}
-                      <details class="version">
-                        <summary>v{v.version} · {v.source} · {timeOf(v.createdAt)} · {v.changes.length} change{v.changes.length === 1 ? '' : 's'}</summary>
-                        <ul class="changes">{#each v.changes as c, ci (ci)}<li>{c}</li>{/each}</ul>
-                      </details>
-                    {/each}
-                  </details>
+                {#if latest.version > 1}
+                  <button class="pen-link" type="button" disabled={!!desk.busy} onclick={() => desk.undo(latest.version - 1)}>Undo this change</button>
                 {/if}
+                <VersionHistory versions={data.versions} current={latest.version} {desk} />
               </MarginBlock>
             {/if}
           {:else}
@@ -504,10 +637,27 @@
                     {#if di < plan.days.length - 1}<button class="pen-link" type="button" onclick={() => selectTab(plan.days[di + 1].date, true)}>Next day →</button>{/if}
                   </div>
                 </header>
+                <div class="day-ways" role="group" aria-label="Other ways to do {weekday(day.date)}">
+                  <span class="np-aside small">Other ways to do it:</span>
+                  <button class="dx-pen" type="button" disabled={!!desk.busy} onclick={() => dayVariant(day.date, 'lighter')}>{desk.busy === `day:${day.date}:lighter` ? 'Finding…' : 'Make it lighter'}</button>
+                  <button class="dx-pen" type="button" disabled={!!desk.busy} onclick={() => dayVariant(day.date, 'rainy')}>{desk.busy === `day:${day.date}:rainy` ? 'Finding…' : 'Rainy-day version'}</button>
+                  {#if plan.days.length > 1}
+                    <button class="dx-pen" type="button" aria-expanded={swapDays?.date === day.date} onclick={() => (swapDays = swapDays?.date === day.date ? null : { date: day.date, with: plan.days.find((x) => x.date !== day.date)?.date ?? '' })}>Swap with another day</button>
+                  {/if}
+                  {#if swapDays?.date === day.date}
+                    <span class="swap-days">
+                      <label class="vh" for="swap-with">Swap {weekday(day.date)} with</label>
+                      <select id="swap-with" class="field" bind:value={swapDays.with}>
+                        {#each plan.days.filter((x) => x.date !== day.date) as o (o.date)}<option value={o.date}>{dayLabel(o.date)}</option>{/each}
+                      </select>
+                      <button class="dx-btn small" type="button" disabled={!!desk.busy || !swapDays.with} onclick={() => swapDays && dayVariant(day.date, 'swap-days', swapDays.with)}>{desk.busy === `day:${day.date}:swap-days` ? 'Finding…' : 'Show me'}</button>
+                    </span>
+                  {/if}
+                </div>
                 {#each day.warnings as wn, wi (wi)}<p class="warn">{wn}</p>{/each}
                 <div class="day-map np-taped">
-                  <TripMap days={mapDays} suggestions={[]} focus={day.date}>
-                    {#snippet fallback()}<RouteSketch days={mapDays} focus={day.date} />{/snippet}
+                  <TripMap days={mapDays} suggestions={[]} focus={day.date} ghost={ghost.filter((g) => !g.date || g.date === day.date)}>
+                    {#snippet fallback()}<RouteSketch days={mapDays} focus={day.date} ghost={ghost.filter((g) => !g.date || g.date === day.date)} />{/snippet}
                   </TripMap>
                 </div>
                 {#if day.legs.some((l) => l.mode === 'drive' || l.mode === 'taxi')}
@@ -533,6 +683,10 @@
                       {base}
                       dayStopIds={day.stops.map((x) => x.id)}
                       onAdded={() => reloadAndHighlight()}
+                      marked={markedStops}
+                      onSwap={swapFor(day.date, g.stage)}
+                      onFill={fillFor(day.date, g.stage)}
+                      asking={desk.busy}
                     />
                   {/each}
                 </div>
@@ -566,20 +720,40 @@
         </MarginBlock>
       </div>
 
-      <aside class="talk" class:open={talkOpen} aria-label="Planning conversation">
+      <aside class="rail" aria-label="Decisions and the planner">
+        <div class="rail-scroll">
+          <DecisionsRail
+            questions={railQuestions}
+            answered={data.decisions.answered}
+            groups={railGroups}
+            pack={data.decisions.pack}
+            {desk}
+            today={data.today}
+            {previewId}
+            onPreview={preview}
+            placesHref="/trips/{trip.id}/places"
+            shapesOpen={grouped.shapes.length}
+          />
+          {#if inThread.size}<p class="np-aside small rail-more">The planner’s last reply has {inThread.size} more {inThread.size === 1 ? 'card' : 'cards'} — below, with the conversation.</p>{/if}
+        </div>
+
+      <section class="talk" class:open={talkOpen} aria-labelledby="talk-h">
         <div class="pad">
           <header class="talk-hd">
             <div>
-              <h2 class="talk-h">The planner</h2>
-              <p class="talk-sub">Talk it through. It changes the plan, and you can see what moved.</p>
+              <h2 id="talk-h" class="talk-h">Tell the planner</h2>
+              <p class="talk-sub">Anything you’d like. It comes back as a change you can undo, a few cards to choose from, or a quick question.</p>
             </div>
             <button class="close" type="button" onclick={() => (talkOpen = false)} aria-label="Close the planner">Close</button>
           </header>
           <div class="messages" bind:this={talkEl}>
             {#if !shown.length && !pending}
-              <p class="np-aside">Tell the planner about the trip — where and when, where you’re staying, who’s going and what you want to do. It will ask for anything missing.</p>
+              <p class="np-aside">Tell the planner about the trip — where and when, where you’re staying, who’s going and what you want to do. It assumes what it must, and shows you.</p>
             {/if}
-            {#each shown as m (m.id)}
+            {#if shown.length > THREAD_TAIL}
+              <button class="pen-link earlier-msgs" type="button" aria-expanded={showAll} onclick={() => (showAll = !showAll)}>{showAll ? 'Show only the latest' : `Show the whole conversation (${shown.length})`}</button>
+            {/if}
+            {#each showAll ? shown : shown.slice(-THREAD_TAIL) as m (m.id)}
               {#if m.role === 'event'}
                 <p class="msg event"><span class="meta">{timeOf(m.createdAt)}</span> Changed directly: {m.text}</p>
               {:else}
@@ -604,6 +778,14 @@
               <div class="msg user"><span class="who">you · now</span><p>{pending}</p></div>
               <p class="msg event thinking" role="status">The planner is thinking<span class="dots" aria-hidden="true">…</span></p>
             {/if}
+            {#if !pending && (turnQuestions.length || turnGroups.length)}
+              <div class="turn" role="group" aria-label="What the planner offered">
+                {#each turnQuestions as q (q.id)}<QuestionCard {q} {desk} today={data.today} tilt={-0.8} />{/each}
+                {#each turnGroups as g (g.groupId)}
+                  <ProposalGroup heading={g.heading} groupId="turn-{g.groupId}" proposals={g.proposals} {desk} {previewId} onPreview={preview} />
+                {/each}
+              </div>
+            {/if}
           </div>
           {#if quick.length}
             <div class="quick">
@@ -611,13 +793,14 @@
             </div>
           {/if}
           <form class="composer" onsubmit={(e) => { e.preventDefault(); void send(draft); }}>
-            <textarea rows="3" bind:this={composer} bind:value={draft} onkeydown={onKey} placeholder="“Make Thursday lighter”, “add the Borghese”, “we land at 10:40”…" aria-label="Message the planner"></textarea>
+            <textarea rows="3" bind:this={composer} bind:value={draft} onkeydown={onKey} placeholder="Tell the planner… “make Thursday lighter”, “somewhere for dinner near the flat”, “we land at 10:40”" aria-label="Tell the planner"></textarea>
             <div class="composer-go">
               <span class="hint">Enter to send · Shift + Enter for a new line</span>
               <button class="pen-btn" type="submit" disabled={sending || !draft.trim()}>{sending ? 'Sending…' : 'Send'}</button>
             </div>
           </form>
         </div>
+      </section>
       </aside>
     </div>
   </div>
@@ -625,7 +808,7 @@
 
 {#if talkOpen}<button class="scrim" type="button" tabindex="-1" aria-label="Close the planner" onclick={() => (talkOpen = false)}></button>{/if}
 {#if !talkOpen}
-  <button class="talk-fab" type="button" onclick={openTalk}>Ask the planner{#if shown.length} <span class="fab-n">{shown.filter((m) => m.role !== 'event').length}</span>{/if}</button>
+  <button class="talk-fab" type="button" onclick={openTalk}><span class="fab-text">Tell the planner…</span>{#if turnQuestions.length + turnProposals.length} <span class="fab-n">{turnQuestions.length + turnProposals.length} new</span>{/if}</button>
 {/if}
 
 <style>
@@ -696,7 +879,7 @@
   }
   .studio {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
     gap: 8px;
     align-items: start;
   }
@@ -1082,21 +1265,46 @@
   .changes li::marker {
     color: var(--accent);
   }
-  .earlier {
-    margin-top: 12px;
-  }
-  .earlier > summary,
-  .version > summary {
-    cursor: pointer;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    color: var(--accent-ink);
-  }
-  .version {
-    margin: 6px 0 0 14px;
-  }
-  .version .changes {
+
+  /* ── v8: preview, plan notes, day variants ── */
+  .preview-bar {
+    position: sticky;
+    top: calc(var(--site-nav-height, 48px) + 4px);
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    margin: 0 28px 8px calc(var(--np-margin-x) + 28px);
+    padding: 8px 12px;
+    border: 1px dashed var(--accent-ink);
+    background: var(--np-card);
     font-size: var(--fs-label);
+  }
+  .preview-bar p {
+    flex: 1 1 260px;
+    margin: 0;
+  }
+  .preview-acts {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .banner.inset {
+    margin: 0 28px 10px calc(var(--np-margin-x) + 28px);
+  }
+  .day-ways {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    margin: 8px 0 6px;
+  }
+  .swap-days {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
   }
 
   /* ── A day ── */
@@ -1142,16 +1350,39 @@
     margin-top: 14px;
   }
 
-  /* ── The planner: a notepad beside the sheet ── */
-  .talk {
+  /* ── v8: the rail beside the sheet — Decisions above, "Tell the planner" at its foot ── */
+  .rail {
     position: sticky;
     top: calc(var(--site-nav-height, 48px) + 12px);
-    padding: 20px 24px 20px 0;
-  }
-  .pad {
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - var(--site-nav-height, 48px) - 48px);
+    gap: 12px;
+    box-sizing: border-box;
+    max-height: calc(100vh - var(--site-nav-height, 48px) - 24px);
+    padding: 20px 24px 20px 0;
+  }
+  .rail-scroll {
+    flex: 1 1 auto;
+    min-height: 140px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 6px 8px 4px;
+  }
+  .rail-more {
+    margin: 10px 0 0;
+  }
+  .talk {
+    flex: 0 1 auto;
+    display: flex;
+    min-height: 0;
+    max-height: 58%;
+  }
+  .pad {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     background-color: var(--np-card);
     background-image: repeating-linear-gradient(to bottom, transparent 0 23px, var(--np-rule) 23px 24px);
     border: 1px solid var(--line-strong);
@@ -1195,8 +1426,8 @@
     cursor: pointer;
   }
   .messages {
-    flex: 1;
-    min-height: 220px;
+    flex: 1 1 auto;
+    min-height: 48px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -1287,6 +1518,15 @@
     margin: 4px 0 0;
     padding-left: 16px;
   }
+  .earlier-msgs {
+    align-self: flex-start;
+  }
+  .turn {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 6px 0 4px;
+  }
   .quick {
     display: flex;
     flex-wrap: wrap;
@@ -1343,8 +1583,22 @@
   }
 
   @media (max-width: 1100px) {
+    /* The rail stacks above the days. */
     .studio {
-      grid-template-columns: minmax(0, 1fr);
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .rail {
+      order: -1;
+      position: static;
+      max-height: none;
+      padding: 12px 28px 4px calc(var(--np-margin-x) + 28px);
+    }
+    .rail-scroll {
+      overflow: visible;
+      min-height: 0;
+      padding: 0;
     }
     /* The pad becomes a sheet that slides up over the page. */
     .talk {
@@ -1354,10 +1608,14 @@
       top: auto;
       z-index: 60;
       padding: 0;
+      max-height: none;
     }
     .talk.open {
       display: block;
       animation: rise 220ms ease-out;
+    }
+    .messages {
+      min-height: 120px;
     }
     .pad {
       height: min(86dvh, 760px);
@@ -1380,6 +1638,7 @@
     }
     .talk-fab {
       display: inline-flex;
+      max-width: calc(100vw - 32px);
       align-items: center;
       gap: 8px;
       position: fixed;
@@ -1445,6 +1704,16 @@
     .banner {
       margin: 0 16px 10px calc(var(--np-margin-x) + 12px);
     }
+    .banner.inset {
+      margin: 0 16px 10px calc(var(--np-margin-x) + 12px);
+    }
+    .rail {
+      padding: 10px 16px 4px calc(var(--np-margin-x) + 12px);
+    }
+    .preview-bar {
+      margin-left: calc(var(--np-margin-x) + 12px);
+      margin-right: 16px;
+    }
     .tick-row {
       grid-template-columns: 22px minmax(0, 1fr);
     }
@@ -1466,8 +1735,11 @@
   }
   @media print {
     .talk,
+    .rail,
     .talk-fab,
-    .tabs {
+    .tabs,
+    .day-ways,
+    .preview-bar {
       display: none !important;
     }
     .studio {
