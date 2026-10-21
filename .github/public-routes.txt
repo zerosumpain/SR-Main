@@ -115,8 +115,10 @@
 /api/native/trips/[id]/decisions
 /api/native/trips/[id]/events
 /api/native/trips/[id]/ideas
+/api/native/trips/[id]/pack
 /api/native/trips/[id]/proposals
 /api/native/trips/[id]/proposals/[pid]
+/api/native/trips/[id]/questions/[qid]
 /api/native/trips/[id]/replan
 /api/native/trips/[id]/route
 /api/native/trips/[id]/suggestions
@@ -124,6 +126,7 @@
 /api/native/trips/[id]/undo
 /api/native/trips/[id]/versions
 /api/native/trips/jobs/[jobId]
+/api/native/trips/notes
 /api/native/wildmind
 /api/native/wildmind/chronicle
 /api/native/wildmind/inventions
