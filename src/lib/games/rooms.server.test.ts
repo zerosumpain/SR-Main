@@ -541,3 +541,63 @@ describe('chess through the registry', () => {
     ).toThrow(/for two/);
   });
 });
+
+describe('manhunt through the registry', () => {
+  const kim = { id: 'p_kim', name: 'Kim' };
+  const rob = { id: 'p_rob', name: 'Rob' };
+  const centre = { lat: 51.5, lng: -0.12 };
+  const near = (m: number) => ({ lat: Number((51.5 + m / 111_195).toFixed(7)), lng: -0.12 });
+
+  it('runs the head start, the ping and the catch on its own timers, and records the catcher', () => {
+    const { id } = createGame({
+      game: 'manhunt',
+      host: john,
+      invite: [sam, kim],
+      difficulty: 'hard',
+      options: { ...centre, radius: 400, minutes: 15 },
+    });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_kim', 'join');
+    act(id, 'p_john', 'runner', { playerId: 'p_sam' });
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    expect(roomFor(id, 'p_sam')).toMatchObject({ phase: 'headstart', myRole: 'runner' });
+    vi.advanceTimersByTime(2 * 60_000);
+    expect(roomFor(id, 'p_kim')).toMatchObject({ phase: 'hunt', myRole: 'hunter' });
+
+    act(id, 'p_sam', 'position', { ...near(100), accuracy: 5, at: Date.now() });
+    act(id, 'p_kim', 'position', { ...near(-50), accuracy: 5, at: Date.now() });
+    // Between pings the runner is not on Kim's phone.
+    expect(JSON.stringify(roomFor(id, 'p_kim'))).not.toContain(String(near(100).lat));
+
+    // The room's own timer pings at two minutes (hard).
+    vi.advanceTimersByTime(2 * 60_000);
+    const pinged = roomFor(id, 'p_kim') as WireRoom & { pings: { runner: { lat: number } | null }[] };
+    expect(pinged.pings).toHaveLength(1);
+    expect(pinged.pings[0].runner?.lat).toBe(near(100).lat);
+
+    act(id, 'p_kim', 'position', { ...near(95), accuracy: 5, at: Date.now() });
+    act(id, 'p_kim', 'catch');
+    // Nobody confirms: the server accepts the claim at 20 s.
+    vi.advanceTimersByTime(20_000);
+    const done = roomFor(id, 'p_john') as WireRoom & { result: { outcome: string; catcherId: string }; winnerIds: string[] };
+    expect(done.phase).toBe('finished');
+    expect(done.result).toMatchObject({ outcome: 'caught', catcherId: 'p_kim' });
+    expect(JSON.stringify(done)).not.toContain(String(near(95).lat));
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].map((r) => [r.game, r.playerId, r.won])).toEqual([
+      ['manhunt', 'p_kim', true],
+      ['manhunt', 'p_john', false],
+      ['manhunt', 'p_sam', false],
+    ]);
+    expect(JSON.stringify(recorded[0])).not.toContain('51.5');
+  });
+
+  it('holds up to eight, where every other game stops at five', () => {
+    const { id } = createGame({ game: 'manhunt', host: john, invite: [sam, kim, rob], difficulty: 'easy', options: centre });
+    const more = Array.from({ length: 4 }, (_, i) => ({ id: `p_${i}`, name: `P${i}` }));
+    inviteTo(id, 'p_john', more);
+    expect(() => inviteTo(id, 'p_john', [{ id: 'p_9', name: 'P9' }])).toThrow(/Up to 8/);
+  });
+});

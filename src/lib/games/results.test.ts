@@ -46,7 +46,8 @@ async function finished(game: GameId, options: Record<string, unknown> = {}): Pr
 }
 
 describe('recording a finished round, in every game in the catalogue', () => {
-  it.each(GAME_IDS.map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
+  // Manhunt needs three players and a play area; manhunt.test.ts records its own finish.
+  it.each(GAME_IDS.filter((g) => g !== 'manhunt').map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
     const rules = GAMES[game];
     const { room, now } = await finished(game);
     expect(room.phase).toBe('finished');

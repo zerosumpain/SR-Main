@@ -17,6 +17,7 @@ import * as liarsDice from './liars-dice';
 import * as drawGuess from './draw-guess';
 import * as marbleRace from './marble-race';
 import * as chess from './chess';
+import * as manhunt from './manhunt';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -33,6 +34,7 @@ export const GAME_IDS = [
   'draw-guess',
   'marble-race',
   'chess',
+  'manhunt',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -101,6 +103,8 @@ export interface GameRules {
    * Null: this game has no score, and its board ranks by wins.
    */
   resultScore?(standing: { id: string; [key: string]: unknown }): number | null;
+  /** Most players a room may hold, when it is not the shared MAX_PLAYERS (Manhunt: 8). */
+  maxPlayers?: number;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -217,6 +221,30 @@ export const GAMES: Record<GameId, GameRules> = {
         chess.move(room as chess.Room, playerId, { from: body.from, to: body.to, promotion: body.promotion }, now),
       resign: (room, playerId, _body, now) => chess.resign(room as chess.Room, playerId, now),
       draw: (room, playerId, _body, now) => chess.draw(room as chess.Room, playerId, now),
+    },
+  },
+  manhunt: {
+    ...manhunt,
+    moves: {
+      // Raw on purpose: each types its own fields (400 for a place that is not on the map).
+      area: (room, playerId, body, now) =>
+        manhunt.setArea(
+          room as manhunt.Room,
+          playerId,
+          { lat: body.lat, lng: body.lng, radius: body.radius, minutes: body.minutes },
+          now,
+        ),
+      runner: (room, playerId, body, now) =>
+        manhunt.pickRunner(room as manhunt.Room, playerId, { playerId: body.playerId }, now),
+      position: (room, playerId, body, now) =>
+        void manhunt.position(
+          room as manhunt.Room,
+          playerId,
+          { lat: body.lat, lng: body.lng, accuracy: body.accuracy, at: body.at },
+          now,
+        ),
+      catch: (room, playerId, _body, now) => manhunt.claimCatch(room as manhunt.Room, playerId, now),
+      confirm: (room, playerId, _body, now) => manhunt.confirmCatch(room as manhunt.Room, playerId, now),
     },
   },
 };

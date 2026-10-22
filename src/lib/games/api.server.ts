@@ -17,16 +17,31 @@ import { isWindow } from './results';
 import { act, asHttp, canCreate, createGame, inviteTo, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
 import { pushInvites } from './invite-push.server';
 import { isDifficulty, MAX_PLAYERS } from './tap-duel';
-import { isGameId, type GameId } from './catalogue';
+import { GAMES, isGameId, type GameId } from './catalogue';
 import { cleanTopic, isAudience, isClean } from './quiz-night';
 import { subjectFor } from './gcse';
 import { reserveUsage } from '$lib/jkai/chat-access.server';
 import { areaAccess } from '$lib/server/area-scope';
+import { familyRole } from '$lib/server/family-access';
 
 /** Quiz Nights a member may start per rolling 24 h — each is two model calls (write, then check). */
 export const QUIZ_DAILY = 10;
 
 export type GameRole = 'owner' | 'member';
+
+/**
+ * Games only a parent (or the owner) may host: Manhunt sends children out
+ * into the real world, so the person who draws the circle and starts the
+ * clock is a grown-up in the family roles (`family:admin`).
+ */
+const PARENT_HOSTED: ReadonlySet<GameId> = new Set<GameId>(['manhunt']);
+/** The host's set-up actions in those games: each is checked against the caller's role. */
+const PARENT_ACTIONS: ReadonlySet<string> = new Set(['start', 'again', 'area', 'runner']);
+
+async function assertParent(caller: GameCaller): Promise<void> {
+  const role = caller.role === 'owner' ? { parent: true } : await familyRole(caller.email);
+  if (!role?.parent) error(403, 'Only a parent can host Manhunt.');
+}
 
 /** Who is calling, however they authenticated. */
 export interface GameCaller {
@@ -77,7 +92,9 @@ export async function startGame(
   if (!isGameId(game)) error(400, 'Unknown game.');
   if (!isDifficulty(body.difficulty)) error(400, 'Pick easy, medium or hard.');
   const ids = stringIds(body.invite);
-  if (ids.length > MAX_PLAYERS - 1) error(400, `Up to ${MAX_PLAYERS} players.`);
+  const cap = GAMES[game].maxPlayers ?? MAX_PLAYERS;
+  if (ids.length > cap - 1) error(400, `Up to ${cap} players.`);
+  if (PARENT_HOSTED.has(game)) await assertParent(caller);
 
   const me = await playerFor(caller.email);
   const invite = await resolveInvitees(ids);
@@ -113,6 +130,11 @@ export async function startGame(
     dice: body.dice,
     turnsEach: body.turnsEach,
     course: body.course,
+    // Manhunt: the circle's centre (the host's phone), radius in metres, minutes.
+    lat: body.lat,
+    lng: body.lng,
+    radius: body.radius,
+    minutes: body.minutes,
   };
   const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
   // Not awaited: the host's screen should not wait on Apple. An invite whose
@@ -147,6 +169,12 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
     const room = asHttp(() => inviteTo(id, me.id, people));
     void pushInvites(id);
     return room;
+  }
+  // Setting up a game whose host must be a parent is checked against the
+  // caller's family role here, not only when the room was made: the host
+  // role can pass to somebody else when the first host leaves mid-game.
+  if (PARENT_ACTIONS.has(action) && PARENT_HOSTED.has((asHttp(() => roomFor(id, me.id)) as { game?: GameId }).game as GameId)) {
+    await assertParent(caller);
   }
   const room = asHttp(() => act(id, me.id, action, body));
   // "Play again" re-invites everybody; their phones are rung afresh.
