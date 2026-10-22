@@ -305,6 +305,11 @@ export function simulate(ctx: SolverContext, frame: DayFrame, start: SimStart, i
     } else {
       const legMin = travel(target, item.id);
       travelMin += legMin;
+      // A slot hours away while still at the stay (an idea on an otherwise
+      // free day): stay put until it is time to go, rather than wait there.
+      if (item.fixedStartMin !== null && frame.stay && point === stayPoint(frame.stay.id) && item.fixedStartMin - legMin - t > DINNER_NEAR_STAY_AFTER_MIN) {
+        t = item.fixedStartMin - legMin;
+      }
       arrive = t + legMin;
     }
     let begin = arrive;

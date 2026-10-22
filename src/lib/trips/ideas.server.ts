@@ -21,7 +21,7 @@ import { logEdit } from './converse.server';
 import { computeGap, ideaDraft, ideaStartMin, IDEAS_SYSTEM, ideasPrompt, noGapReason, readIdeas, verifyIdea, type Gap, type IdeaDraft, type Verdict } from './ideas';
 import { jsonCall } from './llm.server';
 import { DAY_STAGE_LABEL, type DayStage, type ResearchStep, type Stay, type Wish, type WishDraft } from './model';
-import { dietaryHints, elementsFromNominatim, gapCentre, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM, nominatimTerms, viewboxAround, type NearbyCandidate } from './nearby-ideas';
+import { dietaryHints, elementsFromNominatim, gapCentre, nearWay, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM, nominatimTerms, viewboxAround, type NearbyCandidate } from './nearby-ideas';
 import { solverInput } from './plan.server';
 import { profileText, travellersOnly } from './profile';
 import { emptyFacts, parseLooseJson, withinReach } from './research';
@@ -159,8 +159,8 @@ export async function findIdeas(
   const fitting = ideas.filter((x) => x.verdict.fits);
   if (fitting.some((x) => x.source === 'nearby') && !fitting.some((x) => x.source === 'planner')) {
     note = planned.failure
-      ? `The planner ${FAILURE_WORDS[planned.failure]}, so these are places near the way from ${gap.before.title} to ${gap.after.title}, checked against your day.`
-      : `These are places near the way from ${gap.before.title} to ${gap.after.title}, checked against your day.`;
+      ? `The planner ${FAILURE_WORDS[planned.failure]}, so these are places ${nearWay(gap)}, checked against your day.`
+      : `These are places ${nearWay(gap)}, checked against your day.`;
   } else if (!ideas.length) {
     note = planned.failure
       ? `The planner ${FAILURE_WORDS[planned.failure]} and nothing nearby fits ${gap.freeMin} minutes between ${gap.before.title} and ${gap.after.title}${nearbyNote ? ` (${nearbyNote})` : ''} — try again shortly.`

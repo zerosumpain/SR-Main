@@ -56,7 +56,10 @@ describe('computeGap', () => {
       partOfDay: 'afternoon', fixedDate: '2026-10-28', fixedStartMin: ideaStartMin(after), locked: false, suggested: false, skipped: false, facts: null, note: null, sortHint: 0,
     };
     expect(ideaStartMin(after)).toBe(14 * 60 + 45);
-    expect(verifyIdea(bare, w, after, free)).toMatchObject({ fits: true, landedStage: 'afternoon', departMin: 14 * 60 + 45 + 40 });
+    const v = verifyIdea(bare, w, after, free);
+    expect(v).toMatchObject({ fits: true, landedStage: 'afternoon', departMin: 14 * 60 + 45 + 40 });
+    // They leave the stay in time for it, not first thing to wait there.
+    expect(v.arriveMin).toBe(14 * 60 + 45);
     // Between two different stops the solver times it, as before.
     expect(ideaStartMin(computeGap(plan, '2026-10-28', 'afternoon')!)).toBeNull();
   });

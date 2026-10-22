@@ -47,6 +47,11 @@ export function metresFromLine(p: LatLng, a: LatLng, b: LatLng): number {
   return Math.hypot(px - t * bx, py - t * by);
 }
 
+/** "near the way from A to B", or "near A" when the slot starts and ends there. */
+export function nearWay(gap: Gap): string {
+  return gap.before.stopId === gap.after.stopId ? `near ${gap.before.title}` : `near the way from ${gap.before.title} to ${gap.after.title}`;
+}
+
 /** Where to look: between the two ends of the gap (or at whichever is known). */
 export function gapCentre(gap: Gap): LatLng | null {
   const a = gap.before.location;
@@ -190,7 +195,7 @@ export function nearbyCandidates(
       kind,
       place: { name, location: at, osmId, address },
       durationMin,
-      why: `${(KIND_WORD[kind] ?? 'a place').replace(/^./, (c) => c.toUpperCase())} near the way from ${gap.before.title} to ${gap.after.title}, found on OpenStreetMap${diet ? ` (marked ${hints.join('/')} friendly)` : ''}.`,
+      why: `${(KIND_WORD[kind] ?? 'a place').replace(/^./, (c) => c.toUpperCase())} ${nearWay(gap)}, found on OpenStreetMap${diet ? ` (marked ${hints.join('/')} friendly)` : ''}.`,
       fit: `About ${inMin} min walk from ${gap.before.title}, ${durationMin} min for ${gap.meal ? gap.meal : STAGE_WORD[gap.stage]}, ${outMin} min on to ${gap.after.title}.`,
       openingHours: tags.opening_hours?.trim() || null,
       score,
