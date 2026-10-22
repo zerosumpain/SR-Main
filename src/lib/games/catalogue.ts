@@ -17,6 +17,7 @@ import * as liarsDice from './liars-dice';
 import * as drawGuess from './draw-guess';
 import * as marbleRace from './marble-race';
 import * as chess from './chess';
+import * as fakeArtist from './fake-artist';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -33,6 +34,7 @@ export const GAME_IDS = [
   'draw-guess',
   'marble-race',
   'chess',
+  'fake-artist',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -101,6 +103,10 @@ export interface GameRules {
    * Null: this game has no score, and its board ranks by wins.
    */
   resultScore?(standing: { id: string; [key: string]: unknown }): number | null;
+  /** Most players a room may hold, when not the registry's default (`MAX_PLAYERS`, five). */
+  maxPlayers?: number;
+  /** Fewest joined players `start` accepts, when more than two (for tests that play every game). */
+  minPlayers?: number;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -217,6 +223,19 @@ export const GAMES: Record<GameId, GameRules> = {
         chess.move(room as chess.Room, playerId, { from: body.from, to: body.to, promotion: body.promotion }, now),
       resign: (room, playerId, _body, now) => chess.resign(room as chess.Room, playerId, now),
       draw: (room, playerId, _body, now) => chess.draw(room as chess.Room, playerId, now),
+    },
+  },
+  'fake-artist': {
+    ...fakeArtist,
+    maxPlayers: fakeArtist.MAX_PLAYERS,
+    minPlayers: fakeArtist.MIN_PLAYERS,
+    moves: {
+      // Raw on purpose: each types its own fields (400 with a sentence for a bad line or vote).
+      stroke: (room, playerId, body, now) =>
+        fakeArtist.stroke(room as fakeArtist.Room, playerId, { points: body.points, end: body.end }, now),
+      vote: (room, playerId, body, now) =>
+        fakeArtist.vote(room as fakeArtist.Room, playerId, { playerId: body.playerId }, now),
+      guess: (room, playerId, body, now) => fakeArtist.guess(room as fakeArtist.Room, playerId, { text: body.text }, now),
     },
   },
 };

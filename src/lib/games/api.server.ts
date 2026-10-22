@@ -17,7 +17,7 @@ import { isWindow } from './results';
 import { act, asHttp, canCreate, createGame, inviteTo, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
 import { pushInvites } from './invite-push.server';
 import { isDifficulty, MAX_PLAYERS } from './tap-duel';
-import { isGameId, type GameId } from './catalogue';
+import { GAMES, isGameId, type GameId } from './catalogue';
 import { cleanTopic, isAudience, isClean } from './quiz-night';
 import { subjectFor } from './gcse';
 import { reserveUsage } from '$lib/jkai/chat-access.server';
@@ -66,7 +66,7 @@ const stringIds = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x 
  * Start a game: `{ game, difficulty, invite: [playerId] }` plus that game's
  * options (Quiz Night `topic`/`audience`, or `mode: 'gcse'` with `subject`/`board`, Boggle `size`/`seconds`/`scoring`,
  * Categories `categoryCount`/`seconds`, Liar's Dice `dice`, Draw & Guess
- * `turnsEach`/`seconds`).
+ * `turnsEach`/`seconds`, Fake Artist `rounds`).
  */
 export async function startGame(
   event: Pick<RequestEvent, 'locals'>,
@@ -77,7 +77,8 @@ export async function startGame(
   if (!isGameId(game)) error(400, 'Unknown game.');
   if (!isDifficulty(body.difficulty)) error(400, 'Pick easy, medium or hard.');
   const ids = stringIds(body.invite);
-  if (ids.length > MAX_PLAYERS - 1) error(400, `Up to ${MAX_PLAYERS} players.`);
+  const cap = GAMES[game].maxPlayers ?? MAX_PLAYERS;
+  if (ids.length > cap - 1) error(400, `Up to ${cap} players.`);
 
   const me = await playerFor(caller.email);
   const invite = await resolveInvitees(ids);
@@ -113,6 +114,7 @@ export async function startGame(
     dice: body.dice,
     turnsEach: body.turnsEach,
     course: body.course,
+    rounds: body.rounds,
   };
   const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
   // Not awaited: the host's screen should not wait on Apple. An invite whose
