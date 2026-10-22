@@ -16,8 +16,13 @@ import {
   type PlayerStatus,
   type Rng,
 } from './tap-duel';
+import { BAND, BOARD_LABEL, gcseAbout, isBoard, subjectFor, timeMs as gcseTimeMs, type Board, type Subject } from './gcse';
 
 export { COUNTDOWN_MS, FINISHED_MS, LOBBY_MS };
+
+/** `general`: any topic, for an audience. `gcse`: exam-style revision on one subject's spec. */
+export const MODES = ['general', 'gcse'] as const;
+export type Mode = (typeof MODES)[number];
 
 export const AUDIENCES = ['kids', 'family', 'adults'] as const;
 export type Audience = (typeof AUDIENCES)[number];
@@ -30,6 +35,8 @@ export const QUESTIONS = 10;
 export const MIN_QUESTIONS = 6;
 export const OPTIONS = 4;
 export const REVEAL_MS = 4_000;
+/** A GCSE answer comes with working or a mark-scheme reason: long enough to read it aloud. */
+export const GCSE_REVEAL_MS = 9_000;
 /** After the clock, how long an answer already in flight may still land. */
 export const GRACE_MS = 750;
 export const TOPIC_MAX = 60;
@@ -43,6 +50,8 @@ export interface Question {
   options: string[];
   answerIndex: number;
   explain: string | null;
+  /** The spec heading a GCSE question tests — what the end-of-game recap groups by. */
+  topic: string | null;
 }
 
 export interface Pick {
@@ -65,6 +74,12 @@ export interface Room {
   game: 'quiz-night';
   difficulty: Difficulty;
   audience: Audience;
+  mode: Mode;
+  /** GCSE only: a `gcse.ts` subject id and the exam board; null in a general quiz. */
+  subject: string | null;
+  board: Board | null;
+  /** How long each question stays open: by difficulty, or by subject and grade band. */
+  timeMs: number;
   /** What the host asked for; null = jkai picks. */
   topic: string | null;
   /** The topic jkai actually wrote about — the same as `topic` unless it picked. */
@@ -105,8 +120,23 @@ export function player(id: string, name: string, status: PlayerStatus): Player {
 
 const AUDIENCE_LABEL: Record<Audience, string> = { kids: 'for kids', family: 'for the family', adults: 'for adults' };
 
-/** "The Solar System · for kids" — what an invite banner says the quiz is. */
+/** The room's GCSE subject, or null in a general quiz. */
+export function subjectOf(room: { mode: Mode; subject: string | null }): Subject | null {
+  return room.mode === 'gcse' ? subjectFor(room.subject) : null;
+}
+
+/** The block-list stems a room's subject lifts — none outside GCSE. */
+export function allowsOf(room: { mode: Mode; subject: string | null }): string[] {
+  return subjectOf(room)?.allows ?? [];
+}
+
+/**
+ * "The Solar System · for kids", or "GCSE Biology · AQA · grades 4–5" (with
+ * " — Ecology" when a topic was asked for) — what an invite banner says.
+ */
 export function about(room: Room): string {
+  const subject = subjectOf(room);
+  if (subject) return `${gcseAbout(subject, room.board ?? 'any', room.difficulty)}${room.topic ? ` — ${room.topic}` : ''}`;
   return `${room.title ?? 'jkai picks the topic'} · ${AUDIENCE_LABEL[room.audience]}`;
 }
 
@@ -130,16 +160,26 @@ export function createRoom(input: {
 }): Room {
   const invited = input.invite.filter((p, i, all) => p.id !== input.host.id && all.findIndex((q) => q.id === p.id) === i);
   if (invited.length > MAX_PLAYERS - 1) throw new GameError(400, `Up to ${MAX_PLAYERS} players.`);
-  const audience = isAudience(input.options?.audience) ? input.options.audience : 'family';
+  const mode: Mode = input.options?.mode === 'gcse' ? 'gcse' : 'general';
+  const subject = mode === 'gcse' ? subjectFor(input.options?.subject) : null;
+  if (mode === 'gcse' && !subject) throw new GameError(400, 'Pick a GCSE subject.');
+  const board: Board | null = subject ? (isBoard(input.options?.board) ? input.options.board : 'any') : null;
+  // A GCSE quiz is pitched at the exam, not at the youngest player: the
+  // children's layer of the block list would strip History and Literature bare.
+  const audience = subject ? 'family' : isAudience(input.options?.audience) ? input.options.audience : 'family';
   const topic = cleanTopic(input.options?.topic);
-  if (topic && !isClean(topic, audience)) throw new GameError(400, 'Pick a different topic.');
+  if (topic && !isClean(topic, audience, subject?.allows)) throw new GameError(400, 'Pick a different topic.');
   return {
     id: input.id,
     game: 'quiz-night',
     difficulty: input.difficulty,
     audience,
+    mode,
+    subject: subject?.id ?? null,
+    board,
+    timeMs: subject ? gcseTimeMs(subject, input.difficulty) : TIME_MS[input.difficulty],
     topic,
-    title: topic,
+    title: subject ? `GCSE ${subject.label}` : topic,
     hostId: input.host.id,
     phase: 'lobby',
     prep: 'writing',
@@ -246,7 +286,7 @@ export function answer(room: Room, playerId: string, input: { question: number; 
   }
   if (p.picks.some((x) => x.question === room.index)) return;
   const q = room.questions[room.index];
-  const timeMs = TIME_MS[room.difficulty];
+  const timeMs = room.timeMs;
   const ms = Math.max(0, Math.min(timeMs, now - (room.questionStartsAt ?? now)));
   const pts = input.choice === q.answerIndex ? points(ms, timeMs) : 0;
   // Scored at the reveal, not now: a score that jumped the moment Mum answered
@@ -265,7 +305,7 @@ function reveal(room: Room, now: number): void {
     for (const x of p.picks) if (x.question === room.index) p.score += x.points;
   }
   room.phase = 'reveal';
-  room.phaseEndsAt = now + REVEAL_MS;
+  room.phaseEndsAt = now + (room.mode === 'gcse' ? GCSE_REVEAL_MS : REVEAL_MS);
   room.updatedAt = now;
 }
 
@@ -273,7 +313,7 @@ function ask(room: Room, index: number, now: number): void {
   room.phase = 'question';
   room.index = index;
   room.questionStartsAt = now;
-  room.phaseEndsAt = now + TIME_MS[room.difficulty];
+  room.phaseEndsAt = now + room.timeMs;
   room.updatedAt = now;
 }
 
@@ -379,6 +419,26 @@ const wordRe = (words: string[]) => new RegExp(`\\b(${words.join('|')})\\b`, 'i'
 const RE_ALL = wordRe(BLOCKED_ALL);
 const RE_KIDS = wordRe(BLOCKED_KIDS);
 
+/**
+ * The general list minus the stems a GCSE subject has to teach (`gcse.ts`
+ * `allows`): Biology's sexual reproduction, History's Nazi Germany. Lifted per
+ * subject, never globally, and only from the general list — the children's
+ * layer is never in play for a GCSE quiz.
+ */
+const reAllWithout = (() => {
+  const cache = new Map<string, RegExp>();
+  return (allows: readonly string[]): RegExp => {
+    if (!allows.length) return RE_ALL;
+    const key = allows.join('|');
+    let re = cache.get(key);
+    if (!re) {
+      re = wordRe(BLOCKED_ALL.filter((w) => !allows.includes(w)));
+      cache.set(key, re);
+    }
+    return re;
+  };
+})();
+
 /** Undo the dodges a block list is usually beaten with: f*ck, s3x, sh!t. */
 function unmask(text: string): string {
   return text
@@ -386,16 +446,24 @@ function unmask(text: string): string {
     .replace(/[*!@$0134]/g, (c) => ({ '*': 'u', '!': 'i', '@': 'a', $: 's', '0': 'o', '1': 'i', '3': 'e', '4': 'a' })[c] ?? c);
 }
 
-export function isClean(text: string, audience: Audience = 'family'): boolean {
+export function isClean(text: string, audience: Audience = 'family', allows: readonly string[] = []): boolean {
   const forms = [text, unmask(text), unmask(text).replace(/u/g, 'i')];
-  return forms.every((t) => !RE_ALL.test(t) && (audience !== 'kids' || !RE_KIDS.test(t)));
+  const all = reAllWithout(allows);
+  return forms.every((t) => !all.test(t) && (audience !== 'kids' || !RE_KIDS.test(t)));
+}
+
+/** A prompt reduced to its words, so a reworded repeat is still a repeat. */
+export function promptKey(prompt: string): string {
+  return prompt.toLowerCase().replace(/\W+/g, ' ').trim();
 }
 
 const QuestionSchema = z.object({
   prompt: z.string().trim().min(8).max(220),
   options: z.array(z.string().trim().min(1).max(80)).length(OPTIONS),
   answerIndex: z.number().int().min(0).max(OPTIONS - 1),
-  explain: z.string().trim().max(240).nullish(),
+  // Room for a line of working or a mark-scheme reason on a GCSE question.
+  explain: z.string().trim().max(320).nullish(),
+  topic: z.string().trim().max(TOPIC_MAX).nullish(),
 });
 
 const BatchSchema = z.object({
@@ -405,15 +473,20 @@ const BatchSchema = z.object({
 
 /**
  * The model's JSON, reduced to questions a room can use: well-formed, four
- * distinct options, clean, no repeats — then the options SHUFFLED, so the
- * right answer is not wherever the model habitually puts it. Returns null if
- * fewer than MIN_QUESTIONS survive.
+ * distinct options, clean, no repeats (within the batch, or of a question this
+ * host has played recently — `avoid`, by `promptKey`) — then the options
+ * SHUFFLED, so the right answer is not wherever the model habitually puts it.
+ * Returns null if fewer than MIN_QUESTIONS survive. `limit` lets the writer
+ * keep spares for the checker to drop.
  */
 export function validateQuestions(
   raw: unknown,
   rng: Rng,
   audience: Audience = 'family',
+  opts: { allows?: readonly string[]; avoid?: ReadonlySet<string>; limit?: number } = {},
 ): { title: string | null; questions: Question[]; dropped: number } | null {
+  const allows = opts.allows ?? [];
+  const limit = opts.limit ?? QUESTIONS;
   const batch = BatchSchema.safeParse(raw);
   if (!batch.success) return null;
   const seen = new Set<string>();
@@ -427,10 +500,11 @@ export function validateQuestions(
     }
     const { prompt, options, answerIndex } = q.data;
     const explain = q.data.explain?.trim() || null;
-    const key = prompt.toLowerCase().replace(/\W+/g, ' ').trim();
+    const topic = q.data.topic?.trim() || null;
+    const key = promptKey(prompt);
     const distinct = new Set(options.map((o) => o.toLowerCase())).size === OPTIONS;
-    const clean = [prompt, ...options, explain ?? ''].every((t) => isClean(t, audience));
-    if (!distinct || !clean || seen.has(key)) {
+    const clean = [prompt, ...options, explain ?? '', topic ?? ''].every((t) => isClean(t, audience, allows));
+    if (!distinct || !clean || seen.has(key) || opts.avoid?.has(key)) {
       dropped++;
       continue;
     }
@@ -440,12 +514,12 @@ export function validateQuestions(
       const j = Math.floor(rng() * (i + 1));
       [order[i], order[j]] = [order[j], order[i]];
     }
-    out.push({ prompt, options: order.map((i) => options[i]), answerIndex: order.indexOf(answerIndex), explain });
-    if (out.length === QUESTIONS) break;
+    out.push({ prompt, options: order.map((i) => options[i]), answerIndex: order.indexOf(answerIndex), explain, topic });
+    if (out.length === limit) break;
   }
   if (out.length < MIN_QUESTIONS) return null;
   const title = batch.data.title?.trim() || null;
-  return { title: title && isClean(title, audience) ? title : null, questions: out, dropped };
+  return { title: title && isClean(title, audience, allows) ? title : null, questions: out, dropped };
 }
 
 // ── What a phone sees ──────────────────────────────────────────────────────
@@ -455,11 +529,24 @@ export function toWire(room: Room, meId: string, now: number) {
   const table = finished ? standings(room) : null;
   const q = room.index >= 0 ? room.questions[room.index] : undefined;
   const open = room.phase === 'question';
+  const subject = subjectOf(room);
   return {
     id: room.id,
     game: room.game,
     difficulty: room.difficulty,
     audience: room.audience,
+    mode: room.mode,
+    // GCSE: what the lobby and the question header say. Null in a general quiz.
+    gcse: subject
+      ? {
+          subject: subject.id,
+          subjectLabel: subject.label,
+          board: room.board ?? 'any',
+          boardLabel: room.board && room.board !== 'any' ? BOARD_LABEL[room.board] : null,
+          band: BAND[room.difficulty].label,
+          tier: subject.tiered ? (room.difficulty === 'easy' ? 'Foundation' : room.difficulty === 'hard' ? 'Higher' : 'Foundation and Higher') : null,
+        }
+      : null,
     topic: room.topic,
     title: room.title,
     phase: room.phase,
@@ -468,7 +555,7 @@ export function toWire(room: Room, meId: string, now: number) {
     hostId: room.hostId,
     meId,
     questionCount: room.questions.length,
-    timeMs: TIME_MS[room.difficulty],
+    timeMs: room.timeMs,
     players: room.players.map((p) => ({
       id: p.id,
       name: p.name,
@@ -488,6 +575,8 @@ export function toWire(room: Room, meId: string, now: number) {
             answeredIds: room.players.filter((p) => p.picks.some((x) => x.question === room.index)).map((p) => p.id),
             answerIndex: open ? null : q.answerIndex,
             explain: open ? null : q.explain,
+            // The spec heading is the reveal's, not the question's: it can give the answer away.
+            topic: open ? null : q.topic,
             picks: open
               ? []
               : room.players.flatMap((p) =>
@@ -500,8 +589,30 @@ export function toWire(room: Room, meId: string, now: number) {
         : null,
     standings: table,
     winnerIds: table ? winners(table) : [],
+    review: finished ? review(room, meId) : null,
     serverNow: now,
   };
+}
+
+/**
+ * Every question again once the game is over — the revision half of a GCSE
+ * quiz, and the "wait, what was that one?" of any other: the right answer, why,
+ * what I picked, and how many of the table got it.
+ */
+export function review(room: Room, meId: string) {
+  const me = room.players.find((p) => p.id === meId);
+  const playing = room.players.filter((p) => p.status === 'joined' || p.picks.length > 0);
+  return room.questions.map((q, index) => ({
+    index,
+    prompt: q.prompt,
+    options: q.options,
+    answerIndex: q.answerIndex,
+    explain: q.explain,
+    topic: q.topic,
+    myChoice: me?.picks.find((x) => x.question === index)?.choice ?? null,
+    rightCount: playing.filter((p) => p.picks.some((x) => x.question === index && x.points > 0)).length,
+    playerCount: playing.length,
+  }));
 }
 
 export type WireRoom = ReturnType<typeof toWire>;

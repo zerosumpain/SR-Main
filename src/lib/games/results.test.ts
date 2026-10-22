@@ -13,6 +13,7 @@ vi.mock('./quiz-night.server', () => ({
           options: ['a', 'b', 'c', 'd'],
           answerIndex: 1,
           explain: null,
+          topic: null,
         })),
       },
       room.createdAt,
