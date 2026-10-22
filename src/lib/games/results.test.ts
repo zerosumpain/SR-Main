@@ -46,7 +46,10 @@ async function finished(game: GameId, options: Record<string, unknown> = {}): Pr
 }
 
 describe('recording a finished round, in every game in the catalogue', () => {
-  it.each(GAME_IDS.map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
+  // Homestead needs three at the table and a game nobody plays is abandoned
+  // (nothing recorded): its own suite records a played game.
+  const twoPlayerClockGames = GAME_IDS.filter((g) => g !== 'homestead');
+  it.each(twoPlayerClockGames.map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
     const rules = GAMES[game];
     const { room, now } = await finished(game);
     expect(room.phase).toBe('finished');

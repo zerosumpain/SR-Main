@@ -113,6 +113,9 @@ export async function startGame(
     dice: body.dice,
     turnsEach: body.turnsEach,
     course: body.course,
+    pace: body.pace,
+    deadlineHours: body.deadlineHours,
+    island: body.island,
   };
   const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
   // Not awaited: the host's screen should not wait on Apple. An invite whose

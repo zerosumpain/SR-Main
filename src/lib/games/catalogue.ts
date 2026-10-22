@@ -17,6 +17,7 @@ import * as liarsDice from './liars-dice';
 import * as drawGuess from './draw-guess';
 import * as marbleRace from './marble-race';
 import * as chess from './chess';
+import * as homestead from './homestead';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -33,6 +34,7 @@ export const GAME_IDS = [
   'draw-guess',
   'marble-race',
   'chess',
+  'homestead',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -49,7 +51,13 @@ export interface RoomBase {
   phase: string;
   players: { id: string; name: string; status: PlayerStatus }[];
   phaseEndsAt: number | null;
+  /** Set by a game that supports pace (from `options.pace`); absent = 'live'. */
+  pace?: Pace;
 }
+
+/** How fast a room's turns go: 'live' (everyone at the table, short timers) or 'async' (a move a day). */
+export type Pace = 'live' | 'async';
+export const PACES = ['live', 'async'] as const;
 
 type Move = (room: RoomBase, playerId: string, body: Record<string, unknown>, now: number) => void;
 
@@ -101,6 +109,30 @@ export interface GameRules {
    * Null: this game has no score, and its board ranks by wins.
    */
   resultScore?(standing: { id: string; [key: string]: unknown }): number | null;
+  /**
+   * Rooms of this game are written to `game_rooms` and survive a restart
+   * (spec: 2026-10-22-family-games-durable-rooms.md). `schema` is bumped when
+   * the room's stored shape changes; a row written under an older schema is
+   * passed to `revive` (null = cannot: the room is closed and logged). The
+   * room MUST be JSON-safe: plain objects, arrays, strings, finite numbers,
+   * booleans, null — no Map, Set, Date, functions or class instances.
+   */
+  durable?: { schema: number; revive?(state: Record<string, unknown>, fromSchema: number): RoomBase | null };
+  /** The paces a host may pick; absent = ['live']. */
+  paces?: readonly Pace[];
+  /**
+   * Who the room is waiting on right now, and a key that changes whenever a
+   * new decision starts (turn + step + who). Null when nobody (lobby,
+   * countdown, finished). Drives the "your move" push and the lobby's
+   * `myTurn`; `line` is the push body's first sentence ("Sam rolled a 9.").
+   */
+  waitingOn?(room: RoomBase): { ids: string[]; key: string; line?: string } | null;
+  /**
+   * A live-pace room read back after a restart: restart the running
+   * decision's timer from `now` (a deploy is a pause, never a timeout).
+   * `pausedMs` is how long it was down. Not called for async rooms.
+   */
+  resume?(room: RoomBase, now: number, pausedMs: number): void;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -217,6 +249,29 @@ export const GAMES: Record<GameId, GameRules> = {
         chess.move(room as chess.Room, playerId, { from: body.from, to: body.to, promotion: body.promotion }, now),
       resign: (room, playerId, _body, now) => chess.resign(room as chess.Room, playerId, now),
       draw: (room, playerId, _body, now) => chess.draw(room as chess.Room, playerId, now),
+    },
+  },
+  homestead: {
+    // Exports durable = { schema: 1 }, paces = ['live', 'async'], waitingOn and resume.
+    ...homestead,
+    moves: {
+      // Raw on purpose: each types its own fields (400 with a sentence for a bad spot or hand).
+      roll: (room, p, _b, now) => homestead.roll(room as homestead.Room, p, now),
+      build: (room, p, b, now) => homestead.build(room as homestead.Room, p, { piece: b.piece, at: b.at }, now),
+      buy: (room, p, _b, now) => homestead.buy(room as homestead.Room, p, now),
+      play: (room, p, b, now) =>
+        homestead.play(room as homestead.Room, p, { card: b.card, take: b.take, resource: b.resource }, now),
+      fox: (room, p, b, now) => homestead.fox(room as homestead.Room, p, { hex: b.hex, victim: b.victim }, now),
+      discard: (room, p, b, now) => homestead.discard(room as homestead.Room, p, { cards: b.cards }, now),
+      bank: (room, p, b, now) => homestead.bank(room as homestead.Room, p, { give: b.give, get: b.get }, now),
+      offer: (room, p, b, now) => homestead.offer(room as homestead.Room, p, { give: b.give, want: b.want, to: b.to }, now),
+      counter: (room, p, b, now) =>
+        homestead.counter(room as homestead.Room, p, { offerId: b.offerId, give: b.give, want: b.want }, now),
+      accept: (room, p, b, now) => homestead.accept(room as homestead.Room, p, { offerId: b.offerId }, now),
+      refuse: (room, p, b, now) => homestead.refuse(room as homestead.Room, p, { offerId: b.offerId }, now),
+      cancel: (room, p, b, now) => homestead.cancel(room as homestead.Room, p, { offerId: b.offerId }, now),
+      skip: (room, p, _b, now) => homestead.skip(room as homestead.Room, p, now),
+      end: (room, p, _b, now) => homestead.end(room as homestead.Room, p, now),
     },
   },
 };
