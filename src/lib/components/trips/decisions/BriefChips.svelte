@@ -137,33 +137,50 @@
     f.people = [...f.people, p];
     if (!p.name) void tick().then(() => (panel?.querySelector(`#bt-name-${f.people.length - 1}`) as HTMLInputElement | null)?.focus());
   }
+  // What the owner's notes say they like or cannot do, folded behind one chip
+  // so the trip's own facts lead the row.
+  const isNote = (i: BriefItem) => i.kind === 'preference' || i.kind === 'constraint';
+  const facts = $derived(brief.items.filter((i) => !isNote(i)));
+  const notes = $derived(brief.items.filter(isNote));
+  let notesOpen = $state(false);
   const unlisted = $derived(family.filter((m) => !f.people.some((p) => p.personId === m.id || p.name.trim().toLowerCase() === m.name.toLowerCase())));
 </script>
 
+{#snippet chip(item: BriefItem)}
+  {@const v = briefChip(item)}
+  <li class="bc-item" class:assumed={v.assumed}>
+    <button
+      id="bc-{cssId(item.key)}"
+      class="bc-chip dx-chip-btn"
+      type="button"
+      aria-expanded={openKey === item.key}
+      aria-controls="bc-panel"
+      onclick={() => show(item)}
+    >
+      <span class="bc-label">{item.label}</span>
+      <span class="bc-origin">{v.originLabel}</span>
+    </button>
+    {#if v.assumed}
+      <span class="bc-quick">
+        <button class="dx-link" type="button" disabled={!!desk.busy} onclick={() => confirm(item)} aria-label="Right: {item.label}">Right</button>
+        <button class="dx-link" type="button" onclick={() => show(item, true)} aria-label="Change: {item.label}">Change</button>
+      </span>
+    {/if}
+  </li>
+{/snippet}
+
 <div class="bc">
   <ul class="bc-row" role="list" aria-label="What the planner knows">
-    {#each brief.items as item (item.key)}
-      {@const v = briefChip(item)}
-      <li class="bc-item" class:assumed={v.assumed}>
-        <button
-          id="bc-{cssId(item.key)}"
-          class="bc-chip dx-chip-btn"
-          type="button"
-          aria-expanded={openKey === item.key}
-          aria-controls="bc-panel"
-          onclick={() => show(item)}
-        >
-          <span class="bc-label">{item.label}</span>
-          <span class="bc-origin">{v.originLabel}</span>
+    {#each facts as item (item.key)}{@render chip(item)}{/each}
+    {#if notes.length}
+      <li class="bc-item">
+        <button class="bc-chip dx-chip-btn" type="button" aria-expanded={notesOpen} onclick={() => (notesOpen = !notesOpen)}>
+          <span class="bc-label">From your notes</span>
+          <span class="bc-origin">{notesOpen ? 'Hide' : notes.length}</span>
         </button>
-        {#if v.assumed}
-          <span class="bc-quick">
-            <button class="dx-link" type="button" disabled={!!desk.busy} onclick={() => confirm(item)} aria-label="Right: {item.label}">Right</button>
-            <button class="dx-link" type="button" onclick={() => show(item, true)} aria-label="Change: {item.label}">Change</button>
-          </span>
-        {/if}
       </li>
-    {/each}
+      {#if notesOpen}{#each notes as item (item.key)}{@render chip(item)}{/each}{/if}
+    {/if}
   </ul>
   {#if brief.missing.length}
     <p class="dx-aside bc-missing">Still to find out, assumed meanwhile: {brief.missing.join('; ')}.</p>

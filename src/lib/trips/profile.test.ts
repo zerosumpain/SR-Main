@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildProfile, mergeProfile, ownerMemoriesOnly, profileText, type MemoryRow } from './profile';
+import { buildProfile, mergeProfile, ownerMemoriesOnly, profileText, relevantProfile, type MemoryRow } from './profile';
 
 const mem = (id: string, category: string, content: string, over: Partial<MemoryRow> = {}): MemoryRow => ({ id, category, content, sourceConversationId: null, provenance: { scope: 'personal' }, ...over });
 
@@ -108,5 +108,49 @@ describe('v5: only what matters for a trip, and ages', () => {
     const set = mergeProfile(base, { travellers: [{ name: 'Sam', relation: 'family', notes: [], age: 9 }] }, 'n');
     expect(set.travellers[0]).toMatchObject({ age: 9, personId: 'f_sam' });
     expect(travellersOnly(base)).toEqual({ travellers: [{ name: 'Sam', relation: 'family', notes: [], age: null, personId: 'f_sam' }], preferences: [], constraints: [], history: [], gatheredAt: 'n' });
+  });
+});
+
+describe('22 Oct: the owner’s name is not a reason, and health is only a limit', () => {
+  const roster = [
+    { name: 'John Kelly', email: 'owner@example.test', parent: true },
+    { name: 'Katie', email: 'k@example.test', parent: true },
+  ];
+  it('leaves out conditions, fitness readings and work preferences that merely name the owner', () => {
+    const p = buildProfile({
+      memories: [
+        mem('m1', 'health', 'John occasionally experiences tinnitus (ringing in the ears), with occasional intense flare-ups.'),
+        mem('m2', 'health', 'John has asthma'),
+        mem('m3', 'health', "John's Whoop readiness before the 10k: recovery 61%, HRV 46 ms, sleep 8.2 hrs"),
+        mem('m4', 'preferences', 'John is interested in evaluating Google Gemini 3.8 Flash'),
+        mem('m5', 'preferences', 'For family travel in Rome, John wants family-friendly restaurants'),
+        mem('m6', 'health', 'Katie is coeliac'),
+        mem('m7', 'people', 'Katie loves gelato'),
+      ],
+      knowledge: [],
+      roster,
+      ownerEmail: 'owner@example.test',
+      now: '2026-10-22T00:00:00Z',
+    });
+    expect(p.constraints.map((c) => c.ref)).toEqual(['m6']);
+    expect(p.preferences.map((c) => c.ref)).toEqual(['m5', 'm7']);
+  });
+
+  it('cleans a profile stored before the rule: memory notes off the trip go, conversation ones stay', () => {
+    const stored = {
+      travellers: [],
+      preferences: [
+        { text: 'John wants Home Assistant expanded with useful sensors', source: 'memory' as const, ref: 'a' },
+        { text: 'Prioritise a guided tour of the Vatican Museums on the trip', source: 'memory' as const, ref: 'b' },
+        { text: 'Anything Katie says goes', source: 'conversation' as const, ref: null },
+      ],
+      constraints: [{ text: 'John has asthma', source: 'memory' as const, ref: 'c' }],
+      history: [],
+      gatheredAt: 'n',
+    };
+    const p = relevantProfile(stored)!;
+    expect(p.preferences.map((x) => x.ref)).toEqual(['b', null]);
+    expect(p.constraints).toEqual([]);
+    expect(relevantProfile(null)).toBeNull();
   });
 });

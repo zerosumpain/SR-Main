@@ -18,10 +18,10 @@ import { IDEAS_BUDGET } from './agent';
 import { agentTurn } from './agent.server';
 import { dayLabel } from './changes';
 import { logEdit } from './converse.server';
-import { computeGap, ideaDraft, IDEAS_SYSTEM, ideasPrompt, readIdeas, verifyIdea, type Gap, type IdeaDraft, type Verdict } from './ideas';
+import { computeGap, ideaDraft, ideaStartMin, IDEAS_SYSTEM, ideasPrompt, noGapReason, readIdeas, verifyIdea, type Gap, type IdeaDraft, type Verdict } from './ideas';
 import { jsonCall } from './llm.server';
 import { DAY_STAGE_LABEL, type DayStage, type ResearchStep, type Stay, type Wish, type WishDraft } from './model';
-import { dietaryHints, elementsFromNominatim, gapCentre, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM, nominatimTerms, viewboxAround, type NearbyCandidate } from './nearby-ideas';
+import { dietaryHints, elementsFromNominatim, gapCentre, nearWay, nearbyCandidates, nearbyIdeasQuery, nearbyRadiusM, nominatimTerms, viewboxAround, type NearbyCandidate } from './nearby-ideas';
 import { solverInput } from './plan.server';
 import { profileText, travellersOnly } from './profile';
 import { emptyFacts, parseLooseJson, withinReach } from './research';
@@ -71,10 +71,15 @@ export async function findIdeas(
 ): Promise<IdeasResult> {
   const latest = await latestPlan(trip.id);
   if (!latest) return { gap: null, ideas: [], rejected: [], note: 'There is no plan yet to find a gap in.', research: [] };
-  const gap = computeGap(latest.plan, ask.date, ask.stage, { afterStopId: ask.afterStopId, beforeStopId: ask.beforeStopId });
-  if (!gap) return { gap: null, ideas: [], rejected: [], note: 'That day is not in the plan.', research: [] };
-  const day = latest.plan.days.find((d) => d.date === ask.date)!;
+  const between = { afterStopId: ask.afterStopId, beforeStopId: ask.beforeStopId };
   const { input, state } = await solverInput(trip, latest, { reuseMatrix: true });
+  const baseline = solveTrip(input);
+  // A plan stored before the trip had a stay (or the v8 centre stand-in) has
+  // empty days: find the slot in the trip as it solves now.
+  const plan = latest.plan.days.find((d) => d.date === ask.date)?.stops.length ? latest.plan : baseline;
+  const gap = computeGap(plan, ask.date, ask.stage, between);
+  if (!gap) return { gap: null, ideas: [], rejected: [], note: noGapReason(plan, ask.date, ask.stage), research: [] };
+  const day = plan.days.find((d) => d.date === ask.date)!;
   const transport = await listTransport(trip.id);
   const titles = new Map(state.wishes.map((w) => [w.id, w.title]));
   const slot = `${dayLabel(gap.date)} ${DAY_STAGE_LABEL[gap.stage].toLowerCase()} (${hhmm(gap.before.min)}–${hhmm(gap.after.min)}, ${gap.freeMin} min between ${gap.before.title} and ${gap.after.title})`;
@@ -83,8 +88,8 @@ export async function findIdeas(
     gap,
     day,
     destination: trip.destination,
-    otherDays: latest.plan.days.filter((d) => d.date !== gap.date).map((d) => ({ date: d.date, titles: d.stops.filter((s) => s.kind === 'wish').map((s) => s.title) })),
-    dropped: latest.plan.dropped.map((d) => titles.get(d.wishId) ?? d.wishId),
+    otherDays: plan.days.filter((d) => d.date !== gap.date).map((d) => ({ date: d.date, titles: d.stops.filter((s) => s.kind === 'wish').map((s) => s.title) })),
+    dropped: plan.dropped.map((d) => titles.get(d.wishId) ?? d.wishId),
     // Only the owner's own asks see the owner's memory; anyone else gets the travellers (v5).
     profileText: profileText(deps.asOwner === false ? travellersOnly(trip.profile) : trip.profile),
     guideText: trip.guide ? [trip.guide.gettingAround, trip.guide.transitTickets].filter(Boolean).join(' ') : null,
@@ -94,7 +99,6 @@ export async function findIdeas(
   const planned = await plannerDrafts(trip, state, prompt, deps);
   const research = planned.research;
   let note = planned.note;
-  const baseline = solveTrip(input);
   const ideas: Idea[] = [];
   const rejected: IdeasResult['rejected'] = [];
   // The candidate's own OSM hours (as ./meals reads them), so an idea that is
@@ -108,7 +112,7 @@ export async function findIdeas(
     durationSec: durationMin * 60,
     partOfDay,
     fixedDate: gap.date,
-    fixedStartMin: null,
+    fixedStartMin: ideaStartMin(gap),
     locked: false,
     suggested: false,
     skipped: false,
@@ -155,8 +159,8 @@ export async function findIdeas(
   const fitting = ideas.filter((x) => x.verdict.fits);
   if (fitting.some((x) => x.source === 'nearby') && !fitting.some((x) => x.source === 'planner')) {
     note = planned.failure
-      ? `The planner ${FAILURE_WORDS[planned.failure]}, so these are places near the way from ${gap.before.title} to ${gap.after.title}, checked against your day.`
-      : `These are places near the way from ${gap.before.title} to ${gap.after.title}, checked against your day.`;
+      ? `The planner ${FAILURE_WORDS[planned.failure]}, so these are places ${nearWay(gap)}, checked against your day.`
+      : `These are places ${nearWay(gap)}, checked against your day.`;
   } else if (!ideas.length) {
     note = planned.failure
       ? `The planner ${FAILURE_WORDS[planned.failure]} and nothing nearby fits ${gap.freeMin} minutes between ${gap.before.title} and ${gap.after.title}${nearbyNote ? ` (${nearbyNote})` : ''} — try again shortly.`

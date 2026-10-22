@@ -37,6 +37,7 @@ import type {
 } from './model';
 import type { TripSummary } from './bundle';
 import type { BookingPatch, StayInput, TripInput, WishInput, WishPatch } from './intake';
+import { relevantProfile } from './profile';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isUuid = (v: string | null | undefined): v is string => !!v && UUID.test(v);
@@ -81,7 +82,7 @@ export function toTrip(r: TripRow): TripRecord {
     dayLoads: (r.dayLoads as Trip['dayLoads']) ?? {},
     research: (r.research as ResearchState | null) ?? null,
     guide: (r.guide as unknown as TripGuide | null) ?? null,
-    profile: (r.profile as unknown as TravellerProfile | null) ?? null,
+    profile: relevantProfile((r.profile as unknown as TravellerProfile | null) ?? null),
     updatedAt: r.updatedAt.toISOString(),
   };
 }

@@ -81,14 +81,33 @@ export function ageFrom(name: string, texts: string[], today: string): number | 
 }
 
 /** Words that make a memory a hard constraint rather than a preference. */
-const CONSTRAINT = /\b(vegetarian|vegan|pescatarian|halal|kosher|gluten|coeliac|celiac|allerg|intoleran|diabet|wheelchair|mobility|stairs|knee|hip|back pain|asthma|pregnan|can't walk|cannot walk|no alcohol|teetotal)/i;
+const CONSTRAINT = /\b(vegetarian|vegan|pescatarian|halal|kosher|gluten|coeliac|celiac|allerg|intoleran|diabet|wheelchair|mobility|stairs|knee|hip|back pain|pregnan|can't walk|cannot walk|no alcohol|teetotal)/i;
 /**
  * What makes a memory matter for planning a trip (v5: the owner does not want
  * every memory, only the trip-relevant ones): travel itself, food and diet,
  * mobility and health limits, pace and rest, where to stay, and the family —
  * who they are and how old. Anything else (devices, work, gadgets) is left out.
  */
-const TRAVEL = /\b(travel\w*|trips?|holidays?|vacation|flights?|fly|flying|airports?|hotels?|apartment|accommodation|walk\w*|hik\w*|taxis?|trains?|bus(es)?|trams?|metro|drive|driving|food|eat\w*|lunch|dinner|breakfast|restaurants?|caf[eé]s?|museums?|galler\w*|churches|beach\w*|early|lie[- ]in|late nights?|mornings?|naps?|sleep\w*|coffee|wine|beer|queues?|crowds?|heat|hot weather|cold|rain|budget|cheap|luxury|pace|rest|kids?|child\w*|partner|wife|husband|sons?|daughters?|mum|dad|vegetarian|vegan|pescatarian|allerg\w*|gluten|coeliac|mobility|wheelchair|stairs|pushchair|buggy|aged? \\d|years? old|born)\b/i;
+const TRAVEL = /\b(travel\w*|trips?|holidays?|vacation|flights?|fly|flying|airports?|hotels?|apartment|accommodation|walk\w*|hik\w*|taxis?|trains?|bus(es)?|trams?|metro|drive|driving|food|eat\w*|lunch|dinner|breakfast|restaurants?|caf[eé]s?|museums?|galler\w*|churches|beach\w*|early|lie[- ]in|late nights?|mornings?|naps?|coffee|wine|beer|queues?|crowds?|heat|hot weather|cold|rain|budget|cheap|luxury|pace|rest|kids?|child\w*|partner|wife|husband|sons?|daughters?|mum|dad|vegetarian|vegan|pescatarian|allerg\w*|gluten|coeliac|mobility|wheelchair|stairs|pushchair|buggy|aged? \\d|years? old|born)\b/i;
+
+/**
+ * Whether a memory-sourced note bears on a trip. The owner's own name is not
+ * a reason (every memory names him), and health is only a constraint when it
+ * limits what they can eat or do — not a condition (asthma, tinnitus) or a
+ * fitness reading.
+ */
+export const tripRelevant = (text: string): boolean => TRAVEL.test(text) || CONSTRAINT.test(text);
+
+/**
+ * A stored profile with the memory notes that do not bear on the trip left
+ * out — profiles gathered before the rule tightened (22 Oct 2026) carried
+ * whatever mentioned the owner. What was said in the trip conversation stays.
+ */
+export function relevantProfile(profile: TravellerProfile | null): TravellerProfile | null {
+  if (!profile) return null;
+  const keep = (p: TravellerProfile['preferences'][number]) => p.source !== 'memory' || tripRelevant(p.text);
+  return { ...profile, preferences: (profile.preferences ?? []).filter(keep), constraints: (profile.constraints ?? []).filter(keep) };
+}
 
 /** Drop memories from a member's conversation (theirs, not the owner's) and non-personal scopes. */
 export function ownerMemoriesOnly<T extends MemoryRow>(rows: T[], memberConversationIds: Set<string>): T[] {
@@ -110,7 +129,11 @@ export function buildProfile(input: {
   previous?: TravellerProfile | null;
 }): TravellerProfile {
   // The family matters: a memory about one of them (their age, what they like) is kept.
-  const firstNames = input.roster.map((r) => r.name.split(' ')[0]).filter((x) => x.length > 1);
+  const owner = input.ownerEmail.trim().toLowerCase();
+  const firstNames = input.roster
+    .filter((r) => r.email.trim().toLowerCase() !== owner)
+    .map((r) => r.name.split(' ')[0])
+    .filter((x) => x.length > 1);
   const mentionsFamily = (t: string) => firstNames.some((f) => new RegExp(`\\b${f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(t));
   const seen = new Set<string>();
   const once = (t: string) => {
@@ -130,9 +153,9 @@ export function buildProfile(input: {
   for (const m of input.memories) {
     const text = clip(m.content.trim(), 200);
     if (!text) continue;
-    const relevant = TRAVEL.test(text) || (m.category === 'health' && CONSTRAINT.test(text)) || mentionsFamily(text);
+    const relevant = m.category === 'health' ? CONSTRAINT.test(text) : TRAVEL.test(text) || CONSTRAINT.test(text) || mentionsFamily(text);
     if (!relevant || !once(text)) continue;
-    if (CONSTRAINT.test(text) || m.category === 'health') {
+    if (CONSTRAINT.test(text)) {
       if (constraints.length < 8) constraints.push({ text, source: 'memory', ref: m.id });
     } else if (m.category === 'places') {
       if (history.length < 6) history.push(text);
@@ -146,7 +169,6 @@ export function buildProfile(input: {
     if (once(text)) history.push(text);
   }
 
-  const owner = input.ownerEmail.trim().toLowerCase();
   const today = input.now.slice(0, 10);
   const texts = input.memories.map((m) => m.content);
   const ownerRow = input.roster.find((r) => r.email.trim().toLowerCase() === owner);

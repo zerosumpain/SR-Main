@@ -6,7 +6,9 @@
 // by a network factor for the route length, then timed per mode:
 //   walk    4.8 km/h
 //   cycle   15 km/h
-//   transit 15 min overhead (walk to the stop, waiting) + 18 km/h
+//   transit 15 min overhead (walk to the stop, waiting) + 18 km/h for the
+//           first 10 km, then 50 km/h — a hop that long is a train (an
+//           airport run took 111 min at city speed; the train is ~70)
 //   drive   20 km/h (city traffic and parking)
 //   taxi    the drive time + TAXI_PICKUP_SEC (never a matrix row of its own:
 //           see `taxiSec` / `modeSeconds` in matrix.ts)
@@ -19,6 +21,9 @@ export const ESTIMATE_FACTORS = {
   kmh: { walk: 4.8, cycle: 15, transit: 18, drive: 20, taxi: 20 } satisfies Record<TravelMode, number>,
   /** Fixed time added to every non-zero transit leg, seconds. */
   transitOverheadSec: 15 * 60,
+  /** Transit beyond this many route metres runs at `transitLongKmh`. */
+  transitCityM: 10_000,
+  transitLongKmh: 50,
 };
 
 const EARTH_RADIUS_M = 6371008.8;
@@ -36,7 +41,9 @@ export function haversineM(a: LatLng, b: LatLng): number {
 export function estimateLeg(a: LatLng, b: LatLng, mode: TravelMode): { seconds: number; metres: number } {
   const metres = Math.round(haversineM(a, b) * ESTIMATE_FACTORS.networkFactor);
   if (metres === 0) return { seconds: 0, metres: 0 };
-  const travel = metres / ((ESTIMATE_FACTORS.kmh[mode] * 1000) / 3600);
+  const speed = (kmh: number) => (kmh * 1000) / 3600;
+  const long = mode === 'transit' ? Math.max(0, metres - ESTIMATE_FACTORS.transitCityM) : 0;
+  const travel = (metres - long) / speed(ESTIMATE_FACTORS.kmh[mode]) + long / speed(ESTIMATE_FACTORS.transitLongKmh);
   const overhead =
     mode === 'transit' ? ESTIMATE_FACTORS.transitOverheadSec : mode === 'taxi' ? TAXI_PICKUP_SEC : 0;
   return { seconds: Math.round(travel + overhead), metres };

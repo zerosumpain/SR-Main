@@ -124,3 +124,29 @@ describe('arrival and departure days', () => {
     }
   });
 });
+
+describe('22 Oct: an early flight home', () => {
+  const input = romeTransportInput();
+  input.transport!.find((t) => t.id === 'back')!.departMin = 10 * 60 + 40;
+  input.bookings = input.bookings.filter((b) => b.date !== '2026-10-30');
+  const day = solveTrip(input).days.find((d) => d.date === '2026-10-30')!;
+  const flight = day.stops[day.stops.length - 1];
+
+  it('starts the morning in time to check out, collect the bags and reach the airport 2 h before', () => {
+    expect(flight.id).toBe('transport:back:depart');
+    expect(flight.arriveMin).toBeLessThanOrEqual(8 * 60 + 40);
+    expect(day.warnings.filter((w) => /later than/.test(w))).toEqual([]);
+    expect(day.stops.map((s) => s.id)).toEqual(['stay:2026-10-30:start', 'stay:2026-10-30:checkout', 'stay:2026-10-30:end', 'transport:back:depart']);
+    expect(overlaps(day)).toEqual([]);
+  });
+
+  it('leaves breakfast at the stay out when it would be before 07:30, and says so', () => {
+    expect(day.stops[0].arriveMin - 30).toBeLessThan(7 * 60 + 30);
+    expect(day.stops[0].warnings).toContain('Early start — breakfast on the way');
+  });
+
+  it('a later flight keeps the usual morning with breakfast', () => {
+    const late = solveTrip(romeTransportInput()).days.find((d) => d.date === '2026-10-30')!;
+    expect(late.stops.some((s) => s.id === 'meal:2026-10-30:breakfast')).toBe(true);
+  });
+});

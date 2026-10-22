@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { solveTrip } from '$lib/trips/solver';
-import { romeInput } from './solver/fixtures/rome';
-import { computeGap, ideaDraft, ideasPrompt, readIdeas, verifyIdea, withPoint } from './ideas';
+import { romeInput, romeTransportInput } from './solver/fixtures/rome';
+import { computeGap, ideaDraft, ideaStartMin, ideasPrompt, noGapReason, readIdeas, verifyIdea, withPoint } from './ideas';
 import type { Wish } from './model';
 import { emptyFacts } from './research';
 
@@ -42,6 +42,33 @@ describe('computeGap', () => {
     const g = computeGap(plan, '2026-10-27', 'morning', { afterStopId: 'pantheon', beforeStopId: 'spanish-steps' })!;
     expect(g).toMatchObject({ before: { title: 'Pantheon' }, after: { title: 'Spanish Steps' }, freeMin: 11 * 60 + 4 - (10 * 60 + 39) });
     expect(computeGap(plan, '2027-01-01', 'morning')).toBeNull();
+  });
+
+  it('a day with nothing planned ends at the stay after breakfast: later stages run out from the stay and back', () => {
+    const bare = { ...input, wishes: [], bookings: [] };
+    const free = solveTrip(bare);
+    const after = computeGap(free, '2026-10-28', 'afternoon')!;
+    expect(after).toMatchObject({ before: { stopId: 'stay:2026-10-28:end', min: 14 * 60 + 30 }, after: { stopId: 'stay:2026-10-28:end', min: 18 * 60 + 30 }, freeMin: 240, meal: null });
+    expect(computeGap(free, '2026-10-28', 'evening')).toMatchObject({ meal: 'dinner', freeMin: 180 });
+    // And the solver agrees: an idea pinned there lands in that stage.
+    const w: Wish = {
+      id: 'idea:0', title: 'Sant’Ignazio', place: { name: 'Sant’Ignazio', location: { lat: 41.8991, lng: 12.4797 }, osmId: null, address: null }, priority: 'nice', durationSec: 40 * 60,
+      partOfDay: 'afternoon', fixedDate: '2026-10-28', fixedStartMin: ideaStartMin(after), locked: false, suggested: false, skipped: false, facts: null, note: null, sortHint: 0,
+    };
+    expect(ideaStartMin(after)).toBe(14 * 60 + 45);
+    const v = verifyIdea(bare, w, after, free);
+    expect(v).toMatchObject({ fits: true, landedStage: 'afternoon', departMin: 14 * 60 + 45 + 40 });
+    // They leave the stay in time for it, not first thing to wait there.
+    expect(v.arriveMin).toBe(14 * 60 + 45);
+    // Between two different stops the solver times it, as before.
+    expect(ideaStartMin(computeGap(plan, '2026-10-28', 'afternoon')!)).toBeNull();
+  });
+
+  it('after the flight home there is no slot, and the reason says so', () => {
+    const home = solveTrip(romeTransportInput());
+    expect(computeGap(home, '2026-10-30', 'evening')).toBeNull();
+    expect(noGapReason(home, '2026-10-30', 'evening')).toMatch(/^You will be on your way by then \(/);
+    expect(noGapReason(home, '2027-01-01', 'evening')).toBe('That day is not in the plan.');
   });
 });
 
