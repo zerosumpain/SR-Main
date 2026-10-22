@@ -113,6 +113,8 @@ export function dayFrame(ctx: SolverContext, date: LocalDate, stay: Stay | null)
   if (leaves && stay) {
     frame.departure = departureFrame(ctx, leaves, stay);
     frame.dayEndMin = Math.min(frame.dayEndMin, frame.departure.leaveMin - STAY_HANDLING_MIN);
+    // An early flight or train: the morning starts in time to check out and collect the bags before leaving.
+    frame.dayStartMin = Math.min(frame.dayStartMin, frame.departure.leaveMin - STAY_HANDLING_MIN * (frame.departure.checkOut ? 2 : 1));
     frame.activeEndMin = Math.min(frame.activeEndMin ?? frame.dayEndMin, frame.dayEndMin);
   }
   return frame;

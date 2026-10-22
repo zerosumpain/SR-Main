@@ -21,6 +21,15 @@ describe('estimates', () => {
     expect(transit.seconds).toBe(Math.round(walk.metres / (18000 / 3600) + 900));
   });
 
+  it('a transit hop past 10 km is a train after the first 10 km: the airport run is about 70 min, not 111', () => {
+    const NAVONA = { lat: 41.8986, lng: 12.4731 };
+    const FIUMICINO = { lat: 41.8003, lng: 12.2389 };
+    const leg = estimateLeg(NAVONA, FIUMICINO, 'transit');
+    expect(leg.seconds).toBe(Math.round(10_000 / (18000 / 3600) + (leg.metres - 10_000) / (50000 / 3600) + 900));
+    expect(leg.seconds / 60).toBeGreaterThan(60);
+    expect(leg.seconds / 60).toBeLessThan(80);
+  });
+
   it('builds a full matrix, always with walk, marked estimated', () => {
     const m = estimateMatrix(
       [

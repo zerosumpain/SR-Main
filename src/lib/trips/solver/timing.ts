@@ -133,8 +133,11 @@ export function freshStart(frame: DayFrame, atMin = frame.dayStartMin, leaveEarl
   }
   // v4: breakfast at the stay just before setting off at `atMin`.
   const bf = Math.round(BREAKFAST.durationSec / 60);
-  const start = stayStartStop(frame, frame.stay ? atMin - bf : atMin);
+  // An early departure: no breakfast at the stay before its window opens — it is had on the way.
+  const skipBreakfast = !!frame.departure && atMin - bf < BREAKFAST.fromMin;
+  const start = stayStartStop(frame, frame.stay && !skipBreakfast ? atMin - bf : atMin);
   if (start && frame.stay) {
+    if (skipBreakfast) start.warnings.push('Early start — breakfast on the way');
     const breakfast: PlannedStop = {
       id: `meal:${frame.date}:breakfast`,
       kind: 'meal',
@@ -148,8 +151,8 @@ export function freshStart(frame: DayFrame, atMin = frame.dayStartMin, leaveEarl
       bookingId: null,
       warnings: breakfastWarnings(atMin - bf),
     };
-    const prefixStops: PlannedStop[] = [start, breakfast];
-    const prefixLegs: PlannedLeg[] = [legOf(start.id, breakfast.id, ZERO_LEG)];
+    const prefixStops: PlannedStop[] = skipBreakfast ? [start] : [start, breakfast];
+    const prefixLegs: PlannedLeg[] = skipBreakfast ? [] : [legOf(start.id, breakfast.id, ZERO_LEG)];
     if (frame.departure?.checkOut) {
       const by = frame.stay.checkOutMin as number;
       const checkOut: PlannedStop = {
@@ -165,7 +168,7 @@ export function freshStart(frame: DayFrame, atMin = frame.dayStartMin, leaveEarl
         bookingId: null,
         warnings: atMin + STAY_HANDLING_MIN > by ? [`Check-out is by ${fmtMin(by)}`] : [],
       };
-      prefixLegs.push(legOf(breakfast.id, checkOut.id, ZERO_LEG));
+      prefixLegs.push(legOf(prefixStops[prefixStops.length - 1].id, checkOut.id, ZERO_LEG));
       prefixStops.push(checkOut);
     }
     const last = prefixStops[prefixStops.length - 1];
