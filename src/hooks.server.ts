@@ -203,6 +203,15 @@ import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
 // in a non-terminal status before this existed, the oldest for four months. CI
 // deploys on every merge, so the exposure is continuous.
 import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
+// Durable family game rooms: wakes async games whose deadline passed, drops
+// idle ones from memory and deletes rows past retention. Inert until a game
+// declares `durable` (spec 2026-10-22-family-games-durable-rooms.md).
+// Imported only where it runs: the registry pulls in every game module.
+if (runsService('background')) {
+  void import('$lib/games/rooms.server')
+    .then((m) => m.startGameRoomSweep())
+    .catch((err) => console.error('[hooks.server] game room sweep:', err));
+}
 if (runsService('background')) {
   startDatastoreReaper();
   startSelfImprovementSeeds();

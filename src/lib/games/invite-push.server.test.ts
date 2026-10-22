@@ -11,7 +11,7 @@ vi.mock('./players.server', () => ({
 vi.mock('$lib/server/push-devices', () => ({ pushToEmails: vi.fn() }));
 
 const { _resetRooms, act, createGame, inviteTo, invitesFor } = await import('./rooms.server');
-const { inviteMessage, nameList, pushInvites } = await import('./invite-push.server');
+const { finishMessage, inviteMessage, nameList, pushInvites, turnMessage } = await import('./invite-push.server');
 
 const john = { id: 'p_john', name: 'John' };
 const sam = { id: 'p_sam', name: 'Sam' };
@@ -82,5 +82,35 @@ describe('pushInvites', () => {
     expect(invitesFor('p_sam')[0].pushed).toBe(false);
     const push = reaching('sam@example.test');
     expect(await pushInvites(id, push)).toBe(1);
+  });
+});
+
+describe('the "your move" banner (async durable rooms)', () => {
+  const NOW = 1_790_000_000_000;
+  const HOUR = 3_600_000;
+
+  it('says whose move, what happened and how long is left, and lives until the deadline', () => {
+    const m = turnMessage({ roomId: 'g_1', game: 'chess', line: 'Sam moved.', dueAt: NOW + 23.5 * HOUR }, NOW);
+    expect(m.title).toBe('Your move in Chess');
+    expect(m.body).toBe('Sam moved. 23 h left.');
+    expect(m).toMatchObject({ category: 'game', threadId: 'game', level: 'active', collapseId: 'game-g_1' });
+    expect(m.userInfo).toEqual({ roomId: 'g_1', game: 'chess', category: 'game', kind: 'turn' });
+    expect(m.ttlSeconds).toBe(23.5 * 3600);
+  });
+
+  it('reads well with no line, an hour to go, or no deadline', () => {
+    expect(turnMessage({ roomId: 'g_1', game: 'chess', dueAt: NOW + 30 * 60_000 }, NOW).body).toBe('Under an hour left.');
+    expect(turnMessage({ roomId: 'g_1', game: 'chess', dueAt: NOW + 30_000 }, NOW).ttlSeconds).toBe(60);
+    const open = turnMessage({ roomId: 'g_1', game: 'chess', line: null, dueAt: null }, NOW);
+    expect(open.body).toBe("It's your turn.");
+    expect(open.ttlSeconds).toBe(24 * 3600);
+  });
+
+  it('says who won when an async game is over', () => {
+    const m = finishMessage({ roomId: 'g_1', game: 'chess', winners: ['Sam'] });
+    expect(m.title).toBe('Chess is over');
+    expect(m.body).toBe('Sam won.');
+    expect(m.userInfo).toEqual({ roomId: 'g_1', game: 'chess', category: 'game', kind: 'finished' });
+    expect(finishMessage({ roomId: 'g_1', game: 'chess', winners: [] }).body).toBe('Nobody won this time.');
   });
 });
