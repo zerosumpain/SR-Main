@@ -19,6 +19,7 @@ import { pushInvites } from './invite-push.server';
 import { isDifficulty, MAX_PLAYERS } from './tap-duel';
 import { isGameId, type GameId } from './catalogue';
 import { cleanTopic, isAudience, isClean } from './quiz-night';
+import { subjectFor } from './gcse';
 import { reserveUsage } from '$lib/jkai/chat-access.server';
 import { areaAccess } from '$lib/server/area-scope';
 
@@ -63,7 +64,7 @@ const stringIds = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x 
 
 /**
  * Start a game: `{ game, difficulty, invite: [playerId] }` plus that game's
- * options (Quiz Night `topic`/`audience`, Boggle `size`/`seconds`/`scoring`,
+ * options (Quiz Night `topic`/`audience`, or `mode: 'gcse'` with `subject`/`board`, Boggle `size`/`seconds`/`scoring`,
  * Categories `categoryCount`/`seconds`, Liar's Dice `dice`, Draw & Guess
  * `turnsEach`/`seconds`).
  */
@@ -86,8 +87,10 @@ export async function startGame(
   asHttp(() => canCreate(me.id));
   if (game === 'quiz-night') {
     const topic = cleanTopic(body.topic);
-    const audience = isAudience(body.audience) ? body.audience : 'family';
-    if (topic && !isClean(topic, audience)) error(400, 'Pick a different topic.');
+    const subject = body.mode === 'gcse' ? subjectFor(body.subject) : null;
+    if (body.mode === 'gcse' && !subject) error(400, 'Pick a GCSE subject.');
+    const audience = subject ? 'family' : isAudience(body.audience) ? body.audience : 'family';
+    if (topic && !isClean(topic, audience, subject?.allows)) error(400, 'Pick a different topic.');
   }
   if (game === 'quiz-night' && caller.role === 'member') {
     await reserveUsage(
@@ -100,6 +103,9 @@ export async function startGame(
   const options = {
     topic: body.topic,
     audience: body.audience,
+    mode: body.mode,
+    subject: body.subject,
+    board: body.board,
     size: body.size,
     seconds: body.seconds,
     scoring: body.scoring,
