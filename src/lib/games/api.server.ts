@@ -17,7 +17,7 @@ import { isWindow } from './results';
 import { act, asHttp, canCreate, createGame, inviteTo, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
 import { pushInvites } from './invite-push.server';
 import { isDifficulty, MAX_PLAYERS } from './tap-duel';
-import { isGameId, type GameId } from './catalogue';
+import { GAMES, isGameId, type GameId } from './catalogue';
 import { cleanTopic, isAudience, isClean } from './quiz-night';
 import { subjectFor } from './gcse';
 import { reserveUsage } from '$lib/jkai/chat-access.server';
@@ -77,7 +77,8 @@ export async function startGame(
   if (!isGameId(game)) error(400, 'Unknown game.');
   if (!isDifficulty(body.difficulty)) error(400, 'Pick easy, medium or hard.');
   const ids = stringIds(body.invite);
-  if (ids.length > MAX_PLAYERS - 1) error(400, `Up to ${MAX_PLAYERS} players.`);
+  const most = GAMES[game].maxPlayers ?? MAX_PLAYERS;
+  if (ids.length > most - 1) error(400, `Up to ${most} players.`);
 
   const me = await playerFor(caller.email);
   const invite = await resolveInvitees(ids);

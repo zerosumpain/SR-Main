@@ -296,8 +296,9 @@ export function inviteTo(id: string, hostId: string, people: { id: string; name:
   const inPlay = (s: string) => s === 'joined' || s === 'invited';
   const fresh = people.filter((p, i, all) => p.id !== hostId && all.findIndex((q) => q.id === p.id) === i);
   const adding = fresh.filter((p) => !room.players.some((q) => q.id === p.id && inPlay(q.status)));
-  if (room.players.filter((p) => inPlay(p.status)).length + adding.length > MAX_PLAYERS) {
-    throw refuse(400, `Up to ${MAX_PLAYERS} players.`);
+  const most = live.rules.maxPlayers ?? MAX_PLAYERS;
+  if (room.players.filter((p) => inPlay(p.status)).length + adding.length > most) {
+    throw refuse(400, `Up to ${most} players.`);
   }
   for (const p of adding) {
     const known = room.players.find((q) => q.id === p.id);

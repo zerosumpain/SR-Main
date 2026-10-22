@@ -17,6 +17,7 @@ import * as liarsDice from './liars-dice';
 import * as drawGuess from './draw-guess';
 import * as marbleRace from './marble-race';
 import * as chess from './chess';
+import * as oneClue from './one-clue';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -33,6 +34,7 @@ export const GAME_IDS = [
   'draw-guess',
   'marble-race',
   'chess',
+  'one-clue',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -101,6 +103,10 @@ export interface GameRules {
    * Null: this game has no score, and its board ranks by wins.
    */
   resultScore?(standing: { id: string; [key: string]: unknown }): number | null;
+  /** Most players a room seats, host included, when not the site's usual `MAX_PLAYERS`. */
+  maxPlayers?: number;
+  /** Fewest joined players `start` accepts, when more than two. */
+  minPlayers?: number;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -217,6 +223,21 @@ export const GAMES: Record<GameId, GameRules> = {
         chess.move(room as chess.Room, playerId, { from: body.from, to: body.to, promotion: body.promotion }, now),
       resign: (room, playerId, _body, now) => chess.resign(room as chess.Room, playerId, now),
       draw: (room, playerId, _body, now) => chess.draw(room as chess.Room, playerId, now),
+    },
+  },
+  'one-clue': {
+    ...oneClue,
+    maxPlayers: oneClue.MAX_PLAYERS,
+    minPlayers: oneClue.MIN_PLAYERS,
+    moves: {
+      // Raw on purpose: each types its own fields (400 with a sentence).
+      clue: (room, playerId, body, now) => oneClue.clue(room as oneClue.Room, playerId, { text: body.text }, now),
+      veto: (room, playerId, body, now) => oneClue.veto(room as oneClue.Room, playerId, { playerId: body.playerId }, now),
+      unveto: (room, playerId, body, now) =>
+        oneClue.unveto(room as oneClue.Room, playerId, { playerId: body.playerId }, now),
+      done: (room, playerId, _body, now) => oneClue.done(room as oneClue.Room, playerId, now),
+      guess: (room, playerId, body, now) => oneClue.guess(room as oneClue.Room, playerId, { text: body.text }, now),
+      pass: (room, playerId, _body, now) => oneClue.pass(room as oneClue.Room, playerId, now),
     },
   },
 };
