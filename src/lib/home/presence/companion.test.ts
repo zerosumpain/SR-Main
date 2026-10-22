@@ -47,6 +47,7 @@ import {
   COMPANION_CURSOR_KEY,
   COMPANION_USERS_KEY,
   fetchHousehold,
+  fetchHouseholdUsers,
   ingestCompanion,
   notSharingSubjects,
   toIncomingFix,
@@ -139,6 +140,14 @@ describe('fetchHousehold', () => {
     expect(url).toContain('http://127.0.0.1:5295/api/apple/household?');
     expect(url).toContain('since=c0');
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it('reads the people with one fix, not a page of them', async () => {
+    const f = vi.fn(async () => pageResponse({ cursor: 'c1', more: true, users: [], fixes: [] }));
+    await fetchHouseholdUsers(f as unknown as typeof fetch);
+    const [url] = f.mock.calls[0] as unknown as [string];
+    expect(new URL(url).searchParams.get('limit')).toBe('1');
+    expect(new URL(url).searchParams.get('since')).toBe('');
   });
 
   it('throws on a refused token rather than reading it as an empty page', async () => {

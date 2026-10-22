@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { clearSettingsCache } from '$lib/server/models/settings';
 import { db } from '$lib/db';
 import { companionToken, companionUrl } from './companion';
+import { trailChanged } from './trail-generation';
 
 /** Idempotent consumer. ACK only after all Main copies commit; failures retry. */
 export async function drainPrivacyJobs(fetchImpl: typeof fetch = fetch): Promise<number> {
@@ -45,6 +46,7 @@ export async function drainPrivacyJobs(fetchImpl: typeof fetch = fetch): Promise
         (SELECT id FROM native_credentials WHERE owner_email=${job.email})`);
       await tx.execute(sql`INSERT INTO companion_privacy_receipt(job_id) VALUES(${job.id}) ON CONFLICT DO NOTHING`);
     });
+    trailChanged();
     clearSettingsCache();
     await call('POST', { id: job.id });
     completed++;

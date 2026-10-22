@@ -32,7 +32,7 @@
 import { and, asc, gte, inArray, isNotNull, lt } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { allowedUser, daydreamPlaces, daydreamTrail } from '$lib/db/schema';
-import { companionToken, companionUrl, fetchHousehold, loadCompanionUsers, type HouseholdUser } from './companion';
+import { companionToken, companionUrl, fetchHouseholdUsers, loadCompanionUsers, type HouseholdUser } from './companion';
 import { inferMode } from './cluster';
 import { distanceM } from './geo';
 import { listPanelPlaces } from './places';
@@ -599,7 +599,7 @@ export async function pushAppViews(
 ): Promise<AppViewsResult | null> {
   const token = companionToken();
   if (!token) return null;
-  const snapshot = await fetchHousehold('', fetchImpl).catch(() => null);
+  const snapshot = await fetchHouseholdUsers(fetchImpl).catch(() => null);
   if (!snapshot?.revision) return null;
   const users = snapshot.users;
 

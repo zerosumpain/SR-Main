@@ -132,10 +132,11 @@ function asPage(body: unknown): HouseholdPage {
 export async function fetchHousehold(
   since: string,
   fetchImpl: typeof fetch = fetch,
+  limit = PAGE_LIMIT,
 ): Promise<HouseholdPage | null> {
   const token = companionToken();
   if (!token) return null;
-  const qs = new URLSearchParams({ since, limit: String(PAGE_LIMIT) });
+  const qs = new URLSearchParams({ since, limit: String(limit) });
   const res = await fetchImpl(`${companionUrl()}/api/apple/household?${qs}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -288,7 +289,17 @@ export function notSharingSubjects(
   return out;
 }
 
+/**
+ * The pilot's users and consent revision, without its fixes: the household
+ * page carries both, and every caller of this wants only the people. One fix
+ * comes with them (the pilot's smallest page); asking with the default page
+ * shipped the 500 OLDEST fixes, read by nobody, on every roster build.
+ */
+export async function fetchHouseholdUsers(fetchImpl: typeof fetch = fetch): Promise<HouseholdPage | null> {
+  return fetchHousehold('', fetchImpl, 1);
+}
+
 /** The latest users list the pilot sent, for `notSharingSubjects`. */
 export async function loadCompanionUsers(): Promise<HouseholdUser[] | null> {
-  return (await fetchHousehold(''))?.users ?? null;
+  return (await fetchHouseholdUsers())?.users ?? null;
 }

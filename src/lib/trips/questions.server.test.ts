@@ -371,6 +371,10 @@ describe('answering', () => {
 describe('pushes', () => {
   const q = { id: 'q9', prompt: 'Keep it?', impact: 2, audience: 'parents', answers: [{ id: 'a0', label: 'Yes' }, { id: 'a1', label: 'No' }] } as unknown as Question;
   it('at most one a day, only before the trip, to the question’s audience', async () => {
+    // The store stamps a push with the clock, not with `now`: pin the clock to
+    // the first push, or "the same day" stops being true the day after this was written.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-21T08:00:00Z'));
     h.questions.push({ ...q, key: 'k', status: 'open' } as never);
     const push = vi.fn(async (to: readonly string[], _msg: unknown) => ({ sent: to.length, failed: 0, reached: new Set<string>() }));
     expect(await qs.pushQuestions(trip(), [q], { push, now: new Date('2026-10-21T08:00:00Z') })).toBe(2);
@@ -378,6 +382,7 @@ describe('pushes', () => {
     expect(push.mock.calls[0][1]).toMatchObject({ category: 'trip-q-q9', userInfo: { answers: [{ id: 'a0', label: 'Yes' }, { id: 'a1', label: 'No' }], prompt: 'Keep it?' } });
     expect(await qs.pushQuestions(trip(), [q], { push, now: new Date('2026-10-21T18:00:00Z') })).toBe(0);
     expect(await qs.pushQuestions(trip(), [q], { push, now: new Date('2026-10-26T08:00:00Z') })).toBe(0);
+    vi.useRealTimers();
   });
 
   it('reads the route body', () => {

@@ -78,6 +78,7 @@ function resolveIsHome(haState: string | null | undefined, distanceHomeKm: numbe
 // Two copies of this query with different ordering would put two different
 // houses into distance_home_km and the weather fallback.
 import { getHomePlace } from './places';
+import { trailChanged } from './trail-generation';
 
 /**
  * The most recent positioned fixes, for deriving speed and spotting rail.
@@ -196,6 +197,7 @@ export async function recordFix(
       readingAgeS: fix.readingAgeS ?? null,
     })
     .returning({ id: daydreamTrail.id, ts: daydreamTrail.ts, isHome: daydreamTrail.isHome });
+  trailChanged();
 
   if (!row) throw Object.assign(new Error('A pre-deletion companion fix was discarded'), { name: 'CompanionDeletionFloor' });
 
@@ -229,6 +231,7 @@ export async function recordGap(
     mode: 'unknown',
     note: reason.slice(0, 500),
   });
+  trailChanged();
 }
 
 /** True when a fix has landed recently enough that the poll floor can stand
@@ -283,6 +286,7 @@ export async function pruneTrail(retentionDays = TRAIL_RETENTION_DAYS): Promise<
     .delete(daydreamTrail)
     .where(lt(daydreamTrail.ts, cutoff))
     .returning({ id: daydreamTrail.id });
+  if (deleted.length) trailChanged();
   return deleted.length;
 }
 

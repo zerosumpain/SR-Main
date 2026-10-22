@@ -24,6 +24,7 @@ import { db, type DbExecutor } from '$lib/db';
 import { daydreamTrail } from '$lib/db/schema';
 import { deletePilotData, pilotFailureText, type PilotDeleted, type PilotResult } from './companion-accounts';
 import { memberByEmail } from './members';
+import { trailChanged } from './trail-generation';
 
 /** The confirm field must hold exactly this word. */
 export const DELETE_CONFIRM_WORD = 'delete';
@@ -48,6 +49,7 @@ export const defaultDeleteDeps: DeleteDeps = {
       .delete(daydreamTrail)
       .where(and(eq(daydreamTrail.subject, subject), eq(daydreamTrail.source, 'companion')))
       .returning({ id: daydreamTrail.id });
+    trailChanged();
     return rows.length;
   },
 };

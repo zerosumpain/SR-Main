@@ -315,8 +315,35 @@ export async function identifyDevice(request: Request): Promise<NativeIdentity |
   };
 }
 
+/** A phone's row is stamped at most this often; the uses in between ride on the next stamp. */
+export const TOUCH_EVERY_MS = 60_000;
+const touched = new Map<string, { at: number; uses: number; said: string }>();
+
 /**
- * Stamp last-seen for a device that has just been served.
+ * How many uses to write for this one, or null to only count it. A phone on
+ * the Games lobby asks every five seconds, and each ask used to be an UPDATE
+ * of its credential row for a "last used" a person reads in minutes. A phone
+ * that says something new about itself (a new build) is written at once.
+ */
+export function touchDue(id: string, said: string, now = Date.now()): number | null {
+  const last = touched.get(id);
+  if (last && now - last.at < TOUCH_EVERY_MS && last.said === said) {
+    last.uses++;
+    return null;
+  }
+  touched.set(id, { at: now, uses: 0, said });
+  return (last?.uses ?? 0) + 1;
+}
+
+/** Reset between tests. */
+export function resetTouchedForTest(): void {
+  touched.clear();
+}
+
+/**
+ * Stamp last-seen for a device that has just been served — at most once a
+ * minute (`touchDue`), so "last used" can be a minute behind and the count
+ * arrives in steps.
  *
  * Deliberately fire-and-forget at the call site: this is telemetry for the
  * device list, and a write failing here must never turn a good request into a
@@ -324,30 +351,39 @@ export async function identifyDevice(request: Request): Promise<NativeIdentity |
  */
 export async function touchDevice(id: string, request?: Request): Promise<void> {
   const t = request ? phoneTelemetry(request.headers) : null;
+  const uses = touchDue(id, JSON.stringify(t));
+  if (uses === null) return;
   const now = new Date();
-  await db
-    .update(nativeCredentials)
-    .set({
-      lastUsedAt: now,
-      useCount: sql`${nativeCredentials.useCount} + 1`,
-      // What the phone said about itself, when it said anything: an app from
-      // before the headers leaves the last description standing. `appSeenAt`
-      // moves only with the build, so it reads as "running 136 since".
-      ...(t && {
-        appSeenAt:
-          t.appBuild === null
-            ? undefined
-            : sql`case when ${nativeCredentials.appBuild} is distinct from ${t.appBuild} then ${now} else ${nativeCredentials.appSeenAt} end`,
-        appVersion: t.appVersion ?? undefined,
-        appBuild: t.appBuild ?? undefined,
-        appCommit: t.appCommit ?? undefined,
-        appChannel: t.appChannel ?? undefined,
-        osVersion: t.osVersion ?? undefined,
-        deviceModel: t.deviceModel ?? undefined,
-        deviceName: t.deviceName ?? undefined,
-      }),
-    })
-    .where(eq(nativeCredentials.id, id));
+  try {
+    await db
+      .update(nativeCredentials)
+      .set({
+        lastUsedAt: now,
+        useCount: sql`${nativeCredentials.useCount} + ${uses}`,
+        // What the phone said about itself, when it said anything: an app from
+        // before the headers leaves the last description standing. `appSeenAt`
+        // moves only with the build, so it reads as "running 136 since".
+        ...(t && {
+          appSeenAt:
+            t.appBuild === null
+              ? undefined
+              : sql`case when ${nativeCredentials.appBuild} is distinct from ${t.appBuild} then ${now} else ${nativeCredentials.appSeenAt} end`,
+          appVersion: t.appVersion ?? undefined,
+          appBuild: t.appBuild ?? undefined,
+          appCommit: t.appCommit ?? undefined,
+          appChannel: t.appChannel ?? undefined,
+          osVersion: t.osVersion ?? undefined,
+          deviceModel: t.deviceModel ?? undefined,
+          deviceName: t.deviceName ?? undefined,
+        }),
+      })
+      .where(eq(nativeCredentials.id, id));
+  } catch (error) {
+    // Not written: the next request writes, and carries these uses with it.
+    const entry = touched.get(id);
+    if (entry) Object.assign(entry, { at: 0, uses: entry.uses + uses });
+    throw error;
+  }
 }
 
 /** The telemetry columns a device list shows, selected the same way everywhere. */

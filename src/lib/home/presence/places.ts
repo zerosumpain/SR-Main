@@ -35,6 +35,7 @@ import {
   TRAIL_RETENTION_DAYS,
   type ClusterPoint,
 } from './types';
+import { trailChanged } from './trail-generation';
 
 export interface RefreshResult {
   /** Fixes considered this pass. */
@@ -323,6 +324,7 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
       result.reassigned += slice.length;
     }
   }
+  if (changed.size) trailChanged();
 
   return result;
 }

@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { companionToken, companionUrl } from '$lib/home/presence/companion';
 import { drainPrivacyJobs } from '$lib/home/presence/privacy-jobs';
+import { trailChanged } from '$lib/home/presence/trail-generation';
 
 let draining = false;
 /** Runs independently of projection/ingestion so stopped upload traffic is irrelevant. */
@@ -31,6 +32,7 @@ export async function privacyMaintenance(): Promise<void> {
     }
     // Local retention must still run while the companion is unavailable.
     await db.execute(sql`DELETE FROM daydream_trail WHERE source='companion' AND ts<now()-interval '30 days'`);
+    trailChanged();
     await db.execute(sql`DELETE FROM household_journey_viewer WHERE journey_id IN
       (SELECT id FROM household_journey WHERE started_at<now()-interval '30 days')`);
     await db.execute(sql`DELETE FROM household_journey WHERE started_at<now()-interval '30 days'`);
