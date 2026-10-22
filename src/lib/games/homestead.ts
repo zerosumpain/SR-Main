@@ -464,6 +464,8 @@ export function leave(room: Room, playerId: string, now: number): void {
   // Awards held by somebody who has gone are re-judged without them.
   refreshAwards(room, now);
   const wasActive = room.seats[room.active] === p.id;
+  // An award handed over by the leaver can carry the active player to the target on their own turn.
+  if (!wasActive && checkWin(room, now)) return;
   if (room.step === 'discard' && !Object.keys(room.discardOwed).length && !wasActive) {
     toStep(room, 'fox', now);
   }
@@ -1552,8 +1554,13 @@ export function waitingOn(room: Room): { ids: string[]; key: string; line?: stri
     case 'roads':
       line = 'Place your free roads.';
       break;
-    default:
-      line = dice && dice.by === active ? `${name} rolled a ${dice.total}.` : 'Your move.';
+    default: {
+      // This line goes only to the active player: word it for them.
+      const lastRoll = [...room.log].reverse().find((e) => e.kind === 'roll');
+      if (!dice || dice.by !== active) line = 'Your move.';
+      else if (lastRoll?.by === active && lastRoll.auto) line = `The dice rolled ${dice.total} for you.`;
+      else line = `You rolled ${dice.total}.`;
+    }
   }
   return { ids, key: `${room.turn}:${room.step}:${active}`, line };
 }

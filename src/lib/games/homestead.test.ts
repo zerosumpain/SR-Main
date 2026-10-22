@@ -1043,6 +1043,25 @@ describe('leaving', () => {
     expect(s.slice(1).every((row) => row.left)).toBe(true);
   });
 
+  it('wins at once when a leaver\'s award carries the active player to the target', () => {
+    const { r, now } = setUp(3);
+    const a = activePlayer(r)!;
+    const b = r.seats.find((id) => id !== a.id)!;
+    toMain(r, now);
+    emptyHands(r);
+    // A: two cottages (2) + six heirlooms = 8, with three rangers played; B holds Chief Ranger on four.
+    for (let i = 0; i < 6; i++) a.cards.push({ kind: 'heirloom', boughtTurn: 0 });
+    a.rangersPlayed = 3;
+    P(r, b).rangersPlayed = 4;
+    r.chiefRangerId = b;
+    r.longestTrailId = null;
+    expect(totalVp(r, a.id)).toBe(8);
+    leave(r, b, now);
+    expect(r.chiefRangerId).toBe(a.id);
+    expect(r.phase).toBe('finished');
+    expect(r.result).toEqual({ winnerId: a.id, reason: 'points' });
+  });
+
   it('skips a leaver\'s setup placement', () => {
     const { r, now } = begun(4);
     const later = r.seats[3];
@@ -1147,6 +1166,24 @@ describe('waitingOn', () => {
     expect(waitingOn(r)).toMatchObject({ ids: [b], key: `${r.turn}:roll:${b}`, line: 'Your turn to roll.' });
     expect(waitingOn(lobby(3))).toBeNull();
     void t;
+  });
+
+  it('words the main-step push for the player it goes to, even when the clock rolled for them', () => {
+    const { r, now } = setUp(3);
+    const seen = new Set<string>();
+    for (let i = 0; i < 40 && seen.size < 2; i++) {
+      const id = activePlayer(r)!.id;
+      const auto = i % 2 === 1;
+      r.step = 'roll';
+      roll(r, id, now + i, auto);
+      if ((r.step as Room['step']) !== 'main') continue; // roll() moved it on
+      const w = waitingOn(r)!;
+      expect(w.ids).toEqual([id]);
+      expect(w.line).toBe(auto ? `The dice rolled ${r.dice!.total} for you.` : `You rolled ${r.dice!.total}.`);
+      expect(w.line).not.toContain(P(r, id).name);
+      seen.add(auto ? 'auto' : 'own');
+    }
+    expect([...seen].sort()).toEqual(['auto', 'own']);
   });
 });
 

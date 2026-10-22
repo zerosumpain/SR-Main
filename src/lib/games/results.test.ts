@@ -45,11 +45,17 @@ async function finished(game: GameId, options: Record<string, unknown> = {}): Pr
   return { room, now };
 }
 
+/**
+ * Games the two-player clock run below cannot finish (three or more at the
+ * table; a game nobody plays is abandoned, nothing recorded): each one's own
+ * suite records a played round instead. One id a line, appended.
+ */
+const OWN_SUITE: readonly string[] = [
+  'homestead',
+];
+
 describe('recording a finished round, in every game in the catalogue', () => {
-  // Homestead needs three at the table and a game nobody plays is abandoned
-  // (nothing recorded): its own suite records a played game.
-  const twoPlayerClockGames = GAME_IDS.filter((g) => g !== 'homestead');
-  it.each(twoPlayerClockGames.map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
+  it.each(GAME_IDS.filter((g) => !OWN_SUITE.includes(g)).map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
     const rules = GAMES[game];
     const { room, now } = await finished(game);
     expect(room.phase).toBe('finished');

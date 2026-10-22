@@ -35,7 +35,10 @@ const INVITE_HOLD_MS = 2 * 60_000;
 
 /** A room that closed stays readable briefly, so a phone arriving late sees "closed", not a 404. */
 const CLOSED_KEEP_MS = 60_000;
+/** Open quick (in-memory) rooms at once, across every host. */
 const MAX_ROOMS = 50;
+/** Open durable rooms in memory at once: their own budget, so games lasting days never crowd out quick ones. */
+export const MAX_DURABLE_ROOMS = 200;
 const MAX_OPEN_PER_HOST = 3;
 /** Open (not finished, not closed) durable rooms one host may hold, in memory or stored. */
 export const MAX_DURABLE_PER_HOST = 5;
@@ -567,6 +570,14 @@ export async function ensureRoom(id: string): Promise<void> {
   await pending;
 }
 
+/** Postgres "permission denied" (42501) or "no such table" (42P01), however the driver wraps it. */
+export function storeUnusable(err: unknown): boolean {
+  for (let e = err as { code?: unknown; cause?: unknown } | null, i = 0; e && i < 4; e = e.cause as typeof e, i++) {
+    if (e.code === '42501' || e.code === '42P01') return true;
+  }
+  return false;
+}
+
 async function loadRoom(id: string): Promise<void> {
   const s = await store();
   let row: StoredRoom | null;
@@ -574,6 +585,11 @@ async function loadRoom(id: string): Promise<void> {
     row = await s.load(id);
   } catch (err) {
     console.error(`[games] ${id}: could not read the stored room`, (err as Error)?.message ?? err);
+    // No table yet, or no grant on it (the window between the release that
+    // creates it and the hand-applied GRANT): nothing durable can have been
+    // stored, so the room is simply not here — the old 404, which a phone holding
+    // a quick game from before a restart reads as "ended" rather than retrying.
+    if (storeUnusable(err)) return;
     throw new GameError(503, "Games can't be reached right now. Try again shortly.");
   }
   if (!row || rooms.has(id)) return;
@@ -772,10 +788,15 @@ function inRoom(room: RoomBase, playerId: string): boolean {
  * charge for a game that was never going to start.
  */
 export function canCreate(hostId: string, game?: GameId): void {
-  const open = [...rooms.values()].filter((l) => l.room.phase !== 'closed' && l.room.phase !== 'finished');
-  if (open.length >= MAX_ROOMS) throw new GameError(409, 'Too many games running. Try again shortly.');
+  const durable = !!(game && GAMES[game]?.durable);
+  const open = [...rooms.values()].filter(
+    (l) => l.durable === durable && l.room.phase !== 'closed' && l.room.phase !== 'finished',
+  );
+  if (open.length >= (durable ? MAX_DURABLE_ROOMS : MAX_ROOMS)) {
+    throw new GameError(409, 'Too many games running. Try again shortly.');
+  }
   // A durable game's own cap is `canCreateDurable` (its rooms last days, not minutes).
-  if (game && GAMES[game]?.durable) return;
+  if (durable) return;
   if (open.filter((l) => !l.durable && l.room.hostId === hostId).length >= MAX_OPEN_PER_HOST) {
     throw new GameError(409, 'Finish one of your games first.');
   }

@@ -11,6 +11,7 @@ import {
   _setRoomStore,
   _setTurnPusher,
   act,
+  canCreate,
   canCreateDurable,
   createGame,
   ensureRoom,
@@ -18,6 +19,7 @@ import {
   hydrateFor,
   invitesFor,
   MAX_DURABLE_PER_HOST,
+  MAX_DURABLE_ROOMS,
   roomFor,
   roomsFor,
   subscribe,
@@ -453,6 +455,19 @@ describe('after a restart', () => {
     error.mockRestore();
   });
 
+  it('answers "not here" (404), not 503, while the table is missing or not yet granted', async () => {
+    restart();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const denied = Object.assign(new Error('permission denied for table game_rooms'), { code: '42501' });
+    _setRoomStore({ ...store, load: async () => Promise.reject(new Error('Failed query', { cause: denied })) });
+    await expect(ensureRoom('g_0123456789ab')).resolves.toBeUndefined();
+    expect(() => roomFor('g_0123456789ab', 'p_john')).toThrow(expect.objectContaining({ status: 404 }));
+    const missing = Object.assign(new Error('relation "game_rooms" does not exist'), { code: '42P01' });
+    _setRoomStore({ ...store, load: async () => Promise.reject(missing) });
+    await expect(ensureRoom('g_0123456789ac')).resolves.toBeUndefined();
+    error.mockRestore();
+  });
+
   it('never reads a closed room back', async () => {
     const { id } = newRelay();
     vi.advanceTimersByTime(LOBBY_MS);
@@ -511,6 +526,17 @@ describe('the lobby', () => {
   it('does not count durable rooms against the three-game cap of quick games', () => {
     for (let i = 0; i < 3; i++) newRelay({}, []);
     expect(() => createGame({ game: 'tap-duel', host: john, invite: [], difficulty: 'easy' })).not.toThrow();
+  });
+
+  it('keeps durable rooms out of the global quick-game budget, with a budget of their own', () => {
+    const host = (i: number) => ({ id: `p_h${i}`, name: `H${i}` });
+    for (let i = 0; i < 60; i++) createGame({ game: RELAY, host: host(i), invite: [], difficulty: 'easy', options: {} });
+    // Sixty games lasting days do not block a Tap Duel.
+    expect(() => canCreate('p_new', 'tap-duel')).not.toThrow();
+    expect(() => canCreate('p_new')).not.toThrow();
+    for (let i = 60; i < MAX_DURABLE_ROOMS; i++) createGame({ game: RELAY, host: host(i), invite: [], difficulty: 'easy', options: {} });
+    expect(() => canCreate('p_new', RELAY)).toThrow(/Too many games/);
+    expect(() => canCreate('p_new', 'tap-duel')).not.toThrow();
   });
 });
 
