@@ -17,6 +17,7 @@ import * as liarsDice from './liars-dice';
 import * as drawGuess from './draw-guess';
 import * as marbleRace from './marble-race';
 import * as chess from './chess';
+import * as fireworks from './fireworks';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -33,6 +34,7 @@ export const GAME_IDS = [
   'draw-guess',
   'marble-race',
   'chess',
+  'fireworks',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -217,6 +219,17 @@ export const GAMES: Record<GameId, GameRules> = {
         chess.move(room as chess.Room, playerId, { from: body.from, to: body.to, promotion: body.promotion }, now),
       resign: (room, playerId, _body, now) => chess.resign(room as chess.Room, playerId, now),
       draw: (room, playerId, _body, now) => chess.draw(room as chess.Room, playerId, now),
+    },
+  },
+  fireworks: {
+    ...fireworks,
+    moves: {
+      // Raw on purpose: each types its own fields (400 with a sentence for a bad hint or card).
+      hint: (room, playerId, body, now) =>
+        fireworks.hint(room as fireworks.Room, playerId, { to: body.to, colour: body.colour, rank: body.rank }, now),
+      play: (room, playerId, body, now) => fireworks.play(room as fireworks.Room, playerId, { card: body.card }, now),
+      discard: (room, playerId, body, now) =>
+        fireworks.discard(room as fireworks.Room, playerId, { card: body.card }, now),
     },
   },
 };
