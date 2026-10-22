@@ -52,7 +52,7 @@ Every clock running out is a server move (`advance`), one step per call, every n
 
 ## Leaving mid-game
 
-The leaver keeps their seat and their secret, and the server plays for them from then on: their vote approves, their card succeeds, the lead skips them. A leader who leaves passes the lead on with a fresh clock. A Tracker who leaves the hunt forfeits the guess (crew win). A host who leaves hands the host role to the next player. If fewer than three people are left the game ends (`reason: "abandoned"`), every role is shown and nobody wins. A leaver is never counted a winner, even if their side wins.
+The leaver keeps their seat and their secret, and the server plays for them from then on: their vote approves, their card succeeds, the lead skips them. A leader who leaves passes the lead on with a fresh clock. A Tracker who leaves the hunt forfeits the guess (crew win). A host who leaves hands the host role to the next player. If fewer than three people are left the game ends. A result already earned stands: on the outcome screen after a side's third mission, on the tally after the fifth rejection, or during the hunt (crew win). Otherwise it is `reason: "abandoned"`, every role is shown and nobody wins. A player who left before the finish is never counted a winner, even if their side wins. Standings are frozen at the finish, so leaving from the results screen does not change who won.
 
 ## Moves (`POST /api/native/games/<id>`)
 

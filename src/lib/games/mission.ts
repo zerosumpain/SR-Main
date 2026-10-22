@@ -191,6 +191,8 @@ export interface Room {
   tallies: Tally[];
   missions: MissionResult[];
   result: Result | null;
+  /** Who had left when the game finished: standings are frozen on this, so leaving the results screen changes nothing. */
+  leftAtFinish: string[];
   startedAt: number | null;
   /** Lobby expiry, countdown end, each phase's clock, finished expiry. */
   phaseEndsAt: number | null;
@@ -260,6 +262,7 @@ export function createRoom(input: {
     tallies: [],
     missions: [],
     result: null,
+    leftAtFinish: [],
     startedAt: null,
     phaseEndsAt: input.now + LOBBY_MS,
     createdAt: input.now,
@@ -321,7 +324,7 @@ export function leave(room: Room, playerId: string, now: number): void {
   if (!p.seated || !IN_PLAY.includes(room.phase)) return;
 
   if (active(room).length < 3) {
-    finish(room, null, 'abandoned', null, now);
+    settleOrAbandon(room, now);
     return;
   }
   switch (room.phase) {
@@ -374,6 +377,7 @@ function resetPlay(room: Room): void {
   room.tallies = [];
   room.missions = [];
   room.result = null;
+  room.leftAtFinish = [];
   room.startedAt = null;
 }
 
@@ -651,8 +655,26 @@ export function score(room: Room): { crew: number; spies: number } {
   return { crew, spies: room.missions.length - crew };
 }
 
+/**
+ * Too few left to carry on. A result already earned stands: the third mission
+ * scored (outcome), the fifth rejection counted (tally), the crew's three
+ * successes (hunt). Only an undecided game is abandoned.
+ */
+function settleOrAbandon(room: Room, now: number): void {
+  const s = score(room);
+  if (room.phase === 'outcome' && s.spies >= WIN_AT) return finish(room, 'spies', 'sabotage', null, now);
+  if (room.phase === 'outcome' && s.crew >= WIN_AT) return finish(room, 'crew', 'missions', null, now);
+  if (room.phase === 'hunt') return finish(room, 'crew', 'missions', null, now);
+  if (room.phase === 'tally') {
+    const last = room.tallies[room.tallies.length - 1];
+    if (last && !last.approved && room.rejections >= MAX_REJECTIONS) return finish(room, 'spies', 'rejections', null, now);
+  }
+  finish(room, null, 'abandoned', null, now);
+}
+
 function finish(room: Room, winner: Side | null, reason: Reason, guessId: string | null, now: number): void {
   room.result = { winner, reason, guessId };
+  room.leftAtFinish = room.players.filter((p) => p.status !== 'joined').map((p) => p.id);
   for (const p of room.players) {
     p.vote = null;
     p.card = null;
@@ -776,7 +798,8 @@ export function standings(room: Room): Standing[] {
   const winner = room.result?.winner ?? null;
   const rows = seatedPlayers(room).map((p) => {
     const side = sideOf(p.role ?? 'crew');
-    const left = p.status !== 'joined';
+    // Frozen at the finish: leaving the results screen does not undo a win.
+    const left = room.result ? room.leftAtFinish.includes(p.id) : p.status !== 'joined';
     const won = winner !== null && side === winner && !left;
     return { id: p.id, name: p.name, place: winner === null ? 1 : won ? 1 : 2, role: p.role ?? 'crew', side, won, left };
   });

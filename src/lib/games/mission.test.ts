@@ -515,6 +515,85 @@ describe('leaving', () => {
   });
 });
 
+describe('a decided game is never abandoned', () => {
+  it('keeps the spies their third sabotage when the table empties on the outcome screen', () => {
+    const { r, now } = proposing(FIVE);
+    runMission(r, now, ['p_john', 'p_robin'], ['p_robin']);
+    runMission(r, now, ['p_john', 'p_sam', 'p_alex'], ['p_alex']);
+    sendTeam(r, now, ['p_john', 'p_robin']);
+    play(r, 'p_john', { card: 'succeed' }, now);
+    play(r, 'p_robin', { card: 'sabotage' }, now);
+    expect(r.phase).toBe('outcome');
+    for (const id of ['p_kim', 'p_sam', 'p_john']) leave(r, id, now);
+    expect(r.result).toEqual({ winner: 'spies', reason: 'sabotage', guessId: null });
+    expect(winners(r)).toEqual(['p_robin', 'p_alex']);
+  });
+
+  it('keeps the crew their third success when the table empties on the outcome screen', () => {
+    const { r, now } = proposing(FIVE);
+    runMission(r, now, ['p_john', 'p_sam']);
+    runMission(r, now, ['p_john', 'p_sam', 'p_kim']);
+    sendTeam(r, now, ['p_john', 'p_sam']);
+    play(r, 'p_john', { card: 'succeed' }, now);
+    play(r, 'p_sam', { card: 'succeed' }, now);
+    expect(r.phase).toBe('outcome');
+    for (const id of ['p_robin', 'p_alex', 'p_john']) leave(r, id, now);
+    expect(r.result).toEqual({ winner: 'crew', reason: 'missions', guessId: null });
+    expect(winners(r)).toEqual(['p_sam', 'p_kim']);
+  });
+
+  it('keeps the spies the fifth rejection when the table empties on the tally', () => {
+    const { r, now } = proposing(FIVE);
+    let t = now;
+    for (let i = 0; i < 5; i++) {
+      propose(r, r.leaderId!, { team: ['p_john', 'p_sam'] }, t);
+      voteAll(r, t, {}, false);
+      if (i < 4) {
+        t += TALLY_MS;
+        advance(r, t, half);
+      }
+    }
+    expect(r.phase).toBe('tally');
+    for (const id of ['p_john', 'p_sam', 'p_kim']) leave(r, id, t);
+    expect(r.result).toEqual({ winner: 'spies', reason: 'rejections', guessId: null });
+  });
+
+  it('still abandons on a tally that decided nothing', () => {
+    const { r, now } = proposing(FIVE);
+    propose(r, 'p_john', { team: ['p_john', 'p_sam'] }, now);
+    voteAll(r, now, {}, false);
+    expect(r.phase).toBe('tally');
+    for (const id of ['p_kim', 'p_sam', 'p_robin']) leave(r, id, now);
+    expect(r.result).toEqual({ winner: null, reason: 'abandoned', guessId: null });
+  });
+
+  it('keeps the crew their win when the table empties during the hunt', () => {
+    const { r, now } = proposing(FIVE_SPECIAL, 'hard');
+    runMission(r, now, ['p_john', 'p_sam']);
+    runMission(r, now, ['p_john', 'p_sam', 'p_kim']);
+    runMission(r, now, ['p_john', 'p_sam']);
+    expect(r.phase).toBe('hunt');
+    for (const id of ['p_john', 'p_sam', 'p_robin']) leave(r, id, now);
+    expect(r.result).toEqual({ winner: 'crew', reason: 'missions', guessId: null });
+    expect(winners(r)).toEqual(['p_kim']);
+  });
+});
+
+describe('the results screen', () => {
+  it('freezes the standings: a winner leaving afterwards is still a winner on every wire', () => {
+    const { r, now } = proposing(FIVE);
+    runMission(r, now, ['p_john', 'p_sam']);
+    runMission(r, now, ['p_john', 'p_sam', 'p_kim']);
+    runMission(r, now, ['p_john', 'p_sam']);
+    expect(r.phase).toBe('finished');
+    leave(r, 'p_john', now + 1);
+    expect(winners(r)).toEqual(['p_john', 'p_sam', 'p_kim']);
+    expect(standings(r).find((s) => s.id === 'p_john')).toMatchObject({ won: true, left: false, place: 1 });
+    const w = toWire(r, 'p_sam', now + 1);
+    expect(w.winnerIds).toContain('p_john');
+  });
+});
+
 describe('again', () => {
   it('goes back to the lobby with fresh everything', () => {
     const { r, now } = proposing(FIVE);
