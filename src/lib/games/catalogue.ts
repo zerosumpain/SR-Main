@@ -17,6 +17,7 @@ import * as liarsDice from './liars-dice';
 import * as drawGuess from './draw-guess';
 import * as marbleRace from './marble-race';
 import * as chess from './chess';
+import * as passThePlate from './pass-the-plate';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -33,6 +34,7 @@ export const GAME_IDS = [
   'draw-guess',
   'marble-race',
   'chess',
+  'pass-the-plate',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -217,6 +219,14 @@ export const GAMES: Record<GameId, GameRules> = {
         chess.move(room as chess.Room, playerId, { from: body.from, to: body.to, promotion: body.promotion }, now),
       resign: (room, playerId, _body, now) => chess.resign(room as chess.Room, playerId, now),
       draw: (room, playerId, _body, now) => chess.draw(room as chess.Room, playerId, now),
+    },
+  },
+  'pass-the-plate': {
+    ...passThePlate,
+    moves: {
+      // Raw on purpose: `pick` types its own fields (400 with a sentence for a card not on the plate).
+      pick: (room, playerId, body, now) =>
+        passThePlate.pick(room as passThePlate.Room, playerId, { cards: body.cards }, now),
     },
   },
 };
