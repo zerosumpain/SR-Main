@@ -620,14 +620,17 @@ describe('the sweep', () => {
   });
 
   it('does nothing at all when no game is durable', async () => {
-    delete (GAMES as Record<string, GameRules>)[RELAY];
+    // Set aside every durable game, the real ones (Homestead) as well as the relay.
+    const games = GAMES as Record<string, GameRules>;
+    const aside = Object.entries(games).filter(([, rules]) => rules.durable);
+    for (const [id] of aside) delete games[id];
     try {
       const due = vi.spyOn(store, 'due');
       expect(await sweepRooms()).toEqual({ woken: 0, evicted: 0, purged: 0 });
       await hydrateFor('p_john');
       expect(due).not.toHaveBeenCalled();
     } finally {
-      (GAMES as Record<string, GameRules>)[RELAY] = relay;
+      for (const [id, rules] of aside) games[id] = rules;
     }
   });
 });
