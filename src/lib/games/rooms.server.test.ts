@@ -541,3 +541,84 @@ describe('chess through the registry', () => {
     ).toThrow(/for two/);
   });
 });
+
+describe('secret mission through the registry', () => {
+  const table = [sam, { id: 'p_kim', name: 'Kim' }, { id: 'p_robin', name: 'Robin' }, { id: 'p_alex', name: 'Alex' }];
+  type MissionWire = WireRoom & {
+    secret: { role: string; side: string; spies: string[] } | null;
+    leaderId: string;
+    teamSizes: number[];
+    mission: number;
+    result: { winner: string | null; reason: string } | null;
+    winnerIds: string[];
+  };
+  const view = (id: string, who: string) => roomFor(id, who) as MissionWire;
+
+  it('deals secrets per phone, plays three missions to a crew win, and records the winning side', () => {
+    const { id } = createGame({ game: 'mission', host: john, invite: table, difficulty: 'easy' });
+    const everyone = ['p_john', ...table.map((p) => p.id)];
+    for (const p of table) act(id, p.id, 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    expect(view(id, 'p_john').phase).toBe('roles');
+
+    // Each phone holds its own role; only spies are told who the spies are.
+    const secrets = new Map(everyone.map((p) => [p, view(id, p).secret!]));
+    const spies = everyone.filter((p) => secrets.get(p)!.side === 'spies');
+    expect(spies).toHaveLength(2);
+    for (const p of everyone) {
+      const json = JSON.stringify(roomFor(id, p));
+      expect(json.match(/"role":"[a-z]+"/g)).toEqual([`"role":"${secrets.get(p)!.role}"`]);
+      expect(secrets.get(p)!.spies).toEqual(spies.includes(p) ? spies.filter((s) => s !== p) : []);
+    }
+
+    for (const p of everyone) act(id, p, 'ready');
+    const crew = everyone.filter((p) => !spies.includes(p));
+    for (let m = 0; m < 3; m++) {
+      const w = view(id, 'p_john');
+      expect(w.phase).toBe('proposing');
+      const size = w.teamSizes[w.mission - 1];
+      act(id, w.leaderId, 'propose', { team: crew.slice(0, size) });
+      for (const p of everyone) act(id, p, 'vote', { approve: true });
+      expect(view(id, 'p_john').phase).toBe('tally');
+      vi.advanceTimersByTime(6_000);
+      for (const p of crew.slice(0, size)) act(id, p, 'play', { card: 'succeed' });
+      expect(view(id, 'p_john').phase).toBe('outcome');
+      vi.advanceTimersByTime(7_000);
+    }
+    const done = view(id, 'p_john');
+    expect(done.phase).toBe('finished');
+    expect(done.result).toMatchObject({ winner: 'crew', reason: 'missions' });
+    expect(new Set(done.winnerIds)).toEqual(new Set(crew));
+
+    expect(recorded).toHaveLength(1);
+    const rows = recorded[0];
+    expect(rows.filter((r) => r.won).map((r) => r.playerId).sort()).toEqual([...crew].sort());
+    expect(rows.filter((r) => !r.won).map((r) => r.playerId).sort()).toEqual([...spies].sort());
+    expect(rows.every((r) => r.game === 'mission' && r.score === null && r.players === 5)).toBe(true);
+    expect(rows[0].options).toEqual({ label: 'Crew and spies only' });
+  });
+
+  it('auto-moves a table that does nothing, and lets the host invite past five', () => {
+    const { id } = createGame({ game: 'mission', host: john, invite: table, difficulty: 'hard' });
+    inviteTo(id, 'p_john', [{ id: 'p_jo', name: 'Jo' }, { id: 'p_max', name: 'Max' }]);
+    expect(view(id, 'p_john').players).toHaveLength(7);
+    for (const p of table) act(id, p.id, 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS + 30_000);
+    expect(view(id, 'p_john').phase).toBe('proposing');
+    // The leader's clock (60 s on hard): a team is drawn and put to the vote.
+    vi.advanceTimersByTime(60_000);
+    expect(view(id, 'p_john').phase).toBe('voting');
+    // Nobody votes (30 s): everyone approves; the team goes after the tally.
+    vi.advanceTimersByTime(30_000 + 6_000);
+    expect(view(id, 'p_john').phase).toBe('mission');
+    vi.advanceTimersByTime(20_000);
+    expect(view(id, 'p_john').phase).toBe('outcome');
+  });
+
+  it('refuses a sixth person for any other game', () => {
+    const { id } = createGame({ game: 'liars-dice', host: john, invite: table, difficulty: 'easy' });
+    expect(() => inviteTo(id, 'p_john', [{ id: 'p_jo', name: 'Jo' }])).toThrow(/Up to 5/);
+  });
+});
