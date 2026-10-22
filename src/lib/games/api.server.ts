@@ -23,7 +23,7 @@ import { subjectFor } from './gcse';
 import { reserveUsage } from '$lib/jkai/chat-access.server';
 import { areaAccess } from '$lib/server/area-scope';
 
-/** Quiz Nights a member may start per rolling 24 h — each is one model call. */
+/** Quiz Nights a member may start per rolling 24 h — each is two model calls (write, then check). */
 export const QUIZ_DAILY = 10;
 
 export type GameRole = 'owner' | 'member';

@@ -631,13 +631,13 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     id: 'games-quiz',
     scope: 'site',
     label: 'Quiz Night writer',
-    blurb: 'Writes the ten questions for a family Quiz Night in the iPhone app, once per game.',
+    blurb: 'Writes the ten questions for a family Quiz Night in the iPhone app, then checks every answer: two calls per game.',
     key: 'games.quiz.model',
     fallbackModelId: null,
     requires: null,
     catalogue: 'tools',
     reason:
-      'Follows the site default: one ~2k-token call per game, and wrong "facts" are the one failure a quiz cannot hide, so it is not pinned to a cheaper model than the default. The server marks answers; the model only drafts.',
+      'Follows the site default: a writing call and a checking call per game, and wrong "facts" are the one failure a quiz cannot hide (worse on a GCSE revision quiz), so it is not pinned to a cheaper model than the default. The server marks answers; the model drafts, then answers its own questions blind.',
   },
   {
     id: 'trips-reader',
