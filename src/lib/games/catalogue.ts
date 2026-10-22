@@ -49,7 +49,13 @@ export interface RoomBase {
   phase: string;
   players: { id: string; name: string; status: PlayerStatus }[];
   phaseEndsAt: number | null;
+  /** Set by a game that supports pace (from `options.pace`); absent = 'live'. */
+  pace?: Pace;
 }
+
+/** How fast a room's turns go: 'live' (everyone at the table, short timers) or 'async' (a move a day). */
+export type Pace = 'live' | 'async';
+export const PACES = ['live', 'async'] as const;
 
 type Move = (room: RoomBase, playerId: string, body: Record<string, unknown>, now: number) => void;
 
@@ -101,6 +107,30 @@ export interface GameRules {
    * Null: this game has no score, and its board ranks by wins.
    */
   resultScore?(standing: { id: string; [key: string]: unknown }): number | null;
+  /**
+   * Rooms of this game are written to `game_rooms` and survive a restart
+   * (spec: 2026-10-22-family-games-durable-rooms.md). `schema` is bumped when
+   * the room's stored shape changes; a row written under an older schema is
+   * passed to `revive` (null = cannot: the room is closed and logged). The
+   * room MUST be JSON-safe: plain objects, arrays, strings, finite numbers,
+   * booleans, null — no Map, Set, Date, functions or class instances.
+   */
+  durable?: { schema: number; revive?(state: Record<string, unknown>, fromSchema: number): RoomBase | null };
+  /** The paces a host may pick; absent = ['live']. */
+  paces?: readonly Pace[];
+  /**
+   * Who the room is waiting on right now, and a key that changes whenever a
+   * new decision starts (turn + step + who). Null when nobody (lobby,
+   * countdown, finished). Drives the "your move" push and the lobby's
+   * `myTurn`; `line` is the push body's first sentence ("Sam rolled a 9.").
+   */
+  waitingOn?(room: RoomBase): { ids: string[]; key: string; line?: string } | null;
+  /**
+   * A live-pace room read back after a restart: restart the running
+   * decision's timer from `now` (a deploy is a pause, never a timeout).
+   * `pausedMs` is how long it was down. Not called for async rooms.
+   */
+  resume?(room: RoomBase, now: number, pausedMs: number): void;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);

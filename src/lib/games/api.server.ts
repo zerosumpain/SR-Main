@@ -14,10 +14,24 @@ import type { RequestEvent } from '@sveltejs/kit';
 import { gamePlayers, playerFor, playerId } from './players.server';
 import { leaderboard } from './results.server';
 import { isWindow } from './results';
-import { act, asHttp, canCreate, createGame, inviteTo, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
+import {
+  act,
+  asHttp,
+  canCreate,
+  canCreateDurable,
+  createGame,
+  ensureRoom,
+  flush,
+  hydrateFor,
+  inviteTo,
+  invitesFor,
+  roomFor,
+  roomsFor,
+  subscribe,
+} from './rooms.server';
 import { pushInvites } from './invite-push.server';
-import { isDifficulty, MAX_PLAYERS } from './tap-duel';
-import { isGameId, type GameId } from './catalogue';
+import { GameError, isDifficulty, MAX_PLAYERS } from './tap-duel';
+import { GAMES, isGameId, type GameId, type Pace } from './catalogue';
 import { cleanTopic, isAudience, isClean } from './quiz-night';
 import { subjectFor } from './gcse';
 import { reserveUsage } from '$lib/jkai/chat-access.server';
@@ -41,13 +55,38 @@ export interface GameCaller {
 export async function lobbyFor(caller: GameCaller) {
   const me = await playerFor(caller.email);
   const players = (await gamePlayers()).filter((p) => p.id !== me.id).map((p) => ({ id: p.id, name: p.name }));
+  // Durable rooms this player is in come back into memory first (after a
+  // restart, or an async game evicted while idle), so they list like any other.
+  await hydrateFor(me.id);
   return {
     me: { id: me.id, name: me.name },
     players,
     invites: invitesFor(me.id),
     rooms: roomsFor(me.id),
+    // The games a host may play over days: the app offers a pace picker for these.
+    paces: gamePaces(),
     serverNow: Date.now(),
   };
+}
+
+/** Each game whose `paces` offer more than 'live', with them. */
+function gamePaces(): Record<string, Pace[]> {
+  const out: Record<string, Pace[]> = {};
+  for (const [id, rules] of Object.entries(GAMES)) {
+    const paces = rules?.paces ?? [];
+    if (paces.some((p) => p !== 'live')) out[id] = [...paces];
+  }
+  return out;
+}
+
+/** A stored durable room into memory before a synchronous room call; a database that is down is a 503. */
+async function loaded(id: string): Promise<void> {
+  try {
+    await ensureRoom(id);
+  } catch (err) {
+    if (err instanceof GameError) error(err.status, err.message);
+    throw err;
+  }
 }
 
 /** Resolve invitee ids against the roster; anyone not on it is refused. */
@@ -66,7 +105,8 @@ const stringIds = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x 
  * Start a game: `{ game, difficulty, invite: [playerId] }` plus that game's
  * options (Quiz Night `topic`/`audience`, or `mode: 'gcse'` with `subject`/`board`, Boggle `size`/`seconds`/`scoring`,
  * Categories `categoryCount`/`seconds`, Liar's Dice `dice`, Draw & Guess
- * `turnsEach`/`seconds`).
+ * `turnsEach`/`seconds`; for a durable game `pace` ('live' | 'async') with
+ * `deadlineHours` (12 | 24 | 48), and Homestead's `island`).
  */
 export async function startGame(
   event: Pick<RequestEvent, 'locals'>,
@@ -84,7 +124,15 @@ export async function startGame(
   const difficulty = body.difficulty;
   // Every refusal BEFORE the cap is charged: a quiz that was never going to
   // start must not cost a member one of their ten.
-  asHttp(() => canCreate(me.id));
+  asHttp(() => canCreate(me.id, game));
+  if (GAMES[game].durable) {
+    try {
+      await canCreateDurable(me.id);
+    } catch (err) {
+      if (err instanceof GameError) error(err.status, err.message);
+      throw err;
+    }
+  }
   if (game === 'quiz-night') {
     const topic = cleanTopic(body.topic);
     const subject = body.mode === 'gcse' ? subjectFor(body.subject) : null;
@@ -113,8 +161,13 @@ export async function startGame(
     dice: body.dice,
     turnsEach: body.turnsEach,
     course: body.course,
+    pace: body.pace,
+    deadlineHours: body.deadlineHours,
+    island: body.island,
   };
   const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
+  // A durable room is answered once it is saved (or after FLUSH_MS, the write retrying on).
+  await flush(room.id);
   // Not awaited: the host's screen should not wait on Apple. An invite whose
   // push fails is still collected by the invitee's poll (app or web lobby).
   void pushInvites(room.id);
@@ -124,6 +177,7 @@ export async function startGame(
 /** One room as this player sees it. */
 export async function roomView(caller: GameCaller, id: string) {
   const me = await playerFor(caller.email);
+  await loaded(id);
   return asHttp(() => roomFor(id, me.id));
 }
 
@@ -138,6 +192,7 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
   const action = body.action;
   if (typeof action !== 'string') error(400, 'Unknown action.');
   const me = await playerFor(caller.email);
+  await loaded(id);
   if (action === 'invite') {
     // Resolved against the same roster a new game's invites are, so nobody
     // without games access — or without anywhere to open it — can be named.
@@ -145,10 +200,12 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
     if (!ids.length) error(400, 'Pick somebody to invite.');
     const people = await resolveInvitees(ids);
     const room = asHttp(() => inviteTo(id, me.id, people));
+    await flush(id);
     void pushInvites(id);
     return room;
   }
   const room = asHttp(() => act(id, me.id, action, body));
+  await flush(id);
   // "Play again" re-invites everybody; their phones are rung afresh.
   if (action === 'again') void pushInvites(id);
   return room;
@@ -166,6 +223,7 @@ const KEEPALIVE_MS = 15_000;
  */
 export async function roomStream(caller: GameCaller, id: string): Promise<Response> {
   const me = await playerFor(caller.email);
+  await loaded(id);
   const encoder = new TextEncoder();
   let cleanup = () => {};
 

@@ -31,7 +31,7 @@
 // their address or principal. `erase.test.ts` fails when the schema grows a
 // new one that is not classified there.
 
-import { and, eq, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, arrayOverlaps, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import {
   accessInvite,
@@ -64,6 +64,7 @@ import {
   familyBacklogReaction,
   fileShareTokens,
   gameResults,
+  gameRooms,
   gmailAccounts,
   householdMember,
   jkaiAttachments,
@@ -128,6 +129,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   family_steps_event: { email: 'erase' },
   // Keyed by the games' hash of the address (`playerId`), never the address.
   game_results: { player_id: 'erase' },
+  // Durable game rooms they are in (hashed ids too): the game ends for everyone at that table.
+  game_rooms: { host_id: 'erase', player_ids: 'erase' },
   // Alarms they raised (their message and position) go; one they stood down
   // for somebody else stays, without their address.
   family_alarm: { from_email: 'erase', cancelled_by_email: 'scrub' },
@@ -234,7 +237,9 @@ export interface ErasedRows {
 export async function eraseRows(target: EraseTarget, executor: typeof db = db): Promise<ErasedRows> {
   const addrs = target.addresses;
   const pid = target.principalId;
-  return executor.transaction(async (tx) => {
+  // Durable game rooms deleted below; once committed, the copies in memory are closed too.
+  let gameRoomIds: string[] = [];
+  const erased = await executor.transaction(async (tx) => {
     const out: ErasedRows = {
       conversations: 0,
       researchRuns: 0,
@@ -318,8 +323,13 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
       await tx.update(trip).set({ questionPushOff: (t.off ?? []).filter((e) => !addrs.includes(e.toLowerCase())) }).where(eq(trip.id, t.id));
     }
 
-    // Their games on the family leaderboard.
-    await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));
+    // Their games on the family leaderboard, and any durable game they sit in.
+    const players = addrs.map((a) => playerId(a));
+    await tx.delete(gameResults).where(inArray(gameResults.playerId, players));
+    if (players.length) {
+      const rooms = await tx.delete(gameRooms).where(arrayOverlaps(gameRooms.playerIds, players)).returning({ id: gameRooms.id });
+      gameRoomIds = rooms.map((r) => r.id);
+    }
 
     const removed = await tx
       .update(familyTask)
@@ -422,6 +432,12 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     }
     return out;
   });
+  if (gameRoomIds.length) {
+    await import('$lib/games/rooms.server')
+      .then((m) => m.dropRooms(gameRoomIds))
+      .catch((err) => console.error('[account] could not close erased game rooms in memory:', (err as Error).message));
+  }
+  return erased;
 }
 
 /**

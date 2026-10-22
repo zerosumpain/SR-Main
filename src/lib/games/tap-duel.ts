@@ -86,7 +86,7 @@ export interface Room {
 
 export class GameError extends Error {
   constructor(
-    readonly status: 403 | 404 | 409 | 400,
+    readonly status: 403 | 404 | 409 | 400 | 503,
     message: string,
   ) {
     super(message);
