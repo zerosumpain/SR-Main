@@ -20,8 +20,8 @@ export const load: PageServerLoad = async (event) => {
   const caller = await webFamilyCaller(event);
   if (!caller) error(403, 'The backlog is for the family.');
   event.setHeaders({ 'cache-control': 'private, no-store' });
-  const me = await familyPersonFor(caller.email, caller.parent);
   const roster = await familyRoster();
+  const me = await familyPersonFor(caller.email, caller.parent, roster);
   const people = roster.map((p) => ({ id: p.id, name: p.name }));
   if (!roster.some((p) => p.email === me.email)) people.push({ id: me.id, name: me.name });
   const lists = listsOf(await loadItems(), new Date());

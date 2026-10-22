@@ -5,6 +5,7 @@ import { qualifiedStop } from './insights';
 import { insightMembers } from './insights.server';
 import { metresBetween } from './cluster';
 import { geocodePendingPlaces } from './geocode.server';
+import { trailChanged } from './trail-generation';
 
 /** Small recent-window stop detection; never run the ninety-day clusterer on ingest. */
 export async function discoverRecentStops(): Promise<{ created: number; geocoded: number }> {
@@ -38,6 +39,8 @@ export async function discoverRecentStops(): Promise<{ created: number; geocoded
       const ids = rows.filter(r => +r.ts >= +stop[0].ts && +r.ts <= +stop.at(-1)!.ts).map(r => r.id);
       if (ids.length) await tx.update(daydreamTrail).set({ placeId: id }).where(inArray(daydreamTrail.id, ids));
     });
+    // After the commit: a reader that re-reads now sees the new places.
+    trailChanged();
   }
   return { created, geocoded: await geocodePendingPlaces() };
 }

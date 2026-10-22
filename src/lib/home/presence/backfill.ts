@@ -28,6 +28,7 @@ import { db } from '$lib/db';
 import { daydreamTrail, homeAssistantConfig } from '$lib/db/schema';
 import { inferMode, metresBetween, speedKmhBetween } from './cluster';
 import { DEFAULT_SUBJECT, MAX_USABLE_ACCURACY_M, errMsg } from './types';
+import { trailChanged } from './trail-generation';
 
 /** HA keeps roughly a month; asking for more is a slow way to fetch nothing. */
 export const DEFAULT_BACKFILL_DAYS = 30;
@@ -350,6 +351,7 @@ export async function backfillFromHomeAssistant(
     for (let i = 0; i < rows.length; i += 500) {
       await db.insert(daydreamTrail).values(rows.slice(i, i + 500));
     }
+    trailChanged();
     result.fixesKept += rows.length;
   }
 

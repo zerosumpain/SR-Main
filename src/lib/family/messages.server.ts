@@ -85,8 +85,8 @@ export async function sendMessage(
     );
   if ((recent?.n ?? 0) >= SEND_LIMIT) return { kind: 'limited', retryAfterSeconds: Math.ceil(SEND_WINDOW_MS / 1000) };
 
-  const person = await familyPersonFor(sender, parent);
   const roster = await familyRoster(now.getTime());
+  const person = await familyPersonFor(sender, parent, roster);
   const { emails, people } = alarmRecipients(sender, roster.map((p) => p.email), getOwnerEmails(), isOwnerEmail);
   const [message] = await db
     .insert(familyMessage)
