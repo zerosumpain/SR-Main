@@ -51,6 +51,19 @@ export interface Gap {
 
 const STAGE_MEAL: Record<DayStage, MealRole> = { morning: null, lunch: 'lunch', afternoon: null, evening: 'dinner' };
 
+/**
+ * Roughly when each stage runs, for a stage the day's stops never reach: a
+ * day with nothing planned ends at the stay after breakfast (or the bag drop
+ * on an arrival day), so its afternoon and evening have no stop after them.
+ */
+const STAGE_HOURS: Record<DayStage, [number, number]> = {
+  morning: [9 * 60, 12 * 60],
+  lunch: [12 * 60 + 30, 14 * 60 + 30],
+  afternoon: [14 * 60 + 30, 18 * 60 + 30],
+  evening: [19 * 60, 22 * 60],
+};
+const MIN_OPEN_MIN = 30;
+
 /** Free-time stays mid-day ("Free time at the hotel") and, in a meal slot, the meal itself are open. */
 function isOpen(stop: PlannedStop, index: number, day: PlannedDay, meal: MealRole): boolean {
   if (stop.kind === 'stay') return index > 0 && index < day.stops.length - 1;
@@ -60,8 +73,10 @@ function isOpen(stop: PlannedStop, index: number, day: PlannedDay, meal: MealRol
 /**
  * The open slot to fill. With `afterStopId`/`beforeStopId`, the gap between
  * those two stops; otherwise the largest gap touching the stage: from the
- * last fixed stop before (or inside) the stage to the next one. Null when the
- * day is not in the plan.
+ * last fixed stop before (or inside) the stage to the next one; a stage after
+ * the day has ended at the stay runs out from the stay and back by the stage's
+ * end. Null when the day is not in the plan or has no open time then
+ * (`noGapReason` says which).
  */
 export function computeGap(plan: SolvedPlan, date: string, stage: DayStage, between?: { afterStopId?: string | null; beforeStopId?: string | null }): Gap | null {
   const day = plan.days.find((d) => d.date === date);
@@ -103,9 +118,28 @@ export function computeGap(plan: SolvedPlan, date: string, stage: DayStage, betw
       }
     }
   }
+  if ((!a || !b) && !between?.afterStopId && !between?.beforeStopId) {
+    const last = stops[stops.length - 1];
+    const [from, to] = STAGE_HOURS[stage];
+    const leave = Math.max(last.departMin, from);
+    if (last.kind === 'stay' && to - leave >= MIN_OPEN_MIN) {
+      a = { ...last, departMin: leave };
+      b = { ...last, arriveMin: to };
+    }
+  }
   if (!a || !b) return null;
   const replaces = meal ? (stops.find((s) => s.kind === 'meal' && s.id.endsWith(`:${meal}`) && s.arriveMin >= a!.departMin && s.departMin <= b!.arriveMin)?.id ?? null) : null;
   return { date, stage, before: end(a, 'before'), after: end(b, 'after'), freeMin: Math.max(0, b.arriveMin - a.departMin), meal, replacesStopId: replaces };
+}
+
+/** Why `computeGap` found no slot, in words the phone shows as the answer. */
+export function noGapReason(plan: SolvedPlan, date: string, stage: DayStage): string {
+  const day = plan.days.find((d) => d.date === date);
+  if (!day) return 'That day is not in the plan.';
+  const last = day.stops[day.stops.length - 1];
+  if (last?.kind === 'transport') return `You will be on your way by then (${last.title}).`;
+  const when: Record<DayStage, string> = { morning: 'in the morning', lunch: 'at lunch', afternoon: 'in the afternoon', evening: 'in the evening' };
+  return `That day has no open time ${when[stage]}.`;
 }
 
 const STAGE_RANK: Record<DayStage, number> = { morning: 0, lunch: 1, afternoon: 2, evening: 3 };
@@ -196,6 +230,17 @@ export function readIdeas(raw: unknown): { ideas: IdeaDraft[]; note: string | nu
   return { ideas, note: str(r.note, 300) };
 }
 
+/**
+ * When an idea for a slot after the day has ended at the stay should start.
+ * The solver never waits for a stop without a time, so a lone idea on a free
+ * day would otherwise be planned first thing (dinner at nine in the morning).
+ * Null for a gap between two different stops.
+ */
+export function ideaStartMin(gap: Gap): number | null {
+  if (gap.before.stopId !== gap.after.stopId) return null;
+  return Math.ceil((gap.before.min + 15) / 15) * 15;
+}
+
 /** The wish an idea becomes for its slot: pinned to the day, in the stage (or as the meal). */
 export function ideaDraft(idea: IdeaDraft, gap: Gap): WishDraft {
   const part: Record<DayStage, PartOfDay> = { morning: 'morning', lunch: 'any', afternoon: 'afternoon', evening: 'evening' };
@@ -206,7 +251,7 @@ export function ideaDraft(idea: IdeaDraft, gap: Gap): WishDraft {
     durationMin: idea.durationMin,
     partOfDay: gap.meal ? 'any' : part[gap.stage],
     fixedDate: gap.date,
-    fixedStartMin: null,
+    fixedStartMin: ideaStartMin(gap),
     note: idea.why ? `Idea for ${dayLabel(gap.date)} ${DAY_STAGE_LABEL[gap.stage].toLowerCase()}: ${idea.why}` : null,
     replacesMeal: gap.meal,
   };
