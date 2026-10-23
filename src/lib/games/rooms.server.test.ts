@@ -774,3 +774,63 @@ describe('pass the plate through the registry', () => {
     expect(recorded[0].find((r) => r.playerId === 'p_john')?.won).toBe(true);
   });
 });
+
+describe('fireworks through the registry', () => {
+  type Hand = { id: number; colour: string | null; rank: number | null }[];
+  type Fw = {
+    phase: string;
+    turnId: string;
+    hints: number;
+    score: number;
+    players: { id: string; hand: Hand }[];
+    standings: { id: string; score: number }[] | null;
+  };
+  const kim = { id: 'p_kim', name: 'Kim' };
+
+  it('hides each phone its own hand, hints, times out, and records the team score for everyone', () => {
+    const { id } = createGame({ game: 'fireworks', host: john, invite: [sam, kim], difficulty: 'medium' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_kim', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+
+    for (const viewer of ['p_john', 'p_sam', 'p_kim']) {
+      const w = roomFor(id, viewer) as unknown as Fw;
+      expect(w.phase).toBe('playing');
+      for (const p of w.players) {
+        expect(p.hand).toHaveLength(5);
+        expect(p.hand.every((c) => (c.colour === null) === (p.id === viewer))).toBe(true);
+      }
+    }
+
+    // John tells Sam which of his cards share the first one's number.
+    const johnSees = roomFor(id, 'p_john') as unknown as Fw;
+    expect(johnSees.turnId).toBe('p_john');
+    const samFirst = johnSees.players.find((p) => p.id === 'p_sam')!.hand[0];
+    expect(() => act(id, 'p_sam', 'hint', { to: 'p_john', rank: 1 })).toThrow(/not your turn/);
+    const after = act(id, 'p_john', 'hint', { to: 'p_sam', rank: samFirst.rank }) as unknown as Fw;
+    expect(after.hints).toBe(7);
+    expect(after.turnId).toBe('p_sam');
+
+    // Sam's clock runs out: the server drops a card for him and Kim is up.
+    vi.advanceTimersByTime(75_000);
+    const timed = roomFor(id, 'p_kim') as unknown as Fw & { log: { kind: string; by: string; auto: boolean }[] };
+    expect(timed.log.at(-1)).toMatchObject({ kind: 'discard', by: 'p_sam', auto: true });
+    expect(timed.turnId).toBe('p_kim');
+    expect(timed.hints).toBe(8);
+
+    // Two leave: one player cannot play alone, so the show ends with its score.
+    act(id, 'p_kim', 'leave');
+    act(id, 'p_sam', 'leave');
+    const done = roomFor(id, 'p_john') as unknown as Fw;
+    expect(done.phase).toBe('finished');
+    expect(done.standings!.map((s) => s.id)).toEqual(['p_john', 'p_sam', 'p_kim']);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].map((r) => [r.game, r.playerId, r.won, r.rank, r.score])).toEqual([
+      ['fireworks', 'p_john', false, 1, done.score],
+      ['fireworks', 'p_sam', false, 1, done.score],
+      ['fireworks', 'p_kim', false, 1, done.score],
+    ]);
+    expect(recorded[0][0].options).toEqual({ label: '5 colours · 3 misfires' });
+  });
+});

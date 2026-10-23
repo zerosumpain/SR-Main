@@ -35,6 +35,7 @@ export const TITLES: Record<GameId, string> = {
   'one-clue': 'One Clue',
   'fake-artist': 'Odd Artist Out',
   'pass-the-plate': 'Pass the Plate',
+  fireworks: 'Fireworks',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
