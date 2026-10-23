@@ -31,7 +31,7 @@ export const TITLES: Record<GameId, string> = {
   'draw-guess': 'Draw & Guess',
   'marble-race': 'Marble Race',
   chess: 'Chess',
-  'fake-artist': 'Fake Artist',
+  'fake-artist': 'Odd Artist Out',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };

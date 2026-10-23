@@ -66,7 +66,7 @@ const stringIds = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x 
  * Start a game: `{ game, difficulty, invite: [playerId] }` plus that game's
  * options (Quiz Night `topic`/`audience`, or `mode: 'gcse'` with `subject`/`board`, Boggle `size`/`seconds`/`scoring`,
  * Categories `categoryCount`/`seconds`, Liar's Dice `dice`, Draw & Guess
- * `turnsEach`/`seconds`, Fake Artist `rounds`).
+ * `turnsEach`/`seconds`, Odd Artist Out `rounds`).
  */
 export async function startGame(
   event: Pick<RequestEvent, 'locals'>,

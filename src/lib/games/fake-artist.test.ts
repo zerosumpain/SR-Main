@@ -5,16 +5,19 @@ import {
   advance,
   again,
   createRoom,
+  decline,
   dealWord,
   deadline,
   guess,
   guessMatches,
   join,
   leave,
+  player,
   start,
   stroke,
   toWire,
   vote,
+  voteCounts,
   wordsFor,
   ARTIST_POINTS,
   COLORS,
@@ -154,6 +157,37 @@ describe('lobby', () => {
     ).toThrow(/Up to 10/);
   });
 
+  it('play again never takes the table past the cap, so no two players share a colour', () => {
+    const many = Array.from({ length: MAX_PLAYERS - 1 }, (_, i) => ({ id: `p_${i}`, name: `P${i}` }));
+    const room = createRoom({ id: 'g', host: john, invite: many, difficulty: 'easy', now: T0 });
+    for (const p of many.slice(0, 6)) join(room, p.id, T0);
+    for (const p of many.slice(6)) decline(room, p.id, T0);
+    // As `inviteTo` would: three newcomers fill the seats the decliners left.
+    for (let i = 0; i < 3; i++) room.players.push(player(`p_new${i}`, `N${i}`, 'invited'));
+    for (let i = 0; i < 3; i++) join(room, `p_new${i}`, T0);
+    expect(room.players).toHaveLength(13);
+    room.phase = 'finished';
+    leave(room, 'p_0', T0);
+    again(room, john.id, T0);
+    const inPlay = room.players.filter((p) => p.status === 'joined' || p.status === 'invited');
+    expect(inPlay).toHaveLength(MAX_PLAYERS);
+    // The one who played last game is asked back before those who declined.
+    expect(room.players.find((p) => p.id === 'p_0')!.status).toBe('invited');
+    expect(room.players.filter((p) => p.status === 'declined')).toHaveLength(3);
+    for (const p of room.players) if (p.status === 'invited') join(room, p.id, T0);
+    start(room, john.id, T0);
+    const colours = room.players.filter((p) => p.status === 'joined').map((p) => p.color);
+    expect(new Set(colours).size).toBe(colours.length);
+  });
+
+  it('start refuses more than the cap', () => {
+    const many = Array.from({ length: MAX_PLAYERS - 1 }, (_, i) => ({ id: `p_${i}`, name: `P${i}` }));
+    const room = createRoom({ id: 'g', host: john, invite: many, difficulty: 'easy', now: T0 });
+    room.players.push(player('p_x', 'X', 'invited'));
+    for (const p of room.players) join(room, p.id, T0);
+    expect(() => start(room, john.id, T0)).toThrow(/Up to 10/);
+  });
+
   it('a host leaving the lobby cancels it', () => {
     const room = createRoom({ id: 'g', host: john, invite: [sam], difficulty: 'easy', now: T0 });
     leave(room, john.id, T0);
@@ -198,12 +232,27 @@ describe('a round', () => {
     for (let i = 0; i < MAX_LINE_POINTS / MAX_POST_POINTS; i++) {
       stroke(room, sam.id, { points: Array.from({ length: MAX_POST_POINTS }, () => [5, 5]) }, t + 500);
     }
-    expect(() => stroke(room, sam.id, { points: [[1, 1]] }, t + 600)).toThrow(/long enough/);
-    stroke(room, sam.id, { end: true }, t + 600);
+    // A full line lifts itself: the turn moves on without waiting for `end`.
+    expect(room.round!.turn).toBe(2);
+    expect(() => stroke(room, sam.id, { points: [[1, 1]] }, t + 600)).toThrow(/not your turn/);
     expect(room.drawing.lines.map((l) => [l.id, l.color])).toEqual([
       [1, 'red'],
       [2, 'blue'],
     ]);
+  });
+
+  it('drops points past the line cap and still honours the lift, never refusing the post', () => {
+    const room = drawingRoom();
+    const t = nowOf(room);
+    const post = () => Array.from({ length: MAX_POST_POINTS }, () => [5, 5]);
+    for (let i = 0; i < MAX_LINE_POINTS / MAX_POST_POINTS - 1; i++) stroke(room, john.id, { points: post() }, t + 100);
+    stroke(room, john.id, { points: Array.from({ length: 100 }, () => [6, 6]) }, t + 200);
+    expect(room.round!.turn).toBe(0);
+    // 1300 drawn; this post of 300 with the lift crosses the cap: 200 kept, the lift kept.
+    stroke(room, john.id, { points: post(), end: true }, t + 300);
+    expect(room.drawing.lines[0].points).toHaveLength(MAX_LINE_POINTS);
+    expect(room.round!.turn).toBe(1);
+    expect(room.round!.skipped).toEqual([]);
   });
 
   it('skips a turn nobody drew, and keeps a line cut short by the clock', () => {
@@ -401,7 +450,28 @@ describe('leaving', () => {
     drawAll(room);
     vote(room, kim.id, { playerId: ada.id }, nowOf(room));
     leave(room, ada.id, nowOf(room));
-    expect(room.round!.votes).toEqual({});
+    expect(voteCounts(room)).toEqual({});
+  });
+
+  it('a leaver does not reveal who had voted for them', () => {
+    const room = createRoom({ id: 'g_1', host: john, invite: [sam, kim, ada, bo], difficulty: 'medium', now: T0 });
+    for (const p of [sam, kim, ada, bo]) join(room, p.id, T0);
+    start(room, john.id, T0);
+    advance(room, T0 + COUNTDOWN_MS, first);
+    advance(room, T0 + COUNTDOWN_MS + READ_MS, first);
+    drawAll(room);
+    // John is the fake; Sam votes for Kim, Ada votes for John.
+    vote(room, sam.id, { playerId: kim.id }, nowOf(room));
+    vote(room, ada.id, { playerId: john.id }, nowOf(room));
+    const votedFor = (me: string) => toWire(room, me, nowOf(room)).current!.voted;
+    expect(votedFor(john.id)).toEqual([sam.id, ada.id]);
+    leave(room, kim.id, nowOf(room));
+    expect(room.phase).toBe('voting');
+    expect(votedFor(john.id)).toEqual([sam.id, ada.id]);
+    expect(voteCounts(room)).toEqual({ [john.id]: 1 });
+    // Sam may still change the vote that no longer counts.
+    vote(room, sam.id, { playerId: john.id }, nowOf(room));
+    expect(voteCounts(room)).toEqual({ [john.id]: 2 });
   });
 
   it('fewer than three left finishes the game', () => {

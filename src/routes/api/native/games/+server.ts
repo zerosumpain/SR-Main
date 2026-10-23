@@ -26,7 +26,7 @@ export const GET: RequestHandler = withNativeAccess('games', async (_event, iden
  * for Boggle, and `categoryCount` (6 | 8 | 10) and `seconds` (90 | 120 | 180) for
  * Categories, `dice` (3 | 5) for Liar's Dice, and `turnsEach` (1 | 2) with `seconds`
  * (60 | 80 | 100) for Draw & Guess, and `course` ({ id, name, marbles, seconds }, from
- * Marbler's course pack) for Marble Race, and `rounds` (3 | 5) for Fake Artist — an unknown value is that game's default
+ * Marbler's course pack) for Marble Race, and `rounds` (3 | 5) for Odd Artist Out — an unknown value is that game's default
  * (Marble Race refuses a malformed course rather than guess one).
  */
 export const POST: RequestHandler = withNativeAccess('games', async (event, identity, role) => {

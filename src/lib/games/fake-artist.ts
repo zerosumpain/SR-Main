@@ -1,4 +1,4 @@
-// Fake Artist — the rules, as pure functions over a room.
+// Odd Artist Out — the rules, as pure functions over a room.
 //
 // Same shape as Draw & Guess (`draw-guess.ts`): every function takes `now`
 // (epoch ms) and, where it deals, a `rng`, so a whole game plays in a test
@@ -379,9 +379,11 @@ export function leave(room: Room, playerId: string, now: number): void {
     finish(room, now);
     return;
   }
-  // Their vote, and any votes for them, no longer count.
+  // Their own vote goes. Votes cast FOR them stay put — `voteCounts` skips a
+  // target who is no longer here, and deleting them would show every phone
+  // (through `voted`) who had picked the leaver. Those voters may still change
+  // their vote until everyone has voted.
   delete round.votes[playerId];
-  for (const [voter, target] of Object.entries(round.votes)) if (target === playerId) delete round.votes[voter];
   if (room.phase === 'drawing' && round.turns[round.turn] === playerId) nextTurn(room, now);
   else if (room.phase === 'voting' && everyoneVoted(room)) tally(room, now);
 }
@@ -389,7 +391,8 @@ export function leave(room: Room, playerId: string, now: number): void {
 export function start(room: Room, playerId: string, now: number): void {
   if (playerId !== room.hostId) throw new GameError(403, 'Only the host can start.');
   if (room.phase !== 'lobby') throw new GameError(409, 'That game has already started.');
-  if (joined(room).length < MIN_PLAYERS) throw new GameError(409, 'Fake Artist needs at least four players.');
+  if (joined(room).length < MIN_PLAYERS) throw new GameError(409, 'Odd Artist Out needs at least four players.');
+  if (joined(room).length > MAX_PLAYERS) throw new GameError(409, `Up to ${MAX_PLAYERS} players.`);
   for (const p of room.players) if (p.status === 'invited') p.status = 'declined';
   joined(room).forEach((p, i) => {
     p.color = COLORS[i % COLORS.length];
@@ -403,8 +406,20 @@ export function start(room: Room, playerId: string, now: number): void {
 export function again(room: Room, playerId: string, now: number): void {
   if (playerId !== room.hostId) throw new GameError(403, 'Only the host can start another.');
   if (room.phase !== 'finished') throw new GameError(409, 'This game is still going.');
+  // Re-invite only while the table stays within MAX_PLAYERS (colours are dealt
+  // one per seat, and a colour is the only way to tell whose line is whose):
+  // those who played last game (and left) first, then those who declined.
+  let inPlay = joined(room).length;
+  const asked = [...room.players.filter((p) => p.status === 'left'), ...room.players.filter((p) => p.status === 'declined')];
+  for (const p of asked) {
+    if (inPlay >= MAX_PLAYERS) {
+      p.status = 'declined';
+      continue;
+    }
+    p.status = 'invited';
+    inPlay += 1;
+  }
   for (const p of room.players) {
-    p.status = p.status === 'joined' ? 'joined' : 'invited';
     p.score = 0;
     p.color = null;
     p.timesFake = 0;
@@ -608,6 +623,7 @@ function record(room: Room, op: DrawOp): void {
  * same line (the server numbers it; any `id` posted is ignored), so a line
  * streams in as it is drawn; `end: true` is the finger lifting, which ends
  * the turn. A post may be `end` alone, with no points, if there is a line.
+ * Points past MAX_LINE_POINTS are dropped and a full line lifts itself.
  */
 export function stroke(
   room: Room,
@@ -632,9 +648,13 @@ export function stroke(
   }
   let line = lineOf(room, round, round.turn);
   if (!pts.length && !(end && line)) throw new GameError(400, 'A line needs points.');
+  // A line is capped at MAX_LINE_POINTS: points past the cap are dropped, and
+  // a line that reaches it is lifted for the drawer — never a refusal, which
+  // would lose an `end` and leave the table waiting out the turn clock.
+  const space = MAX_LINE_POINTS - (line?.points.length ?? 0);
+  if (pts.length > space) pts.length = Math.max(0, space);
+  const full = (line?.points.length ?? 0) + pts.length >= MAX_LINE_POINTS;
   if (pts.length) {
-    if ((line?.points.length ?? 0) + pts.length > MAX_LINE_POINTS)
-      throw new GameError(409, 'That line is long enough — lift your finger.');
     if (!line) {
       line = { id: round.turn + 1, playerId, color: p.color ?? 'black', width: WIDTH, points: [] };
       room.drawing.lines.push(line);
@@ -644,7 +664,7 @@ export function stroke(
     record(room, { seq: room.revision, op: 'stroke', id: line.id, color: line.color, width: line.width, points: pts });
   }
   room.updatedAt = now;
-  if (end) {
+  if (end || full) {
     round.lifted = true;
     nextTurn(room, now);
   }

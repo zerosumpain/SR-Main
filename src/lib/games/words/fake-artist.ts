@@ -1,4 +1,4 @@
-// Fake Artist words: a category everyone sees and a secret word only the
+// Odd Artist Out words: a category everyone sees and a secret word only the
 // artists see. Hand-picked and family-safe: every word is something a child
 // under thirteen knows (easy) or could work out from the category (medium,
 // hard), with nothing scary, rude or grown-up. Each must be drawable a line at

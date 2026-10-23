@@ -542,7 +542,7 @@ describe('chess through the registry', () => {
   });
 });
 
-describe('fake artist through the registry', () => {
+describe('odd artist out through the registry', () => {
   const kim = { id: 'p_kim', name: 'Kim' };
   const ada = { id: 'p_ada', name: 'Ada' };
   const bo = { id: 'p_bo', name: 'Bo' };

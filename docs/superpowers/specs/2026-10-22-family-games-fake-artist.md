@@ -1,8 +1,8 @@
-# Family games: Fake Artist
+# Family games: Odd Artist Out
 
 Status: built 2026-10-22. Repos: SR-Main (`src/lib/games/fake-artist.ts`, word list `src/lib/games/words/fake-artist.ts`, catalogue entry `fake-artist`), SR-AppleApp (`Games/FakeArtist*.swift`). A drawing-and-bluffing game for four to ten; the leaderboard needs nothing new (standings carry a numeric `score`, the total points).
 
-The mechanics are inspired by a commercial party game. The name, word list, copy and rules text here are our own.
+The mechanics are inspired by a commercial party game. The name ("Odd Artist Out"), word list, copy and rules text here are our own; `fake-artist` is only the internal game id.
 
 ## The game
 
@@ -38,13 +38,13 @@ A harder word gives the fake less to go on from the category, and makes the arti
 
 ## Lobby
 
-`createRoom` refuses more than nine invitees (400 "Up to 10 players."); `inviteTo` and `startGame` read the same cap from `GAMES['fake-artist'].maxPlayers`. `start` needs four joined (409 "Fake Artist needs at least four players."). Colours are dealt by seat at the start: red, blue, green, orange, purple, brown, pink, teal, black, gold.
+`createRoom` refuses more than nine invitees (400 "Up to 10 players."); `inviteTo` and `startGame` read the same cap from `GAMES['fake-artist'].maxPlayers`. `start` needs four joined (409 "Odd Artist Out needs at least four players."). `start` also refuses more than ten joined (409), and *play again* re-invites the absent (those who left first, then those who declined) only while the table stays within ten — the rest stay declined. Colours are dealt by seat at the start: red, blue, green, orange, purple, brown, pink, teal, black, gold.
 
 ## Moves (`POST /api/native/games/<id>`)
 
 | Body | Does |
 |---|---|
-| `{ action: "stroke", points: [[x,y],…], end?: true, since? }` | Only the artist in turn, while drawing. Points are on the 0…1000 canvas (rounded, clamped; up to 300 a post, 1500 a line). Every post of a turn extends the same line, which the server numbers (turn index + 1) and inks in the player's colour; a posted `id`, `color` or `width` is ignored. `end: true` lifts the finger and ends the turn; it may come alone once the line has points. 409 off-turn or after the lift; 400 for bad points. |
+| `{ action: "stroke", points: [[x,y],…], end?: true, since? }` | Only the artist in turn, while drawing. Points are on the 0…1000 canvas (rounded, clamped; up to 300 a post, 1500 a line — points past 1500 are dropped and a full line lifts itself, ending the turn; a post is never refused for length). Every post of a turn extends the same line, which the server numbers (turn index + 1) and inks in the player's colour; a posted `id`, `color` or `width` is ignored. `end: true` lifts the finger and ends the turn; it may come alone once the line has points. 409 off-turn or after the lift; 400 for bad points. |
 | `{ action: "vote", playerId }` | While voting; anybody dealt in and still here, not yourself. Replaces your earlier vote. |
 | `{ action: "guess", text }` | The caught fake only, while guessing. One guess; ends the round. |
 
@@ -57,7 +57,7 @@ Nothing waits on a person: reading 8 s, each turn 15–30 s (then skipped or cut
 ## Leaving mid-game
 
 - **The fake leaves** (any time before the reveal): the round ends `fake-left`, each artist still in scores 1.
-- **An artist leaves:** their turn in hand passes on, their later turns are skipped, their vote and any votes for them stop counting; the vote closes if everyone left has voted.
+- **An artist leaves:** their turn in hand passes on, their later turns are skipped, their own vote is dropped and any votes for them stop counting (but stay cast, so `voted` does not change and no phone learns who had picked the leaver; those voters may change their vote while the vote is open); the vote closes if everyone left has voted.
 - **Fewer than three left:** the game finishes with the standings so far.
 - The host role passes on as in every game.
 
