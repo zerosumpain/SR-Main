@@ -77,8 +77,8 @@ export async function startGame(
   if (!isGameId(game)) error(400, 'Unknown game.');
   if (!isDifficulty(body.difficulty)) error(400, 'Pick easy, medium or hard.');
   const ids = stringIds(body.invite);
-  const most = GAMES[game].maxPlayers ?? MAX_PLAYERS;
-  if (ids.length > most - 1) error(400, `Up to ${most} players.`);
+  const cap = GAMES[game].maxPlayers ?? MAX_PLAYERS;
+  if (ids.length > cap - 1) error(400, `Up to ${cap} players.`);
 
   const me = await playerFor(caller.email);
   const invite = await resolveInvitees(ids);

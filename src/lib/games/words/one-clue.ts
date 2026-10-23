@@ -63,3 +63,38 @@ export const HARD: readonly string[] = split(`
 `);
 
 export const WORDS: Record<'easy' | 'medium' | 'hard', readonly string[]> = { easy: EASY, medium: MEDIUM, hard: HARD };
+
+/**
+ * Real words that sit one typo (two, on a ten-letter word) from a secret word,
+ * keep its first letter, and are not a form of it: a guess of one of these is
+ * a different answer, never a typo (plant is not planet, winner is not
+ * winter). Never shown to anyone; generated from a system word list against
+ * the lists above with the same typo and root rules as `guessMatches`, then
+ * checked by hand: US spellings (color) and common misspellings (lightening)
+ * are left off so they still count. Regenerate when the lists change; the
+ * test checks every entry still sits near a listed word.
+ */
+export const NOT_TYPOS: readonly string[] = split(`
+  adventurer atmospheric baaing backing badder badge baker baling balking
+  bandana banking baring barking baseball basing basking bating batter baying
+  biking blanked blanker blankest boarder bolder borer braking bravely
+  braver breezy bride bridle buttery cannon canon canton capitol capping
+  carping caste cattle champing cheesy chords chores circlet cirrus clamping
+  cramping cricked currant dragoon electrician ellipse expedient experimental
+  experimenter farmed firefight firmer flaming flowed flowery footfall
+  fores former framer freighter gapes glazier graces grades graphs grates
+  graves grazes gripes gropes gymnasts hardest honest honestly imaginative
+  inland instructing instructional instructors intention invisibly jangle
+  jingle juggle karat lander larder lighting magneto marked marker mastery
+  meddle meter money muddle orchestral paddle paining panting pastern patter
+  peddle piddle planed planes plant pointing postmen prate printing puzzler
+  rabbi racket recite reelection reflecting reflective reflector refraction
+  rejection repletion rocked rocker sating scooted seating secrete selling
+  sentience shadowy shelling shimming shipping shooter signing silencer
+  singling sinking sinning sipping skimming skimping slating slider slimming
+  slinging slipping smelling snider snipping sparkler spidery spilling
+  state stating stature status statute stinging subset swelling swinging
+  teaches temperate thicket ticked ticker traitor treasurer treasury trumped
+  villager wadding wedging weeding weigh weighty welding wending whistler
+  whittle widow wight winger winner winnow wintery wright
+`);

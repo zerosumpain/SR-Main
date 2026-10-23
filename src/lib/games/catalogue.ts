@@ -103,9 +103,9 @@ export interface GameRules {
    * Null: this game has no score, and its board ranks by wins.
    */
   resultScore?(standing: { id: string; [key: string]: unknown }): number | null;
-  /** Most players a room seats, host included, when not the site's usual `MAX_PLAYERS`. */
+  /** Most players a room may hold, when not the registry's default (`MAX_PLAYERS`, five). */
   maxPlayers?: number;
-  /** Fewest joined players `start` accepts, when more than two. */
+  /** Fewest joined players `start` accepts, when more than two (for tests that play every game). */
   minPlayers?: number;
 }
 
@@ -231,7 +231,7 @@ export const GAMES: Record<GameId, GameRules> = {
     minPlayers: oneClue.MIN_PLAYERS,
     moves: {
       // Raw on purpose: each types its own fields (400 with a sentence).
-      clue: (room, playerId, body, now) => oneClue.clue(room as oneClue.Room, playerId, { text: body.text }, now),
+      clue: (room, playerId, body, now) => oneClue.clue(room as oneClue.Room, playerId, { text: body.text, lock: body.lock }, now),
       veto: (room, playerId, body, now) => oneClue.veto(room as oneClue.Room, playerId, { playerId: body.playerId }, now),
       unveto: (room, playerId, body, now) =>
         oneClue.unveto(room as oneClue.Room, playerId, { playerId: body.playerId }, now),

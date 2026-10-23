@@ -14,10 +14,10 @@ import {
   again,
   checkClue,
   clue,
-  clueKey,
   createRoom,
   dealWords,
   deadline,
+  distance,
   done,
   guess,
   guessMatches,
@@ -28,14 +28,16 @@ import {
   pass,
   standings,
   start,
-  stem,
+  sameClue,
+  sameStem,
+  stems,
   toWire,
   unveto,
   veto,
   type Difficulty,
   type Room,
 } from './one-clue';
-import { EASY, HARD, MEDIUM, WORDS } from './words/one-clue';
+import { EASY, HARD, MEDIUM, NOT_TYPOS, WORDS } from './words/one-clue';
 import { roundRows } from './results';
 import { GAMES } from './catalogue';
 
@@ -64,7 +66,7 @@ const givers = (r: Room) => r.card!.givers.filter((id) => r.players.find((p) => 
 
 /** Every clue-giver writes a clue nobody else wrote, and the review is waved through. */
 function toGuessing(r: Room, t: number): void {
-  givers(r).forEach((id, n) => clue(r, id, { text: `hint${n}` }, t));
+  givers(r).forEach((id, n) => clue(r, id, { text: `hint${n}`, lock: true }, t));
   if (r.phase === 'review') for (const id of givers(r)) done(r, id, t);
   expect(r.phase).toBe('guess');
 }
@@ -103,12 +105,32 @@ describe('the checks', () => {
   });
 
   it('stems plurals and simple endings', () => {
-    expect(stem('bakes')).toBe(stem('baking'));
-    expect(stem('baked')).toBe(stem('bake'));
-    expect(stem('running')).toBe(stem('run'));
-    expect(stem('berries')).toBe(stem('berry'));
-    expect(stem('boxes')).toBe(stem('box'));
-    expect(stem('glass')).toBe('glass');
+    expect(sameStem('bakes', 'baking')).toBe(true);
+    expect(sameStem('baked', 'bake')).toBe(true);
+    expect(sameStem('running', 'run')).toBe(true);
+    expect(sameStem('berries', 'berry')).toBe(true);
+    expect(sameStem('boxes', 'box')).toBe(true);
+    expect(sameStem('cheeses', 'cheese')).toBe(true);
+    expect(stems('glass')).toEqual(['glass']);
+  });
+
+  it('never takes a final letter off a plain word: kite is not kit, hope is not hop', () => {
+    for (const [a, b] of [
+      ['kite', 'kit'],
+      ['plane', 'plan'],
+      ['stage', 'stag'],
+      ['globe', 'glob'],
+      ['time', 'tim'],
+      ['hope', 'hop'],
+      ['note', 'not'],
+      ['cape', 'cap'],
+      ['care', 'car'],
+      ['pine', 'pin'],
+      ['speed', 'spe'],
+      ['speed', 'sped'],
+      ['string', 'str'],
+    ])
+      expect(sameStem(a, b)).toBe(false);
   });
 
   it('cancels empty, multi-word and too-close clues', () => {
@@ -128,9 +150,21 @@ describe('the checks', () => {
   });
 
   it('counts two clues the same once normalised and stemmed', () => {
-    expect(clueKey('Trunks!')).toBe(clueKey('trunk'));
-    expect(clueKey('Café')).toBe(clueKey('cafe'));
-    expect(clueKey('trunk')).not.toBe(clueKey('tusk'));
+    expect(sameClue('Trunks!', 'trunk')).toBe(true);
+    expect(sameClue('Café', 'cafe')).toBe(true);
+    expect(sameClue('trunk', 'tusk')).toBe(false);
+    // Different words that only look alike once an "e" is gone are two clues.
+    for (const [a, b] of [['hope', 'hop'], ['plane', 'plan'], ['note', 'not'], ['cape', 'cap'], ['care', 'car'], ['pine', 'pin']])
+      expect(sameClue(a, b)).toBe(false);
+  });
+
+  it('keeps both of two clues that differ by a final "e"', () => {
+    const r = room();
+    const t = dealt(r); // apple
+    clue(r, SAM.id, { text: 'Hope', lock: true }, t);
+    clue(r, KIM.id, { text: 'hop', lock: true }, t);
+    clue(r, ROBIN.id, { text: 'Tree', lock: true }, t);
+    expect(judge(r, r.card!).map((c) => c.status)).toEqual(['ok', 'ok', 'ok']);
   });
 
   it('accepts a guess with a trivial typo or plural, and nothing looser', () => {
@@ -148,6 +182,64 @@ describe('the checks', () => {
     expect(guessMatches('mouse', 'house')).toBe(false);
     expect(guessMatches('elegant', 'elephant')).toBe(false);
     expect(guessMatches('', 'moon')).toBe(false);
+  });
+
+  it('refuses a real word a typo away, a shorter word, and another listed word that shares a root', () => {
+    // Real words one change from a listed word are different answers.
+    for (const [g, w] of [
+      ['moose', 'mouse'],
+      ['hose', 'house'],
+      ['plant', 'plane'],
+      ['plant', 'planet'],
+      ['trail', 'train'],
+      ['timer', 'tiger'],
+      ['broad', 'bread'],
+      ['breed', 'bread'],
+      ['clout', 'cloud'],
+      ['winner', 'winter'],
+      ['racket', 'rocket'],
+    ])
+      expect(guessMatches(g, w), `${g} for ${w}`).toBe(false);
+    // A word with its last letter missing is not the word.
+    for (const [g, w] of [
+      ['kit', 'kite'],
+      ['plan', 'plane'],
+      ['stag', 'stage'],
+      ['glob', 'globe'],
+      ['tim', 'time'],
+      ['spe', 'speed'],
+      ['sped', 'speed'],
+    ])
+      expect(guessMatches(g, w), `${g} for ${w}`).toBe(false);
+    // One listed word is never the answer for another.
+    expect(guessMatches('paint', 'painting')).toBe(false);
+    expect(guessMatches('painting', 'paint')).toBe(false);
+    expect(guessMatches('paints', 'painting')).toBe(false);
+    // ...while a plural, an ending and a British spelling slip still count.
+    expect(guessMatches('paintings', 'painting')).toBe(true);
+    expect(guessMatches('kites', 'kite')).toBe(true);
+    expect(guessMatches('Cheeses', 'cheese')).toBe(true);
+    expect(guessMatches('flavor', 'flavour')).toBe(true);
+  });
+
+  it('no listed word is accepted as the answer for another listed word', () => {
+    const all = [...new Set([...EASY, ...MEDIUM, ...HARD])];
+    const clashes: string[] = [];
+    for (const g of all) for (const w of all) if (g !== w && guessMatches(g, w)) clashes.push(`${g}→${w}`);
+    expect(clashes).toEqual([]);
+  });
+
+  it('every near-word is lower case, not itself a listed word, and still a typo away from one', () => {
+    const all = new Set([...EASY, ...MEDIUM, ...HARD]);
+    for (const n of NOT_TYPOS) {
+      expect(n).toMatch(/^[a-z]+$/);
+      expect(all.has(n)).toBe(false);
+    }
+    // Each would pass as a typo of some listed word if it were not on this list: it earns its place.
+    const slack = (w: string) => (w.length < 6 ? 0 : w.length < 10 ? 1 : 2);
+    for (const n of NOT_TYPOS)
+      expect([...all].some((w) => w[0] === n[0] && distance(n, w) <= slack(w)), n).toBe(true);
+    expect(new Set(NOT_TYPOS).size).toBe(NOT_TYPOS.length);
   });
 });
 
@@ -209,10 +301,10 @@ describe('a card', () => {
   it('refuses the guesser a clue, a clue outside its phase, and a guess from a clue-giver', () => {
     const r = room();
     const t = dealt(r);
-    expect(() => clue(r, JOHN.id, { text: 'x' }, t)).toThrow(/guessing this one/);
-    expect(() => clue(r, SAM.id, { text: 42 }, t)).toThrow(/some text/);
+    expect(() => clue(r, JOHN.id, { text: 'x', lock: true }, t)).toThrow(/guessing this one/);
+    expect(() => clue(r, SAM.id, { text: 42, lock: true }, t)).toThrow(/some text/);
     expect(() => guess(r, JOHN.id, { text: 'apple' }, t)).toThrow(/time to guess/);
-    expect(() => clue(r, SAM.id, { text: 'late' }, t + CLUE_MS.easy + GRACE_MS + 1)).toThrow(/Time's up/);
+    expect(() => clue(r, SAM.id, { text: 'late', lock: true }, t + CLUE_MS.easy + GRACE_MS + 1)).toThrow(/Time's up/);
     toGuessing(r, t);
     expect(() => guess(r, SAM.id, { text: 'apple' }, t)).toThrow(/Only the guesser/);
     expect(() => guess(r, JOHN.id, { text: '   ' }, t)).toThrow(/Type a guess/);
@@ -221,10 +313,10 @@ describe('a card', () => {
   it('opens the review once every clue-giver has written, cancels the duplicates, and shows the guesser only the survivors', () => {
     const r = room();
     const t = dealt(r); // apple
-    clue(r, SAM.id, { text: 'Fruit' }, t + 1000);
-    clue(r, KIM.id, { text: 'fruits' }, t + 2000);
+    clue(r, SAM.id, { text: 'Fruit', lock: true }, t + 1000);
+    clue(r, KIM.id, { text: 'fruits', lock: true }, t + 2000);
     expect(r.phase).toBe('clues');
-    clue(r, ROBIN.id, { text: 'Orchard' }, t + 3000);
+    clue(r, ROBIN.id, { text: 'Orchard', lock: true }, t + 3000);
     expect(r.phase).toBe('review');
     expect(r.phaseEndsAt).toBe(t + 3000 + REVIEW_MS);
     expect(judge(r, r.card!).map((c) => [c.playerId, c.status])).toEqual([
@@ -241,12 +333,52 @@ describe('a card', () => {
     expect(toWire(r, SAM.id, t + 4000).clues?.map((c) => c.status)).toEqual(['duplicate', 'duplicate', 'ok']);
   });
 
+  it('a draft never closes the clues: only a locked-in clue does, and editing unlocks it', () => {
+    const r = room();
+    const t = dealt(r); // apple
+    clue(r, SAM.id, { text: 'Fruit', lock: true }, t);
+    clue(r, KIM.id, { text: 'Tree', lock: true }, t);
+    // Robin pauses half-way through a word: the draft is saved, the phase stays open.
+    clue(r, ROBIN.id, { text: 'Or' }, t + 1000);
+    expect(r.phase).toBe('clues');
+    expect(toWire(r, ROBIN.id, t + 1000).myClue).toBe('Or');
+    expect(toWire(r, ROBIN.id, t + 1000).myLocked).toBe(false);
+    // Nobody else learns about a draft.
+    expect(toWire(r, JOHN.id, t).players.filter((p) => p.submitted).map((p) => p.id)).toEqual([SAM.id, KIM.id]);
+    // Kim edits: her lock is undone until she locks again.
+    clue(r, KIM.id, { text: 'Trees' }, t + 1500);
+    expect(toWire(r, KIM.id, t + 1500).myLocked).toBe(false);
+    clue(r, ROBIN.id, { text: 'Orchard', lock: true }, t + 2000);
+    expect(r.phase).toBe('clues');
+    clue(r, KIM.id, { text: 'Trees', lock: true }, t + 2500);
+    expect(r.phase).toBe('review');
+    expect(judge(r, r.card!).map((c) => c.text)).toEqual(['Fruit', 'Trees', 'Orchard']);
+  });
+
+  it('a draft still counts when the clock runs out', () => {
+    const r = room();
+    const t = dealt(r);
+    clue(r, SAM.id, { text: 'Fruit', lock: true }, t);
+    clue(r, KIM.id, { text: 'Tree', lock: true }, t);
+    clue(r, ROBIN.id, { text: 'Orchar' }, t);
+    advance(r, t + CLUE_MS.easy + GRACE_MS, first);
+    expect(r.phase).toBe('review');
+    expect(judge(r, r.card!).find((c) => c.playerId === ROBIN.id)?.text).toBe('Orchar');
+  });
+
+  it('refuses a lock with nothing written, and a lock that is not true or false', () => {
+    const r = room();
+    const t = dealt(r);
+    expect(() => clue(r, SAM.id, { text: '  ', lock: true }, t)).toThrow(/Write a clue/);
+    expect(() => clue(r, SAM.id, { text: 'Fruit', lock: 'yes' }, t)).toThrow(/true or false/);
+  });
+
   it('skips the review when nothing survived the checks', () => {
     const r = room();
     const t = dealt(r); // apple
-    clue(r, SAM.id, { text: 'apples' }, t);
-    clue(r, KIM.id, { text: 'red fruit' }, t);
-    clue(r, ROBIN.id, { text: 'Apple' }, t);
+    clue(r, SAM.id, { text: 'apples', lock: true }, t);
+    clue(r, KIM.id, { text: 'red fruit', lock: true }, t);
+    clue(r, ROBIN.id, { text: 'Apple', lock: true }, t);
     expect(r.phase).toBe('guess');
     expect(toWire(r, JOHN.id, t).clues).toEqual([]);
     expect(toWire(r, JOHN.id, t).cancelledCount).toBe(3);
@@ -255,9 +387,9 @@ describe('a card', () => {
   it('strikes a clue once half the other clue-givers veto it, and only clue-givers veto', () => {
     const r = room();
     const t = dealt(r);
-    clue(r, SAM.id, { text: 'Fruit' }, t);
-    clue(r, KIM.id, { text: 'Tree' }, t);
-    clue(r, ROBIN.id, { text: 'Pomme' }, t);
+    clue(r, SAM.id, { text: 'Fruit', lock: true }, t);
+    clue(r, KIM.id, { text: 'Tree', lock: true }, t);
+    clue(r, ROBIN.id, { text: 'Pomme', lock: true }, t);
     expect(r.phase).toBe('review');
     expect(() => veto(r, JOHN.id, { playerId: ROBIN.id }, t)).toThrow(/Only the clue-givers/);
     expect(() => veto(r, ROBIN.id, { playerId: ROBIN.id }, t)).toThrow(/your own/);
@@ -282,9 +414,9 @@ describe('a card', () => {
   it('a veto on a clue the checks already cancelled is refused', () => {
     const r = room();
     const t = dealt(r);
-    clue(r, SAM.id, { text: 'Fruit' }, t);
-    clue(r, KIM.id, { text: 'fruit' }, t);
-    clue(r, ROBIN.id, { text: 'Tree' }, t);
+    clue(r, SAM.id, { text: 'Fruit', lock: true }, t);
+    clue(r, KIM.id, { text: 'fruit', lock: true }, t);
+    clue(r, ROBIN.id, { text: 'Tree', lock: true }, t);
     expect(() => veto(r, ROBIN.id, { playerId: SAM.id }, t)).toThrow(/already out/);
   });
 
@@ -346,8 +478,8 @@ describe('the clock', () => {
   it('a stalled table never freezes: empty clues, a closed review, a passing guesser, the next card', () => {
     const r = room();
     const t = dealt(r);
-    clue(r, SAM.id, { text: 'Fruit' }, t);
-    clue(r, KIM.id, { text: 'Tree' }, t);
+    clue(r, SAM.id, { text: 'Fruit', lock: true }, t);
+    clue(r, KIM.id, { text: 'Tree', lock: true }, t);
     // Robin never writes; the clue clock runs out and the review opens.
     let now = t + CLUE_MS.easy + GRACE_MS;
     advance(r, now, first);
@@ -377,10 +509,28 @@ describe('the clock', () => {
 });
 
 describe('leaving', () => {
+  it('leaving the countdown below three sends the room back to the lobby, never deals a short game', () => {
+    const r = room([SAM, KIM]);
+    for (const p of r.players) if (p.status === 'invited') join(r, p.id, T0);
+    start(r, JOHN.id, T0);
+    leave(r, KIM.id, T0 + 1);
+    expect(r.phase).toBe('lobby');
+    expect(r.phaseEndsAt).toBe(T0 + 1 + LOBBY_MS);
+    advance(r, T0 + 10_000, first);
+    expect(r.phase).toBe('lobby');
+    expect(r.card).toBeNull();
+    expect(() => start(r, JOHN.id, T0 + 10_000)).toThrow(/at least 3/);
+    // A third player is invited and joins from the lobby: it starts again.
+    r.players.find((p) => p.id === KIM.id)!.status = 'invited';
+    join(r, KIM.id, T0 + 20_000);
+    start(r, JOHN.id, T0 + 20_000);
+    expect(r.phase).toBe('countdown');
+  });
+
   it('the guesser leaving loses the card and the next guesser carries on', () => {
     const r = room();
     const t = dealt(r);
-    clue(r, SAM.id, { text: 'Fruit' }, t);
+    clue(r, SAM.id, { text: 'Fruit', lock: true }, t);
     leave(r, JOHN.id, t);
     expect(r.phase).toBe('reveal');
     expect(r.played[0].outcome).toBe('left');
@@ -393,8 +543,8 @@ describe('leaving', () => {
   it('a clue-giver leaving stops the table waiting on them', () => {
     const r = room();
     const t = dealt(r);
-    clue(r, SAM.id, { text: 'Fruit' }, t);
-    clue(r, KIM.id, { text: 'Tree' }, t);
+    clue(r, SAM.id, { text: 'Fruit', lock: true }, t);
+    clue(r, KIM.id, { text: 'Tree', lock: true }, t);
     leave(r, ROBIN.id, t);
     expect(r.phase).toBe('review');
     done(r, SAM.id, t);
@@ -461,12 +611,12 @@ describe('the wire never leaks', () => {
     const r = room();
     const t = dealt(r); // apple; John guesses
     if (phase !== 'clues') {
-      clue(r, SAM.id, { text: 'Crunchy' }, t);
-      clue(r, KIM.id, { text: 'Pie' }, t);
-      clue(r, ROBIN.id, { text: 'apples' }, t); // too close: cancelled
+      clue(r, SAM.id, { text: 'Crunchy', lock: true }, t);
+      clue(r, KIM.id, { text: 'Pie', lock: true }, t);
+      clue(r, ROBIN.id, { text: 'apples', lock: true }, t); // too close: cancelled
     } else {
-      clue(r, SAM.id, { text: 'Crunchy' }, t);
-      clue(r, KIM.id, { text: 'Pie' }, t);
+      clue(r, SAM.id, { text: 'Crunchy', lock: true }, t);
+      clue(r, KIM.id, { text: 'Pie', lock: true }, t);
     }
     if (phase === 'guess') for (const id of [SAM.id, KIM.id, ROBIN.id]) done(r, id, t);
     expect(r.phase).toBe(phase);

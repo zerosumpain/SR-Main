@@ -39,7 +39,7 @@ import {
   type PlayerStatus,
   type Rng,
 } from "./tap-duel";
-import { WORDS } from "./words/one-clue";
+import { NOT_TYPOS, WORDS } from "./words/one-clue";
 
 export { COUNTDOWN_MS, FINISHED_MS, GameError, LOBBY_MS, isDifficulty, DIFFICULTIES };
 export type { Difficulty, PlayerStatus, Rng };
@@ -115,23 +115,45 @@ export function normalise(text: string): string {
 }
 
 /**
- * A light stem: plurals off, then "-ing" / "-ed", then a final "e" and a
- * doubled last consonant — so bake, bakes, baked and baking are all "bak", and
- * run, runs and running are all "run". Deliberately simple: it only has to
- * catch the family's own near-copies, not be a linguist.
+ * The word and what it may be without a plural ending: kites → kite; boxes →
+ * box (or boxe, for cheeses → cheese); berries → berry (or berrie).
  */
-export function stem(word: string): string {
-  let w = word;
-  if (w.length > 4 && w.endsWith("ies")) w = w.slice(0, -3) + "y";
-  else if (w.length > 4 && /(s|x|z|ch|sh)es$/.test(w)) w = w.slice(0, -2);
-  else if (w.length > 3 && w.endsWith("s") && !/(ss|us|is)$/.test(w)) w = w.slice(0, -1);
-  let ending = false;
-  if (w.length > 5 && w.endsWith("ing")) [w, ending] = [w.slice(0, -3), true];
-  else if (w.length > 4 && w.endsWith("ed")) [w, ending] = [w.slice(0, -2), true];
-  if (w.length > 3 && w.endsWith("e")) w = w.slice(0, -1);
-  // running → runn → run; but glass stays glass.
-  if (ending && w.length > 2 && /([b-df-hj-np-tv-z])\1$/.test(w)) w = w.slice(0, -1);
-  return w;
+export function singulars(w: string): string[] {
+  if (w.length > 4 && w.endsWith("ies")) return [w, w.slice(0, -3) + "y", w.slice(0, -1)];
+  if (w.length > 4 && /(s|x|z|ch|sh)es$/.test(w)) return [w, w.slice(0, -2), w.slice(0, -1)];
+  if (w.length > 3 && w.endsWith("s") && !/(ss|us|is)$/.test(w)) return [w, w.slice(0, -1)];
+  return [w];
+}
+
+/**
+ * The roots a word may have: itself, its singular, and — only when an "-ing"
+ * or "-ed" really came off — that root as written, with an "e" back on, and
+ * with a doubled last letter undone. So bake, bakes, baked and baking share
+ * "bake", and run, runs and running share "run"; but a plain word keeps its
+ * last letter, so kite is never kit and hope is never hop. An ending only
+ * comes off a root with a vowel left in it (string stays string) and never off
+ * "-eed" (speed stays speed). Deliberately simple: it only has to catch the
+ * family's own near-copies, not be a linguist.
+ */
+export function stems(word: string): string[] {
+  const out = new Set<string>();
+  for (const w of singulars(word)) {
+    out.add(w);
+    let root: string | null = null;
+    if (w.length > 5 && w.endsWith("ing")) root = w.slice(0, -3);
+    else if (w.length > 4 && w.endsWith("ed") && !w.endsWith("eed")) root = w.slice(0, -2);
+    if (root === null || !/[aeiouy]/.test(root)) continue;
+    out.add(root);
+    out.add(root + "e");
+    if (/([b-df-hj-np-tv-z])\1$/.test(root)) out.add(root.slice(0, -1));
+  }
+  return [...out];
+}
+
+/** Whether two words share a root (see `stems`). */
+export function sameStem(a: string, b: string): boolean {
+  const roots = stems(a);
+  return stems(b).some((r) => roots.includes(r));
 }
 
 /** Edits (insert, delete, change, swap two neighbours) between two words. */
@@ -149,25 +171,33 @@ export function distance(a: string, b: string): number {
   return d[a.length][b.length];
 }
 
-/** The typos a guess may have and still be right: none under five letters, one to eight, two from nine. */
+/** The typos a guess may have and still be right: none under six letters, one to nine, two from ten. */
 function typosAllowed(word: string): number {
-  return word.length < 5 ? 0 : word.length < 9 ? 1 : 2;
+  return word.length < 6 ? 0 : word.length < 10 ? 1 : 2;
 }
 
 /** Every secret word: a guess that is one of them is a different guess, never a typo (horse is not house). */
 const KNOWN = new Set<string>([...WORDS.easy, ...WORDS.medium, ...WORDS.hard]);
+/** Real words that sit a typo away from a secret word: a different guess, never a typo (plant is not plane). */
+const NEAR = new Set<string>(NOT_TYPOS);
 
 /**
  * Whether a guess is the secret word, forgiving case, accents, an article, a
- * plural or other simple ending, spaces ("tooth brush"), and a trivial typo —
- * one that keeps the first letter and does not make another word on the lists.
+ * plural or other simple ending, spaces ("tooth brush"), and a trivial typo in
+ * a long word — one that keeps the first letter and does not make a real word.
+ * A guess that is another word on the lists is always a different guess, even
+ * when it shares a root (paint is not painting).
  */
 export function guessMatches(guess: string, word: string): boolean {
   const g = normalise(guess).replace(/ /g, "");
   const w = normalise(word).replace(/ /g, "");
   if (!g || !w) return false;
-  if (g === w || stem(g) === stem(w)) return true;
-  if (g[0] !== w[0] || KNOWN.has(g) || KNOWN.has(stem(g))) return false;
+  if (g === w) return true;
+  const forms = singulars(g);
+  const own = singulars(w);
+  if (forms.some((f) => KNOWN.has(f) && !own.includes(f))) return false;
+  if (sameStem(g, w)) return true;
+  if (g[0] !== w[0] || forms.some((f) => NEAR.has(f))) return false;
   return distance(g, w) <= typosAllowed(w);
 }
 
@@ -180,7 +210,7 @@ export function checkClue(text: string | undefined, word: string): "ok" | "empty
   const c = normalise(text);
   if (!c || c.includes(" ")) return "not-one-word";
   const w = normalise(word).replace(/ /g, "");
-  if (c === w || stem(c) === stem(w)) return "too-close";
+  if (c === w || sameStem(c, w)) return "too-close";
   // Part of the word ("sun" for sunset) or the word inside it ("snowman" for snow).
   if (c.length >= 3 && w.includes(c)) return "too-close";
   if (w.length >= 3 && c.includes(w)) return "too-close";
@@ -188,9 +218,11 @@ export function checkClue(text: string | undefined, word: string): "ok" | "empty
   return "ok";
 }
 
-/** What two clues must share to be "the same clue". */
-export function clueKey(text: string): string {
-  return stem(normalise(text));
+/** Whether two clues are "the same clue": the same once normalised, or sharing a root (see `stems`). */
+export function sameClue(a: string, b: string): boolean {
+  const x = normalise(a);
+  const y = normalise(b);
+  return x === y || sameStem(x, y);
 }
 
 // ---- The room --------------------------------------------------------------
@@ -222,6 +254,8 @@ export interface Card {
   givers: string[];
   /** Each clue-giver's clue as they last wrote it; absent is not written. */
   clues: Record<string, string>;
+  /** Clue-givers who have locked their clue in. The review opens early only when all have. */
+  locked: string[];
   /** Vetoes by the clue's author: who has vetoed it. */
   vetoes: Record<string, string[]>;
   /** The clues as judged when the review closed; null before. */
@@ -338,7 +372,9 @@ const inPlay = (phase: Phase) => phase === "clues" || phase === "review" || phas
 
 /**
  * Leaving the lobby as host cancels the game; later, the host role passes on
- * and the last one out closes the room. In play:
+ * and the last one out closes the room. Leaving the countdown so that fewer
+ * than three remain sends the room back to the lobby (two can wait for a
+ * third; one alone closes it). In play:
  * - fewer than two left: the game ends where it stands (the score so far);
  * - the guesser leaving a card still in play loses that card (no penalty);
  * - a clue-giver leaving stops the table waiting on them: their clue, if
@@ -362,6 +398,12 @@ export function leave(room: Room, playerId: string, now: number): void {
   if (playerId === room.hostId) room.hostId = rest[0].id;
   if (room.phase === "countdown" && rest.length < 2) {
     close(room, now);
+    return;
+  }
+  // The countdown is not the game yet: below the minimum, back to the lobby to invite someone else.
+  if (room.phase === "countdown" && rest.length < MIN_PLAYERS) {
+    room.phase = "lobby";
+    room.phaseEndsAt = now + LOBBY_MS;
     return;
   }
   if (!inPlay(room.phase) || !room.card) return;
@@ -442,7 +484,7 @@ function allClued(room: Room): boolean {
   const card = room.card;
   if (!card) return false;
   const left = givers(room);
-  return left.length > 0 && left.every((p) => (card.clues[p.id] ?? "").trim() !== "");
+  return left.length > 0 && left.every((p) => card.locked.includes(p.id) && (card.clues[p.id] ?? "").trim() !== "");
 }
 
 function resetDone(room: Room): void {
@@ -458,6 +500,7 @@ function startCard(room: Room, index: number, guesserId: string, now: number): v
       .filter((p) => p.id !== guesserId)
       .map((p) => p.id),
     clues: {},
+    locked: [],
     vetoes: {},
     judged: null,
     guess: null,
@@ -508,18 +551,13 @@ function vetoesOn(room: Room, card: Card, ownerId: string): string[] {
  */
 export function judge(room: Room, card: Card): JudgedClue[] {
   const auto = card.givers.map((id) => ({ id, text: (card.clues[id] ?? "").trim(), status: checkClue(card.clues[id], card.word) }));
-  const counts = new Map<string, number>();
-  for (const c of auto) {
-    if (c.status === "ok" || c.status === "too-close") {
-      const key = clueKey(c.text);
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-  }
+  const counted = auto.filter((c) => c.status === "ok" || c.status === "too-close");
+  const twin = (c: (typeof auto)[number]) => counted.some((o) => o.id !== c.id && sameClue(o.text, c.text));
   return auto.map((c) => {
     const against = vetoesOn(room, card, c.id);
     const bar = strikeAt(room, c.id);
     let status: ClueStatus = c.status;
-    if (status === "ok" && (counts.get(clueKey(c.text)) ?? 0) > 1) status = "duplicate";
+    if (status === "ok" && twin(c)) status = "duplicate";
     else if (status === "ok" && bar > 0 && against.length >= bar) status = "vetoed";
     return { playerId: c.id, text: c.text, status, vetoes: against.length, strikeAt: bar };
   });
@@ -574,6 +612,7 @@ function settleCard(room: Room, outcome: Outcome, guess: string | null, now: num
         guesserId: "",
         givers: [],
         clues: {},
+        locked: [],
         vetoes: {},
         judged: [],
         guess: null,
@@ -613,19 +652,28 @@ function cleanText(input: unknown, max: number, what: string): string {
 /**
  * A clue-giver's one clue for the card — written over whatever was there, and
  * cleared by an empty one. It is checked at the review, not here: a clue of two
- * words is kept and cancelled, so the table sees why. When every clue-giver
- * still in has written one, the review opens at once.
+ * words is kept and cancelled, so the table sees why.
+ *
+ * A draft (no `lock`) is saved as it stands — it is what counts if the clock
+ * runs out — and undoes an earlier lock, so a half-typed word never closes the
+ * phase. `lock: true` locks a written clue in; when every clue-giver still in
+ * has locked one in, the review opens at once.
  */
-export function clue(room: Room, playerId: string, input: { text: unknown }, now: number): void {
+export function clue(room: Room, playerId: string, input: { text: unknown; lock?: unknown }, now: number): void {
   playing(room, playerId);
   const card = room.card;
   if (room.phase !== "clues" || !card) throw new GameError(409, "It isn't time for clues.");
   if (now > (room.phaseEndsAt ?? Infinity) + GRACE_MS) throw new GameError(409, "Time's up.");
   if (playerId === card.guesserId) throw new GameError(403, "You are guessing this one.");
   if (!card.givers.includes(playerId)) throw new GameError(403, "You are not giving a clue on this card.");
+  if (input.lock !== undefined && input.lock !== null && typeof input.lock !== "boolean")
+    throw new GameError(400, "Lock is true or false.");
   const text = cleanText(input.text, MAX_CLUE, "clue");
+  if (input.lock === true && !text) throw new GameError(400, "Write a clue to lock in.");
   if (text) card.clues[playerId] = text;
   else delete card.clues[playerId];
+  card.locked = card.locked.filter((id) => id !== playerId);
+  if (input.lock === true) card.locked.push(playerId);
   room.updatedAt = now;
   if (allClued(room)) toReview(room, now);
 }
@@ -875,6 +923,8 @@ export function toWire(room: Room, meId: string, now: number) {
     role,
     word,
     myClue: card && room.phase === "clues" && amGiver ? (card.clues[meId] ?? "") : null,
+    /** Whether my clue is locked in (clue phase, clue-givers only). */
+    myLocked: !!card && room.phase === "clues" && amGiver && card.locked.includes(meId),
     clues,
     cancelledCount: cancelled,
     guess: card && shown && inPlay(room.phase) ? card.guess : null,
@@ -894,7 +944,8 @@ export function toWire(room: Room, meId: string, now: number) {
             : card.givers.includes(p.id)
               ? "clue"
               : null,
-      submitted: !!card && room.phase === "clues" && (card.clues[p.id] ?? "") !== "",
+      // Locked in, not merely drafted: a draft is nobody else's business.
+      submitted: !!card && room.phase === "clues" && card.locked.includes(p.id) && (card.clues[p.id] ?? "") !== "",
       done: p.done,
     })),
     standings: table,

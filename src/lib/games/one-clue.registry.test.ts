@@ -83,9 +83,9 @@ describe('one clue through the registry', () => {
     expect(view(id, guesser).word).toBeNull();
     expect(JSON.stringify(view(id, guesser))).not.toContain(`"${word}"`);
 
-    act(id, givers[0], 'clue', { text: 'Zigzag' });
+    act(id, givers[0], 'clue', { text: 'Zigzag', lock: true });
     // Two clue-givers and one writes the word itself: cancelled.
-    act(id, givers[1], 'clue', { text: word.toUpperCase() });
+    act(id, givers[1], 'clue', { text: word.toUpperCase(), lock: true });
     // One clue left standing: the other clue-giver may still veto it. Both wave it through.
     expect(view(id, guesser).phase).toBe('review');
     expect(view(id, guesser).clues).toBeNull();
