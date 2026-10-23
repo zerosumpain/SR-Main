@@ -277,6 +277,15 @@ export function act(id: string, playerId: string, action: string, body: Record<s
 }
 
 /**
+ * The API has checked `playerId` is a parent: a game that cares (Manhunt)
+ * remembers it for the host handoff. Nothing on the wire changes.
+ */
+export function noteParent(id: string, playerId: string): void {
+  const live = get(id);
+  if (inRoom(live.room, playerId)) live.rules.noteParent?.(live.room, playerId);
+}
+
+/**
  * The host asks more people in while the lobby is open. Somebody who declined
  * or left is asked again; somebody already in or invited is left alone. The
  * lobby is held open at least INVITE_HOLD_MS from now, so an invite sent in

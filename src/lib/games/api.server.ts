@@ -14,7 +14,7 @@ import type { RequestEvent } from '@sveltejs/kit';
 import { gamePlayers, playerFor, playerId } from './players.server';
 import { leaderboard } from './results.server';
 import { isWindow } from './results';
-import { act, asHttp, canCreate, createGame, inviteTo, invitesFor, roomFor, roomsFor, subscribe } from './rooms.server';
+import { act, asHttp, canCreate, createGame, inviteTo, invitesFor, noteParent, roomFor, roomsFor, subscribe } from './rooms.server';
 import { pushInvites } from './invite-push.server';
 import { isDifficulty, MAX_PLAYERS } from './tap-duel';
 import { GAMES, isGameId, type GameId } from './catalogue';
@@ -38,9 +38,13 @@ const PARENT_HOSTED: ReadonlySet<GameId> = new Set<GameId>(['manhunt']);
 /** The host's set-up actions in those games: each is checked against the caller's role. */
 const PARENT_ACTIONS: ReadonlySet<string> = new Set(['start', 'again', 'area', 'runner']);
 
-async function assertParent(caller: GameCaller): Promise<void> {
+async function isParent(caller: GameCaller): Promise<boolean> {
   const role = caller.role === 'owner' ? { parent: true } : await familyRole(caller.email);
-  if (!role?.parent) error(403, 'Only a parent can host Manhunt.');
+  return role?.parent === true;
+}
+
+async function assertParent(caller: GameCaller): Promise<void> {
+  if (!(await isParent(caller))) error(403, 'Only a parent can host Manhunt.');
 }
 
 /** Who is calling, however they authenticated. */
@@ -173,10 +177,14 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
   // Setting up a game whose host must be a parent is checked against the
   // caller's family role here, not only when the room was made: the host
   // role can pass to somebody else when the first host leaves mid-game.
-  if (PARENT_ACTIONS.has(action) && PARENT_HOSTED.has((asHttp(() => roomFor(id, me.id)) as { game?: GameId }).game as GameId)) {
-    await assertParent(caller);
-  }
+  const parentHosted =
+    (PARENT_ACTIONS.has(action) || action === 'join') &&
+    PARENT_HOSTED.has((asHttp(() => roomFor(id, me.id)) as { game?: GameId }).game as GameId);
+  if (parentHosted && PARENT_ACTIONS.has(action)) await assertParent(caller);
   const room = asHttp(() => act(id, me.id, action, body));
+  // A parent who joins may inherit the host seat if the host leaves, so the
+  // room never ends up hosted by a child who cannot set up the next game.
+  if (parentHosted && action === 'join' && (await isParent(caller))) asHttp(() => noteParent(id, me.id));
   // "Play again" re-invites everybody; their phones are rung afresh.
   if (action === 'again') void pushInvites(id);
   return room;

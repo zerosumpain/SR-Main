@@ -217,6 +217,12 @@ export interface Room {
   result: Result | null;
   /** Lobby expiry, countdown end, head start end, hunt end, finished expiry. */
   phaseEndsAt: number | null;
+  /**
+   * Players the server has checked are parents (the host who made the room,
+   * and anyone the API marks with `noteParent` as they join). The host role
+   * passes to one of them first. Never on the wire.
+   */
+  parents: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -281,6 +287,8 @@ export function createRoom(input: {
     claim: null,
     result: null,
     phaseEndsAt: input.now + LOBBY_MS,
+    // Only a parent may make a Manhunt room (the API checks before it gets here).
+    parents: [input.host.id],
     createdAt: input.now,
     updatedAt: input.now,
   };
@@ -342,16 +350,30 @@ function finish(room: Room, outcome: Outcome, catcherId: string | null, confirme
 }
 
 /**
+ * The API has checked this player is a parent: they may inherit the host
+ * role. Not a move — no phone can say it of itself.
+ */
+export function noteParent(room: Room, playerId: string): void {
+  if (!room.players.some((p) => p.id === playerId) || room.parents.includes(playerId)) return;
+  room.parents.push(playerId);
+}
+
+/**
  * Leaving the lobby as host cancels the game; the last one out closes the
  * room. Mid-game a leaver's fix is dropped at once. The runner leaving ends
- * it for the hunters (nobody made the catch); the last hunter leaving ends it
- * for the runner. A hunter's own pending claim goes with them.
+ * it for the hunters (nobody made the catch) — unless a claim is standing,
+ * which the runner cannot walk away from: it stands as the catch. The last
+ * hunter leaving ends it for the runner. A hunter's own pending claim goes
+ * with them, and so do the copies of their fix in earlier pings. The host
+ * role passes to a parent still here when there is one (a child cannot set
+ * up the next game); with none left it passes to whoever is next.
  */
 export function leave(room: Room, playerId: string, now: number): void {
   const p = find(room, playerId);
   if (p.status !== 'joined') return;
   p.status = 'left';
   p.fix = null;
+  for (const pg of room.pings) pg.hunters = pg.hunters.filter((h) => h.id !== playerId);
   room.updatedAt = now;
   if (room.runnerPick === playerId) room.runnerPick = null;
   if (room.phase === 'lobby' && playerId === room.hostId) {
@@ -363,12 +385,13 @@ export function leave(room: Room, playerId: string, now: number): void {
     close(room, now);
     return;
   }
-  if (playerId === room.hostId) room.hostId = rest[0].id;
+  if (playerId === room.hostId) room.hostId = (rest.find((q) => room.parents.includes(q.id)) ?? rest[0]).id;
   if (room.phase !== 'headstart' && room.phase !== 'hunt') return;
   if (!p.seated) return;
   if (room.claim?.hunterId === playerId) room.claim = null;
   if (p.role === 'runner') {
-    finish(room, 'runner-left', null, false, now);
+    if (room.claim) finish(room, 'caught', room.claim.hunterId, false, now);
+    else finish(room, 'runner-left', null, false, now);
   } else if (hunters(room).length === 0) {
     finish(room, 'hunters-left', null, false, now);
   }
@@ -467,7 +490,8 @@ export function pickRunner(room: Room, playerId: string, input: { playerId: unkn
  * Where my phone is: `{ lat, lng, accuracy, at }`. Taken only from players in
  * the hunt during the head start and the hunt; anywhere else it is dropped
  * without a word (a phone that has not caught up yet). A fix sooner than
- * FIX_MIN_GAP_MS after my last one, or older than FIX_MAX_AGE_MS, is ignored.
+ * FIX_MIN_GAP_MS after my last one, older than FIX_MAX_AGE_MS, or no newer than the
+ * fix already held (a delayed or retried POST), is ignored.
  * Returns whether the fix was kept.
  */
 export function position(
@@ -485,6 +509,8 @@ export function position(
   // A phone's clock is its own: a fix "from the future" is now, one with no time is now.
   const at = finite(input.at) ? Math.min(input.at, now) : now;
   if (now - at > FIX_MAX_AGE_MS) return false;
+  // A delayed or retried POST must not put an older place over a newer one.
+  if (p.fix && at <= p.fix.at) return false;
   const fix: Fix = { ...where, accuracy: Math.min(input.accuracy, 10_000), at, receivedAt: now };
   p.fix = fix;
   if (room.phase === 'hunt' && p.role === 'runner' && room.area && isOutside(room.area, fix)) {
@@ -629,8 +655,9 @@ export function advance(room: Room, now: number, rng: Rng): boolean {
 
 function beginHeadStart(room: Room, at: number, rng: Rng): void {
   const ready = joined(room);
-  // Two is the least that is still a hunt: somebody left during the 3-2-1.
-  if (ready.length < 2) {
+  // Somebody left during the 3-2-1 and too few are left for a hunt: one
+  // runner and two hunters, the same as the start asks for.
+  if (ready.length < MIN_PLAYERS) {
     close(room, at);
     return;
   }

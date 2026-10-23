@@ -6,7 +6,7 @@ Status: built 2026-10-22. Repos: SR-Main (`src/lib/games/manhunt.ts`, catalogue 
 
 Three to eight players. One is the **runner**, the rest are **hunters**. The host draws a circle centred on where their phone is (radius 250 m to 2 km, to the nearest 10 m; default 500 m) and picks a length (15 to 60 minutes; default 30). The host may pick the runner in the lobby; otherwise the start draws one at random. "Play again" passes the runner's role to the next player round the table.
 
-1. **Lobby.** The host's phone sends its position as the circle's centre (`area`). Start needs a centre and three joined players.
+1. **Lobby.** The host's phone sends its position as the circle's centre (`area`). Start needs a centre and three joined players. If leavers during the 3-2-1 leave fewer than three, the room closes instead of starting.
 2. **Countdown** (3 s), then **head start** (2 min). Phones send positions, but nobody sees anybody: the runner gets away.
 3. **Hunt** (the length the host picked, from the end of the head start).
    - Hunters see each other **live**.
@@ -28,7 +28,7 @@ So "hard" is hard for the runner. No ping lands on the final whistle (a 15-minut
 
 ### Who may host
 
-Only a **parent** (`family:admin`, shown as "Parent" in /admin/access) or the **owner** may host. It is checked on the server in `api.server.ts`, which both doors (native and web) use: at create, and again for every set-up action (`start`, `again`, `area`, `runner`), because the host seat passes to another player when the first host leaves mid-game. A member who is not a parent gets 403 "Only a parent can host Manhunt." Playing (positions, catch, confirm) needs only `games:self`.
+Only a **parent** (`family:admin`, shown as "Parent" in /admin/access) or the **owner** may host. It is checked on the server in `api.server.ts`, which both doors (native and web) use: at create, and again for every set-up action (`start`, `again`, `area`, `runner`), because the host seat passes to another player when the first host leaves mid-game. The seat passes to a **parent** still in the room first: the room remembers who is a parent (the host at create, and anyone the API checks is a parent as they `join`; it is not a move a phone can post, and never on the wire). With no parent left it passes to the next player, and that room can still be played out but not set up again (`again` is 403 for a child host); the finished room simply expires. A member who is not a parent gets 403 "Only a parent can host Manhunt." Playing (positions, catch, confirm) needs only `games:self`.
 
 ### Outside the circle
 
@@ -51,8 +51,8 @@ A standing claim lasts 20 s: the runner's Confirm ends the game at once; otherwi
 ## Positions: safety and privacy
 
 - Positions are moves (`position {lat, lng, accuracy, at}`) and live **only in the in-memory room**. They are never written to journeys, location history, the database or a log line. `game_results` records names, ranks and wins; the recorder reads `radius`, `minutes` and the `about` label, and the centre arrives as options `lat`/`lng` that the room keeps only inside `area`, which the recorder never reads (a test proves it).
-- A finished or closed room drops every fix and every ping at once. A player who leaves has their fix dropped at once. A deploy ends every room and its positions with it.
-- Rate limit: a phone's fixes closer together than 3 s (server time) are ignored. A fix more than 60 s old on arrival is ignored; one stamped in the future, or with no time, is taken as now. A place off the map (lat outside ±90, lng outside ±180, not a number) or an accuracy that is negative or not a number is 400.
+- A finished or closed room drops every fix and every ping at once. A player who leaves has their fix dropped at once, and so are the copies of it in earlier pings. A deploy ends every room and its positions with it.
+- Rate limit: a phone's fixes closer together than 3 s (server time) are ignored. A fix more than 60 s old on arrival is ignored; one stamped in the future, or with no time, is taken as now. A fix stamped no later than the one already held (a delayed or retried POST) is ignored, so an older place never replaces a newer one. A place off the map (lat outside ±90, lng outside ±180, not a number) or an accuracy that is negative or not a number is 400.
 - Positions are taken only from players in the hunt during the head start and the hunt. Anything else is dropped without a word.
 - The app collects game positions only while the room is in the head start or hunt, from the moment the game screen sees that phase (it keeps going with the phone in a pocket, the blue location pill showing). It stops at the finish, on Leave, when the room closes or goes away, and when the screen is closed. It is a separate location session from family sharing, an explicit exception to "GPS sleeps when still" for the game only, and its fixes never enter the journey outbox.
 
@@ -91,7 +91,7 @@ Beside the shared fields (`id`, `game`, `difficulty`, `phase`, `hostId`, `meId`,
 
 - Nothing waits on a person. The head start, every ping, the 30 s live window, the claim's 20 s and the end are deadlines on the room's own timer; `advance` takes them in order, anchored to the schedule, with a loop cap and a NaN guard (`advance(room, NaN)` does nothing).
 - A stalled phone: a hunter who stops sending is just not seen; a runner who stops sending goes quiet (above) and the claim is accepted at 20 s without them.
-- Leaving: the runner leaving ends it for the hunters still in (outcome `runner-left`, they share the win, nobody is the catcher). The last hunter leaving ends it for the runner (`hunters-left`). A hunter's own standing claim goes with them. The host leaving the lobby cancels it; the last player out closes the room.
+- Leaving: the runner leaving ends it for the hunters still in (outcome `runner-left`, they share the win, nobody is the catcher) — unless a claim is standing, which the runner cannot walk away from: it stands as the catch (`caught`, unconfirmed, the claimer wins). The last hunter leaving ends it for the runner (`hunters-left`). A hunter's own standing claim goes with them. The host leaving the lobby cancels it; the last player out closes the room.
 
 ## Leaderboard
 
@@ -100,6 +100,8 @@ Standings: winners first, then the rest of the winning side, then the losers. Ea
 ## Not built
 
 - Real GPS can only be tested on a device, outdoors. The server and the app's logic are unit-tested with fixed coordinates; the `-SRDemo` fixtures show the map with made-up positions. Nothing in CI or the simulator walks.
+- Approximate Location: a phone with Precise Location off asks for temporary full accuracy and says so on screen ("turn on Precise Location"). It still sends its rough fixes, so a runner is never made "quiet" (caught on a hunter's word) by poor GPS alone; a hunter's rough fix cannot claim (the 50 m sharpness rule), and the catch slack stays capped at 25 m.
+- A phone locked in the lobby misses the start: the stream closes in the background and iOS will not start a When-In-Use location session from the background. The lobby tells everyone to keep the app open until the hunt starts. A runner who misses it goes quiet 60 s into the hunt and can be caught on a hunter's word; a hunter who misses it is invisible and cannot claim. The app starts its location session at the 3-2-1, and a phone pocketed during the 3-2-1 or head start keeps learning the phase from its own fixes (each one asks for the room while the phase is not yet the hunt).
 - No push for pings or a claim: the phones are in pockets on the move, but the app hears the room only while its screen (or background session) is open. A "you have been pinged" push wants the APNs delivery path.
 - No dispute of a catch, no in-game chat, no shrinking circle, no hiding-spot rules, no web play (the web lobby says "open in the app").
 - No safety geofence beyond the circle: the circle is a play boundary, not a guarantee. Parents set the area; the app tells the runner when they are outside.

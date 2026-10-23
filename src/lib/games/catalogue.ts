@@ -95,6 +95,11 @@ export interface GameRules {
    * subscriber, so each frame after the first carries only what is new.
    */
   revision?(room: RoomBase): number;
+  /**
+   * The API has checked this player is a parent (Manhunt: who may inherit the
+   * host role). Server-only; never a move a phone can post.
+   */
+  noteParent?(room: RoomBase, playerId: string): void;
   /** The game's own actions, by the name the phone posts. */
   moves: Record<string, Move>;
   /**

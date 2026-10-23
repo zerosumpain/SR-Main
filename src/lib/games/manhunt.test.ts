@@ -13,6 +13,7 @@ import {
   about,
   advance,
   again,
+  noteParent,
   claimCatch,
   confirmCatch,
   createRoom,
@@ -149,6 +150,16 @@ describe('setting up', () => {
 });
 
 describe('the head start', () => {
+  it('closes the room when a leaver in the 3-2-1 leaves fewer than three', () => {
+    const r = createRoom({ id: 'g_2', host: JOHN, invite: [SAM, KIM], difficulty: 'easy', options: { ...C }, now: T0 });
+    join(r, SAM.id, T0);
+    join(r, KIM.id, T0);
+    start(r, JOHN.id, T0);
+    leave(r, KIM.id, T0 + 1_000);
+    advance(r, T0 + COUNTDOWN_MS, Math.random);
+    expect(r.phase).toBe('closed');
+  });
+
   it('makes the picked player the runner and everyone else a hunter', () => {
     const r = room();
     const t = headStart(r);
@@ -209,6 +220,16 @@ describe('positions', () => {
     expect(r.players.find((p) => p.id === KIM.id)?.fix?.at).toBe(t);
     expect(position(r, ROB.id, { ...at(1), accuracy: 5, at: Number.NaN }, t)).toBe(true);
     expect(r.players.find((p) => p.id === ROB.id)?.fix?.at).toBe(t);
+  });
+
+  it('never lets an older fix (a delayed or retried POST) replace a newer one', () => {
+    const r = room();
+    const t = hunting(r) + 60_000;
+    expect(send(r, SAM.id, at(150), t)).toBe(true);
+    expect(position(r, SAM.id, { ...at(10), accuracy: 5, at: t - 50_000 }, t + FIX_MIN_GAP_MS)).toBe(false);
+    expect(position(r, SAM.id, { ...at(10), accuracy: 5, at: t }, t + FIX_MIN_GAP_MS)).toBe(false);
+    expect(r.players.find((p) => p.id === SAM.id)?.fix).toMatchObject({ ...at(150), at: t });
+    expect(position(r, SAM.id, { ...at(160), accuracy: 5, at: t + 1 }, t + FIX_MIN_GAP_MS)).toBe(true);
   });
 
   it('refuses a place that is not on the map, or a fix with no accuracy', () => {
@@ -331,6 +352,24 @@ describe('who sees whom', () => {
     send(r, KIM.id, kim, t + 1_000);
     leave(r, ROB.id, t + 2_000);
     expect(json(r, ROB.id, t + 3_000)).not.toContain(coord(kim));
+  });
+
+  it('drops a leaver from the pings the runner already has', () => {
+    const r = room('hard');
+    const t = hunting(r);
+    const kim = at(-310, 140);
+    const rob = at(260, -170);
+    send(r, KIM.id, kim, t + 1_000);
+    send(r, ROB.id, rob, t + 1_000);
+    advance(r, t + PING_MS.hard, Math.random);
+    expect(r.pings).toHaveLength(1);
+    expect(json(r, SAM.id, t + PING_MS.hard + 1)).toContain(coord(kim));
+    leave(r, KIM.id, t + PING_MS.hard + 2_000);
+    const runnerWire = json(r, SAM.id, t + PING_MS.hard + 3_000);
+    expect(runnerWire).not.toContain(coord(kim));
+    expect(runnerWire).not.toContain(String(kim.lng));
+    // The others' pings stay.
+    expect(runnerWire).toContain(coord(rob));
   });
 });
 
@@ -472,6 +511,31 @@ describe('the end', () => {
     expect(r.result).toMatchObject({ outcome: 'runner-left', catcherId: null });
     expect(winners(r).sort()).toEqual([JOHN.id, KIM.id]);
     expect(standings(r).find((s) => s.id === SAM.id)).toMatchObject({ result: 'lost', left: true });
+  });
+
+  it('a standing claim is the catch when the runner leaves', () => {
+    const r = room();
+    const t = hunting(r) + 10_000;
+    send(r, SAM.id, at(200), t);
+    send(r, KIM.id, at(205), t);
+    claimCatch(r, KIM.id, t);
+    leave(r, SAM.id, t + 1_000);
+    expect(r.result).toMatchObject({ outcome: 'caught', catcherId: KIM.id, confirmed: false });
+    expect(winners(r)).toEqual([KIM.id]);
+    expect(standings(r).find((s) => s.id === SAM.id)).toMatchObject({ result: 'lost', left: true });
+  });
+
+  it('passes the host to a parent still here, not the next player', () => {
+    const r = room();
+    noteParent(r, KIM.id);
+    noteParent(r, 'p_stranger');
+    expect(r.parents).toEqual([JOHN.id, KIM.id]);
+    hunting(r);
+    leave(r, JOHN.id, T0 + 60_000);
+    expect(r.hostId).toBe(KIM.id);
+    // With no parent left, whoever is next.
+    leave(r, KIM.id, T0 + 61_000);
+    expect(r.hostId).toBe(SAM.id);
   });
 
   it('goes to the runner when every hunter leaves, and a leaver takes their claim', () => {
