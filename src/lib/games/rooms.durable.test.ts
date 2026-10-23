@@ -14,6 +14,7 @@ import {
   canCreate,
   canCreateDurable,
   createGame,
+  drainRoomWrites,
   ensureRoom,
   flush,
   hydrateFor,
@@ -375,6 +376,65 @@ describe('writing a durable room', () => {
   });
 });
 
+describe('shutting down', () => {
+  it('writes a change still waiting on its retry before the process exits', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    let down = true;
+    const id = await playing();
+    _setRoomStore({
+      ...store,
+      save: async (row: StoredRoom, expected: number) => {
+        if (down) throw new Error('db down');
+        return store.save(row, expected);
+      },
+    });
+    act(id, 'p_john', 'step');
+    await vi.advanceTimersByTimeAsync(0); // the write failed; a retry is armed
+    expect(store.rows.get(id)!.version).toBeLessThan(view(id).version);
+    down = false;
+    await drainRoomWrites(2_000); // no timers advanced: the drain itself wrote it
+    expect(store.rows.get(id)!.version).toBe(view(id).version);
+    expect((store.rows.get(id)!.state as Wire).log).toEqual(['p_john']);
+    error.mockRestore();
+    log.mockRestore();
+  });
+
+  it('waits for result rows still being written', async () => {
+    let finish: () => void = () => {};
+    let written = false;
+    _setRecorder(
+      () =>
+        new Promise((resolve) => {
+          finish = () => {
+            written = true;
+            resolve({});
+          };
+        }),
+    );
+    const id = await playing();
+    for (let i = 0; i < 4; i++) act(id, i % 2 ? 'p_sam' : 'p_john', 'step');
+    expect(view(id).phase).toBe('finished');
+    const drained = drainRoomWrites(2_000);
+    setTimeout(() => finish(), 10);
+    await vi.advanceTimersByTimeAsync(10);
+    await drained;
+    expect(written).toBe(true);
+  });
+
+  it('gives up after its bound when the store never answers', async () => {
+    const id = await playing();
+    _setRoomStore({ ...store, save: () => new Promise(() => {}) });
+    act(id, 'p_john', 'step');
+    let done = false;
+    void drainRoomWrites(2_000).then(() => (done = true));
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(done).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(done).toBe(true);
+  });
+});
+
 // ── reading back ────────────────────────────────────────────────────────────
 
 describe('after a restart', () => {
@@ -465,6 +525,28 @@ describe('after a restart', () => {
     const missing = Object.assign(new Error('relation "game_rooms" does not exist'), { code: '42P01' });
     _setRoomStore({ ...store, load: async () => Promise.reject(missing) });
     await expect(ensureRoom('g_0123456789ac')).resolves.toBeUndefined();
+    error.mockRestore();
+  });
+
+  it('keeps the lobby throttled (one query a minute) while the table is not yet granted', async () => {
+    restart();
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const denied = Object.assign(new Error('permission denied for table game_rooms'), { code: '42501' });
+    const openFor = vi.fn(async () => Promise.reject(new Error('Failed query', { cause: denied })));
+    _setRoomStore({ ...store, openFor });
+    const now = Date.now();
+    await hydrateFor('p_john', now);
+    await hydrateFor('p_john', now + 1_000);
+    await hydrateFor('p_john', now + 30_000);
+    expect(openFor).toHaveBeenCalledTimes(1);
+    await hydrateFor('p_john', now + 61_000);
+    expect(openFor).toHaveBeenCalledTimes(2);
+    // A database that is merely down is retried on the next look.
+    const down = vi.fn(async () => Promise.reject(new Error('db down')));
+    _setRoomStore({ ...store, openFor: down });
+    await hydrateFor('p_sam', now);
+    await hydrateFor('p_sam', now + 1_000);
+    expect(down).toHaveBeenCalledTimes(2);
     error.mockRestore();
   });
 

@@ -267,6 +267,14 @@ async function gracefulShutdown() {
   stopBriefingEngine();
   stopConnectorWatch();
   stopModelRouting();
+  // Durable game rooms write behind the move; save what is still unsaved
+  // (bounded) so a deploy restart does not roll a room back.
+  try {
+    const { drainRoomWrites } = await import('$lib/games/rooms.server');
+    await drainRoomWrites(2_000);
+  } catch (err) {
+    console.error('[hooks.server] game room drain failed:', err);
+  }
   process.exit(0);
 }
 

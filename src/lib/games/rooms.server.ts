@@ -172,7 +172,7 @@ function record(live: Live, now: number): void {
   }
   if (!rows.length) return;
   const round = live.round;
-  void recorder(rows)
+  const pending: Promise<void> = recorder(rows)
     .then((records) => {
       if (!Object.keys(records).length) return;
       // Still the same finish: a room that went again, or went away, is not told.
@@ -180,8 +180,13 @@ function record(live: Live, now: number): void {
       live.records = records;
       emit(live);
     })
-    .catch((err) => console.error(`[games] ${room.id}: could not record round ${round}`, err));
+    .catch((err) => console.error(`[games] ${room.id}: could not record round ${round}`, err))
+    .finally(() => recording.delete(pending));
+  recording.add(pending);
 }
+
+/** Result writes still in flight, so a shutdown can wait for them. */
+const recording = new Set<Promise<void>>();
 
 const rooms = new Map<string, Live>();
 
@@ -547,6 +552,34 @@ export function flush(id: string, ms = FLUSH_MS): Promise<void> {
   });
 }
 
+/**
+ * Shutdown: write every durable room's unsaved changes now (a retry waiting
+ * on its back-off goes at once) and wait for them, and for result rows still
+ * being written, for at most `ms`. Without this a deploy's SIGTERM drops the
+ * last move, or a timer's auto-move, made just before it.
+ */
+export async function drainRoomWrites(ms = 2_000): Promise<void> {
+  const waits: Promise<void>[] = [...recording];
+  for (const live of rooms.values()) {
+    if (!live.durable || live.dead || live.savedVersion >= live.version) continue;
+    if (live.retry) {
+      clearTimeout(live.retry);
+      live.retry = null;
+    }
+    live.dirty = true;
+    startWriting(live);
+    waits.push(flush(live.room.id, ms));
+  }
+  if (!waits.length) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+  await Promise.race([Promise.allSettled(waits), deadline]);
+  clearTimeout(timer);
+}
+
 // ── reading rooms back ───────────────────────────────────────────────────────
 
 const loading = new Map<string, Promise<void>>();
@@ -635,7 +668,9 @@ export async function hydrateFor(playerId: string, now = Date.now()): Promise<vo
     const ids = await (await store()).openFor(playerId, 20);
     for (const id of ids) await ensureRoom(id).catch(() => {});
   } catch (err) {
-    hydrated.delete(playerId);
+    // A table not yet granted (or not yet created) stays throttled: the lobby
+    // would otherwise query and log on every poll until the GRANT lands.
+    if (!storeUnusable(err)) hydrated.delete(playerId);
     console.error('[games] could not list stored rooms for the lobby', (err as Error)?.message ?? err);
   }
 }
@@ -1130,6 +1165,7 @@ export function _resetRooms(): void {
   rooms.clear();
   loading.clear();
   hydrated.clear();
+  recording.clear();
 }
 
 /**
