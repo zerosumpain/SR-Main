@@ -164,6 +164,10 @@
     {
       "id": "manhunt",
       "title": "Manhunt"
+    },
+    {
+      "id": "homestead",
+      "title": "Homestead"
     }
   ],
   "backgroundModes": [
