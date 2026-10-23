@@ -7306,6 +7306,55 @@ export const gameResults = pgTable(
 
 export type GameResult = typeof gameResults.$inferSelect;
 
+// Durable game rooms (`$lib/games/rooms.server`): a game that declares
+// `durable` in its rules has its room written here after every accepted
+// change, so a deploy is a pause rather than the end of the game. The
+// in-memory registry stays the authority while the process is up; this is
+// what survives a restart. Players are the games' keyed hash (`playerId`),
+// never an email. Text key (the room id): there is no sequence to grant.
+// Spec: docs/superpowers/specs/2026-10-22-family-games-durable-rooms.md.
+export const gameRooms = pgTable(
+  'game_rooms',
+  {
+    /** The room id the phones already hold: 'g_' + 12 hex. */
+    id: text('id').primaryKey(),
+    /** A `GameId` from `$lib/games/catalogue`. */
+    game: text('game').notNull(),
+    /** The game's `durable.schema` when `state` was written; a mismatch goes through `durable.revive`. */
+    stateSchema: integer('state_schema').notNull().default(1),
+    /** 'live' | 'async'. */
+    pace: text('pace').notNull().default('live'),
+    /** The room's `phase`, copied out for the lobby query and the sweep. */
+    phase: text('phase').notNull(),
+    /** Hashed player id (`playerId(email)`), never an email. */
+    hostId: text('host_id').notNull(),
+    /** Every id in `room.players`, any status (hashed). The lobby and erasure look up by containment. */
+    playerIds: text('player_ids').array().notNull(),
+    /** The whole room as the rules module holds it, hidden information included: never sent anywhere but `toWire`. */
+    state: jsonb('state').notNull(),
+    /** The registry's own bookkeeping for the room (invite and push marks, rounds recorded). */
+    meta: jsonb('meta').notNull().default(sql`'{}'::jsonb`),
+    /** Monotonic write counter; every write is compare-and-set on it. */
+    version: integer('version').notNull(),
+    /** `rules.deadline(room)` as a time, null when the room waits on people. The sweep's index. */
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Set when the room reaches `finished`; cleared by "Play again". Retention counts from it. */
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    /** Set when the room reaches `closed`. A closed row is never rehydrated. */
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+  },
+  (t) => [
+    // GIN: "which rooms contain this player" is containment over the array.
+    index('game_rooms_player_ids_idx').using('gin', t.playerIds),
+    index('game_rooms_due_idx').on(t.dueAt).where(sql`${t.closedAt} is null`),
+    index('game_rooms_updated_idx').on(t.updatedAt),
+  ],
+);
+
+export type GameRoomRow = typeof gameRooms.$inferSelect;
+
 // Permission epochs survive removal/re-add; triggers in the security migration
 // revoke device capabilities in the same transaction as access changes.
 export const companionAccessVersion = pgTable('companion_access_version', {
