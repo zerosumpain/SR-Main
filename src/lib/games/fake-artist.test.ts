@@ -97,6 +97,11 @@ describe('the word list', () => {
     expect(ALL_WORDS.length).toBeGreaterThan(250);
   });
 
+  it('deals no trademarked toy or brand names', () => {
+    const brands = ['slinky', 'lego', 'frisbee', 'play doh', 'playdoh', 'barbie', 'rubik', 'hula hoop', 'jenga', 'monopoly'];
+    for (const b of brands) expect(ALL_WORDS, b).not.toContain(b);
+  });
+
   it('draws easy from the common words and hard from the less common', () => {
     const animals = CATEGORIES[0];
     expect(wordsFor('easy', animals)).toEqual(animals.easy);

@@ -19,7 +19,7 @@ Files: SR-Main `src/lib/games/homestead-board.ts` (pure geometry and board gener
 | Victory point card | `heirloom`: +1 VP, hidden until the end |
 | Road building | `pathfinders`: two free roads |
 | Year of plenty | `harvest`: take any two resources from the bank |
-| Monopoly | `market`: name a resource; every other player hands you all of it |
+| Name-a-resource card | `market`: name a resource; every other player hands you all of it |
 | Longest road | **Longest Trail** (2 VP) |
 | Largest army | **Chief Ranger** (2 VP) |
 | Harbour | `harbour`: 3:1 (`any`) or 2:1 for one resource |

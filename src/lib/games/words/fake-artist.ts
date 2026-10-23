@@ -84,7 +84,7 @@ export const CATEGORIES: readonly Category[] = [
   cat(
     'Toys',
     'ball kite teddy doll yo_yo robot blocks puzzle',
-    'spinning_top rocking_horse marbles jigsaw puppet slinky',
+    'spinning_top rocking_horse marbles jigsaw puppet skipping_rope',
     'kaleidoscope jack_in_the_box music_box pogo_stick boomerang dominoes',
   ),
   cat(
