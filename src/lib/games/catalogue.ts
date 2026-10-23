@@ -22,6 +22,7 @@ import * as oneClue from './one-clue';
 import * as fakeArtist from './fake-artist';
 import * as passThePlate from './pass-the-plate';
 import * as fireworks from './fireworks';
+import * as manhunt from './manhunt';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -43,6 +44,7 @@ export const GAME_IDS = [
   'fake-artist',
   'pass-the-plate',
   'fireworks',
+  'manhunt',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -103,6 +105,11 @@ export interface GameRules {
    * subscriber, so each frame after the first carries only what is new.
    */
   revision?(room: RoomBase): number;
+  /**
+   * The API has checked this player is a parent (Manhunt: who may inherit the
+   * host role). Server-only; never a move a phone can post.
+   */
+  noteParent?(room: RoomBase, playerId: string): void;
   /** The game's own actions, by the name the phone posts. */
   moves: Record<string, Move>;
   /**
@@ -296,6 +303,30 @@ export const GAMES: Record<GameId, GameRules> = {
       play: (room, playerId, body, now) => fireworks.play(room as fireworks.Room, playerId, { card: body.card }, now),
       discard: (room, playerId, body, now) =>
         fireworks.discard(room as fireworks.Room, playerId, { card: body.card }, now),
+    },
+  },
+  manhunt: {
+    ...manhunt,
+    moves: {
+      // Raw on purpose: each types its own fields (400 for a place that is not on the map).
+      area: (room, playerId, body, now) =>
+        manhunt.setArea(
+          room as manhunt.Room,
+          playerId,
+          { lat: body.lat, lng: body.lng, radius: body.radius, minutes: body.minutes },
+          now,
+        ),
+      runner: (room, playerId, body, now) =>
+        manhunt.pickRunner(room as manhunt.Room, playerId, { playerId: body.playerId }, now),
+      position: (room, playerId, body, now) =>
+        void manhunt.position(
+          room as manhunt.Room,
+          playerId,
+          { lat: body.lat, lng: body.lng, accuracy: body.accuracy, at: body.at },
+          now,
+        ),
+      catch: (room, playerId, _body, now) => manhunt.claimCatch(room as manhunt.Room, playerId, now),
+      confirm: (room, playerId, _body, now) => manhunt.confirmCatch(room as manhunt.Room, playerId, now),
     },
   },
 };

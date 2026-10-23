@@ -36,6 +36,7 @@ export const TITLES: Record<GameId, string> = {
   'fake-artist': 'Odd Artist Out',
   'pass-the-plate': 'Pass the Plate',
   fireworks: 'Fireworks',
+  manhunt: 'Manhunt',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
