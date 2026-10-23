@@ -84,7 +84,7 @@ export function roundOptions(
  */
 export function roundRows(
   room: RoomBase,
-  rules: Pick<GameRules, 'toWire' | 'about' | 'resultScore'>,
+  rules: Pick<GameRules, 'toWire' | 'about' | 'resultScore' | 'resultRank'>,
   round: number,
   now: number,
   optionKeys: readonly string[] = [],
@@ -108,8 +108,11 @@ export function roundRows(
     const score = scoreOf(s);
     const won = winners.has(s.id);
     const prev = rows[i - 1];
+    const own = rules.resultRank?.(s);
     const rank = won
       ? 1
+      : typeof own === 'number' && Number.isInteger(own) && own >= 1
+        ? own
       : prev && score !== null && prev.score === score
         ? prev.rank
         : i + 1;

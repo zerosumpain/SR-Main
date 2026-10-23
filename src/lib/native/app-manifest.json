@@ -132,6 +132,42 @@
     {
       "id": "draw-guess",
       "title": "Draw & Guess"
+    },
+    {
+      "id": "marble-race",
+      "title": "Marble Race"
+    },
+    {
+      "id": "chess",
+      "title": "Chess"
+    },
+    {
+      "id": "mission",
+      "title": "Secret Mission"
+    },
+    {
+      "id": "one-clue",
+      "title": "One Clue"
+    },
+    {
+      "id": "fake-artist",
+      "title": "Odd Artist Out"
+    },
+    {
+      "id": "pass-the-plate",
+      "title": "Pass the Plate"
+    },
+    {
+      "id": "fireworks",
+      "title": "Fireworks"
+    },
+    {
+      "id": "manhunt",
+      "title": "Manhunt"
+    },
+    {
+      "id": "homestead",
+      "title": "Homestead"
     }
   ],
   "backgroundModes": [

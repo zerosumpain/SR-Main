@@ -28,13 +28,19 @@ const T0 = Date.parse('2026-09-29T10:00:00Z');
 const john = { id: 'p_john', name: 'John' };
 const sam = { id: 'p_sam', name: 'Sam' };
 
-/** A room of `game` with John and Sam, played to its finish by the clock alone. */
+/** John and Sam, and as many more as a game needs to start (`GameRules.minPlayers`). */
+function contenders(game: GameId): { id: string; name: string }[] {
+  const extra = Math.max(0, (GAMES[game].minPlayers ?? 2) - 2);
+  return [john, sam, ...Array.from({ length: extra }, (_, i) => ({ id: `p_extra${i}`, name: `Extra ${i}` }))];
+}
+
+/** A room of `game` with John and Sam (and more if it needs them), played to its finish by the clock alone. */
 async function finished(game: GameId, options: Record<string, unknown> = {}): Promise<{ room: RoomBase; now: number }> {
   const rules = GAMES[game];
   let now = T0;
-  const room = rules.createRoom({ id: `g_${game}`, host: john, invite: [sam], difficulty: 'easy', options, now });
+  const room = rules.createRoom({ id: `g_${game}`, host: john, invite: contenders(game).slice(1), difficulty: 'easy', options, now });
   if (rules.prepare) await rules.prepare(room);
-  rules.join(room, 'p_sam', now);
+  for (const p of contenders(game).slice(1)) rules.join(room, p.id, now);
   rules.start(room, 'p_john', now);
   // Nobody moves: every game ends on its own clock. Step to each deadline.
   for (let i = 0; i < 5_000 && room.phase !== 'finished'; i++) {
@@ -45,24 +51,35 @@ async function finished(game: GameId, options: Record<string, unknown> = {}): Pr
   return { room, now };
 }
 
+/**
+ * Games the two-player clock run below cannot finish (three or more at the
+ * table; a game nobody plays is abandoned, nothing recorded): each one's own
+ * suite records a played round instead. One id a line, appended.
+ */
+const OWN_SUITE: readonly string[] = [
+  'manhunt', // three players and a play area; manhunt.test.ts records its own finish
+  'homestead',
+];
+
 describe('recording a finished round, in every game in the catalogue', () => {
-  it.each(GAME_IDS.map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
+  it.each(GAME_IDS.filter((g) => !OWN_SUITE.includes(g)).map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
     const rules = GAMES[game];
     const { room, now } = await finished(game);
     expect(room.phase).toBe('finished');
     const rows = roundRows(room, rules, 1, now, []);
-    expect(rows.map((r) => r.playerId).sort()).toEqual(['p_john', 'p_sam']);
+    const everyone = contenders(game).map((p) => p.id);
+    expect(rows.map((r) => r.playerId).sort()).toEqual([...everyone].sort());
 
     const wire = rules.toWire(room, 'p_john', now) as unknown as {
       standings: Array<{ id: string; score?: unknown }>;
       winnerIds: string[];
     };
     for (const r of rows) {
-      expect(r).toMatchObject({ game, roomId: room.id, round: 1, players: 2, difficulty: 'easy' });
+      expect(r).toMatchObject({ game, roomId: room.id, round: 1, players: everyone.length, difficulty: 'easy' });
       expect(r.won).toBe(wire.winnerIds.includes(r.playerId));
       expect(r.score === null || Number.isInteger(r.score)).toBe(true);
       expect(r.rank).toBeGreaterThanOrEqual(1);
-      expect(r.rank).toBeLessThanOrEqual(2);
+      expect(r.rank).toBeLessThanOrEqual(everyone.length);
       const standing = wire.standings.find((s) => s.id === r.playerId)!;
       // The default is the standing's own numeric score; an override says otherwise.
       if (!rules.resultScore && typeof standing.score === 'number') expect(r.score).toBe(standing.score);

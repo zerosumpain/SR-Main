@@ -541,3 +541,356 @@ describe('chess through the registry', () => {
     ).toThrow(/for two/);
   });
 });
+
+describe('secret mission through the registry', () => {
+  const table = [sam, { id: 'p_kim', name: 'Kim' }, { id: 'p_robin', name: 'Robin' }, { id: 'p_alex', name: 'Alex' }];
+  type MissionWire = WireRoom & {
+    secret: { role: string; side: string; spies: string[] } | null;
+    leaderId: string;
+    teamSizes: number[];
+    mission: number;
+    result: { winner: string | null; reason: string } | null;
+    winnerIds: string[];
+  };
+  const view = (id: string, who: string) => roomFor(id, who) as MissionWire;
+
+  it('deals secrets per phone, plays three missions to a crew win, and records the winning side', () => {
+    const { id } = createGame({ game: 'mission', host: john, invite: table, difficulty: 'easy' });
+    const everyone = ['p_john', ...table.map((p) => p.id)];
+    for (const p of table) act(id, p.id, 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    expect(view(id, 'p_john').phase).toBe('roles');
+
+    // Each phone holds its own role; only spies are told who the spies are.
+    const secrets = new Map(everyone.map((p) => [p, view(id, p).secret!]));
+    const spies = everyone.filter((p) => secrets.get(p)!.side === 'spies');
+    expect(spies).toHaveLength(2);
+    for (const p of everyone) {
+      const json = JSON.stringify(roomFor(id, p));
+      expect(json.match(/"role":"[a-z]+"/g)).toEqual([`"role":"${secrets.get(p)!.role}"`]);
+      expect(secrets.get(p)!.spies).toEqual(spies.includes(p) ? spies.filter((s) => s !== p) : []);
+    }
+
+    for (const p of everyone) act(id, p, 'ready');
+    const crew = everyone.filter((p) => !spies.includes(p));
+    for (let m = 0; m < 3; m++) {
+      const w = view(id, 'p_john');
+      expect(w.phase).toBe('proposing');
+      const size = w.teamSizes[w.mission - 1];
+      act(id, w.leaderId, 'propose', { team: crew.slice(0, size) });
+      for (const p of everyone) act(id, p, 'vote', { approve: true });
+      expect(view(id, 'p_john').phase).toBe('tally');
+      vi.advanceTimersByTime(6_000);
+      for (const p of crew.slice(0, size)) act(id, p, 'play', { card: 'succeed' });
+      expect(view(id, 'p_john').phase).toBe('outcome');
+      vi.advanceTimersByTime(7_000);
+    }
+    const done = view(id, 'p_john');
+    expect(done.phase).toBe('finished');
+    expect(done.result).toMatchObject({ winner: 'crew', reason: 'missions' });
+    expect(new Set(done.winnerIds)).toEqual(new Set(crew));
+
+    expect(recorded).toHaveLength(1);
+    const rows = recorded[0];
+    expect(rows.filter((r) => r.won).map((r) => r.playerId).sort()).toEqual([...crew].sort());
+    expect(rows.filter((r) => !r.won).map((r) => r.playerId).sort()).toEqual([...spies].sort());
+    expect(rows.every((r) => r.game === 'mission' && r.score === null && r.players === 5)).toBe(true);
+    expect(rows[0].options).toEqual({ label: 'Crew and spies only' });
+  });
+
+  it('auto-moves a table that does nothing, and lets the host invite past five', () => {
+    const { id } = createGame({ game: 'mission', host: john, invite: table, difficulty: 'hard' });
+    inviteTo(id, 'p_john', [{ id: 'p_jo', name: 'Jo' }, { id: 'p_max', name: 'Max' }]);
+    expect(view(id, 'p_john').players).toHaveLength(7);
+    for (const p of table) act(id, p.id, 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS + 30_000);
+    expect(view(id, 'p_john').phase).toBe('proposing');
+    // The leader's clock (60 s on hard): a team is drawn and put to the vote.
+    vi.advanceTimersByTime(60_000);
+    expect(view(id, 'p_john').phase).toBe('voting');
+    // Nobody votes (30 s): everyone approves; the team goes after the tally.
+    vi.advanceTimersByTime(30_000 + 6_000);
+    expect(view(id, 'p_john').phase).toBe('mission');
+    vi.advanceTimersByTime(20_000);
+    expect(view(id, 'p_john').phase).toBe('outcome');
+  });
+
+  it('refuses a sixth person for any other game', () => {
+    const { id } = createGame({ game: 'liars-dice', host: john, invite: table, difficulty: 'easy' });
+    expect(() => inviteTo(id, 'p_john', [{ id: 'p_jo', name: 'Jo' }])).toThrow(/Up to 5/);
+  });
+});
+
+describe('odd artist out through the registry', () => {
+  const kim = { id: 'p_kim', name: 'Kim' };
+  const ada = { id: 'p_ada', name: 'Ada' };
+  const bo = { id: 'p_bo', name: 'Bo' };
+  const cy = { id: 'p_cy', name: 'Cy' };
+  type FakeWire = WireRoom & {
+    current: {
+      role: string;
+      word: string | null;
+      fakeId: string | null;
+      artistId: string | null;
+      outcome: string | null;
+    } | null;
+    drawing: { revision: number; since: number | null; ops: unknown[] | null } | null;
+    standings: { id: string; score: number }[] | null;
+  };
+  const view = (id: string, me: string) => roomFor(id, me) as FakeWire;
+
+  it('holds six (over the default five), hides the word from the fake alone, streams lines as changes, and records the finish', () => {
+    const people = [sam, kim, ada, bo, cy];
+    const { id } = createGame({ game: 'fake-artist', host: john, invite: people, difficulty: 'hard', options: { rounds: 3 } });
+    for (const p of people) act(id, p.id, 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const ids = [john, ...people].map((p) => p.id);
+    expect(view(id, 'p_john').phase).toBe('reading');
+
+    for (let round = 1; round <= 3; round++) {
+      const wires = ids.map((me) => view(id, me));
+      const fakes = wires.filter((w) => w.current!.role === 'fake');
+      expect(fakes).toHaveLength(1);
+      const fake = fakes[0].meId;
+      const word = wires.find((w) => w.meId !== fake)!.current!.word!;
+      expect(word).toBeTruthy();
+      for (const w of wires) {
+        // Past rounds (`history`) are public once revealed; this round's secrets are not.
+        const s = JSON.stringify({ ...w, history: [] });
+        if (w.meId === fake) expect(s).not.toContain(`"word":"${word}"`);
+        else expect(s).not.toContain(`"fakeId":"${fake}"`);
+      }
+
+      vi.advanceTimersByTime(8_000);
+      // Each artist in turn: one line in two posts, the second lifting the finger.
+      // A subscriber that holds the picture is sent only the new segment.
+      const frames: FakeWire[] = [];
+      const stop = subscribe(id, 'p_sam', (r) => frames.push(r as FakeWire), () => {});
+      for (let turn = 0; turn < 12; turn++) {
+        const artist = view(id, 'p_john').current!.artistId!;
+        act(id, artist, 'stroke', { points: [[10, 10], [50, 50]] });
+        act(id, artist, 'stroke', { points: [[90, 90]], end: true });
+      }
+      stop();
+      expect(frames[0].drawing!.since).toBeNull();
+      expect(frames.slice(1).some((f) => f.drawing?.ops?.length === 1)).toBe(true);
+      expect(view(id, 'p_john').phase).toBe('voting');
+
+      // Everyone but the fake votes for the fake; the fake guesses the word right in round 1.
+      for (const me of ids) act(id, me, 'vote', { playerId: me === fake ? ids.find((x) => x !== fake) : fake });
+      expect(view(id, 'p_john').phase).toBe('guessing');
+      act(id, fake, 'guess', { text: round === 1 ? word : 'not it at all' });
+      const reveal = view(id, 'p_kim');
+      expect(reveal.phase).toBe('reveal');
+      expect(reveal.current!.outcome).toBe(round === 1 ? 'guessed' : 'caught');
+      vi.advanceTimersByTime(10_000);
+    }
+
+    const done = view(id, 'p_john');
+    expect(done.phase).toBe('finished');
+    expect(recorded).toHaveLength(1);
+    const rows = recorded[0];
+    expect(rows).toHaveLength(6);
+    expect(rows.every((r) => r.game === 'fake-artist' && typeof r.score === 'number')).toBe(true);
+    expect(rows.reduce((n, r) => n + (r.score ?? 0), 0)).toBe(2 + 5 + 5);
+    expect(rows[0].options).toEqual({ rounds: 3, label: '3 rounds · 15 s a line' });
+  });
+
+  it('skips a stalled artist on the room timer, and lets the lobby take up to ten', () => {
+    const { id } = createGame({ game: 'fake-artist', host: john, invite: [sam, kim, ada], difficulty: 'hard' });
+    const more = Array.from({ length: 6 }, (_, i) => ({ id: `p_${i}`, name: `P${i}` }));
+    inviteTo(id, 'p_john', more);
+    expect(() => inviteTo(id, 'p_john', [{ id: 'p_x', name: 'X' }])).toThrow(/Up to 10/);
+    for (const p of [sam, kim, ada]) act(id, p.id, 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS + 8_000);
+    const before = view(id, 'p_john').current!.artistId;
+    vi.advanceTimersByTime(15_000);
+    const after = view(id, 'p_john').current!.artistId;
+    expect(after).not.toBe(before);
+    expect(view(id, 'p_john').phase).toBe('drawing');
+  });
+});
+
+describe('pass the plate through the registry', () => {
+  type Plate = {
+    phase: string;
+    hand: { uid: number; kind: string }[];
+    round: number;
+    turn: number;
+    players: { id: string; handCount: number; picked: boolean; score: number }[];
+    standings: { id: string; score: number }[] | null;
+    winnerIds: string[];
+  };
+  const view = (id: string, who: string) => roomFor(id, who) as unknown as Plate;
+
+  it('deals hidden plates, reveals together, runs three rounds on the clock and records final scores', () => {
+    const { id } = createGame({ game: 'pass-the-plate', host: john, invite: [sam], difficulty: 'medium' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const mine = view(id, 'p_john');
+    const theirs = view(id, 'p_sam');
+    expect(mine.phase).toBe('picking');
+    expect(mine.hand).toHaveLength(10);
+    // Each phone holds only its own plate.
+    const json = JSON.stringify(mine);
+    for (const c of theirs.hand) expect(json).not.toContain(`"uid":${c.uid},`);
+
+    act(id, 'p_john', 'pick', { cards: [mine.hand[0].uid] });
+    const waiting = view(id, 'p_sam');
+    expect(waiting.players.find((p) => p.id === 'p_john')?.picked).toBe(true);
+    expect(waiting.turn).toBe(1);
+    expect(() => act(id, 'p_sam', 'pick', { cards: [mine.hand[1].uid] })).toThrow(/not on your plate/);
+    const after = act(id, 'p_sam', 'pick', { cards: [theirs.hand[0].uid] }) as unknown as Plate;
+    expect(after.turn).toBe(2);
+    expect(after.hand).toHaveLength(9);
+
+    // Nobody touches it again: the turn clock plays every other card, three rounds.
+    for (let i = 0; i < 40 && view(id, 'p_john').phase !== 'finished'; i++) vi.advanceTimersByTime(30_000);
+    const done = view(id, 'p_john');
+    expect(done.phase).toBe('finished');
+    expect(done.standings?.map((s) => s.id).sort()).toEqual(['p_john', 'p_sam']);
+    expect(recorded).toHaveLength(1);
+    const rows = recorded[0];
+    expect(rows.map((r) => r.game)).toEqual(['pass-the-plate', 'pass-the-plate']);
+    expect(rows.map((r) => r.score)).toEqual(done.standings!.map((s) => s.score));
+    expect(rows.filter((r) => r.won).map((r) => r.playerId)).toEqual(done.winnerIds);
+    expect(rows[0].options).toEqual({ label: 'Three rounds · full deck' });
+  });
+
+  it('a player leaving mid-game ends a table of two, the stayer winning', () => {
+    const { id } = createGame({ game: 'pass-the-plate', host: john, invite: [sam], difficulty: 'easy' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    act(id, 'p_sam', 'leave');
+    const w = view(id, 'p_john');
+    expect(w.phase).toBe('finished');
+    expect(w.winnerIds).toEqual(['p_john']);
+    expect(recorded[0].find((r) => r.playerId === 'p_john')?.won).toBe(true);
+  });
+});
+
+describe('fireworks through the registry', () => {
+  type Hand = { id: number; colour: string | null; rank: number | null }[];
+  type Fw = {
+    phase: string;
+    turnId: string;
+    hints: number;
+    score: number;
+    players: { id: string; hand: Hand }[];
+    standings: { id: string; score: number }[] | null;
+  };
+  const kim = { id: 'p_kim', name: 'Kim' };
+
+  it('hides each phone its own hand, hints, times out, and records the team score for everyone', () => {
+    const { id } = createGame({ game: 'fireworks', host: john, invite: [sam, kim], difficulty: 'medium' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_kim', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+
+    for (const viewer of ['p_john', 'p_sam', 'p_kim']) {
+      const w = roomFor(id, viewer) as unknown as Fw;
+      expect(w.phase).toBe('playing');
+      for (const p of w.players) {
+        expect(p.hand).toHaveLength(5);
+        expect(p.hand.every((c) => (c.colour === null) === (p.id === viewer))).toBe(true);
+      }
+    }
+
+    // John tells Sam which of his cards share the first one's number.
+    const johnSees = roomFor(id, 'p_john') as unknown as Fw;
+    expect(johnSees.turnId).toBe('p_john');
+    const samFirst = johnSees.players.find((p) => p.id === 'p_sam')!.hand[0];
+    expect(() => act(id, 'p_sam', 'hint', { to: 'p_john', rank: 1 })).toThrow(/not your turn/);
+    const after = act(id, 'p_john', 'hint', { to: 'p_sam', rank: samFirst.rank }) as unknown as Fw;
+    expect(after.hints).toBe(7);
+    expect(after.turnId).toBe('p_sam');
+
+    // Sam's clock runs out: the server drops a card for him and Kim is up.
+    vi.advanceTimersByTime(75_000);
+    const timed = roomFor(id, 'p_kim') as unknown as Fw & { log: { kind: string; by: string; auto: boolean }[] };
+    expect(timed.log.at(-1)).toMatchObject({ kind: 'discard', by: 'p_sam', auto: true });
+    expect(timed.turnId).toBe('p_kim');
+    expect(timed.hints).toBe(8);
+
+    // Two leave: one player cannot play alone, so the show ends with its score.
+    act(id, 'p_kim', 'leave');
+    act(id, 'p_sam', 'leave');
+    const done = roomFor(id, 'p_john') as unknown as Fw;
+    expect(done.phase).toBe('finished');
+    expect(done.standings!.map((s) => s.id)).toEqual(['p_john', 'p_sam', 'p_kim']);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].map((r) => [r.game, r.playerId, r.won, r.rank, r.score])).toEqual([
+      ['fireworks', 'p_john', false, 1, done.score],
+      ['fireworks', 'p_sam', false, 1, done.score],
+      ['fireworks', 'p_kim', false, 1, done.score],
+    ]);
+    expect(recorded[0][0].options).toEqual({ label: '5 colours · 3 misfires' });
+  });
+});
+
+describe('manhunt through the registry', () => {
+  const kim = { id: 'p_kim', name: 'Kim' };
+  const rob = { id: 'p_rob', name: 'Rob' };
+  const centre = { lat: 51.5, lng: -0.12 };
+  const near = (m: number) => ({ lat: Number((51.5 + m / 111_195).toFixed(7)), lng: -0.12 });
+
+  it('runs the head start, the ping and the catch on its own timers, and records the catcher', () => {
+    const { id } = createGame({
+      game: 'manhunt',
+      host: john,
+      invite: [sam, kim],
+      difficulty: 'hard',
+      options: { ...centre, radius: 400, minutes: 15 },
+    });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_kim', 'join');
+    act(id, 'p_john', 'runner', { playerId: 'p_sam' });
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    expect(roomFor(id, 'p_sam')).toMatchObject({ phase: 'headstart', myRole: 'runner' });
+    vi.advanceTimersByTime(2 * 60_000);
+    expect(roomFor(id, 'p_kim')).toMatchObject({ phase: 'hunt', myRole: 'hunter' });
+
+    act(id, 'p_sam', 'position', { ...near(100), accuracy: 5, at: Date.now() });
+    act(id, 'p_kim', 'position', { ...near(-50), accuracy: 5, at: Date.now() });
+    // Between pings the runner is not on Kim's phone.
+    expect(JSON.stringify(roomFor(id, 'p_kim'))).not.toContain(String(near(100).lat));
+
+    // The room's own timer pings at two minutes (hard).
+    vi.advanceTimersByTime(2 * 60_000);
+    const pinged = roomFor(id, 'p_kim') as WireRoom & { pings: { runner: { lat: number } | null }[] };
+    expect(pinged.pings).toHaveLength(1);
+    expect(pinged.pings[0].runner?.lat).toBe(near(100).lat);
+
+    act(id, 'p_kim', 'position', { ...near(95), accuracy: 5, at: Date.now() });
+    act(id, 'p_kim', 'catch');
+    // Nobody confirms: the server accepts the claim at 20 s.
+    vi.advanceTimersByTime(20_000);
+    const done = roomFor(id, 'p_john') as WireRoom & { result: { outcome: string; catcherId: string }; winnerIds: string[] };
+    expect(done.phase).toBe('finished');
+    expect(done.result).toMatchObject({ outcome: 'caught', catcherId: 'p_kim' });
+    expect(JSON.stringify(done)).not.toContain(String(near(95).lat));
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].map((r) => [r.game, r.playerId, r.won])).toEqual([
+      ['manhunt', 'p_kim', true],
+      ['manhunt', 'p_john', false],
+      ['manhunt', 'p_sam', false],
+    ]);
+    expect(JSON.stringify(recorded[0])).not.toContain('51.5');
+  });
+
+  it('holds up to eight, where every other game stops at five', () => {
+    const { id } = createGame({ game: 'manhunt', host: john, invite: [sam, kim, rob], difficulty: 'easy', options: centre });
+    const more = Array.from({ length: 4 }, (_, i) => ({ id: `p_${i}`, name: `P${i}` }));
+    inviteTo(id, 'p_john', more);
+    expect(() => inviteTo(id, 'p_john', [{ id: 'p_9', name: 'P9' }])).toThrow(/Up to 8/);
+  });
+});

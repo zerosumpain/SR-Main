@@ -161,3 +161,61 @@ describe("a Liar's Dice table between two paired phones", () => {
     await reader.cancel();
   });
 });
+
+describe('Manhunt is hosted by a parent', () => {
+  const area = { lat: 51.5, lng: -0.12, radius: 600, minutes: 20 };
+
+  it('refuses a member who is not a parent, before any room exists', async () => {
+    h.grants.set(sam.email, ['games:self', 'family:circle']);
+    expect(await refusal(startGame(event, sam, { game: 'manhunt', difficulty: 'easy', ...area }))).toEqual({
+      status: 403,
+      message: 'Only a parent can host Manhunt.',
+    });
+    expect((await lobbyFor(sam)).rooms).toEqual([]);
+  });
+
+  it('lets the owner and a parent host, with the circle where they stand', async () => {
+    const mine = (await startGame(event, owner, { game: 'manhunt', difficulty: 'medium', ...area })) as unknown as {
+      area: { lat: number; lng: number; radiusM: number };
+      minutes: number;
+    };
+    expect(mine.area).toEqual({ lat: 51.5, lng: -0.12, radiusM: 600 });
+    expect(mine.minutes).toBe(20);
+
+    h.grants.set(kit.email, ['games:self', 'family:circle', 'family:admin']);
+    const theirs = await startGame(event, kit, { game: 'manhunt', difficulty: 'hard', ...area });
+    expect(theirs.phase).toBe('lobby');
+  });
+
+  it('checks the role again for the set-up actions, whoever holds the host seat', async () => {
+    const room = await startGame(event, owner, { game: 'manhunt', difficulty: 'easy', invite: [playerId(sam.email)], ...area });
+    await roomAct(sam, room.id, { action: 'join' });
+    expect(await refusal(roomAct(sam, room.id, { action: 'area', lat: 51.6, lng: -0.1 }))).toEqual({
+      status: 403,
+      message: 'Only a parent can host Manhunt.',
+    });
+    // Not a set-up action: a member may still play.
+    expect((await refusal(roomAct(sam, room.id, { action: 'catch' }))).status).toBe(403);
+    // Another game's start is not a parent's business.
+    const dice = await startGame(event, owner, { game: 'liars-dice', difficulty: 'easy', invite: [playerId(sam.email)] });
+    await roomAct(sam, dice.id, { action: 'join' });
+    expect((await refusal(roomAct(sam, dice.id, { action: 'start' }))).message).toBe('Only the host can start.');
+  });
+
+  it('hands the host seat to a parent who joined, never a child first in line', async () => {
+    const ana = { email: 'ana@example.test', role: 'member' as const };
+    for (const e of [kit.email, ana.email]) {
+      h.devices.push({ ownerEmail: e, revokedAt: null, expiresAt: new Date(1_800_000_000_000) });
+    }
+    h.grants.set(kit.email, ['games:self', 'family:circle', 'family:admin']);
+    h.grants.set(ana.email, ['games:self', 'family:circle']);
+    _resetPlayers();
+    const invite = [sam, kit, ana].map((c) => playerId(c.email));
+    const room = await startGame(event, owner, { game: 'manhunt', difficulty: 'easy', invite, ...area });
+    for (const c of [sam, kit, ana]) await roomAct(c, room.id, { action: 'join' });
+    await roomAct(owner, room.id, { action: 'start' });
+    await roomAct(owner, room.id, { action: 'leave' });
+    const view = (await roomView(kit, room.id)) as unknown as { players: { id: string; isHost: boolean }[] };
+    expect(view.players.find((p) => p.isHost)?.id).toBe(playerId(kit.email));
+  });
+});
