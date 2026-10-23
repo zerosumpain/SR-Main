@@ -5,8 +5,11 @@
 -- DELETE because the retention sweep and account erasure run in-process.
 -- Narrow on purpose. Apply as the owner after the deploy that creates the table:
 --   docker exec -i strange-rambling-app-db-1 psql -U app -d strange_rambling < this-file
--- SR-Infra's registry/runtime-tables.json needs "game_rooms" in Main's list
--- too (right after "game_results"), in its own PR.
+-- Until it is applied, starting a durable game (Homestead) is a 503 and the
+-- lobby and room sweep log the denied query. SR-Infra's
+-- registry/runtime-tables.json must list "game_rooms" (right after
+-- "game_results") and merge WITH this release: runtime-grants.py revokes every
+-- table it does not list, so a later run would silently undo this grant.
 DO $$ BEGIN
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'sr_main_runtime') THEN
     IF to_regclass('public.game_rooms') IS NOT NULL THEN
