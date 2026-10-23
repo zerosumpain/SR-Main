@@ -33,6 +33,7 @@ export const TITLES: Record<GameId, string> = {
   chess: 'Chess',
   mission: 'Secret Mission',
   'one-clue': 'One Clue',
+  'fake-artist': 'Odd Artist Out',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };

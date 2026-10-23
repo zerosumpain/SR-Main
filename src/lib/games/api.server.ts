@@ -66,7 +66,7 @@ const stringIds = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x 
  * Start a game: `{ game, difficulty, invite: [playerId] }` plus that game's
  * options (Quiz Night `topic`/`audience`, or `mode: 'gcse'` with `subject`/`board`, Boggle `size`/`seconds`/`scoring`,
  * Categories `categoryCount`/`seconds`, Liar's Dice `dice`, Draw & Guess
- * `turnsEach`/`seconds`).
+ * `turnsEach`/`seconds`, Odd Artist Out `rounds`).
  */
 export async function startGame(
   event: Pick<RequestEvent, 'locals'>,
@@ -114,6 +114,7 @@ export async function startGame(
     dice: body.dice,
     turnsEach: body.turnsEach,
     course: body.course,
+    rounds: body.rounds,
   };
   const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
   // Not awaited: the host's screen should not wait on Apple. An invite whose

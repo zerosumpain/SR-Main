@@ -19,6 +19,7 @@ import * as marbleRace from './marble-race';
 import * as chess from './chess';
 import * as mission from './mission';
 import * as oneClue from './one-clue';
+import * as fakeArtist from './fake-artist';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -37,6 +38,7 @@ export const GAME_IDS = [
   'chess',
   'mission',
   'one-clue',
+  'fake-artist',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -253,6 +255,19 @@ export const GAMES: Record<GameId, GameRules> = {
       done: (room, playerId, _body, now) => oneClue.done(room as oneClue.Room, playerId, now),
       guess: (room, playerId, body, now) => oneClue.guess(room as oneClue.Room, playerId, { text: body.text }, now),
       pass: (room, playerId, _body, now) => oneClue.pass(room as oneClue.Room, playerId, now),
+    },
+  },
+  'fake-artist': {
+    ...fakeArtist,
+    maxPlayers: fakeArtist.MAX_PLAYERS,
+    minPlayers: fakeArtist.MIN_PLAYERS,
+    moves: {
+      // Raw on purpose: each types its own fields (400 with a sentence for a bad line or vote).
+      stroke: (room, playerId, body, now) =>
+        fakeArtist.stroke(room as fakeArtist.Room, playerId, { points: body.points, end: body.end }, now),
+      vote: (room, playerId, body, now) =>
+        fakeArtist.vote(room as fakeArtist.Room, playerId, { playerId: body.playerId }, now),
+      guess: (room, playerId, body, now) => fakeArtist.guess(room as fakeArtist.Room, playerId, { text: body.text }, now),
     },
   },
 };

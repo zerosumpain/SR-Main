@@ -622,3 +622,95 @@ describe('secret mission through the registry', () => {
     expect(() => inviteTo(id, 'p_john', [{ id: 'p_jo', name: 'Jo' }])).toThrow(/Up to 5/);
   });
 });
+
+describe('odd artist out through the registry', () => {
+  const kim = { id: 'p_kim', name: 'Kim' };
+  const ada = { id: 'p_ada', name: 'Ada' };
+  const bo = { id: 'p_bo', name: 'Bo' };
+  const cy = { id: 'p_cy', name: 'Cy' };
+  type FakeWire = WireRoom & {
+    current: {
+      role: string;
+      word: string | null;
+      fakeId: string | null;
+      artistId: string | null;
+      outcome: string | null;
+    } | null;
+    drawing: { revision: number; since: number | null; ops: unknown[] | null } | null;
+    standings: { id: string; score: number }[] | null;
+  };
+  const view = (id: string, me: string) => roomFor(id, me) as FakeWire;
+
+  it('holds six (over the default five), hides the word from the fake alone, streams lines as changes, and records the finish', () => {
+    const people = [sam, kim, ada, bo, cy];
+    const { id } = createGame({ game: 'fake-artist', host: john, invite: people, difficulty: 'hard', options: { rounds: 3 } });
+    for (const p of people) act(id, p.id, 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const ids = [john, ...people].map((p) => p.id);
+    expect(view(id, 'p_john').phase).toBe('reading');
+
+    for (let round = 1; round <= 3; round++) {
+      const wires = ids.map((me) => view(id, me));
+      const fakes = wires.filter((w) => w.current!.role === 'fake');
+      expect(fakes).toHaveLength(1);
+      const fake = fakes[0].meId;
+      const word = wires.find((w) => w.meId !== fake)!.current!.word!;
+      expect(word).toBeTruthy();
+      for (const w of wires) {
+        // Past rounds (`history`) are public once revealed; this round's secrets are not.
+        const s = JSON.stringify({ ...w, history: [] });
+        if (w.meId === fake) expect(s).not.toContain(`"word":"${word}"`);
+        else expect(s).not.toContain(`"fakeId":"${fake}"`);
+      }
+
+      vi.advanceTimersByTime(8_000);
+      // Each artist in turn: one line in two posts, the second lifting the finger.
+      // A subscriber that holds the picture is sent only the new segment.
+      const frames: FakeWire[] = [];
+      const stop = subscribe(id, 'p_sam', (r) => frames.push(r as FakeWire), () => {});
+      for (let turn = 0; turn < 12; turn++) {
+        const artist = view(id, 'p_john').current!.artistId!;
+        act(id, artist, 'stroke', { points: [[10, 10], [50, 50]] });
+        act(id, artist, 'stroke', { points: [[90, 90]], end: true });
+      }
+      stop();
+      expect(frames[0].drawing!.since).toBeNull();
+      expect(frames.slice(1).some((f) => f.drawing?.ops?.length === 1)).toBe(true);
+      expect(view(id, 'p_john').phase).toBe('voting');
+
+      // Everyone but the fake votes for the fake; the fake guesses the word right in round 1.
+      for (const me of ids) act(id, me, 'vote', { playerId: me === fake ? ids.find((x) => x !== fake) : fake });
+      expect(view(id, 'p_john').phase).toBe('guessing');
+      act(id, fake, 'guess', { text: round === 1 ? word : 'not it at all' });
+      const reveal = view(id, 'p_kim');
+      expect(reveal.phase).toBe('reveal');
+      expect(reveal.current!.outcome).toBe(round === 1 ? 'guessed' : 'caught');
+      vi.advanceTimersByTime(10_000);
+    }
+
+    const done = view(id, 'p_john');
+    expect(done.phase).toBe('finished');
+    expect(recorded).toHaveLength(1);
+    const rows = recorded[0];
+    expect(rows).toHaveLength(6);
+    expect(rows.every((r) => r.game === 'fake-artist' && typeof r.score === 'number')).toBe(true);
+    expect(rows.reduce((n, r) => n + (r.score ?? 0), 0)).toBe(2 + 5 + 5);
+    expect(rows[0].options).toEqual({ rounds: 3, label: '3 rounds · 15 s a line' });
+  });
+
+  it('skips a stalled artist on the room timer, and lets the lobby take up to ten', () => {
+    const { id } = createGame({ game: 'fake-artist', host: john, invite: [sam, kim, ada], difficulty: 'hard' });
+    const more = Array.from({ length: 6 }, (_, i) => ({ id: `p_${i}`, name: `P${i}` }));
+    inviteTo(id, 'p_john', more);
+    expect(() => inviteTo(id, 'p_john', [{ id: 'p_x', name: 'X' }])).toThrow(/Up to 10/);
+    for (const p of [sam, kim, ada]) act(id, p.id, 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS + 8_000);
+    const before = view(id, 'p_john').current!.artistId;
+    vi.advanceTimersByTime(15_000);
+    const after = view(id, 'p_john').current!.artistId;
+    expect(after).not.toBe(before);
+    expect(view(id, 'p_john').phase).toBe('drawing');
+  });
+});
