@@ -28,22 +28,19 @@ const T0 = Date.parse('2026-09-29T10:00:00Z');
 const john = { id: 'p_john', name: 'John' };
 const sam = { id: 'p_sam', name: 'Sam' };
 
-/** Games that cannot start with two: how many they seat in these tests. */
-const SEATS: Partial<Record<GameId, number>> = { mission: 5 };
-/** John, Sam, and as many more as `game` needs to start. */
-const tableFor = (game: GameId) => [
-  sam,
-  ...Array.from({ length: (SEATS[game] ?? 2) - 2 }, (_, i) => ({ id: `p_extra${i}`, name: `Extra ${i}` })),
-];
+/** John and Sam, and as many more as a game needs to start (`GameRules.minPlayers`). */
+function contenders(game: GameId): { id: string; name: string }[] {
+  const extra = Math.max(0, (GAMES[game].minPlayers ?? 2) - 2);
+  return [john, sam, ...Array.from({ length: extra }, (_, i) => ({ id: `p_extra${i}`, name: `Extra ${i}` }))];
+}
 
-/** A room of `game` with John and Sam (and more, if it needs them), played to its finish by the clock alone. */
+/** A room of `game` with John and Sam (and more if it needs them), played to its finish by the clock alone. */
 async function finished(game: GameId, options: Record<string, unknown> = {}): Promise<{ room: RoomBase; now: number }> {
   const rules = GAMES[game];
   let now = T0;
-  const invite = tableFor(game);
-  const room = rules.createRoom({ id: `g_${game}`, host: john, invite, difficulty: 'easy', options, now });
+  const room = rules.createRoom({ id: `g_${game}`, host: john, invite: contenders(game).slice(1), difficulty: 'easy', options, now });
   if (rules.prepare) await rules.prepare(room);
-  for (const p of invite) rules.join(room, p.id, now);
+  for (const p of contenders(game).slice(1)) rules.join(room, p.id, now);
   rules.start(room, 'p_john', now);
   // Nobody moves: every game ends on its own clock. Step to each deadline.
   for (let i = 0; i < 5_000 && room.phase !== 'finished'; i++) {
@@ -60,18 +57,19 @@ describe('recording a finished round, in every game in the catalogue', () => {
     const { room, now } = await finished(game);
     expect(room.phase).toBe('finished');
     const rows = roundRows(room, rules, 1, now, []);
-    expect(rows.map((r) => r.playerId).sort()).toEqual(['p_john', ...tableFor(game).map((p) => p.id)].sort());
+    const everyone = contenders(game).map((p) => p.id);
+    expect(rows.map((r) => r.playerId).sort()).toEqual([...everyone].sort());
 
     const wire = rules.toWire(room, 'p_john', now) as unknown as {
       standings: Array<{ id: string; score?: unknown }>;
       winnerIds: string[];
     };
     for (const r of rows) {
-      expect(r).toMatchObject({ game, roomId: room.id, round: 1, players: SEATS[game] ?? 2, difficulty: 'easy' });
+      expect(r).toMatchObject({ game, roomId: room.id, round: 1, players: everyone.length, difficulty: 'easy' });
       expect(r.won).toBe(wire.winnerIds.includes(r.playerId));
       expect(r.score === null || Number.isInteger(r.score)).toBe(true);
       expect(r.rank).toBeGreaterThanOrEqual(1);
-      expect(r.rank).toBeLessThanOrEqual(rows.length);
+      expect(r.rank).toBeLessThanOrEqual(everyone.length);
       const standing = wire.standings.find((s) => s.id === r.playerId)!;
       // The default is the standing's own numeric score; an override says otherwise.
       if (!rules.resultScore && typeof standing.score === 'number') expect(r.score).toBe(standing.score);

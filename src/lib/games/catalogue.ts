@@ -18,6 +18,7 @@ import * as drawGuess from './draw-guess';
 import * as marbleRace from './marble-race';
 import * as chess from './chess';
 import * as mission from './mission';
+import * as oneClue from './one-clue';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -35,6 +36,7 @@ export const GAME_IDS = [
   'marble-race',
   'chess',
   'mission',
+  'one-clue',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -103,8 +105,10 @@ export interface GameRules {
    * Null: this game has no score, and its board ranks by wins.
    */
   resultScore?(standing: { id: string; [key: string]: unknown }): number | null;
-  /** Most players a room may hold, host included, when not the shared five (Secret Mission: ten). */
+  /** Most players a room may hold, when not the registry's default (`MAX_PLAYERS`, five). */
   maxPlayers?: number;
+  /** Fewest joined players `start` accepts, when more than two (for tests that play every game). */
+  minPlayers?: number;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -226,6 +230,7 @@ export const GAMES: Record<GameId, GameRules> = {
   mission: {
     ...mission,
     maxPlayers: mission.MAX_PLAYERS,
+    minPlayers: mission.MIN_PLAYERS,
     moves: {
       // Raw on purpose: each types its own fields (400 with a sentence for a team that cannot go).
       ready: (room, playerId, _body, now) => mission.ready(room as mission.Room, playerId, now),
@@ -233,6 +238,21 @@ export const GAMES: Record<GameId, GameRules> = {
       vote: (room, playerId, body, now) => mission.vote(room as mission.Room, playerId, { approve: body.approve }, now),
       play: (room, playerId, body, now) => mission.play(room as mission.Room, playerId, { card: body.card }, now),
       guess: (room, playerId, body, now) => mission.guess(room as mission.Room, playerId, { playerId: body.playerId }, now),
+    },
+  },
+  'one-clue': {
+    ...oneClue,
+    maxPlayers: oneClue.MAX_PLAYERS,
+    minPlayers: oneClue.MIN_PLAYERS,
+    moves: {
+      // Raw on purpose: each types its own fields (400 with a sentence).
+      clue: (room, playerId, body, now) => oneClue.clue(room as oneClue.Room, playerId, { text: body.text, lock: body.lock }, now),
+      veto: (room, playerId, body, now) => oneClue.veto(room as oneClue.Room, playerId, { playerId: body.playerId }, now),
+      unveto: (room, playerId, body, now) =>
+        oneClue.unveto(room as oneClue.Room, playerId, { playerId: body.playerId }, now),
+      done: (room, playerId, _body, now) => oneClue.done(room as oneClue.Room, playerId, now),
+      guess: (room, playerId, body, now) => oneClue.guess(room as oneClue.Room, playerId, { text: body.text }, now),
+      pass: (room, playerId, _body, now) => oneClue.pass(room as oneClue.Room, playerId, now),
     },
   },
 };

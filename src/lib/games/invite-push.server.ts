@@ -32,6 +32,7 @@ export const TITLES: Record<GameId, string> = {
   'marble-race': 'Marble Race',
   chess: 'Chess',
   mission: 'Secret Mission',
+  'one-clue': 'One Clue',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
