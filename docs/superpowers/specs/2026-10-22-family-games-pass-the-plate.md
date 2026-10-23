@@ -1,6 +1,6 @@
 # Family games: Pass the Plate
 
-Status: built 2026-10-22. Repos: SR-Main (`src/lib/games/pass-the-plate.ts`, catalogue entry `pass-the-plate`), SR-AppleApp (`Games/PassThePlate*.swift`). The leaderboard needs nothing: each finished standing carries its final `score`, which the generic recorder reads.
+Status: built 2026-10-22. Repos: SR-Main (`src/lib/games/pass-the-plate.ts`, catalogue entry `pass-the-plate`), SR-AppleApp (`Games/PassThePlate*.swift`). For the leaderboard, each finished standing carries its final `score` and its `place`; the game's `resultRank` hook hands the recorder that place, so a score tie lost on ice cream is recorded below the winner rather than sharing rank 1.
 
 ## The game
 
@@ -66,7 +66,7 @@ The shared verbs. `start` needs two joined (409 "Pass the Plate needs at least t
 - Turn clock (`turnMs`, by difficulty): anyone who has not chosen gets a random card off their plate; that play is `auto: true` in `lastTurn`. A table of absent phones plays itself to the end.
 - `scoring` lasts 8 s (`scoringMs`), then the next deal, or the finish after round 3.
 - `advance` ignores a non-finite `now` and takes one step per call (each deadline is set from `now`), as Liar's Dice.
-- Leaving mid-game: the leaver's plate is discarded (the remaining plates are all one size, so passing goes on round the smaller table), their finished rounds stay in the standings below everyone still playing, and if everyone else had chosen the turn is revealed at once. A table left with one player finishes with them the winner. The host role moves on; the host leaving the lobby closes it.
+- Leaving mid-game: the leaver's plate is discarded (the remaining plates are all one size, so passing goes on round the smaller table), their finished rounds stay in the standings below everyone still playing, and if everyone else had chosen the turn is revealed at once. A table left with one player finishes with them the winner; the unfinished round is not scored (its tables are cleared, so `iceCream`, `dessert` and `standings` all count the finished rounds only). Only leaving during play (`picking`/`scoring`) ranks a player as having left: leaving the results screen of a finished game changes nothing in its standings or winners. The host role moves on; the host leaving the lobby closes it.
 
 ## Wire (`toWire`)
 
@@ -77,7 +77,7 @@ Beside the shared fields (`id`, `game`, `difficulty`, `phase`, `hostId`, `meId`,
 - `rounds` (3), `round` (1-based), `turn` (1-based within the round), `handSize`, `direction` (`left` | `right`), `passTo` / `passFrom` (my neighbours' ids this round), `turnMs`, `scoringMs`, `hints`.
 - `kinds`: `[{ kind, name, emoji, family, count, value, rule }]` — this difficulty's deck.
 - `hand`: MY plate, `[{ uid, kind, gain }]` (`gain` a number on easy, else null). `myPick`: my pending uids. `canTakeTwo`.
-- `players[]`: `seated`, `handCount`, `picked` (chosen this turn, never what), `played: [{ uid, kind, boosted, spent }]` (this round's table, in order), `iceCream` (scoops so far), `berries` (this round), `score` (finished rounds, plus ice cream once finished), `roundSoFar` (null on hard), `left`.
+- `players[]`: `seated`, `handCount`, `picked` (chosen this turn, never what), `played: [{ uid, kind, boosted, spent }]` (this round's table, in order), `iceCream` (scoops so far: kept scoops, plus this round's table only while `picking`), `berries` (this round), `score` (finished rounds, plus ice cream once finished), `roundSoFar` (null on hard), `left`.
 - `lastTurn`: `[{ playerId, cards: [{uid, kind}], auto }]` — the last reveal.
 - `results`: `[{ round, rows: [{ playerId, pancakes, pizza, popcorn, pies, berryCount, berries, scoops, total }] }]`.
 - `dessert`: `[{ playerId, scoops, points }]` once finished.

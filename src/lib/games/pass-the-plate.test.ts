@@ -33,6 +33,8 @@ import {
   type Played,
   type Room,
 } from './pass-the-plate';
+import { GAMES } from './catalogue';
+import { roundRows } from './results';
 
 const T0 = 1_790_000_000_000;
 const SAM = { id: 'p_sam', name: 'Sam' };
@@ -498,5 +500,91 @@ describe('the wire', () => {
     expect(w.standings?.map((s) => s.id)).toEqual(['p_john', 'p_sam']);
     expect(typeof w.standings?.[0].score).toBe('number');
     expect(w.winnerIds).toEqual(['p_john']);
+  });
+});
+
+describe('review fixes', () => {
+  /** Every seat chooses its first card, so the turn reveals. */
+  function everyonePicks(r: Room, now: number) {
+    for (const pl of r.players.filter((x) => x.seated && x.status === 'joined')) {
+      pick(r, pl.id, { cards: [pl.hand[0].uid] }, now);
+    }
+  }
+
+  it('a winner leaving the finished room keeps the result everyone saw', () => {
+    const r = room([SAM, KIM], 'hard');
+    let now = playing(r);
+    const rng = seeded(3);
+    for (let i = 0; i < 200 && r.phase !== 'finished'; i++) {
+      now = deadline(r)!;
+      advance(r, now, rng);
+    }
+    expect(r.phase).toBe('finished');
+    const before = standings(r);
+    const won = winners(r);
+    leave(r, won[0], now + 1);
+    expect(winners(r)).toEqual(won);
+    expect(standings(r)).toEqual(before);
+    expect(standings(r).every((s) => !s.left)).toBe(true);
+  });
+
+  it('the leaderboard ranks a score tie lost on ice cream below the winner', () => {
+    const r = room([SAM]);
+    playing(r);
+    p(r, 'p_john').rounds = [10];
+    p(r, 'p_sam').rounds = [10];
+    p(r, 'p_john').iceCream = 3;
+    p(r, 'p_sam').iceCream = 1;
+    r.dessert = [];
+    r.phase = 'finished';
+    const rows = roundRows(r, GAMES['pass-the-plate'], 1, T0);
+    expect(rows.map((x) => [x.playerId, x.rank, x.won])).toEqual([
+      ['p_john', 1, true],
+      ['p_sam', 2, false],
+    ]);
+  });
+
+  it('the wire counts each scoop once: kept total while scoring, standings scoops when finished', () => {
+    const r = room([SAM, KIM]);
+    let now = playing(r);
+    const rng = seeded(5);
+    let sawScoring = false;
+    for (let i = 0; i < 400 && r.phase !== 'finished'; i++) {
+      if (r.phase === 'scoring') {
+        sawScoring = true;
+        const w = toWire(r, 'p_john', now);
+        for (const pl of w.players.filter((x) => x.seated)) expect(pl.iceCream).toBe(p(r, pl.id).iceCream);
+      }
+      now = deadline(r)!;
+      advance(r, now, rng);
+    }
+    expect(sawScoring).toBe(true);
+    const w = toWire(r, 'p_john', now);
+    for (const s of w.standings!) {
+      expect(w.players.find((x) => x.id === s.id)!.iceCream).toBe(s.scoops);
+      expect(w.dessert!.find((d) => d.playerId === s.id)!.scoops).toBe(s.scoops);
+    }
+  });
+
+  it('finishing mid-round does not score the unfinished round, and the wire agrees', () => {
+    const r = room([SAM]);
+    let now = playing(r);
+    for (let t = 0; t < 3; t++) {
+      hand(r, 'p_john', ['icecream', 'icecream']);
+      hand(r, 'p_sam', ['icecream', 'icecream']);
+      everyonePicks(r, now);
+      now += 1;
+    }
+    expect(toWire(r, 'p_john', now).players.find((x) => x.id === 'p_john')!.iceCream).toBe(3);
+    leave(r, 'p_sam', now);
+    expect(r.phase).toBe('finished');
+    const w = toWire(r, 'p_john', now);
+    expect(w.results).toEqual([]);
+    for (const pl of w.players) {
+      expect(pl.played).toEqual([]);
+      expect(pl.iceCream).toBe(0);
+    }
+    expect(w.dessert).toEqual([{ playerId: 'p_john', scoops: 0, points: 0 }]);
+    expect(w.standings!.map((s) => s.scoops)).toEqual([0, 0]);
   });
 });

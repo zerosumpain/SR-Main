@@ -690,7 +690,16 @@ function scoreTheRound(room: Room, now: number): void {
   room.updatedAt = now;
 }
 
+/**
+ * The end of the game. Finishing mid-round (the table dropped to one) does not
+ * score the unfinished round: its tables are cleared, so the wire's scoops,
+ * the dessert rows and the standings all count the same finished rounds.
+ */
 function finish(room: Room, now: number): void {
+  if (room.phase === 'picking') {
+    for (const p of room.players) p.played = [];
+    room.lastTurn = null;
+  }
   const table = active(room);
   const points = dessertPoints(table.map((p) => ({ id: p.id, scoops: p.iceCream })));
   room.dessert = table.map((p) => ({ playerId: p.id, scoops: p.iceCream, points: points[p.id] ?? 0 }));
@@ -758,9 +767,18 @@ export function totalOf(room: Room, p: Player): number {
   return p.rounds.reduce((a, b) => a + b, 0) + dessert;
 }
 
-/** Scoops so far, this round's included. */
-function scoopsOf(p: Player): number {
-  return p.iceCream + p.played.filter((c) => c.kind === 'icecream').length;
+/**
+ * Scoops so far. While a round is being played its table's ice cream is
+ * added; once it is scored (scoring, finished) it is already in `iceCream`.
+ */
+function scoopsOf(room: Room, p: Player): number {
+  const onTable = room.phase === 'picking' ? p.played.filter((c) => c.kind === 'icecream').length : 0;
+  return p.iceCream + onTable;
+}
+
+/** Left during play (picking or scoring). Leaving the results screen does not count. */
+function leftEarly(p: Player): boolean {
+  return p.leftRound !== null;
 }
 
 export interface Standing {
@@ -781,10 +799,10 @@ export interface Standing {
  */
 export function standings(room: Room): Standing[] {
   const seated = room.players.filter((p) => p.seated);
-  const row = (p: Player) => ({ id: p.id, name: p.name, score: totalOf(room, p), scoops: p.iceCream, left: p.status !== 'joined' });
+  const row = (p: Player) => ({ id: p.id, name: p.name, score: totalOf(room, p), scoops: p.iceCream, left: leftEarly(p) });
   const by = (a: ReturnType<typeof row>, b: ReturnType<typeof row>) => b.score - a.score || b.scoops - a.scoops;
-  const playing = seated.filter((p) => p.status === 'joined').map(row).sort(by);
-  const gone = seated.filter((p) => p.status !== 'joined').map(row).sort(by);
+  const playing = seated.filter((p) => !leftEarly(p)).map(row).sort(by);
+  const gone = seated.filter((p) => leftEarly(p)).map(row).sort(by);
   const out: Standing[] = [];
   playing.forEach((r, i) => {
     const prev = out[i - 1];
@@ -850,7 +868,7 @@ export function toWire(room: Room, meId: string, now: number) {
       handCount: p.hand.length,
       picked: room.phase === 'picking' && p.pick !== null,
       played: p.played.map((c) => ({ ...card(c), boosted: c.boosted, spent: c.spent })),
-      iceCream: scoopsOf(p),
+      iceCream: scoopsOf(room, p),
       berries: berriesOf(p.played),
       score: totalOf(room, p),
       roundSoFar: hints === 'none' && !finished ? null : ownTotal(p.played),
@@ -866,3 +884,12 @@ export function toWire(room: Room, meId: string, now: number) {
 }
 
 export type WireRoom = ReturnType<typeof toWire>;
+
+/**
+ * The leaderboard's rank for one finished standing: the game's own place, so
+ * a score tie lost on ice cream is recorded below the winner, not beside it.
+ */
+export function resultRank(standing: { id: string; [key: string]: unknown }): number | null {
+  const v = standing.place;
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : null;
+}

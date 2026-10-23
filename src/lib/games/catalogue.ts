@@ -103,6 +103,11 @@ export interface GameRules {
    * Null: this game has no score, and its board ranks by wins.
    */
   resultScore?(standing: { id: string; [key: string]: unknown }): number | null;
+  /**
+   * The leaderboard rank for one finished standing, when the game breaks a
+   * score tie itself (the default ranks by score alone). Null: the default.
+   */
+  resultRank?(standing: { id: string; [key: string]: unknown }): number | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
