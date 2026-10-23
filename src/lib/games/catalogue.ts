@@ -20,6 +20,7 @@ import * as chess from './chess';
 import * as mission from './mission';
 import * as oneClue from './one-clue';
 import * as fakeArtist from './fake-artist';
+import * as passThePlate from './pass-the-plate';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -39,6 +40,7 @@ export const GAME_IDS = [
   'mission',
   'one-clue',
   'fake-artist',
+  'pass-the-plate',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -111,6 +113,11 @@ export interface GameRules {
   maxPlayers?: number;
   /** Fewest joined players `start` accepts, when more than two (for tests that play every game). */
   minPlayers?: number;
+  /**
+   * The leaderboard rank for one finished standing, when the game breaks a
+   * score tie itself (the default ranks by score alone). Null: the default.
+   */
+  resultRank?(standing: { id: string; [key: string]: unknown }): number | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -268,6 +275,14 @@ export const GAMES: Record<GameId, GameRules> = {
       vote: (room, playerId, body, now) =>
         fakeArtist.vote(room as fakeArtist.Room, playerId, { playerId: body.playerId }, now),
       guess: (room, playerId, body, now) => fakeArtist.guess(room as fakeArtist.Room, playerId, { text: body.text }, now),
+    },
+  },
+  'pass-the-plate': {
+    ...passThePlate,
+    moves: {
+      // Raw on purpose: `pick` types its own fields (400 with a sentence for a card not on the plate).
+      pick: (room, playerId, body, now) =>
+        passThePlate.pick(room as passThePlate.Room, playerId, { cards: body.cards }, now),
     },
   },
 };

@@ -714,3 +714,63 @@ describe('odd artist out through the registry', () => {
     expect(view(id, 'p_john').phase).toBe('drawing');
   });
 });
+
+describe('pass the plate through the registry', () => {
+  type Plate = {
+    phase: string;
+    hand: { uid: number; kind: string }[];
+    round: number;
+    turn: number;
+    players: { id: string; handCount: number; picked: boolean; score: number }[];
+    standings: { id: string; score: number }[] | null;
+    winnerIds: string[];
+  };
+  const view = (id: string, who: string) => roomFor(id, who) as unknown as Plate;
+
+  it('deals hidden plates, reveals together, runs three rounds on the clock and records final scores', () => {
+    const { id } = createGame({ game: 'pass-the-plate', host: john, invite: [sam], difficulty: 'medium' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    const mine = view(id, 'p_john');
+    const theirs = view(id, 'p_sam');
+    expect(mine.phase).toBe('picking');
+    expect(mine.hand).toHaveLength(10);
+    // Each phone holds only its own plate.
+    const json = JSON.stringify(mine);
+    for (const c of theirs.hand) expect(json).not.toContain(`"uid":${c.uid},`);
+
+    act(id, 'p_john', 'pick', { cards: [mine.hand[0].uid] });
+    const waiting = view(id, 'p_sam');
+    expect(waiting.players.find((p) => p.id === 'p_john')?.picked).toBe(true);
+    expect(waiting.turn).toBe(1);
+    expect(() => act(id, 'p_sam', 'pick', { cards: [mine.hand[1].uid] })).toThrow(/not on your plate/);
+    const after = act(id, 'p_sam', 'pick', { cards: [theirs.hand[0].uid] }) as unknown as Plate;
+    expect(after.turn).toBe(2);
+    expect(after.hand).toHaveLength(9);
+
+    // Nobody touches it again: the turn clock plays every other card, three rounds.
+    for (let i = 0; i < 40 && view(id, 'p_john').phase !== 'finished'; i++) vi.advanceTimersByTime(30_000);
+    const done = view(id, 'p_john');
+    expect(done.phase).toBe('finished');
+    expect(done.standings?.map((s) => s.id).sort()).toEqual(['p_john', 'p_sam']);
+    expect(recorded).toHaveLength(1);
+    const rows = recorded[0];
+    expect(rows.map((r) => r.game)).toEqual(['pass-the-plate', 'pass-the-plate']);
+    expect(rows.map((r) => r.score)).toEqual(done.standings!.map((s) => s.score));
+    expect(rows.filter((r) => r.won).map((r) => r.playerId)).toEqual(done.winnerIds);
+    expect(rows[0].options).toEqual({ label: 'Three rounds · full deck' });
+  });
+
+  it('a player leaving mid-game ends a table of two, the stayer winning', () => {
+    const { id } = createGame({ game: 'pass-the-plate', host: john, invite: [sam], difficulty: 'easy' });
+    act(id, 'p_sam', 'join');
+    act(id, 'p_john', 'start');
+    vi.advanceTimersByTime(COUNTDOWN_MS);
+    act(id, 'p_sam', 'leave');
+    const w = view(id, 'p_john');
+    expect(w.phase).toBe('finished');
+    expect(w.winnerIds).toEqual(['p_john']);
+    expect(recorded[0].find((r) => r.playerId === 'p_john')?.won).toBe(true);
+  });
+});
