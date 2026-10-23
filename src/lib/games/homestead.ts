@@ -16,6 +16,11 @@
 // Every name here is Homestead's own: timber, clay, wool, grain and stone; the
 // fox; cottages and towns; almanac cards (ranger, heirloom, pathfinders,
 // harvest, market); Longest Trail and Chief Ranger.
+//
+// The rules live in four files (each under the new-file size gate): this one
+// moves the game on; `homestead-model.ts` holds the types and read-only
+// queries; `homestead-trade.ts` the bank and offers; `homestead-wire.ts` what
+// one phone may see. This module's exports are the game's whole public face.
 
 import {
   COUNTDOWN_MS,
@@ -34,260 +39,137 @@ import {
   ISLAND,
   edgeEnds,
   generateIsland,
-  geometry,
   hexCorners,
   isResource,
   parseEdge,
   parseHex,
   parseVertex,
   shuffle,
-  type Board,
-  type Harbour,
   type Hex,
   type IslandSize,
   type Resource,
 } from './homestead-board';
+import {
+  COSTS,
+  DEADLINE_HOURS,
+  MIN_PLAYERS,
+  RANGERS_MIN,
+  TARGET,
+  TRAIL_MIN,
+  activePlayer,
+  assertActive,
+  assertPlaying,
+  bestBy,
+  byId,
+  cottageSpots,
+  covers,
+  deadline,
+  decisionMs,
+  emptyHand,
+  find,
+  finishedMs,
+  foxHexes,
+  geo,
+  handCount,
+  handText,
+  hexById,
+  isCardKind,
+  joined,
+  lobbyMs,
+  log,
+  nameOf,
+  openBuilding,
+  parseCards,
+  pay,
+  player,
+  playing,
+  present,
+  publicVp,
+  randInt,
+  roadSpots,
+  roller,
+  seedRng,
+  setupRoadSpots,
+  setupSeat,
+  stepRefusal,
+  toStep,
+  totalVp,
+  trailLength,
+  vertexPips,
+  victimsAt,
+  voidUncovered,
+  waitingIds,
+  type CardKind,
+  type Hand,
+  type Pace,
+  type Player,
+  type Result,
+  type Room,
+} from './homestead-model';
+import {
+  bank,
+} from './homestead-trade';
 
 export { COUNTDOWN_MS, FINISHED_MS, GameError, LOBBY_MS, isDifficulty, DIFFICULTIES, RESOURCES };
 export type { Difficulty, PlayerStatus, Rng, Resource, IslandSize };
-
-export type Phase = 'lobby' | 'countdown' | 'playing' | 'finished' | 'closed';
-export type Step = 'setup' | 'roll' | 'discard' | 'fox' | 'main' | 'roads';
-export type Pace = 'live' | 'async';
-export type Piece = 'road' | 'cottage' | 'town';
-export type CardKind = 'ranger' | 'heirloom' | 'pathfinders' | 'harvest' | 'market';
-export type Hand = Record<Resource, number>;
-
-const CARD_KINDS: readonly CardKind[] = ['ranger', 'heirloom', 'pathfinders', 'harvest', 'market'];
-const isCardKind = (v: unknown): v is CardKind => typeof v === 'string' && (CARD_KINDS as readonly string[]).includes(v);
-
-export const MIN_PLAYERS = 3;
-export const PIECES: Record<Piece, number> = { road: 15, cottage: 5, town: 4 };
-export const COSTS: Record<Piece | 'card', Partial<Hand>> = {
-  road: { timber: 1, clay: 1 },
-  cottage: { timber: 1, clay: 1, wool: 1, grain: 1 },
-  town: { grain: 2, stone: 3 },
-  card: { wool: 1, grain: 1, stone: 1 },
-};
-export const TARGET: Record<Difficulty, number> = { easy: 8, medium: 10, hard: 10 };
-export const DEADLINE_HOURS = [12, 24, 48] as const;
-const COLOURS = ['red', 'blue', 'amber', 'green', 'purple'] as const;
-const TRAIL_MIN = 5;
-const RANGERS_MIN = 3;
-const MAX_OPEN_OFFERS = 3;
-const LOG_KEEP = 200;
-const LOG_SEND = 50;
-/** An async room's finished result stays readable this long. */
-export const ASYNC_FINISHED_MS = 72 * 3_600_000;
-
-/** Live timers per decision (ms). */
-export const LIVE_MS: Record<Difficulty, { setup: number; roll: number; main: number; discard: number }> = {
-  easy: { setup: 90_000, roll: 30_000, main: 180_000, discard: 60_000 },
-  medium: { setup: 90_000, roll: 30_000, main: 120_000, discard: 60_000 },
-  hard: { setup: 60_000, roll: 20_000, main: 90_000, discard: 45_000 },
-};
-/** An away player's decisions time out this fast until they move again. */
-export const AWAY_MS: Record<Pace, number> = { live: 15_000, async: 3_600_000 };
-
-// ---- The generator ----------------------------------------------------------
-
-/** sfc32 state: four uint32. JSON-safe, kept in the room, never on the wire. */
-export type RngState = [number, number, number, number];
-
-/** The next float in [0, 1), advancing the state in place. */
-export function nextFloat(s: RngState): number {
-  let [a, b, c, d] = s;
-  a >>>= 0;
-  b >>>= 0;
-  c >>>= 0;
-  d >>>= 0;
-  const t = (((a + b) >>> 0) + d) >>> 0;
-  d = (d + 1) >>> 0;
-  a = b ^ (b >>> 9);
-  b = (c + (c << 3)) >>> 0;
-  c = ((c << 21) | (c >>> 11)) >>> 0;
-  c = (c + t) >>> 0;
-  s[0] = a >>> 0;
-  s[1] = b;
-  s[2] = c;
-  s[3] = d;
-  return t / 4294967296;
-}
-
-/** A seeded state: from a test's number, or 16 random bytes. */
-export function seedRng(seed?: unknown): RngState {
-  let s: RngState;
-  if (typeof seed === 'number' && Number.isFinite(seed)) {
-    // splitmix32 spreads a small seed over the four words.
-    let x = Math.floor(seed) >>> 0;
-    const mix = () => {
-      x = (x + 0x9e3779b9) >>> 0;
-      let z = x;
-      z = Math.imul(z ^ (z >>> 16), 0x85ebca6b) >>> 0;
-      z = Math.imul(z ^ (z >>> 13), 0xc2b2ae35) >>> 0;
-      return (z ^ (z >>> 16)) >>> 0;
-    };
-    s = [mix(), mix(), mix(), mix()];
-  } else {
-    const bytes = new Uint32Array(4);
-    globalThis.crypto.getRandomValues(bytes);
-    s = [bytes[0], bytes[1], bytes[2], bytes[3]];
-  }
-  // Warm it up: sfc32's first outputs from a near-zero state are poor.
-  for (let i = 0; i < 12; i++) nextFloat(s);
-  return s;
-}
-
-const roller = (room: Room) => () => nextFloat(room.rng);
-const randInt = (room: Room, n: number) => Math.floor(nextFloat(room.rng) * n);
-
-// ---- The room -----------------------------------------------------------------
-
-export interface Card {
-  kind: CardKind;
-  /** The turn it was bought on: it cannot be played that turn. */
-  boughtTurn: number;
-}
-
-export interface Player {
-  id: string;
-  name: string;
-  status: PlayerStatus;
-  /** Seat index once play starts; null before, or for somebody not at the table. */
-  seat: number | null;
-  hand: Hand;
-  cards: Card[];
-  rangersPlayed: number;
-  pieces: Record<Piece, number>;
-  /** Turns auto-ended in a row; two makes them away. */
-  autoEnds: number;
-  away: boolean;
-}
-
-export interface Offer {
-  id: string;
-  from: string;
-  /** Null = everyone. */
-  to: string[] | null;
-  give: Partial<Hand>;
-  want: Partial<Hand>;
-  status: 'open' | 'done' | 'cancelled' | 'void';
-  refusedBy: string[];
-  /** The offer this counters, or null. */
-  counterTo: string | null;
-  acceptedBy: string | null;
-  at: number;
-}
-
-export interface LogEntry {
-  n: number;
-  at: number;
-  kind: string;
-  by: string | null;
-  text: string;
-  /** What a named player sees instead of `text` (a steal's thief and victim). */
-  secret: Record<string, string> | null;
-  auto: boolean;
-}
-
-export interface Result {
-  winnerId: string | null;
-  reason: 'points' | 'left' | 'abandoned';
-}
-
-export interface Room {
-  id: string;
-  game: 'homestead';
-  difficulty: Difficulty;
-  hostId: string;
-  phase: Phase;
-  players: Player[];
-  pace: Pace;
-  deadlineHours: number;
-  /** What the host asked for. */
-  islandChoice: 'auto' | IslandSize;
-  /** The island in play (resolved at start); the choice before then. */
-  island: 'auto' | IslandSize;
-  vpTarget: number;
-  board: Board | null;
-  fox: string | null;
-  /** vertex id → building. */
-  buildings: Record<string, { owner: string; piece: 'cottage' | 'town' }>;
-  /** edge id → owner. */
-  roads: Record<string, string>;
-  /** Player ids by seat. */
-  seats: string[];
-  /** Counts every decision-owning turn, setup placements included. */
-  turn: number;
-  /** Seat index of the active player. */
-  active: number;
-  step: Step;
-  /** Setup progress: index into the snake (0 … 2n−1). */
-  setupIndex: number;
-  setupNeed: 'cottage' | 'road';
-  setupCottage: string | null;
-  /** Where play goes after the fox moves. */
-  foxReturn: 'roll' | 'main';
-  dice: { a: number; b: number; total: number; by: string; at: number } | null;
-  freeRoads: number;
-  discardOwed: Record<string, number>;
-  bank: Hand;
-  deck: CardKind[];
-  offers: Offer[];
-  nextOffer: number;
-  playedCardThisTurn: boolean;
-  longestTrailId: string | null;
-  chiefRangerId: string | null;
-  log: LogEntry[];
-  logN: number;
-  rng: RngState;
-  result: Result | null;
-  startedAt: number | null;
-  phaseEndsAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-const emptyHand = (): Hand => ({ timber: 0, clay: 0, wool: 0, grain: 0, stone: 0 });
-const handCount = (h: Partial<Hand>) => RESOURCES.reduce((n, r) => n + (h[r] ?? 0), 0);
-
-export function player(id: string, name: string, status: PlayerStatus): Player {
-  return {
-    id,
-    name,
-    status,
-    seat: null,
-    hand: emptyHand(),
-    cards: [],
-    rangersPlayed: 0,
-    pieces: { ...PIECES },
-    autoEnds: 0,
-    away: false,
-  };
-}
-
-function find(room: Room, playerId: string): Player {
-  const p = room.players.find((x) => x.id === playerId);
-  if (!p) throw new GameError(403, 'You are not in this game.');
-  return p;
-}
-const byId = (room: Room, id: string) => room.players.find((p) => p.id === id) ?? null;
-const nameOf = (room: Room, id: string | null) => (id ? (byId(room, id)?.name ?? 'Someone') : 'Nobody');
-
-export function joined(room: Room): Player[] {
-  return room.players.filter((p) => p.status === 'joined');
-}
-
-/** Seated players still at the table, in seat order. */
-function playing(room: Room): Player[] {
-  return room.seats.map((id) => byId(room, id)!).filter((p) => p && p.status === 'joined');
-}
-
-export function activePlayer(room: Room): Player | null {
-  if (room.phase !== 'playing') return null;
-  const id = room.seats[room.active];
-  return id ? byId(room, id) : null;
-}
+export {
+  MIN_PLAYERS,
+  PIECES,
+  COSTS,
+  TARGET,
+  DEADLINE_HOURS,
+  ASYNC_FINISHED_MS,
+  LIVE_MS,
+  AWAY_MS,
+  nextFloat,
+  seedRng,
+  player,
+  joined,
+  activePlayer,
+  about,
+  decisionMs,
+  cottageSpots,
+  roadSpots,
+  rates,
+  trailLength,
+  publicVp,
+  totalVp,
+  foxHexes,
+  victimsAt,
+  deadline,
+  standings,
+  winners,
+} from './homestead-model';
+export type {
+  Phase,
+  Step,
+  Pace,
+  Piece,
+  CardKind,
+  Hand,
+  RngState,
+  Card,
+  Player,
+  Offer,
+  LogEntry,
+  Result,
+  Room,
+  Standing,
+} from './homestead-model';
+export {
+  bank,
+  offer,
+  counter,
+  accept,
+  refuse,
+  cancel,
+} from './homestead-trade';
+export {
+  toWire,
+} from './homestead-wire';
+export type {
+  WireRoom,
+} from './homestead-wire';
 
 export function createRoom(input: {
   id: string;
@@ -348,36 +230,6 @@ export function createRoom(input: {
   };
   return room;
 }
-
-const lobbyMs = (pace: Pace, hours: number) => (pace === 'async' ? hours * 3_600_000 : LOBBY_MS);
-const finishedMs = (room: Room) => (room.pace === 'async' ? ASYNC_FINISHED_MS : FINISHED_MS);
-
-/** The invite banner's line. */
-export function about(room: Room): string {
-  const island = room.island === 'auto' ? '' : `${room.island === 'large' ? 'Large' : 'Standard'} island · `;
-  const pace = room.pace === 'async' ? `over days, ${room.deadlineHours} h a move` : 'play now';
-  return `${island}first to ${room.vpTarget} points · ${pace}`;
-}
-
-// ---- The log ------------------------------------------------------------------
-
-function log(
-  room: Room,
-  now: number,
-  kind: string,
-  by: string | null,
-  text: string,
-  extra: { secret?: Record<string, string> | null; auto?: boolean } = {},
-): void {
-  room.logN += 1;
-  room.log.push({ n: room.logN, at: now, kind, by, text, secret: extra.secret ?? null, auto: extra.auto ?? false });
-  if (room.log.length > LOG_KEEP) room.log.splice(0, room.log.length - LOG_KEEP);
-}
-
-const handText = (h: Partial<Hand>) =>
-  RESOURCES.filter((r) => (h[r] ?? 0) > 0)
-    .map((r) => `${h[r]} ${r}`)
-    .join(', ');
 
 // ---- Lobby verbs --------------------------------------------------------------
 
@@ -558,11 +410,6 @@ function begin(room: Room, now: number): void {
   nextSetup(room, now);
 }
 
-/** The setup snake's seat for placement `k`: 0…n−1, then n−1…0. */
-function setupSeat(n: number, k: number): number {
-  return k < n ? k : 2 * n - 1 - k;
-}
-
 /** Move on to the next setup placement, skipping anyone who left; after the last, seat 0 rolls. */
 function nextSetup(room: Room, now: number): void {
   const n = room.seats.length;
@@ -581,42 +428,6 @@ function nextSetup(room: Room, now: number): void {
   room.setupCottage = null;
   room.active = n - 1;
   nextTurn(room, now, true);
-}
-
-// ---- Clock ------------------------------------------------------------------------
-
-/** How long the current decision may take. */
-export function decisionMs(room: Room, step: Step): number {
-  const waiting = waitingIds(room, step);
-  const away = waiting.length > 0 && waiting.every((id) => byId(room, id)?.away);
-  if (away) return AWAY_MS[room.pace];
-  if (room.pace === 'async') return room.deadlineHours * 3_600_000;
-  const t = LIVE_MS[room.difficulty];
-  switch (step) {
-    case 'setup':
-      return t.setup;
-    case 'roll':
-      return t.roll;
-    case 'discard':
-    case 'fox':
-      return t.discard;
-    case 'main':
-    case 'roads':
-      return t.main;
-  }
-}
-
-function toStep(room: Room, step: Step, now: number): void {
-  room.step = step;
-  room.phaseEndsAt = now + decisionMs(room, step);
-  room.updatedAt = now;
-}
-
-function waitingIds(room: Room, step: Step = room.step): string[] {
-  if (room.phase !== 'playing') return [];
-  if (step === 'discard') return Object.keys(room.discardOwed);
-  const id = room.seats[room.active];
-  return id ? [id] : [];
 }
 
 /** Pass to the next seat still here; their turn starts at `roll` (and they may already have won). */
@@ -639,128 +450,6 @@ function nextTurn(room: Room, now: number, first = false): void {
   toStep(room, 'roll', now);
   // Reaching the target off-turn (open building) wins at the start of your own turn.
   checkWin(room, now);
-}
-
-// ---- Board queries -------------------------------------------------------------
-
-function geo(room: Room) {
-  return geometry(room.board!.size);
-}
-
-function hexById(room: Room, id: string): Hex | null {
-  return room.board?.hexes.find((h) => h.id === id) ?? null;
-}
-
-/** Cottage spots for `p` now: the distance rule, plus a road of theirs unless in setup. */
-export function cottageSpots(room: Room, p: Player, setup = false): string[] {
-  if (!room.board) return [];
-  const g = geo(room);
-  return g.vertices.filter((v) => {
-    if (room.buildings[v]) return false;
-    if (g.vertexBoardNeighbours.get(v)!.some((n) => room.buildings[n])) return false;
-    if (setup) return true;
-    return g.vertexBoardEdges.get(v)!.some((e) => room.roads[e] === p.id);
-  });
-}
-
-/** Road spots for `p` now (not in setup). */
-export function roadSpots(room: Room, p: Player): string[] {
-  if (!room.board) return [];
-  const g = geo(room);
-  return g.edges.filter((e) => {
-    if (room.roads[e]) return false;
-    return edgeEnds(e).some((v) => {
-      if (!g.vertexSet.has(v)) return false;
-      const b = room.buildings[v];
-      if (b?.owner === p.id) return true;
-      if (b) return false; // Another player's building blocks the way through.
-      return g.vertexBoardEdges.get(v)!.some((x) => x !== e && room.roads[x] === p.id);
-    });
-  });
-}
-
-function setupRoadSpots(room: Room): string[] {
-  if (!room.board || !room.setupCottage) return [];
-  return geo(room).vertexBoardEdges.get(room.setupCottage)!.filter((e) => !room.roads[e]);
-}
-
-function townSpots(room: Room, p: Player): string[] {
-  return Object.entries(room.buildings)
-    .filter(([, b]) => b.owner === p.id && b.piece === 'cottage')
-    .map(([v]) => v)
-    .sort();
-}
-
-/** Pip total of a corner's land hexes. */
-function vertexPips(room: Room, v: string): number {
-  return geo(room)
-    .vertexLand.get(v)!
-    .reduce((n, h) => n + (hexById(room, h)?.pips ?? 0), 0);
-}
-
-/** Trade rates for each resource: 2 with its harbour, 3 with an `any`, else 4. */
-export function rates(room: Room, playerId: string): Hand {
-  const out: Hand = { timber: 4, clay: 4, wool: 4, grain: 4, stone: 4 };
-  if (!room.board) return out;
-  const mine = (h: Harbour) => edgeEnds(h.edge).some((v) => room.buildings[v]?.owner === playerId);
-  for (const h of room.board.harbours) {
-    if (!mine(h)) continue;
-    if (h.kind === 'any') for (const r of RESOURCES) out[r] = Math.min(out[r], 3);
-    else out[h.kind] = 2;
-  }
-  return out;
-}
-
-// ---- Points and awards ----------------------------------------------------------
-
-/** The longest run of `id`'s roads, no edge twice, never through another player's building. */
-export function trailLength(room: Room, id: string): number {
-  if (!room.board) return 0;
-  const g = geo(room);
-  const mine = Object.keys(room.roads).filter((e) => room.roads[e] === id);
-  if (!mine.length) return 0;
-  const blocked = (v: string) => !!room.buildings[v] && room.buildings[v].owner !== id;
-  const used = new Set<string>();
-  const walk = (v: string): number => {
-    if (blocked(v)) return 0;
-    let best = 0;
-    for (const e of g.vertexBoardEdges.get(v)!) {
-      if (room.roads[e] !== id || used.has(e)) continue;
-      const [a, b] = edgeEnds(e);
-      used.add(e);
-      best = Math.max(best, 1 + walk(a === v ? b : a));
-      used.delete(e);
-    }
-    return best;
-  };
-  let best = 0;
-  for (const e of mine) {
-    // Walk out from every road, both ways: a trail's end road is one of these
-    // starts, and the corner behind it may be blocked without breaking it.
-    for (const to of edgeEnds(e)) {
-      used.add(e);
-      best = Math.max(best, 1 + walk(to));
-      used.delete(e);
-    }
-  }
-  return best;
-}
-
-function heirlooms(p: Player): number {
-  return p.cards.filter((c) => c.kind === 'heirloom').length;
-}
-
-export function publicVp(room: Room, id: string): number {
-  let vp = 0;
-  for (const b of Object.values(room.buildings)) if (b.owner === id) vp += b.piece === 'town' ? 2 : 1;
-  if (room.longestTrailId === id) vp += 2;
-  if (room.chiefRangerId === id) vp += 2;
-  return vp;
-}
-
-export function totalVp(room: Room, id: string): number {
-  const p = byId(room, id);
-  return publicVp(room, id) + (p ? heirlooms(p) : 0);
 }
 
 /** Re-judge Longest Trail (and drop awards held by somebody who left). */
@@ -800,93 +489,6 @@ function checkWin(room: Room, now: number): boolean {
   if (!p || totalVp(room, p.id) < room.vpTarget) return false;
   finish(room, { winnerId: p.id, reason: 'points' }, now);
   return true;
-}
-
-// ---- Hands and the bank -----------------------------------------------------------
-
-function covers(hand: Hand, cost: Partial<Hand>): boolean {
-  return RESOURCES.every((r) => hand[r] >= (cost[r] ?? 0));
-}
-
-function pay(room: Room, p: Player, cost: Partial<Hand>): void {
-  for (const r of RESOURCES) {
-    const n = cost[r] ?? 0;
-    p.hand[r] -= n;
-    room.bank[r] += n;
-  }
-}
-
-/** Offers whose proposer can no longer cover them become void. */
-function voidUncovered(room: Room): void {
-  for (const o of room.offers) {
-    if (o.status !== 'open') continue;
-    const from = byId(room, o.from);
-    if (!from || !covers(from.hand, o.give)) o.status = 'void';
-  }
-}
-
-/** Parse `{ timber: 2, … }`: whole positive counts of real resources, at least one. */
-function parseCards(v: unknown, what: string): Partial<Hand> {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new GameError(400, `Say which cards to ${what}.`);
-  const out: Partial<Hand> = {};
-  for (const [k, n] of Object.entries(v as Record<string, unknown>)) {
-    if (!isResource(k)) throw new GameError(400, `${k} is not a resource.`);
-    if (n === 0) continue;
-    if (typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 99) throw new GameError(400, 'Card counts are whole numbers.');
-    out[k] = n;
-  }
-  if (!handCount(out)) throw new GameError(400, `Say which cards to ${what}.`);
-  return out;
-}
-
-// ---- Moves: shared checks -----------------------------------------------------------
-
-function assertPlaying(room: Room, playerId: string): Player {
-  const p = find(room, playerId);
-  if (room.phase !== 'playing') {
-    throw new GameError(409, room.phase === 'finished' ? 'That game is over.' : 'The game has not started.');
-  }
-  if (p.status !== 'joined' || p.seat === null) throw new GameError(403, 'You are not playing this game.');
-  return p;
-}
-
-function assertActive(room: Room, playerId: string, steps: Step[]): Player {
-  const p = assertPlaying(room, playerId);
-  if (room.seats[room.active] !== p.id) throw new GameError(409, "It's not your turn.");
-  if (!steps.includes(room.step)) throw new GameError(409, stepRefusal(room));
-  return p;
-}
-
-function stepRefusal(room: Room): string {
-  switch (room.step) {
-    case 'setup':
-      return `Place your ${room.setupNeed} first.`;
-    case 'roll':
-      return 'Roll the dice first.';
-    case 'discard':
-      return 'Waiting for discards.';
-    case 'fox':
-      return 'Move the fox first.';
-    case 'roads':
-      return 'Place your free roads first.';
-    default:
-      return 'Not now.';
-  }
-}
-
-/** A player moving for themselves is not away any more. */
-function present(room: Room, p: Player, now: number): void {
-  p.autoEnds = 0;
-  if (!p.away) return;
-  p.away = false;
-  log(room, now, 'away', p.id, `${p.name} is back.`);
-  // Their running decision gets its full time again.
-  if (waitingIds(room).includes(p.id)) room.phaseEndsAt = now + decisionMs(room, room.step);
-}
-
-/** Five seated: anyone may build or buy during another player's main step. */
-function openBuilding(room: Room): boolean {
-  return room.seats.length >= 5;
 }
 
 // ---- Moves --------------------------------------------------------------------------
@@ -974,36 +576,6 @@ export function discard(room: Room, playerId: string, input: { cards: unknown },
   log(room, now, 'discard', p.id, `${p.name} discarded ${handText(cards)}.`, { auto });
   voidUncovered(room);
   if (!Object.keys(room.discardOwed).length) toStep(room, 'fox', now);
-}
-
-/** Hexes the fox may go to now (the friendly fox on easy spares small players). */
-export function foxHexes(room: Room, moverId: string): string[] {
-  if (!room.board) return [];
-  const g = geo(room);
-  const candidates = room.board.hexes.filter((h) => h.id !== room.fox);
-  if (room.difficulty !== 'easy') return candidates.map((h) => h.id);
-  const protectedOwner = (owner: string) => owner !== moverId && publicVp(room, owner) <= 2;
-  const touchesProtected = (h: Hex) =>
-    hexCorners(h.q, h.r).some((v) => g.vertexSet.has(v) && room.buildings[v] && protectedOwner(room.buildings[v].owner));
-  let ok = candidates.filter((h) => !touchesProtected(h));
-  if (!ok.length) ok = candidates.filter((h) => h.kind === 'dunes');
-  if (!ok.length) ok = candidates;
-  return ok.map((h) => h.id);
-}
-
-/** Players the fox could take from on this hex. */
-export function victimsAt(room: Room, moverId: string, hexIdValue: string): string[] {
-  const h = hexById(room, hexIdValue);
-  if (!h) return [];
-  const g = geo(room);
-  const out = new Set<string>();
-  for (const v of hexCorners(h.q, h.r)) {
-    const b = g.vertexSet.has(v) ? room.buildings[v] : undefined;
-    if (!b || b.owner === moverId) continue;
-    const q = byId(room, b.owner);
-    if (q?.status === 'joined' && handCount(q.hand) > 0) out.add(q.id);
-  }
-  return room.seats.filter((id) => out.has(id));
 }
 
 /** Move the fox: `{ hex, victim? }`. A victim is needed when two or more could be robbed. */
@@ -1250,129 +822,6 @@ export function play(room: Room, playerId: string, input: { card: unknown; take?
   checkWin(room, now);
 }
 
-/** Trade with the bank: `rate` of `give` for one `get`. */
-export function bank(room: Room, playerId: string, input: { give: unknown; get: unknown }, now: number): void {
-  const p = assertActive(room, playerId, ['main']);
-  if (!isResource(input.give) || !isResource(input.get)) throw new GameError(400, 'Pick a resource to give and one to get.');
-  if (input.give === input.get) throw new GameError(400, 'Pick a different resource to get.');
-  const rate = rates(room, p.id)[input.give];
-  if (p.hand[input.give] < rate) throw new GameError(409, `You need ${rate} ${input.give} to trade.`);
-  if (room.bank[input.get] < 1) throw new GameError(409, `The bank has no ${input.get} left.`);
-  present(room, p, now);
-  p.hand[input.give] -= rate;
-  room.bank[input.give] += rate;
-  room.bank[input.get] -= 1;
-  p.hand[input.get] += 1;
-  log(room, now, 'bank', p.id, `${p.name} traded ${rate} ${input.give} with the bank for 1 ${input.get}.`);
-  room.updatedAt = now;
-  voidUncovered(room);
-}
-
-function parseTrade(give: unknown, want: unknown): { give: Partial<Hand>; want: Partial<Hand> } {
-  const g = parseCards(give, 'give');
-  const w = parseCards(want, 'ask for');
-  if (RESOURCES.some((r) => g[r] && w[r])) throw new GameError(400, "Don't put the same resource on both sides.");
-  return { give: g, want: w };
-}
-
-function openOffer(room: Room, id: unknown): Offer {
-  const o = room.offers.find((x) => x.id === id);
-  if (!o || o.status !== 'open') throw new GameError(409, 'That offer has gone.');
-  return o;
-}
-
-const isRecipient = (o: Offer, id: string) => o.from !== id && (o.to === null || o.to.includes(id));
-
-/** The active player offers a trade to everyone or to named players. */
-export function offer(room: Room, playerId: string, input: { give: unknown; want: unknown; to?: unknown }, now: number): void {
-  const p = assertActive(room, playerId, ['main']);
-  const { give, want } = parseTrade(input.give, input.want);
-  let to: string[] | null = null;
-  if (input.to != null) {
-    if (!Array.isArray(input.to)) throw new GameError(400, 'Say who the offer is for.');
-    const others = playing(room).filter((q) => q.id !== p.id).map((q) => q.id);
-    const ids = [...new Set(input.to)];
-    if (!ids.every((x): x is string => typeof x === 'string' && others.includes(x))) {
-      throw new GameError(400, 'You can only offer to players in this game.');
-    }
-    to = ids.length ? ids : null;
-  }
-  if (!covers(p.hand, give)) throw new GameError(409, "You don't have those cards.");
-  if (room.offers.filter((o) => o.status === 'open' && o.from === p.id).length >= MAX_OPEN_OFFERS) {
-    throw new GameError(409, `You can have ${MAX_OPEN_OFFERS} offers open at once.`);
-  }
-  present(room, p, now);
-  const o: Offer = { id: `o${room.nextOffer++}`, from: p.id, to, give, want, status: 'open', refusedBy: [], counterTo: null, acceptedBy: null, at: now };
-  room.offers.push(o);
-  log(room, now, 'offer', p.id, `${p.name} offers ${handText(give)} for ${handText(want)}${to ? ` to ${to.map((id) => nameOf(room, id)).join(' and ')}` : ''}.`);
-  room.updatedAt = now;
-}
-
-/** A recipient answers the active player's offer with their own terms. */
-export function counter(room: Room, playerId: string, input: { offerId: unknown; give: unknown; want: unknown }, now: number): void {
-  const p = assertPlaying(room, playerId);
-  if (room.step !== 'main') throw new GameError(409, 'Trading happens in the main part of a turn.');
-  const active = room.seats[room.active];
-  const o = openOffer(room, input.offerId);
-  if (o.from !== active || !isRecipient(o, p.id)) throw new GameError(409, 'You can only counter an offer made to you.');
-  const { give, want } = parseTrade(input.give, input.want);
-  if (!covers(p.hand, give)) throw new GameError(409, "You don't have those cards.");
-  if (room.offers.some((x) => x.status === 'open' && x.from === p.id && x.counterTo === o.id)) {
-    throw new GameError(409, 'You already have a counter-offer open on that one.');
-  }
-  present(room, p, now);
-  room.offers.push({ id: `o${room.nextOffer++}`, from: p.id, to: [active], give, want, status: 'open', refusedBy: [], counterTo: o.id, acceptedBy: null, at: now });
-  log(room, now, 'offer', p.id, `${p.name} counters: ${handText(give)} for ${handText(want)}.`);
-  room.updatedAt = now;
-}
-
-/** Take an offer: the trade happens at once. */
-export function accept(room: Room, playerId: string, input: { offerId: unknown }, now: number): void {
-  const p = assertPlaying(room, playerId);
-  if (room.step !== 'main') throw new GameError(409, 'Trading happens in the main part of a turn.');
-  const o = openOffer(room, input.offerId);
-  const active = room.seats[room.active];
-  // Every trade has the active player on one side.
-  if (!isRecipient(o, p.id) || (o.from !== active && p.id !== active)) throw new GameError(409, "That offer isn't for you.");
-  const from = byId(room, o.from)!;
-  if (from.status !== 'joined' || !covers(from.hand, o.give)) throw new GameError(409, `${from.name} no longer has those cards.`);
-  if (!covers(p.hand, o.want)) throw new GameError(409, "You don't have the cards they want.");
-  present(room, p, now);
-  for (const r of RESOURCES) {
-    const g = o.give[r] ?? 0;
-    const w = o.want[r] ?? 0;
-    from.hand[r] += w - g;
-    p.hand[r] += g - w;
-  }
-  o.status = 'done';
-  o.acceptedBy = p.id;
-  log(room, now, 'trade', p.id, `${from.name} traded ${handText(o.give)} to ${p.name} for ${handText(o.want)}.`);
-  room.updatedAt = now;
-  voidUncovered(room);
-}
-
-/** A recipient says no to an offer. */
-export function refuse(room: Room, playerId: string, input: { offerId: unknown }, now: number): void {
-  const p = assertPlaying(room, playerId);
-  const o = openOffer(room, input.offerId);
-  if (!isRecipient(o, p.id)) throw new GameError(409, "That offer isn't for you.");
-  present(room, p, now);
-  if (!o.refusedBy.includes(p.id)) o.refusedBy.push(p.id);
-  // An offer to named players that all of them refused is over.
-  if (o.to && o.to.every((id) => o.refusedBy.includes(id))) o.status = 'cancelled';
-  room.updatedAt = now;
-}
-
-/** The proposer withdraws an offer. */
-export function cancel(room: Room, playerId: string, input: { offerId: unknown }, now: number): void {
-  const p = assertPlaying(room, playerId);
-  const o = openOffer(room, input.offerId);
-  if (o.from !== p.id) throw new GameError(409, 'Only the player who made an offer can cancel it.');
-  present(room, p, now);
-  o.status = 'cancelled';
-  room.updatedAt = now;
-}
-
 /** Stop placing free roads. */
 export function skip(room: Room, playerId: string, now: number, auto = false): void {
   const p = assertActive(room, playerId, ['roads']);
@@ -1386,22 +835,6 @@ export function end(room: Room, playerId: string, now: number, auto = false): vo
   const p = assertActive(room, playerId, ['main']);
   if (!auto) present(room, p, now);
   nextTurn(room, now);
-}
-
-// ---- Timeouts --------------------------------------------------------------------------
-
-/** Best-pip legal corner (first in board order on a tie). */
-function bestBy<T>(items: T[], score: (t: T) => number): T | null {
-  let best: T | null = null;
-  let top = -Infinity;
-  for (const t of items) {
-    const s = score(t);
-    if (s > top) {
-      top = s;
-      best = t;
-    }
-  }
-  return best;
 }
 
 /** One timed-out decision, made for whoever the room was waiting on. */
@@ -1517,12 +950,6 @@ export function advance(room: Room, now: number, _rng?: Rng): boolean {
   return true;
 }
 
-/** When this room next needs `advance`, or null if it waits on people. */
-export function deadline(room: Room): number | null {
-  if (room.phase === 'closed' || room.phaseEndsAt === null) return null;
-  return room.phaseEndsAt;
-}
-
 // ---- Durable rooms --------------------------------------------------------------------
 
 /** Rooms of this game are written to `game_rooms` and survive a restart. */
@@ -1570,282 +997,3 @@ export function resume(room: Room, now: number, _pausedMs: number): void {
   if (room.phase === 'countdown') room.phaseEndsAt = now + COUNTDOWN_MS;
   else if (room.phase === 'playing') room.phaseEndsAt = now + decisionMs(room, room.step);
 }
-
-// ---- Result -----------------------------------------------------------------------------
-
-export interface Standing {
-  id: string;
-  name: string;
-  place: number;
-  /** Final VP, heirlooms included: the leaderboard's high score. */
-  score: number;
-  vp: number;
-  heirlooms: number;
-  cottages: number;
-  towns: number;
-  trail: number;
-  longestTrail: boolean;
-  chiefRanger: boolean;
-  result: 'won' | 'lost';
-  left: boolean;
-}
-
-/** Winner first, then points (equal points share a place), leavers last. */
-export function standings(room: Room): Standing[] {
-  if (!room.result || room.result.reason === 'abandoned') return [];
-  const winnerId = room.result.winnerId;
-  const rows = room.seats
-    .map((id) => byId(room, id)!)
-    .filter(Boolean)
-    .map((p) => {
-      const mine = Object.values(room.buildings).filter((b) => b.owner === p.id);
-      return {
-        id: p.id,
-        name: p.name,
-        place: 0,
-        score: totalVp(room, p.id),
-        vp: totalVp(room, p.id),
-        heirlooms: heirlooms(p),
-        cottages: mine.filter((b) => b.piece === 'cottage').length,
-        towns: mine.filter((b) => b.piece === 'town').length,
-        trail: trailLength(room, p.id),
-        longestTrail: room.longestTrailId === p.id,
-        chiefRanger: room.chiefRangerId === p.id,
-        result: (p.id === winnerId ? 'won' : 'lost') as 'won' | 'lost',
-        left: p.status !== 'joined',
-      };
-    });
-  rows.sort((a, b) => {
-    if (a.id === winnerId) return -1;
-    if (b.id === winnerId) return 1;
-    if (a.left !== b.left) return a.left ? 1 : -1;
-    return b.vp - a.vp;
-  });
-  rows.forEach((r, i) => {
-    const prev = rows[i - 1];
-    r.place = i === 0 ? 1 : prev && !prev.left && !r.left && prev.vp === r.vp && prev.id !== winnerId ? prev.place : i + 1;
-  });
-  return rows;
-}
-
-export function winners(room: Room): string[] {
-  return room.result?.winnerId ? [room.result.winnerId] : [];
-}
-
-// ---- The wire ---------------------------------------------------------------------------
-
-const TIPS = [
-  'A town makes two of everything its cottage made.',
-  'Numbers with more dots come up more often: 6 and 8 most of all.',
-  'A harbour lets you trade with the bank for less.',
-  'Rangers move the fox — three of them make you Chief Ranger.',
-  'Five roads in a row can win you the Longest Trail.',
-  'Trading with the others is often better than trading with the bank.',
-];
-
-function affordable(room: Room, p: Player): (Piece | 'card')[] {
-  const out: (Piece | 'card')[] = [];
-  for (const k of ['road', 'cottage', 'town'] as Piece[]) if (p.pieces[k] > 0 && covers(p.hand, COSTS[k])) out.push(k);
-  if (room.deck.length && covers(p.hand, COSTS.card)) out.push('card');
-  return out;
-}
-
-/** Bank trades that would let `p` afford something they nearly can, best first. */
-function suggestedTrades(room: Room, p: Player): { give: Resource; count: number; get: Resource; for: Piece | 'card' }[] {
-  const out: { give: Resource; count: number; get: Resource; for: Piece | 'card' }[] = [];
-  const r = rates(room, p.id);
-  for (const target of ['town', 'cottage', 'card', 'road'] as (Piece | 'card')[]) {
-    if (target !== 'card' && p.pieces[target] <= 0) continue;
-    const cost = COSTS[target];
-    const missing = RESOURCES.filter((x) => p.hand[x] < (cost[x] ?? 0));
-    if (missing.length !== 1 || p.hand[missing[0]] + 1 < (cost[missing[0]] ?? 0)) continue;
-    const get = missing[0];
-    if (room.bank[get] < 1) continue;
-    const give = RESOURCES.find((x) => x !== get && p.hand[x] - (cost[x] ?? 0) >= r[x]);
-    if (give) out.push({ give, count: r[give], get, for: target });
-    if (out.length >= 3) break;
-  }
-  return out;
-}
-
-/** The viewer's own options right now. */
-function legalFor(room: Room, p: Player | null) {
-  const none = {
-    road: [] as string[],
-    cottage: [] as string[],
-    town: [] as string[],
-    fox: [] as string[],
-    victims: {} as Record<string, string[]>,
-    canRoll: false,
-    canBuy: false,
-    canEnd: false,
-    playable: [] as CardKind[],
-    canTrade: false,
-  };
-  if (!p || room.phase !== 'playing' || p.status !== 'joined' || p.seat === null) return none;
-  const isActive = room.seats[room.active] === p.id;
-  const out = { ...none };
-  switch (room.step) {
-    case 'setup':
-      if (!isActive) break;
-      if (room.setupNeed === 'cottage') out.cottage = cottageSpots(room, p, true);
-      else out.road = setupRoadSpots(room);
-      break;
-    case 'roll':
-      if (!isActive) break;
-      out.canRoll = true;
-      break;
-    case 'fox':
-      if (!isActive) break;
-      out.fox = foxHexes(room, p.id);
-      for (const h of out.fox) {
-        const v = victimsAt(room, p.id, h);
-        if (v.length) out.victims[h] = v;
-      }
-      break;
-    case 'roads':
-      if (isActive && p.pieces.road > 0) out.road = roadSpots(room, p);
-      break;
-    case 'main':
-      if (!isActive && !openBuilding(room)) break;
-      if (p.pieces.road > 0 && covers(p.hand, COSTS.road)) out.road = roadSpots(room, p);
-      if (p.pieces.cottage > 0 && covers(p.hand, COSTS.cottage)) out.cottage = cottageSpots(room, p);
-      if (p.pieces.town > 0 && covers(p.hand, COSTS.town)) out.town = townSpots(room, p);
-      out.canBuy = room.deck.length > 0 && covers(p.hand, COSTS.card);
-      out.canEnd = isActive;
-      out.canTrade = isActive;
-      break;
-  }
-  if (isActive && !room.playedCardThisTurn && (room.step === 'roll' || room.step === 'main')) {
-    const kinds = new Set(p.cards.filter((c) => c.boughtTurn !== room.turn && c.kind !== 'heirloom').map((c) => c.kind));
-    out.playable = CARD_KINDS.filter((k) => kinds.has(k) && (room.step === 'main' || k === 'ranger'));
-  }
-  return out;
-}
-
-/**
- * The room as one player's phone sees it. Hidden: other players' cards (counts
- * only), unplayed almanac cards (mine listed for me), the deck order, the
- * generator, and what a steal took (thief and victim only).
- */
-export function toWire(room: Room, meId: string, now: number) {
-  const finished = room.phase === 'finished';
-  const meP = byId(room, meId);
-  const seated = meP && meP.seat !== null ? meP : null;
-  const active = activePlayer(room);
-  const hintsLevel = room.difficulty === 'easy' ? 'full' : room.difficulty === 'medium' ? 'affordable' : null;
-  const hints =
-    seated && hintsLevel && room.phase === 'playing'
-      ? {
-          affordable: affordable(room, seated),
-          trades: hintsLevel === 'full' ? suggestedTrades(room, seated) : [],
-          tip: hintsLevel === 'full' ? TIPS[room.turn % TIPS.length] : null,
-        }
-      : null;
-  return {
-    id: room.id,
-    game: room.game,
-    difficulty: room.difficulty,
-    phase: room.phase,
-    step: room.phase === 'playing' ? room.step : null,
-    hostId: room.hostId,
-    meId,
-    pace: room.pace,
-    deadlineHours: room.deadlineHours,
-    vpTarget: room.vpTarget,
-    island: room.island,
-    rule: about(room),
-    turn: room.turn,
-    activeId: active?.id ?? null,
-    phaseEndsAt: room.phaseEndsAt,
-    startedAt: room.startedAt,
-    board: room.board
-      ? {
-          hexes: room.board.hexes.map((h) => ({
-            id: h.id,
-            q: h.q,
-            r: h.r,
-            kind: h.kind,
-            ...(h.resource ? { resource: h.resource } : {}),
-            token: h.token,
-            pips: h.pips,
-          })),
-          harbours: room.board.harbours.map((h) => ({ edge: h.edge, kind: h.kind, rate: h.rate })),
-        }
-      : null,
-    fox: room.fox,
-    buildings: Object.entries(room.buildings)
-      .map(([at, b]) => ({ at, owner: b.owner, piece: b.piece }))
-      .sort((a, b) => (a.at < b.at ? -1 : 1)),
-    roads: Object.entries(room.roads)
-      .map(([at, owner]) => ({ at, owner }))
-      .sort((a, b) => (a.at < b.at ? -1 : 1)),
-    seats: [...room.seats],
-    dice: room.dice ? { ...room.dice } : null,
-    setup:
-      room.phase === 'playing' && room.step === 'setup'
-        ? { round: room.setupIndex < room.seats.length ? 1 : 2, need: room.setupNeed, cottage: room.setupCottage }
-        : null,
-    freeRoads: room.freeRoads,
-    discardOwed: { ...room.discardOwed },
-    me: seated
-      ? {
-          hand: { ...seated.hand },
-          cards: seated.cards.map((c) => ({ kind: c.kind, new: c.boughtTurn === room.turn })),
-          vp: totalVp(room, seated.id),
-          playedCardThisTurn: room.seats[room.active] === seated.id ? room.playedCardThisTurn : false,
-          rates: rates(room, seated.id),
-        }
-      : null,
-    legal: legalFor(room, seated),
-    players: room.players.map((p) => ({
-      id: p.id,
-      name: p.name,
-      status: p.status,
-      isHost: p.id === room.hostId,
-      seat: p.seat,
-      colour: p.seat === null ? null : COLOURS[p.seat],
-      handCount: handCount(p.hand),
-      cardCount: p.cards.length,
-      rangersPlayed: p.rangersPlayed,
-      publicVp: publicVp(room, p.id),
-      trail: trailLength(room, p.id),
-      longestTrail: room.longestTrailId === p.id,
-      chiefRanger: room.chiefRangerId === p.id,
-      pieces: { ...p.pieces },
-      away: p.away,
-      ...(finished ? { heirlooms: heirlooms(p), vp: totalVp(room, p.id) } : {}),
-    })),
-    bank: { ...room.bank },
-    deckCount: room.deck.length,
-    costs: COSTS,
-    showCosts: room.difficulty !== 'hard',
-    offers: room.offers.map((o) => ({
-      id: o.id,
-      from: o.from,
-      to: o.to ? [...o.to] : null,
-      give: { ...o.give },
-      want: { ...o.want },
-      status: o.status,
-      refusedBy: [...o.refusedBy],
-      counterTo: o.counterTo,
-      acceptedBy: o.acceptedBy,
-      at: o.at,
-    })),
-    hints,
-    log: room.log.slice(-LOG_SEND).map((e) => ({
-      n: e.n,
-      at: e.at,
-      kind: e.kind,
-      by: e.by,
-      text: e.secret?.[meId] ?? e.text,
-      auto: e.auto,
-    })),
-    result: room.result ? { ...room.result } : null,
-    standings: finished ? standings(room) : null,
-    winnerIds: finished ? winners(room) : [],
-    serverNow: now,
-  };
-}
-
-export type WireRoom = ReturnType<typeof toWire>;
