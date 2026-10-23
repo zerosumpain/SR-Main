@@ -76,7 +76,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // Approving from the app (access-requests.integration, 2026-10-19) runs the
 // real allow-list trigger — installing the release's idempotent security SQL
 // when the database lacks it — and creates and removes its own rows.
-const INTEGRATION_FILES = 45;
+// Durable game rooms (games/room-store.integration, 2026-10-22) check the
+// compare-and-set write, the lobby and deadline lookups and the retention
+// delete against game_rooms; rows carry an id prefix and are removed each case.
+const INTEGRATION_FILES = 46;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })
