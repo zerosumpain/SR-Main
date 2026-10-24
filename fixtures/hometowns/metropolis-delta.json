@@ -1,0 +1,386 @@
+{
+ "id": "g_fixturemet",
+ "game": "hometowns",
+ "phase": "running",
+ "serverNow": 1797768001000,
+ "rev": 2,
+ "base": 1,
+ "hostId": "p_fixture_host",
+ "meId": "p_fixture_host",
+ "players": [
+  {
+   "id": "p_fixture_host",
+   "name": "Mayor",
+   "status": "joined",
+   "seat": "s1"
+  }
+ ],
+ "client": {
+  "engineHash": "1814b6d0cb3012fd",
+  "page": "/projects/hometowns/d722b412b0c9e803/mobile.html",
+  "bridge": 1
+ },
+ "clock": {
+  "gridTick": 2928,
+  "tickMs": 1800000,
+  "nextTickAt": 1797769800000,
+  "nextRegionalDayAt": 1797789600000,
+  "nextGazetteAt": 1797789600000,
+  "paused": false,
+  "napping": false,
+  "season": {
+   "n": 1,
+   "theme": "founders",
+   "day": 61,
+   "daysLeft": 0
+  }
+ },
+ "me": {
+  "seat": "s1",
+  "profile": "adult",
+  "isParent": true,
+  "townHash": "2bd67e61906cfaf5",
+  "derived": {
+   "stars": [
+    27.8,
+    50,
+    66.7,
+    7.8,
+    47.7,
+    53.3,
+    95.6,
+    78.9,
+    94.6,
+    70,
+    38.1,
+    37.5,
+    25,
+    21.9,
+    54.7,
+    50.7,
+    40.3,
+    71.1,
+    67,
+    57.1
+   ],
+   "meters": [
+    -33.7,
+    -51,
+    -57.6,
+    -74.2,
+    -74.9,
+    5,
+    -96.6,
+    -66.6
+   ],
+   "wants": [
+    {
+     "key": "talk.jobs",
+     "severity": 145014,
+     "tile": -1,
+     "hatched": false
+    },
+    {
+     "key": "talk.homes",
+     "severity": 69257,
+     "tile": -1,
+     "hatched": false
+    },
+    {
+     "key": "talk.schools",
+     "severity": 65841,
+     "tile": -1,
+     "hatched": false
+    }
+   ],
+   "advisors": [
+    {
+     "advisor": "mo",
+     "key": "mo.jobsWanted",
+     "data": {
+      "action": "zone:shops"
+     }
+    },
+    {
+     "advisor": "mo",
+     "key": "mo.schools",
+     "data": {
+      "action": "build:school"
+     }
+    },
+    {
+     "advisor": "mo",
+     "key": "mo.primarySeats",
+     "data": {
+      "action": "build:primarySchool"
+     }
+    }
+   ],
+   "needs": [
+    {
+     "cohort": 1,
+     "tier": 0,
+     "items": [
+      {
+       "key": "water",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0.14,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "primary",
+       "met": 0.02,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 0.04,
+       "buildable": true
+      }
+     ]
+    },
+    {
+     "cohort": 4,
+     "tier": 1,
+     "items": [
+      {
+       "key": "water",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0.13,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "primary",
+       "met": 0.02,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 0.07,
+       "buildable": true
+      },
+      {
+       "key": "secondary",
+       "met": 0.07,
+       "buildable": true
+      },
+      {
+       "key": "police",
+       "met": 0.2,
+       "buildable": true
+      },
+      {
+       "key": "highStreet",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "leisureVenue",
+       "met": 0.27,
+       "buildable": true
+      },
+      {
+       "key": "library",
+       "met": 0.09,
+       "buildable": true
+      }
+     ]
+    },
+    {
+     "cohort": 7,
+     "tier": 2,
+     "items": [
+      {
+       "key": "water",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0.13,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "primary",
+       "met": 0.02,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 0.07,
+       "buildable": true
+      },
+      {
+       "key": "secondary",
+       "met": 0.06,
+       "buildable": true
+      },
+      {
+       "key": "police",
+       "met": 0.21,
+       "buildable": true
+      },
+      {
+       "key": "highStreet",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "leisureVenue",
+       "met": 0.33,
+       "buildable": true
+      },
+      {
+       "key": "library",
+       "met": 0.09,
+       "buildable": true
+      },
+      {
+       "key": "cultureVenue",
+       "met": 0.54,
+       "buildable": true
+      },
+      {
+       "key": "cleanAir",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "safeStreets",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "park",
+       "met": 0.13,
+       "buildable": true
+      },
+      {
+       "key": "topJobs",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "restaurants",
+       "met": 1,
+       "buildable": true
+      }
+     ]
+    }
+   ],
+   "pipeline": {
+    "homes": 70,
+    "movers": 868
+   },
+   "townTalk": [
+    [
+     "jobs",
+     46
+    ],
+    [
+     "homes",
+     22
+    ],
+    [
+     "schools",
+     21
+    ],
+    [
+     "safety",
+     11
+    ]
+   ]
+  },
+  "moves": [
+   {
+    "id": "fixture-budget",
+    "type": "budget",
+    "atTick": 2928
+   }
+  ],
+  "townDelta": {
+   "tick": 2928,
+   "tileEvents": "",
+   "changed": {
+    "taxes": {
+     "town": 900,
+     "homes": [
+      900,
+      900,
+      900
+     ],
+     "business": 450,
+     "sales": 200,
+     "hotel": 500
+    }
+   }
+  }
+ },
+ "townsPatch": [
+  {
+   "taxes": {
+    "homes": [
+     900,
+     900,
+     900
+    ],
+    "business": 450,
+    "sales": 200,
+    "hotel": 500
+   }
+  }
+ ]
+}

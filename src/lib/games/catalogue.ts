@@ -24,6 +24,7 @@ import * as passThePlate from './pass-the-plate';
 import * as fireworks from './fireworks';
 import * as manhunt from './manhunt';
 import * as homestead from './homestead';
+import * as hometowns from './hometowns/hometowns';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -47,6 +48,7 @@ export const GAME_IDS = [
   'fireworks',
   'manhunt',
   'homestead',
+  'hometowns',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -71,7 +73,12 @@ export interface RoomBase {
 export type Pace = 'live' | 'async';
 export const PACES = ['live', 'async'] as const;
 
-type Move = (room: RoomBase, playerId: string, body: Record<string, unknown>, now: number) => void;
+/**
+ * A game's own action. It may return `false` to say it changed nothing worth
+ * storing or sending (telemetry, a canary report): the room is then neither
+ * written nor re-sent to its phones. Anything else is a change.
+ */
+type Move = (room: RoomBase, playerId: string, body: Record<string, unknown>, now: number) => void | boolean;
 
 // Method syntax on purpose: each module's functions take its own Room, and
 // method parameters are checked bivariantly, so a module fits without casts.
@@ -115,9 +122,11 @@ export interface GameRules {
   revision?(room: RoomBase): number;
   /**
    * The API has checked this player is a parent (Manhunt: who may inherit the
-   * host role). Server-only; never a move a phone can post.
+   * host role). Server-only; never a move a phone can post. A game whose
+   * parents change what it stores or shows (Hometowns: an adult's seat)
+   * returns true when this changed the room, which is then written and sent.
    */
-  noteParent?(room: RoomBase, playerId: string): void;
+  noteParent?(room: RoomBase, playerId: string): boolean | void;
   /** The game's own actions, by the name the phone posts. */
   moves: Record<string, Move>;
   /**
@@ -142,8 +151,11 @@ export interface GameRules {
    * passed to `revive` (null = cannot: the room is closed and logged). The
    * room MUST be JSON-safe: plain objects, arrays, strings, finite numbers,
    * booleans, null — no Map, Set, Date, functions or class instances.
+   * `reviveAll`: `revive` also sees rows of the current schema, so a game can
+   * fill fields added within a schema and knows every room it is handed
+   * from the table is a new object (Hometowns moves its delta cursor on).
    */
-  durable?: { schema: number; revive?(state: Record<string, unknown>, fromSchema: number): RoomBase | null };
+  durable?: { schema: number; revive?(state: Record<string, unknown>, fromSchema: number): RoomBase | null; reviveAll?: boolean };
   /** The paces a host may pick; absent = ['live']. */
   paces?: readonly Pace[];
   /**
@@ -384,5 +396,15 @@ export const GAMES: Record<GameId, GameRules> = {
       skip: (room, p, _b, now) => homestead.skip(room as homestead.Room, p, now),
       end: (room, p, _b, now) => homestead.end(room as homestead.Room, p, now),
     },
+  },
+  // A county of up to six towns over months (spec 2026-10-24 Hometowns §10.1).
+  // Exports durable = { schema, revive, reviveAll }, paces = ['async'], maxPlayers = 6,
+  // revision, waitingOn, noteParent and its moves: every engine move by name
+  // (`build`, `budget`, `sprint` …) plus `stats`. Each move types its own body.
+  hometowns: {
+    ...hometowns,
+    moves: Object.fromEntries(
+      Object.entries(hometowns.moves).map(([name, fn]): [string, Move] => [name, (room, p, b, now) => fn(room as hometowns.Room, p, b, now)]),
+    ),
   },
 };

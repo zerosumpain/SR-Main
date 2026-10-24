@@ -1,28 +1,42 @@
-// The map page's entry point. In v1 the page runs inside the iPhone app and
-// talks to it over the bridge (§10.9, WP6). Until then, and for development
-// and Playwright, `?harness=1` plays an in-page county with the harness bot
-// (§9.16): no authentication and no network.
+// The map page's entry point (spec §9.1, §9.16, §10.9).
 //
-// Query parameters (harness mode): seed=<n> (default 1), site=<0–5>,
-// speed=<ticks a second: 0, 1, 4, 16 or 48>, lens=<landValue | pollution |
-// access | development>.
+//   ?app=1      inside the iPhone app: the page draws the map and talks to
+//               the app over the bridge (window.hometowns and the `hometowns`
+//               message handler); it does no network of its own.
+//   ?harness=1  a solo county played in a desktop browser with no server,
+//               for development and Playwright. Options: seed=<n>,
+//               speed=<ticks a second: 0, 1, 4, 16, 48; default Live>,
+//               lens=<a lens id>, kid=1 (children's copy and dials),
+//               bot=1 (the harness bot plays), fresh=1 (do not keep the
+//               county in this browser).
+//
+// In harness mode `window.__hometowns` exposes hash(), stats(), runDays(n),
+// botHash(seed, site, days) and engineHash for Playwright.
 
-import { describeTile, cellValue, LENSES, type Lens } from './render/model';
-import { createMapView, type MapView } from './render/map';
-import { createHud, SPEEDS, type Hud } from './hud';
+import { ENGINE_HASH, paramsFor, paramsHash } from './engine';
+import { PAGE_HASH } from './version';
+import { AppSession } from './app';
+import { expose, inApp, post } from './bridge/bridge';
+import { BRIDGE_VERSION } from './bridge/protocol';
+import { Controller } from './controller';
 import { HarnessSession } from './harness/session';
-import { ENGINE_HASH } from './engine';
-
-/** Wall-clock ms the simulation may use per frame; the rest is the renderer's. */
-const SIM_BUDGET_MS = 12;
+import { HarnessUi } from './harness/ui';
+import { LENS_IDS, type LensId } from './lenses';
 
 interface HarnessHandle {
-  session: HarnessSession;
-  /** For Playwright: the town hash, its stats, and a way to run whole days without the frame loop. */
   hash(): string;
-  stats(): ReturnType<HarnessSession['stats']>;
+  stats(): { tick: number; population: number; tier: number; day: number; fps: number; simMs: number };
+  /** Runs whole game days of the county on screen, without the frame loop. */
   runDays(days: number): void;
+  /** A fresh bot town of `days` days: the WebKit-vs-Node determinism check. */
+  botHash(seed: number, site: number, days: number): string;
+  /** Shows a county built in Node (a JSON fixture), paused. */
+  show(countyJson: string, townIndex: number, now: number): void;
+  /** Draws `n` frames, panning a pixel each time, and returns each frame's ms (the frame-time check). */
+  frameTimes(n: number, repaint: boolean): number[];
   engineHash: string;
+  pageHash: string;
+  ui: HarnessUi;
 }
 
 declare global {
@@ -37,101 +51,75 @@ function param(q: URLSearchParams, k: string, fallback: number): number {
 }
 
 async function harness(root: HTMLElement, q: URLSearchParams): Promise<void> {
+  const lensParam = q.get('lens') ?? 'none';
+  const speedParam = param(q, 'speed', NaN);
+  const ui = new HarnessUi(root, {
+    seed: Math.max(1, Math.floor(param(q, 'seed', 1))),
+    kid: q.get('kid') === '1',
+    bot: q.get('bot') === '1',
+    speed: Number.isFinite(speedParam) ? speedParam : undefined,
+    lens: (LENS_IDS as readonly string[]).includes(lensParam) ? (lensParam as LensId) : 'none',
+    persist: q.get('fresh') !== '1',
+  });
+  await ui.start();
+  window.__hometowns = {
+    hash: () => ui.local.hash(),
+    stats: () => {
+      const t = ui.local.town;
+      const s = ui.controller.stats();
+      return { tick: t?.tick ?? 0, population: ui.local.population(), tier: t?.tier ?? 0, day: ui.local.county.dayIndex, fps: s.fps, simMs: s.simMs };
+    },
+    runDays: (d) => {
+      ui.local.runDays(d);
+      ui.controller.wake();
+    },
+    botHash: (seed, site, days) => {
+      const s = new HarnessSession({ seed, site });
+      s.runDays(days);
+      return s.hash();
+    },
+    show: (json, townIndex, now) => ui.show(JSON.parse(json), townIndex, now),
+    frameTimes: (n, repaint) => {
+      const map = ui.controller.map;
+      const out: number[] = [];
+      for (let k = 0; k < n; k++) {
+        const t0 = performance.now();
+        if (repaint) ui.controller.repaintAll();
+        else map.focus(32 + (k % 2), 40);
+        map.render(t0);
+        // Reading a pixel waits for the GPU, so the time is the whole frame, not just the queueing.
+        (map.app.renderer as unknown as { gl?: WebGLRenderingContext }).gl?.finish();
+        out.push(performance.now() - t0);
+      }
+      return out;
+    },
+    engineHash: ENGINE_HASH,
+    pageHash: PAGE_HASH,
+    ui,
+  };
+}
+
+async function app(root: HTMLElement): Promise<void> {
+  root.replaceChildren();
+  root.className = 'in-app';
   const mapHost = document.createElement('div');
   mapHost.className = 'map';
-  const hudHost = document.createElement('aside');
-  hudHost.className = 'hud';
-  root.replaceChildren(mapHost, hudHost);
-
-  let seed = Math.max(1, Math.floor(param(q, 'seed', 1)));
-  const site = Math.max(0, Math.min(5, Math.floor(param(q, 'site', 0))));
-  let speed = SPEEDS.includes(param(q, 'speed', 4) as (typeof SPEEDS)[number]) ? param(q, 'speed', 4) : 4;
-  let lens: Lens = (LENSES as readonly string[]).includes(q.get('lens') ?? '') ? (q.get('lens') as Lens) : 'none';
-  let session = new HarnessSession({ seed, site });
-  let hovered: [number, number] | null = null;
-
-  const inspect = () => {
-    if (!hovered) return hud.inspect('Hover over a tile.');
-    const [x, y] = hovered;
-    const v = cellValue(session.town, lens, x, y);
-    hud.inspect(describeTile(session.town, x, y) + (v === null ? '' : ` · ${lens === 'landValue' ? 'land value' : 'pollution'} ${v}`));
-  };
-
-  const map: MapView = await createMapView(mapHost, (tile) => {
-    hovered = tile;
-    inspect();
-  });
-  const hud: Hud = createHud(hudHost, seed, {
-    speed(v) {
-      speed = v;
-      hud.setSpeed(v);
+  root.append(mapHost);
+  let session: AppSession | null = null;
+  const c = new Controller(
+    mapHost,
+    {
+      out: post,
+      commit: (planId, ops) => session!.commit(planId, ops),
+      beforeFrame: (_now, budget) => session?.beforeFrame(budget),
+      nextDue: () => session?.nextDue() ?? null,
     },
-    lens(l) {
-      lens = l;
-      hud.setLens(l);
-      map.update(session.town, lens);
-      inspect();
-    },
-    reseed(v) {
-      seed = v;
-      session = new HarnessSession({ seed, site });
-      handle.session = session;
-      backlog = 0;
-      map.update(session.town, lens);
-    },
-  });
-  hud.setSpeed(speed);
-  hud.setLens(lens);
-
-  const handle: HarnessHandle = {
-    session,
-    hash: () => session.hash(),
-    stats: () => session.stats(),
-    runDays: (d) => session.runDays(d),
-    engineHash: ENGINE_HASH,
-  };
-  window.__hometowns = handle;
-
-  // The frame loop: whole ticks only (so a seed always plays the same town), at most SIM_BUDGET_MS a
-  // frame; the map draws only when something changed, and the loop rests while the tab is hidden.
-  let backlog = 0;
-  let simMs = 0;
-  let shown = 0;
-  let last = performance.now();
-  let frames = 0;
-  let draws = 0;
-  let rate = { fps: 0, draws: 0, since: last };
-  const frame = (now: number) => {
-    const dt = Math.min(250, now - last);
-    last = now;
-    backlog = Math.min(backlog + (dt / 1000) * speed, 4);
-    const whole = Math.floor(backlog);
-    if (whole > 0) {
-      const t0 = performance.now();
-      const ran = session.run(whole, SIM_BUDGET_MS, () => performance.now());
-      backlog -= ran;
-      simMs = simMs * 0.8 + (performance.now() - t0) * 0.2;
-    }
-    if (map.update(session.town, lens) && hovered) inspect();
-    frames++;
-    if (map.render()) draws++;
-    if (now - rate.since >= 1000) {
-      rate = { fps: (frames * 1000) / (now - rate.since), draws: (draws * 1000) / (now - rate.since), since: now };
-      frames = 0;
-      draws = 0;
-    }
-    if (now - shown > 250) {
-      shown = now;
-      hud.show(session.stats(), session.log, { simMs, fps: rate.fps, draws: rate.draws });
-    }
-    requestAnimationFrame(frame);
-  };
-  requestAnimationFrame(frame);
-  window.addEventListener('resize', () => {
-    // Pixi resizes the canvas on its own schedule; resize now so fit() reads the new size.
-    (map.app as unknown as { resize?: () => void }).resize?.();
-    map.fit();
-  });
+    { copyLevel: 'adult', reduceMotion: matchMedia('(prefers-reduced-motion: reduce)').matches },
+  );
+  await c.start();
+  session = new AppSession(c, post);
+  expose(session.api());
+  post({ type: 'ready', bridge: BRIDGE_VERSION, engineHash: ENGINE_HASH, pageHash: PAGE_HASH, paramsHash: paramsHash(paramsFor('v1')) });
 }
 
 function placeholder(root: HTMLElement): void {
@@ -140,7 +128,7 @@ function placeholder(root: HTMLElement): void {
   const h = document.createElement('h1');
   h.textContent = 'Hometowns';
   const p = document.createElement('p');
-  p.textContent = 'This page draws a town inside the Hometowns app. For development, add ?harness=1 to the address to watch a bot mayor build a town here.';
+  p.textContent = 'This page draws a town inside the Hometowns app. For development, add ?harness=1 to the address to play a county here, with no server.';
   const a = document.createElement('a');
   a.href = '?harness=1';
   a.textContent = 'Open harness mode';
@@ -148,11 +136,40 @@ function placeholder(root: HTMLElement): void {
   root.replaceChildren(box);
 }
 
+/**
+ * Harness mode could not start, most likely on a county this browser saved:
+ * offer to forget it (every saved harness county) and start afresh, rather
+ * than failing the same way on every visit.
+ */
+function offerFreshCounty(root: HTMLElement): void {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = 'Start a new county';
+  b.addEventListener('click', () => {
+    try {
+      const keys = Array.from({ length: localStorage.length }, (_, k) => localStorage.key(k)).filter((k): k is string => !!k && k.startsWith('hometowns.harness.'));
+      for (const k of keys) localStorage.removeItem(k);
+    } catch {
+      // Storage is blocked: the reload starts afresh anyway, as a private window does.
+    }
+    location.reload();
+  });
+  root.append(document.createElement('br'), b);
+}
+
 const root = document.getElementById('app');
 if (root) {
   const q = new URLSearchParams(location.search);
-  if (q.get('harness') === '1') harness(root, q).catch((e) => {
-    root.textContent = `The harness failed to start: ${e instanceof Error ? e.message : String(e)}`;
-  });
+  const fail = (e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    root.textContent = `The map failed to start: ${msg}`;
+    post({ type: 'error', msg });
+  };
+  if (q.get('app') === '1' || inApp()) app(root).catch(fail);
+  else if (q.get('harness') === '1')
+    harness(root, q).catch((e) => {
+      fail(e);
+      offerFreshCounty(root);
+    });
   else placeholder(root);
 }

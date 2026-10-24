@@ -71,6 +71,9 @@ corpus.json
 # the same patterns, see scripts/development-workspace-broker.mjs).
 core
 core.[0-9]*
+# The bare core rule also matches folders, and the Hometowns map page has a
+# src/core/ folder.
+!games/hometowns-view/src/core/
 
 # Historical Policy build output; keep stale local assets out of source control.
 static/policy-offline/

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The roster's sources: one paired phone (Sam's), the owner, and a member who
 // has games access but no phone until a test pairs one (Kit). Grants are read
@@ -28,6 +28,8 @@ import { _resetPlayers, playerId } from './players.server';
 import { _resetRooms } from './rooms.server';
 import { COUNTDOWN_MS } from './liars-dice';
 import type { WireRoom } from './liars-dice';
+import { GAME_IDS, GAMES, type GameId, type GameRules, type RoomBase } from './catalogue';
+import { GameError, type PlayerStatus } from './tap-duel';
 
 const owner = { email: 'owner@example.test', role: 'owner' as const };
 const sam = { email: 'sam@example.test', role: 'member' as const };
@@ -217,5 +219,131 @@ describe('Manhunt is hosted by a parent', () => {
     await roomAct(owner, room.id, { action: 'leave' });
     const view = (await roomView(kit, room.id)) as unknown as { players: { id: string; isHost: boolean }[] };
     expect(view.players.find((p) => p.isHost)?.id).toBe(playerId(kit.email));
+  });
+});
+
+// A stand-in for the Hometowns adapter (its own suite plays the real one):
+// enough of a county to be created, joined, started solo, paused and set.
+// It keeps what the registry handed it, so the tests can see what got through.
+describe('a Hometowns county is set up by a parent', () => {
+  interface County extends RoomBase {
+    county: unknown;
+    paused: boolean;
+    parents: string[];
+  }
+  const HOMETOWNS = 'hometowns' as GameId;
+  const ids = GAME_IDS as unknown as string[];
+  const registered = (GAMES as Record<string, GameRules | undefined>)[HOMETOWNS];
+  const listed = ids.includes(HOMETOWNS);
+  const county: GameRules = {
+    createRoom: ({ id, host, invite, difficulty, options, now }) =>
+      ({
+        id,
+        game: HOMETOWNS,
+        difficulty,
+        hostId: host.id,
+        phase: 'lobby',
+        players: [
+          { id: host.id, name: host.name, status: 'joined' as PlayerStatus },
+          ...invite.map((p) => ({ id: p.id, name: p.name, status: 'invited' as PlayerStatus })),
+        ],
+        phaseEndsAt: null,
+        pace: 'async',
+        county: options?.county,
+        paused: false,
+        parents: [host.id],
+        createdAt: now,
+      }) as County,
+    player: (id: string, name: string, status: PlayerStatus) => ({ id, name, status }),
+    join(room, playerId) {
+      const p = room.players.find((q) => q.id === playerId);
+      if (p) p.status = 'joined';
+    },
+    decline() {},
+    leave() {},
+    start(room) {
+      room.phase = 'running';
+    },
+    again() {},
+    noteParent(room, playerId) {
+      (room as County).parents.push(playerId);
+      // Like the real county: being noted changes what the room stores and shows.
+      return true;
+    },
+    advance: () => false,
+    deadline: () => null,
+    toWire: (r, _meId, now) => {
+      const room = r as County;
+      // A copy, as a real wire is: the join's answer shows the parent only if it was built after they were noted.
+      return { id: room.id, phase: room.phase, serverNow: now, county: room.county, paused: room.paused, parents: [...room.parents] };
+    },
+    moves: {
+      pause: (room, _playerId, body) => {
+        if (room.phase !== 'running') throw new GameError(409, 'Not yet.');
+        (room as County).paused = body.on === true;
+      },
+      settings: () => {},
+      hello: () => {},
+    },
+    maxPlayers: 6,
+    paces: ['async'],
+    durable: { schema: 1 },
+  };
+  const options = { name: 'Kingsport County', rivalry: 'friendly', regionalHour: 18, mishaps: 'mild', devTickMs: null };
+  type CountyWire = { id: string; phase: string; county: unknown; paused: boolean; parents: string[] };
+
+  beforeAll(() => {
+    if (!listed) ids.push(HOMETOWNS);
+    (GAMES as Record<string, GameRules>)[HOMETOWNS] = county;
+  });
+  afterAll(() => {
+    if (!listed) ids.splice(ids.indexOf(HOMETOWNS), 1);
+    if (registered) (GAMES as Record<string, GameRules>)[HOMETOWNS] = registered;
+    else delete (GAMES as Record<string, GameRules | undefined>)[HOMETOWNS];
+  });
+
+  it('refuses a member who is not a parent, naming the game, before any county exists', async () => {
+    h.grants.set(sam.email, ['games:self', 'family:circle']);
+    expect(await refusal(startGame(event, sam, { game: 'hometowns', difficulty: 'easy', pace: 'async', county: options }))).toEqual({
+      status: 403,
+      message: 'Only a parent can host Hometowns.',
+    });
+    expect((await lobbyFor(sam)).rooms).toEqual([]);
+  });
+
+  it('hands the county option to the game as it was sent', async () => {
+    const room = (await startGame(event, owner, { game: 'hometowns', difficulty: 'easy', pace: 'async', county: options })) as unknown as CountyWire;
+    expect(room.county).toEqual(options);
+    // A solo county: the host starts it alone.
+    expect(((await roomAct(owner, room.id, { action: 'start' })) as unknown as CountyWire).phase).toBe('running');
+  });
+
+  it('checks the role for starting, pausing and the settings, but not for playing', async () => {
+    h.devices.push({ ownerEmail: kit.email, revokedAt: null, expiresAt: new Date(1_800_000_000_000) });
+    h.grants.set(kit.email, ['games:self', 'family:circle', 'family:admin']);
+    _resetPlayers();
+    const invite = [sam, kit].map((c) => playerId(c.email));
+    const room = (await startGame(event, owner, { game: 'hometowns', difficulty: 'easy', pace: 'async', invite, county: options })) as unknown as CountyWire;
+    await roomAct(sam, room.id, { action: 'join' });
+    const joined = (await roomAct(kit, room.id, { action: 'join' })) as unknown as CountyWire;
+    // The parent who joined is noted, the child is not.
+    expect(joined.parents).toEqual([playerId(owner.email), playerId(kit.email)]);
+
+    const parentOnly = { status: 403, message: 'Only a parent can host Hometowns.' };
+    expect(await refusal(roomAct(sam, room.id, { action: 'start' }))).toEqual(parentOnly);
+    await roomAct(kit, room.id, { action: 'start' });
+    expect(await refusal(roomAct(sam, room.id, { action: 'pause', on: true }))).toEqual(parentOnly);
+    expect(await refusal(roomAct(sam, room.id, { action: 'settings', county: { rivalry: 'spirited' } }))).toEqual(parentOnly);
+    expect(((await roomAct(kit, room.id, { action: 'pause', on: true })) as unknown as CountyWire).paused).toBe(true);
+    await roomAct(kit, room.id, { action: 'settings', county: { rivalry: 'spirited' } });
+    // An ordinary move is anyone's.
+    await roomAct(sam, room.id, { action: 'hello' });
+  });
+
+  it("leaves Manhunt's set-up actions as they were: a county's are not Manhunt's", async () => {
+    const area = { lat: 51.5, lng: -0.12, radius: 600, minutes: 20 };
+    const room = await startGame(event, owner, { game: 'manhunt', difficulty: 'easy', invite: [playerId(sam.email)], ...area });
+    await roomAct(sam, room.id, { action: 'join' });
+    expect(await refusal(roomAct(sam, room.id, { action: 'pause', on: true }))).toEqual({ status: 400, message: 'Unknown action.' });
   });
 });

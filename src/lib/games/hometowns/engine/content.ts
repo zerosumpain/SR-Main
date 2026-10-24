@@ -362,8 +362,15 @@ export const ORDER_DEFAULTS: readonly OrderDef[] = [
 
 // ---- Town names (§1.5): two preset halves; WP8 extends the lists ------------------------------
 
-export const NAME_FIRST = ['Sunny', 'Oak', 'Elm', 'Brook', 'Meadow', 'Fox', 'Willow', 'Ash', 'Bramble', 'Kestrel', 'Hazel', 'Otter', 'Clover', 'Heather', 'Mill', 'Stone'] as const;
-export const NAME_SECOND = ['vale', 'ridge', 'field', 'ford', 'bury', 'wick', 'by', 'mouth', 'stead', 'ton', 'hollow', 'dale', 'cliff', 'bridge', 'haven', 'combe'] as const;
+// Append-only: a town stores its chosen halves as strings, and foundTown checks them against these lists.
+export const NAME_FIRST = [
+  'Sunny', 'Oak', 'Elm', 'Brook', 'Meadow', 'Fox', 'Willow', 'Ash', 'Bramble', 'Kestrel', 'Hazel', 'Otter', 'Clover', 'Heather', 'Mill', 'Stone',
+  'Bluebell', 'Primrose', 'Badger', 'Pebble', 'Puffin', 'Thistle', 'Honey', 'Maple', 'Orchard', 'Copper', 'Swan', 'Acorn', 'Bracken', 'Cherry', 'Salt', 'Lark',
+] as const;
+export const NAME_SECOND = [
+  'vale', 'ridge', 'field', 'ford', 'bury', 'wick', 'by', 'mouth', 'stead', 'ton', 'hollow', 'dale', 'cliff', 'bridge', 'haven', 'combe',
+  'well', 'green', 'wood', 'port', 'minster', 'thorpe', 'gate', 'hill', 'moor', 'leigh', 'holme', 'end',
+] as const;
 
 // ---- The catalogue lint (A14) ---------------------------------------------------------------------
 
