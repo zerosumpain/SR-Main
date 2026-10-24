@@ -181,16 +181,18 @@ export function monthStep(t: TownState, ctx: TickContext, steps: StepTable = STE
   const why = new MonthWhy();
   const m: MonthContext = { ...ctx, month: ctx.world.month, derived, why };
   let problems: string[] = [];
+  const slots = derived as unknown as Record<string, unknown>;
+  const had: unknown[] = new Array(SLOT_NAMES.length);
   try {
     for (const step of steps.month) {
-      const had = SLOT_NAMES.map((n) => derived[n]);
+      for (let k = 0; k < SLOT_NAMES.length; k++) had[k] = slots[SLOT_NAMES[k]];
       step.run(t, m);
-      SLOT_NAMES.forEach((n, k) => {
-        const now = derived[n];
-        if (now === had[k]) return;
+      for (let k = 0; k < SLOT_NAMES.length; k++) {
+        const n = SLOT_NAMES[k];
+        if (slots[n] === had[k]) continue;
         if (had[k] !== null) problems.push(`${step.id} replaced the ${n} slot another step wrote`);
         else if (!step.writes.includes(n)) problems.push(`${step.id} wrote the ${n} slot without declaring it`);
-      });
+      }
       if (problems.length) break;
     }
     if (problems.length === 0) {

@@ -186,18 +186,35 @@ function i32(x: number): number {
 }
 
 class Bytes {
-  readonly b: number[] = [];
+  private buf = new Uint8Array(256);
+  n = 0;
+  private push(x: number) {
+    if (this.n === this.buf.length) {
+      const grown = new Uint8Array(this.buf.length * 2);
+      grown.set(this.buf);
+      this.buf = grown;
+    }
+    this.buf[this.n++] = x;
+  }
+  /** The bytes written so far (a copy). */
+  bytes(): Uint8Array {
+    return this.buf.slice(0, this.n);
+  }
+  /** Appends raw bytes (records copied through unchanged). */
+  raw(src: Uint8Array, from: number, to: number) {
+    for (let k = from; k < to; k++) this.push(src[k]);
+  }
   u8(x: number) {
-    this.b.push(x & 255);
+    this.push(x & 255);
   }
   /** Unsigned LEB128: one byte below 128, so small indices and counts cost a byte. */
   uv(x: number) {
     let v = x >>> 0;
     while (v >= 128) {
-      this.b.push((v & 127) | 128);
+      this.push((v & 127) | 128);
       v >>>= 7;
     }
-    this.b.push(v);
+    this.push(v);
   }
   /** A signed i32 as a zigzag varint: most Why amounts are small, so most take one to three bytes. */
   sv(x: number) {
@@ -275,6 +292,31 @@ function readRecord(r: Reader): WhyRecord {
   return rec;
 }
 
+/**
+ * Reads past one record without building it, failing exactly where
+ * readRecord would (the same reads and lookups, in the same order). A record
+ * the writer stored comes back byte for byte from readRecord then
+ * writeRecord (the amounts are whole multiples of 1/scale and the indices
+ * canonical varints), so the rings a commit does not touch are copied as bytes.
+ */
+function skipRecord(r: Reader): void {
+  r.sv();
+  r.uv();
+  const n = r.uv();
+  for (let i = 0; i < n; i++) {
+    const q = QUANTITIES[r.uv()];
+    const nt = r.u8();
+    r.sv();
+    for (let j = 0; j < nt; j++) {
+      void TERMS[r.uv()].key;
+      r.sv();
+      void q.scale;
+    }
+    void q.id;
+    void q.scale;
+  }
+}
+
 const emptyRecord = (at: number): WhyRecord => ({ at, months: 0, entries: [] });
 
 export function readWhy(t: TownState): WhyRings {
@@ -300,7 +342,7 @@ function writeWhy(t: TownState, r: WhyRings): void {
   writeRecord(w, r.today);
   for (const m of r.monthly) writeRecord(w, m);
   for (const d of r.daily) writeRecord(w, d);
-  t.why = toBase64(Uint8Array.from(w.b));
+  t.why = toBase64(w.bytes());
 }
 
 /** Quantities that live in the rings (on-demand ones are not stored). */
@@ -311,13 +353,37 @@ const ON_DEMAND = new Set(['lv', 'grow']);
  * into today's running record, which the Regional Day closes (foldWhyDay).
  */
 export function commitWhy(t: TownState, why: MonthWhy, month: number): void {
-  const rings = readWhy(t);
+  // readWhy, then writeWhy, except that the daily ring (untouched here, and most
+  // of the bytes) is checked and copied through instead of decoded and re-encoded.
+  let today = emptyRecord(-1);
+  const monthly: WhyRecord[] = [];
+  let daily: { b: Uint8Array; n: number; from: number; to: number } | null = null;
+  if (t.why) {
+    const b = fromBase64(t.why);
+    if (b[0] === WHY_FORMAT) {
+      const at = new Reader(b, 3);
+      const nm = b[1];
+      const nd = b[2];
+      today = readRecord(at);
+      for (let i = 0; i < nm; i++) monthly.push(readRecord(at));
+      const from = at.o;
+      for (let i = 0; i < nd; i++) skipRecord(at);
+      daily = { b, n: nd, from, to: at.o };
+    }
+  }
   const entries = why.entries().filter((e) => !ON_DEMAND.has(e.q));
   const rec: WhyRecord = { at: month, months: 1, entries };
-  rings.monthly.push(roundTrip(rec));
-  while (rings.monthly.length > MONTHLY_KEEP) rings.monthly.shift();
-  rings.today = mergeRecord(rings.today, rec);
-  writeWhy(t, rings);
+  monthly.push(roundTrip(rec));
+  while (monthly.length > MONTHLY_KEEP) monthly.shift();
+  today = mergeRecord(today, rec);
+  const w = new Bytes();
+  w.u8(WHY_FORMAT);
+  w.u8(monthly.length);
+  w.u8(daily ? daily.n : 0);
+  writeRecord(w, today);
+  for (const m of monthly) writeRecord(w, m);
+  if (daily) w.raw(daily.b, daily.from, daily.to);
+  t.why = toBase64(w.bytes());
 }
 
 /** Regional Day: closes today's record into the daily ring (seven kept). */
@@ -365,5 +431,5 @@ function mergeRecord(a: WhyRecord, b: WhyRecord): WhyRecord {
 function roundTrip(r: WhyRecord): WhyRecord {
   const w = new Bytes();
   writeRecord(w, r);
-  return readRecord(new Reader(Uint8Array.from(w.b), 0));
+  return readRecord(new Reader(w.bytes(), 0));
 }
