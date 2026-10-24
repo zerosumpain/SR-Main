@@ -19,6 +19,10 @@ function fakeController() {
   const c = {
     sources: [] as Source[],
     canary: [] as unknown[],
+    restored: [] as { planId: string; ops: readonly Op[] }[],
+    restorePlan(planId: string, ops: readonly Op[]) {
+      c.restored.push({ planId, ops });
+    },
     setSource(s: Source) {
       c.sources.push(s);
     },
@@ -108,12 +112,42 @@ describe('app mode against the server adapter', () => {
     const server = s.held!.me!.townHash;
     expect(s.commit('plan-b', [lane(freeRows(c.last.town)[0])])).toBeNull();
     expect(stateHash(c.last.town)).not.toBe(server);
+    const op = (posted[posted.length - 1] as { ops: Op[] }).ops;
     s.commitResult({ planId: 'plan-b', ok: false, error: 'Kingsport is just finishing the day. Trying again…' });
     expect(stateHash(c.last.town)).toBe(server);
     expect(posted.slice(-2)).toEqual([
       { type: 'haptic', kind: 'bad' },
       { type: 'error', msg: 'Kingsport is just finishing the day. Trying again…' },
     ]);
+    // The plan comes back as ghosts, under its own id, to be fixed and built again.
+    expect(c.restored[c.restored.length - 1]).toEqual({ planId: 'plan-b', ops: op });
+  });
+
+  it('stops showing a plan the server took but no frame lists, and asks for a whole frame', () => {
+    expect(s.commit('plan-z', [lane(freeRows(c.last.town)[0])])).toBeNull();
+    s.commitResult({ planId: 'plan-z', ok: true });
+    const server = s.held!.me!.townHash;
+    for (let k = 0; k < 3; k++) {
+      now += 1000;
+      vi.setSystemTime(now);
+      s.apply(HT.toWire(room, 'h', now, s.held!.rev) as WireFrame);
+    }
+    expect(stateHash(c.last.town)).toBe(server);
+    expect(posted.some((m) => m.type === 'needResync')).toBe(true);
+  });
+
+  it('leaves the page as it was on a malformed visit or frame, and says so', () => {
+    const rev = s.held!.rev;
+    const drawn = c.sources.length;
+    const n = posted.length;
+    expect(() => s.api().visit({ planes: 'abc', buildings: 7 } as never)).not.toThrow();
+    expect(() => s.apply({ ...s.held!, clock: undefined } as never)).not.toThrow();
+    expect(s.held!.rev).toBe(rev);
+    expect(c.sources.length).toBe(drawn);
+    expect(posted.slice(n).map((m) => m.type)).toEqual(['error', 'error']);
+    // Still home: tools and plans work.
+    expect(s.commit('plan-y', [lane(freeRows(c.last.town)[0])])).toBeNull();
+    s.commitResult({ planId: 'plan-y', ok: false });
   });
 
   it('refuses a plan the engine refuses, before anything is posted', () => {
@@ -122,18 +156,24 @@ describe('app mode against the server adapter', () => {
     expect(posted.length).toBe(n);
   });
 
-  it('asks for a whole frame when a delta does not fit what it holds', () => {
+  it('asks for a whole frame when a delta does not fit what it holds (at most once every few seconds)', () => {
+    now += 6000;
+    vi.setSystemTime(now);
     const f = HT.toWire(room, 'h', now, s.held!.rev) as WireFrame;
     s.apply({ ...f, base: (f.base ?? 0) + 1000, rev: f.rev + 1000 });
     expect(posted[posted.length - 1]).toEqual({ type: 'needResync', have: s.held!.rev });
   });
 
-  it('asks the app for the page that matches a different engine, once', () => {
+  it('asks the app for the page that matches a different engine, once, and never throws on its frames', () => {
     const f = HT.toWire(room, 'h', now, null) as WireFrame;
-    const other = { ...f, client: { ...f.client, engineHash: 'ffffffffffff' } };
-    s.apply(other);
-    s.apply(other);
+    const other = { ...f, client: { ...f.client, engineHash: 'ffffffffffff' }, me: { ...f.me!, predict: { ...f.me!.predict!, paramsVersion: 'v99' as never } } };
+    const n = posted.length;
+    expect(() => s.apply(other)).not.toThrow();
+    expect(() => s.apply(other)).not.toThrow();
     expect(posted.filter((m) => m.type === 'needReload')).toEqual([{ type: 'needReload', engineHash: 'ffffffffffff' }]);
+    // Held for the next delta, with no resync and no error: the reload is the answer.
+    expect(s.held!.rev).toBe(other.rev);
+    expect(posted.slice(n).filter((m) => m.type === 'needResync' || m.type === 'error')).toEqual([]);
   });
 
   it('checks every call the app makes before acting on it', () => {

@@ -548,7 +548,7 @@ function retryLater(live: Live, err: unknown): void {
 /** The stored room as this game can play it now, or null (unknown schema and no `revive`). */
 function revived(rules: GameRules, row: StoredRoom): RoomBase | null {
   if (!rules.durable) return null;
-  if (row.stateSchema === rules.durable.schema) return row.state as unknown as RoomBase;
+  if (row.stateSchema === rules.durable.schema && !(rules.durable.reviveAll && rules.durable.revive)) return row.state as unknown as RoomBase;
   try {
     return rules.durable.revive?.(row.state, row.stateSchema) ?? null;
   } catch (err) {
@@ -1033,8 +1033,11 @@ export function act(id: string, playerId: string, action: string, body: Record<s
     settle(live, moved);
     throw new GameError(409, 'That game has finished.');
   }
+  // A move that says it changed nothing (`false`: telemetry) is neither
+  // written nor sent; what the catch-up above moved still is.
+  let changed = true;
   try {
-    if (move) move(room, playerId, body, now);
+    if (move) changed = move(room, playerId, body, now) !== false;
     else rules[action as Verb](room, playerId, now);
     // "Play again" asks everyone afresh: nobody has had THAT invite yet.
     if (action === 'again') {
@@ -1047,19 +1050,25 @@ export function act(id: string, playerId: string, action: string, body: Record<s
     settle(live, moved);
     throw err;
   }
-  settle(live, true);
+  settle(live, changed || moved);
   // A phone that says what it holds (`since`) is answered with only what is new.
   const since = typeof body.since === 'number' && Number.isInteger(body.since) ? body.since : null;
   return wire(live, playerId, Date.now(), since);
 }
 
 /**
- * The API has checked `playerId` is a parent: a game that cares (Manhunt)
- * remembers it for the host handoff. Nothing on the wire changes.
+ * The API has checked `playerId` is a parent: a game that cares remembers it
+ * (Manhunt, for the host handoff). A game whose rule says that changed the
+ * room (Hometowns: the seat becomes an adult's) has it written and sent like
+ * any change, and the parent's own view after it is returned; otherwise null
+ * (nothing on the wire changed).
  */
-export function noteParent(id: string, playerId: string): void {
+export function noteParent(id: string, playerId: string): WireRoom | null {
   const live = get(id);
-  if (inRoom(live.room, playerId)) live.rules.noteParent?.(live.room, playerId);
+  if (!inRoom(live.room, playerId)) return null;
+  if (live.rules.noteParent?.(live.room, playerId) !== true) return null;
+  settle(live, true);
+  return wire(live, playerId);
 }
 
 /**
@@ -1200,6 +1209,8 @@ export function roomsFor(playerId: string): RoomSummary[] {
       continue;
     }
     const waiting = live.rules.waitingOn?.(room) ?? null;
+    // A deadline of "now" (0: a county still catching up) is not a time a row can show.
+    const due = live.rules.deadline(room);
     const names = (waiting?.ids ?? [])
       .map((id) => room.players.find((p) => p.id === id)?.name)
       .filter((n): n is string => !!n);
@@ -1209,7 +1220,7 @@ export function roomsFor(playerId: string): RoomSummary[] {
       pace: room.pace ?? 'live',
       myTurn: !!waiting?.ids.includes(playerId),
       waitingFor: names.length ? names : null,
-      dueAt: live.rules.deadline(room),
+      dueAt: due !== null && due > 0 && Number.isFinite(due) ? due : null,
       updatedAt: live.updatedAt,
     });
   }

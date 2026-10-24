@@ -108,7 +108,7 @@ async function app(root: HTMLElement): Promise<void> {
     {
       out: post,
       commit: (planId, ops) => session!.commit(planId, ops),
-      beforeFrame: () => session?.beforeFrame(),
+      beforeFrame: (_now, budget) => session?.beforeFrame(budget),
       nextDue: () => session?.nextDue() ?? null,
     },
     { copyLevel: 'adult', reduceMotion: matchMedia('(prefers-reduced-motion: reduce)').matches },
@@ -133,6 +133,27 @@ function placeholder(root: HTMLElement): void {
   root.replaceChildren(box);
 }
 
+/**
+ * Harness mode could not start, most likely on a county this browser saved:
+ * offer to forget it (every saved harness county) and start afresh, rather
+ * than failing the same way on every visit.
+ */
+function offerFreshCounty(root: HTMLElement): void {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = 'Start a new county';
+  b.addEventListener('click', () => {
+    try {
+      const keys = Array.from({ length: localStorage.length }, (_, k) => localStorage.key(k)).filter((k): k is string => !!k && k.startsWith('hometowns.harness.'));
+      for (const k of keys) localStorage.removeItem(k);
+    } catch {
+      // Storage is blocked: the reload starts afresh anyway, as a private window does.
+    }
+    location.reload();
+  });
+  root.append(document.createElement('br'), b);
+}
+
 const root = document.getElementById('app');
 if (root) {
   const q = new URLSearchParams(location.search);
@@ -142,6 +163,10 @@ if (root) {
     post({ type: 'error', msg });
   };
   if (q.get('app') === '1' || inApp()) app(root).catch(fail);
-  else if (q.get('harness') === '1') harness(root, q).catch(fail);
+  else if (q.get('harness') === '1')
+    harness(root, q).catch((e) => {
+      fail(e);
+      offerFreshCounty(root);
+    });
   else placeholder(root);
 }

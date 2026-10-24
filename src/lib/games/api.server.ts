@@ -265,10 +265,12 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
   // role can pass to somebody else when the first host leaves mid-game.
   const game = setUpGame(id, me.id, action);
   if (game !== null && PARENT_HOSTED.get(game)!.actions.has(action)) await assertParent(caller, game);
-  const room = asHttp(() => act(id, me.id, action, body));
+  let room = asHttp(() => act(id, me.id, action, body));
   // A parent who joins may inherit the host seat if the host leaves, so the
   // room never ends up hosted by a child who cannot set up the next game.
-  if (game !== null && action === 'join' && (await isParent(caller))) asHttp(() => noteParent(id, me.id));
+  // A game that stores what a parent may do (Hometowns' adult seat) answers
+  // the join with the view after it, and has it written before the answer.
+  if (game !== null && action === 'join' && (await isParent(caller))) room = asHttp(() => noteParent(id, me.id)) ?? room;
   await flush(id);
   // "Play again" re-invites everybody; their phones are rung afresh.
   if (action === 'again') void pushInvites(id);

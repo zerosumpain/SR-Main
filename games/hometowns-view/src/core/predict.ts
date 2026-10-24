@@ -29,8 +29,14 @@ export interface PredictClock {
 
 /** How many predicted hashes to remember for the canary. */
 const KEEP = 24;
-/** Most ticks run in one advance call (a phone woken after a long sleep waits for the server instead). */
+/** Most ticks run in one advance call; fewer when the frame's simulation budget runs out first. */
 const MAX_TICKS_PER_CALL = 8;
+/**
+ * A phone this many ticks behind (woken after a long sleep) does not run them
+ * on the main thread, a month step every fourth: it waits for the server's
+ * next frame, which the app asks for on waking, and draws what it has.
+ */
+export const MAX_BEHIND = 8;
 
 export type CanaryResult = { tick: number; ok: boolean; hash: string } | null;
 
@@ -42,6 +48,8 @@ export class Predictor {
   private env: TownEnv | null = null;
   /** True while a local change the server has not confirmed is applied (the canary would be unfair). */
   dirty = false;
+  /** Too far behind to catch up here: nothing runs until the next frame resets the town. */
+  private waiting = false;
 
   town: TownState;
   private info: PredictInfo;
@@ -65,19 +73,34 @@ export class Predictor {
     this.nextAt = clock.nextTickAt + (g - clock.gridTick) * clock.tickMs;
     this.env = { params: paramsFor(info.paramsVersion), snapshot, rivalry: info.rivalry, mishaps: info.mishaps, dayIndex: info.dayIndex };
     this.dirty = false;
+    this.waiting = false;
+    // Predictions from the town this replaces, for ticks the new town has not
+    // reached, were made from other inputs (a tax change from the app): the
+    // canary must never compare the server against them.
+    this.hashes = this.hashes.filter((h) => h.tick < town.tick);
   }
 
   /** The instant the next predicted tick is due, or null when none will run (paused, fortnight, day end). */
   nextDue(): number | null {
-    if (!this.enabled || this.clock.paused || this.clock.napping || this.town.gridBase === null) return null;
+    if (!this.enabled || this.waiting || this.clock.paused || this.clock.napping || this.town.gridBase === null) return null;
     if (this.nextAt > this.clock.nextRegionalDayAt) return null;
     return this.nextAt;
   }
 
-  /** Runs every tick whose boundary has passed by `now`. Returns how many ran. */
-  advance(now: number): number {
+  /**
+   * Runs the ticks whose boundary has passed by `now`, within `budgetMs` of
+   * wall time (at least one; a month step alone can take longer). Returns
+   * how many ran.
+   */
+  advance(now: number, budgetMs = Infinity): number {
+    const first = this.nextDue();
+    if (first !== null && now - first >= MAX_BEHIND * this.clock.tickMs) {
+      this.waiting = true;
+      return 0;
+    }
+    const started = performance.now();
     let n = 0;
-    while (n < MAX_TICKS_PER_CALL) {
+    while (n < MAX_TICKS_PER_CALL && (n === 0 || performance.now() - started < budgetMs)) {
       const due = this.nextDue();
       if (due === null || due > now || !this.env) break;
       const t = this.town;
@@ -97,7 +120,9 @@ export class Predictor {
    * prediction of that tick. Null when the page did not predict that tick.
    */
   check(tick: number, serverHash: string): CanaryResult {
-    const mine = this.hashes.find((h) => h.tick === tick);
+    // The newest prediction of that tick: an older one was made before a reset.
+    let mine: { tick: number; hash: string } | undefined;
+    for (let k = this.hashes.length - 1; k >= 0 && !mine; k--) if (this.hashes[k].tick === tick) mine = this.hashes[k];
     if (!mine || !serverHash) return null;
     const ok = mine.hash === serverHash;
     if (!ok) this.enabled = false;

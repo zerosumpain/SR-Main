@@ -92,6 +92,14 @@ describe('LocalCounty', () => {
       expect(new LocalCounty({ seed: 7, storageKey: 'k', realNow: () => real }).restored).toBe(false);
       b.forget();
       expect(store.getItem('k')).toBeNull();
+      // "Start a new county" reloads the page, whose beforeunload saves: nothing comes back.
+      b.save(true);
+      expect(store.getItem('k')).toBeNull();
+      // A county another engine saved starts afresh instead of failing to start.
+      a.save(true);
+      const raw = JSON.parse(store.getItem('k')!);
+      store.setItem('k', JSON.stringify({ ...raw, engine: 'another-engine' }));
+      expect(new LocalCounty({ seed: 6, storageKey: 'k', realNow: () => real }).restored).toBe(false);
     } finally {
       (globalThis as { localStorage?: Storage }).localStorage = saved;
     }

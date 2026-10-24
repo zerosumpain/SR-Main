@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { fixture } from '../../../scripts/hometowns/fixture';
 import { COUNTY_ROAD_X, stateHash, type Command } from '../src/engine';
 import { FORECAST_SEEDS, handleForecast, type ForecastCache, type ForecastContext } from '../src/forecast/core';
+import { ForecastClient, type ForecastUpdate } from '../src/forecast/client';
 
 describe('handleForecast', () => {
   const f = fixture('town');
@@ -37,6 +38,19 @@ describe('handleForecast', () => {
     const r = handleForecast({ id: 4, kind: 'plan', key, town: t, snapshot: c.snapshot, ctx, plan, seeds: [1, 2] }, cache);
     expect(r.kind).toBe('plan');
     expect(cache.key).toBe(key);
+  });
+
+  it('keeps one request in flight and lets a ticking town never starve the plan’s forecast', async () => {
+    const got: ForecastUpdate[] = [];
+    const client = new ForecastClient((u) => got.push(u), false);
+    client.forecast('w-1', t, c.snapshot, ctx, plan);
+    // Every frame at the top speed is a new state: none of those baselines displaces the plan's job.
+    for (let k = 0; k < 20; k++) client.setState({ ...t, tick: t.tick + k + 1 }, c.snapshot, ctx, true);
+    for (let k = 0; k < 200 && got.length < 2; k++) await new Promise((r) => setTimeout(r, 10));
+    expect(got.map((u) => [u.planId, u.seeds])).toEqual([
+      ['w-1', 1],
+      ['w-1', 5],
+    ]);
   });
 
   it('turns an engine failure into an error reply, not a dead worker', () => {

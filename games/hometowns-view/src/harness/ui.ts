@@ -552,7 +552,8 @@ export class HarnessUi {
     row('Cost now', pounds(cost));
     if (preview && preview.upkeep) row('Upkeep', `${pounds(preview.upkeep)} a month`);
     if (f) {
-      const after = f.exactForMs < f.months * 4 * (this.local.county.tickMs || 1) ? ' (after tomorrow: estimate)' : '';
+      // Exact up to the Regional Day (§9.8), counted in game ticks: real time depends on the harness speed.
+      const after = this.local.ticksToRegionalDay() < f.months * 4 ? ' (after tomorrow: estimate)' : '';
       if (kid) {
         row('Money', f.monthly[1] >= 0 ? 'up' : f.monthly[1] > -500 ? 'down a little' : 'down');
         row('People', f.people[1] > 0 ? 'more people ↑' : f.people[1] < 0 ? 'fewer people ↓' : 'about the same');
@@ -921,11 +922,12 @@ export class HarnessUi {
     const events = readTileLog(t, fromTick);
     const built = events.filter((e) => e.kind === 'built' || e.kind === 'levelUp').length;
     const opened = t.buildings.filter((b) => b[B_BUILT] >= fromTick && constructionLeft(t, tileIndex(b[1], b[2])) === 0).map((b) => BUILDINGS[b[B_KIND]]?.name ?? 'building');
-    const bulletin = this.local.county.bulletin[0] ?? [];
+    // This town's own Bulletin (the harness plays one town of the county), in words.
+    const bulletin = this.local.county.bulletin[this.local.townIndex] ?? [];
     const cards = [
       `${words('welcomeBack.away', this.level, { ticks: t.tick - fromTick })} ${signed(population(t) - before)} people.`,
       opened.length ? `${opened.slice(0, 3).join(', ')} opened.` : `${groupDigits(built)} homes and shops were built or grew.`,
-      bulletin.length ? bulletin.map((b) => b.key).join(' · ') : 'Bramble kept an eye on things. Lovely work.',
+      bulletin.length ? bulletin.map((b) => words(b.key, this.level, b.data)).join(' ') : 'Bramble kept an eye on things. Lovely work.',
     ];
     this.cards('Welcome back!', cards, () => this.act({ type: 'seen', tick: t.tick }));
   }
@@ -938,10 +940,10 @@ export class HarnessUi {
     const dp = pops.length >= 2 ? pops[pops.length - 1] - pops[pops.length - 2] : 0;
     const dm = money.length >= 2 ? money[money.length - 1] - money[money.length - 2] : 0;
     const ev = this.local.county.snapshot.event;
-    const items = this.local.county.bulletin[0] ?? [];
+    const items = this.local.county.bulletin[this.local.townIndex] ?? [];
     const lines = items.length
-      ? items.map((b) => b.key)
-      : [`${dp >= 0 ? 'More' : 'Fewer'} people: ${signed(dp)} today.`, `Money ${dm >= 0 ? 'up' : 'down'} ${pounds(Math.abs(dm))} today.`, ev ? `Tomorrow: ${ev.id}.` : 'Tomorrow looks calm.'];
+      ? items.map((b) => words(b.key, this.level, b.data))
+      : [`${dp >= 0 ? 'More' : 'Fewer'} people: ${signed(dp)} today.`, `Money ${dm >= 0 ? 'up' : 'down'} ${pounds(Math.abs(dm))} today.`, ev ? words('bulletin.tomorrow', this.level, { event: ev.id }) : 'Tomorrow looks calm.'];
     this.toast(`Morning Bulletin · ${lines.join(' · ')}`, 7000);
   }
 

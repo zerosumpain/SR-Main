@@ -215,7 +215,7 @@ export class Plan {
     return true;
   }
 
-  /** Drops every ghost (a new plan id, so a later plan is never mistaken for this one). */
+  /** Drops every ghost; the id stays, so an undo brings the same plan back. */
   clear(): void {
     if (this.ops.length) this.past.push(this.ops);
     this.ops = [];
@@ -232,6 +232,19 @@ export class Plan {
     this.ops = [];
     this.past = [];
     this.planId = this.newId();
+  }
+
+  /**
+   * A committed plan the server refused comes back as ghosts, under its own
+   * id, so it can be fixed and built again. Only onto an empty plan: if the
+   * mayor has started another meanwhile, that one stays. True if restored.
+   */
+  restore(planId: string, ops: readonly Op[]): boolean {
+    if (!this.empty) return false;
+    this.ops = ops.slice(0, this.maxOps);
+    this.past = [];
+    this.planId = planId;
+    return true;
   }
 }
 

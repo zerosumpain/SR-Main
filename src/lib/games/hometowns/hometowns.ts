@@ -22,15 +22,20 @@
 //     finish the day itself (two more chunks).
 //   - `rev` bumps on EVERY change to the room in memory, including a chunk
 //     that is not written. It is what a phone's `since` names, and the wire's
-//     delta cache is keyed by it (wire.ts); it is never reused within one
-//     in-memory room object, and a room read back from the table is a new
-//     object, so a delta is never cut against a state the phone did not see.
+//     delta cache is keyed by it (wire.ts). The row stores an older rev than
+//     the phones may hold (the unwritten bumps), so a room read back from the
+//     table (a restart, a lost write race) moves its rev on to the
+//     milliseconds since the county was made (`revive`): a rev is then never
+//     reused across two timelines either, a phone holding one from before can
+//     never be cut a delta against a different state with the same number,
+//     and its store sees a whole frame and re-posts what that frame lacks.
 //
 // The framework's `rng` is ignored: the engine draws from counter-based
 // streams seeded by the county, so a room read back days later runs exactly
 // as one that never left memory.
 
 import { GameError, type Difficulty, type PlayerStatus, type Rng } from '../tap-duel';
+import { isClean } from '../quiz-night';
 import {
   EngineError,
   LOG_KEEP,
@@ -54,7 +59,7 @@ import {
   type ParamsVersion,
   type SeatSettings,
 } from './engine/index';
-import { closePushWindow, emptyPush, openPushWindow, type PushState } from './push';
+import { closePushWindow, emptyPush, openPushWindow, prunePushWindow, type PushState } from './push';
 import { toWire as wireFor, type WireOptions } from './wire';
 
 export const GAME = 'hometowns' as const;
@@ -69,8 +74,16 @@ export const INLINE_CHUNKS = 2;
 export const PAUSE_MAX_MS = 21 * 86_400_000;
 /** The dev clock's ticks (§2.6), honoured only when the server has HOMETOWNS_DEV_CLOCK=1. */
 export const DEV_TICKS: readonly number[] = [30_000, 120_000, 300_000];
-/** A move's body, as stored in the command log, is at most this big (a 60-op plan is far smaller). */
+/** A plan's body, as stored in the command log, is at most this big (a 60-op plan is far smaller). */
 export const MOVE_BYTES = 16_384;
+/** Any other move's body: a budget, a set of standing orders or a settings change is well under this. */
+export const SMALL_MOVE_BYTES = 2_048;
+/**
+ * Presence and telemetry moves (`hello`, `seen`, `visit`, `stats`) one seat
+ * may make a minute. The engine's own limit counts only logged moves, and
+ * these are never logged; a phone makes one or two a minute.
+ */
+export const PRESENCE_PER_MINUTE = 20;
 /** The engine's sentence for a move that met a Regional Day still running (A19): the phone retries it after a second. */
 export const RETRY_MESSAGE = 'Kingsport is just finishing the day. Trying again…';
 /**
@@ -157,9 +170,12 @@ export function readSetup(options: Record<string, unknown> | undefined, id: stri
   const p = paramsFor('v1');
   const name = typeof o.name === 'string' ? o.name.trim().replace(/\s+/g, ' ').slice(0, 30) : '';
   const hour = typeof o.regionalHour === 'number' && Number.isInteger(o.regionalHour) ? o.regionalHour : p.clock.regionalHour;
-  const seed = typeof o.seed === 'number' && Number.isInteger(o.seed) ? o.seed >>> 0 : seedOf(id);
+  // A chosen terrain seed is the local stack's and the tests' (a parent could
+  // otherwise shop for favourable land); production always uses the room's own.
+  const seed = devClockAllowed() && typeof o.seed === 'number' && Number.isInteger(o.seed) ? o.seed >>> 0 : seedOf(id);
   return {
-    name: name.length >= 2 ? name : 'Kingsport County',
+    // Shown on every child's screen and in the push line: a name that fails the family word list is the default.
+    name: name.length >= 2 && isClean(name, 'kids') ? name : 'Kingsport County',
     rivalry: o.rivalry === 'spirited' ? 'spirited' : 'friendly',
     regionalHour: hour >= REGIONAL_HOURS[0] && hour <= REGIONAL_HOURS[1] ? hour : p.clock.regionalHour,
     mishaps: o.mishaps === 'off' ? 'off' : 'mild',
@@ -332,18 +348,24 @@ export function again(_room: Room, _playerId: string, _now: number): void {
   throw new GameError(409, 'A county keeps going: towns are kept forever.');
 }
 
-/** The API has checked this player is a parent: their seat may pause, change settings and start. */
-export function noteParent(room: Room, playerId: string): void {
+/**
+ * The API has checked this player is a parent: their seat may pause, change
+ * settings and start, and is an adult's. True when that changed the room
+ * (the registry then writes it and sends it), false for a parent already noted.
+ */
+export function noteParent(room: Room, playerId: string): boolean {
   const p = room.players.find((q) => q.id === playerId);
-  if (!p?.seat) return;
+  if (!p?.seat) return false;
   const c = room.county;
-  if (!c.parents.includes(p.seat)) c.parents.push(p.seat);
   const s = c.settings.perSeat[p.seat];
+  if (c.parents.includes(p.seat) && (!s || s.profile === 'adult')) return false;
+  if (!c.parents.includes(p.seat)) c.parents.push(p.seat);
   if (s) {
     s.profile = 'adult';
     s.pushes = true;
   }
   bump(room, room.updatedAt);
+  return true;
 }
 
 // ---- The clock ---------------------------------------------------------------------------------
@@ -389,6 +411,7 @@ export function advance(room: Room, now: number, _rng?: Rng): boolean {
   if (r.changed) changed = true;
   if (noteDays(room, now)) changed = true;
   if (closePushWindow(room.push, now)) changed = true;
+  if (prunePushWindow(room.push, c, now)) changed = true;
   if ((c.pause || c.nap) && heartbeatDue(room, now)) {
     room.heartbeatAt = now;
     changed = true;
@@ -437,12 +460,17 @@ export function revision(room: Room): number {
 const MIGRATIONS: Record<number, (state: Record<string, unknown>) => Record<string, unknown>> = {};
 
 /**
- * A stored room under another schema, brought up to this one. Never null
- * (A38): a county runs for months, and the registry closes a room it cannot
- * revive. Fields added within a schema are filled with their defaults here
- * and read defensively everywhere.
+ * Every room read back from the table, under this schema or an older one
+ * (the registry calls this on every load: `reviveAll`). Never null (A38): a
+ * county runs for months, and the registry closes a room it cannot revive.
+ * Older schemas are migrated; fields added within a schema are filled with
+ * their defaults here and read defensively everywhere. The rev moves on past
+ * anything the last process can have sent (see the top of this file): to the
+ * milliseconds since the county was made, and never backwards. A bump is a
+ * move or a chunk of catch-up, each a request or an event-loop turn of
+ * work, so a run of bumps never gains on the clock.
  */
-export function revive(state: Record<string, unknown>, fromSchema: number): Room {
+export function revive(state: Record<string, unknown>, fromSchema: number, now = Date.now()): Room {
   let s = state;
   for (let v = fromSchema; v < SCHEMA; v++) s = MIGRATIONS[v]?.(s) ?? s;
   const room = s as unknown as Room;
@@ -452,10 +480,13 @@ export function revive(state: Record<string, unknown>, fromSchema: number): Room
   room.queued ??= null;
   room.behind ??= false;
   room.daySeen ??= room.county?.dayIndex ?? 0;
+  const rev = Number.isInteger(room.rev) ? room.rev : 0;
+  const age = Number.isFinite(room.createdAt) ? Math.floor(now - room.createdAt) : 0;
+  room.rev = Math.max(rev + 1, age);
   return room;
 }
 
-export const durable = { schema: SCHEMA, revive };
+export const durable = { schema: SCHEMA, revive, reviveAll: true };
 export const paces = ['async'] as const;
 export const maxPlayers = MAX_SEATS;
 
@@ -488,14 +519,58 @@ export const MOVE_TYPES: readonly MoveType[] = [
   'holiday', 'pause', 'settings', 'seen',
 ];
 
-/** The body as the engine's Command: the framework's `action` and `since` are not part of it. */
+/**
+ * The fields each move's body may carry (engine/types.ts `Command`): the
+ * command log keeps a move's body, so nothing else a phone sends is kept.
+ */
+const MOVE_FIELDS: Record<MoveType, readonly string[]> = {
+  hello: ['moveId'],
+  found: ['moveId', 'site', 'name', 'nameParts', 'avatar', 'flag'],
+  sprint: ['moveId', 'auto'],
+  build: ['planId', 'plan'],
+  undo: ['moveId', 'planId'],
+  budget: ['moveId', 'taxes', 'funding'],
+  policy: ['moveId', 'card', 'on', 'area'],
+  orders: ['moveId', 'orders'],
+  loan: ['moveId', 'take', 'repay'],
+  bond: ['moveId', 'issue', 'repay'],
+  deal: ['moveId', 'offerId', 'accept'],
+  link: ['moveId', 'propose', 'answer', 'close'],
+  contract: ['moveId', 'offer', 'answer', 'end'],
+  share: ['moveId', 'offer', 'answer'],
+  pact: ['moveId', 'propose', 'answer', 'end'],
+  pledge: ['moveId', 'stage', 'input', 'amount'],
+  vote: ['moveId', 'question', 'choice'],
+  bid: ['moveId', 'festival'],
+  advert: ['moveId', 'target', 'cohort'],
+  gift: ['moveId', 'to', 'item'],
+  aid: ['moveId', 'to', 'kind', 'amount'],
+  prank: ['moveId', 'to', 'kind'],
+  prankReply: ['moveId', 'id', 'choice'],
+  visit: ['moveId', 'seat'],
+  stamp: ['moveId', 'seat', 'sticker'],
+  attend: ['moveId', 'ribbonId'],
+  holiday: ['moveId', 'days', 'end'],
+  pause: ['moveId', 'on'],
+  settings: ['moveId', 'county', 'seat'],
+  seen: ['moveId', 'tick'],
+};
+
+/**
+ * The body as the engine's Command: only the move's own fields (the
+ * framework's `action` and `since`, and anything else, are not part of it),
+ * and small, since the newest LOG_FULL bodies are stored whole.
+ */
 function commandOf(type: MoveType, body: Record<string, unknown>, profile: 'kid' | 'adult', seat: string): Command {
-  const { action: _action, since: _since, ...rest } = body ?? {};
-  const cmd: Record<string, unknown> = { ...rest, type };
+  const src = body ?? {};
+  const cmd: Record<string, unknown> = { type };
+  for (const k of MOVE_FIELDS[type]) if (Object.prototype.hasOwnProperty.call(src, k) && src[k] !== undefined) cmd[k] = src[k];
   if (type === 'found') {
     // Never the phone's to say: who owns the town, and whether a typed name is allowed.
     cmd.nameAllowed = profile === 'adult';
     cmd.ownerId = seat;
+    // A typed name is on every mayor's screen and in the Gazette: it passes the family word list first.
+    if (typeof cmd.name === 'string' && !cmd.nameParts && !isClean(cmd.name, 'kids')) throw new GameError(400, 'Pick another name for your town.');
   }
   let size = 0;
   try {
@@ -503,7 +578,8 @@ function commandOf(type: MoveType, body: Record<string, unknown>, profile: 'kid'
   } catch {
     throw new GameError(400, 'That move could not be read.');
   }
-  if (size > MOVE_BYTES) throw new GameError(400, 'That plan is too big: build it in two goes.');
+  if (type === 'build' && size > MOVE_BYTES) throw new GameError(400, 'That plan is too big: build it in two goes.');
+  if (type !== 'build' && size > SMALL_MOVE_BYTES) throw new GameError(400, 'That move could not be read.');
   return cmd as unknown as Command;
 }
 
@@ -529,7 +605,9 @@ function playMove(room: Room, playerId: string, type: MoveType, body: Record<str
   if (!p || p.status !== 'joined' || !p.seat) throw new GameError(403, 'You are not a mayor in this county.');
   const seat = p.seat;
   const c = room.county;
-  const profile = c.settings.perSeat[seat]?.profile ?? 'adult';
+  // A seat with no settings (a damaged row) is treated as a child's: the safe side.
+  const profile = c.settings.perSeat[seat]?.profile ?? 'kid';
+  if (PRESENCE.has(type)) presence(room, seat, now);
   const cmd = commandOf(type, body, profile, seat);
   if (type === 'settings') {
     applySettings(room, seat, cmd as Extract<Command, { type: 'settings' }>, now);
@@ -573,9 +651,12 @@ const isMishaps = (v: unknown): v is 'mild' | 'off' => v === 'mild' || v === 'of
 
 /**
  * `settings` (§9.13, §10.6): county settings and children's seats are a
- * parent's (the API also checks the caller's family role, F6). A mayor who
- * is not a parent may only switch their own pushes, and only on an adult
- * seat. Idempotent by moveId like every move (A28), and logged.
+ * parent's. Through the API every `settings` call is a parent's already (F6
+ * puts it among the parent-hosted set-up actions, checked against the
+ * caller's family role); the rule here is the game's own floor, which would
+ * also let a mayor who is not a parent switch their own pushes on an adult
+ * seat, were the API to let them through. Idempotent by moveId like every
+ * move (A28), and logged.
  */
 function applySettings(room: Room, seat: string, cmd: Extract<Command, { type: 'settings' }>, now: number): void {
   const c = room.county;
@@ -609,6 +690,7 @@ function applySettings(room: Room, seat: string, cmd: Extract<Command, { type: '
     if ('name' in county) {
       const n = typeof county.name === 'string' ? county.name.trim().replace(/\s+/g, ' ') : '';
       if (n.length < 2 || n.length > 30) throw new GameError(400, 'A county name is 2 to 30 letters.');
+      if (!isClean(n, 'kids')) throw new GameError(400, 'Pick another name for the county.');
       name = n;
     }
     if ('youngestOrder' in county) {
@@ -663,32 +745,61 @@ function applySettings(room: Room, seat: string, cmd: Extract<Command, { type: '
 
 // ---- Telemetry ---------------------------------------------------------------------------------------
 
-/** Canary reports this process has seen (§10.15: first-party, logs only). */
+/** Canary reports this process has seen (§10.15: first-party, logs only; nothing reads these but tests yet). */
 export const CANARY = { reports: 0, mismatches: 0 };
+
+/** The moves PRESENCE_PER_MINUTE counts. */
+const PRESENCE: ReadonlySet<string> = new Set(['hello', 'seen', 'visit', 'stats']);
+
+/** Per room object, per seat: the times of its recent presence moves, and the last tick a canary mismatch was logged for. */
+const RECENT = new WeakMap<object, Map<string, { at: number[]; loggedTick: number | null }>>();
+
+function recentFor(room: Room, seat: string): { at: number[]; loggedTick: number | null } {
+  let m = RECENT.get(room);
+  if (!m) RECENT.set(room, (m = new Map()));
+  let r = m.get(seat);
+  if (!r) m.set(seat, (r = { at: [], loggedTick: null }));
+  return r;
+}
+
+/** One presence move by `seat` at `now`, refused past PRESENCE_PER_MINUTE (in memory: a restart forgets, which is fine). */
+function presence(room: Room, seat: string, now: number): void {
+  const r = recentFor(room, seat);
+  r.at = r.at.filter((t) => t > now - 60_000 && t <= now);
+  if (r.at.length >= PRESENCE_PER_MINUTE) throw new GameError(409, 'Slow down a little: try again in a minute.');
+  r.at.push(now);
+}
 
 /**
  * `stats` {canary: {tick, ok, hash?}, fps?, minFps?, simMs?, thermal?}: the
- * page's telemetry, relayed by the app. A canary mismatch is logged; the
- * room does not change.
+ * page's telemetry, relayed by the app. A canary mismatch is logged, once
+ * per seat per tick. The room does not change, so the registry neither
+ * writes it nor tells its phones (`false`).
  */
-function noteStats(room: Room, playerId: string, body: Record<string, unknown>): void {
+function noteStats(room: Room, playerId: string, body: Record<string, unknown>, now: number): false {
   const p = room.players.find((q) => q.id === playerId);
   if (!p?.seat || p.status !== 'joined') throw new GameError(403, 'You are not a mayor in this county.');
+  presence(room, p.seat, now);
   const canary = body.canary && typeof body.canary === 'object' ? (body.canary as Record<string, unknown>) : null;
-  if (!canary) return;
+  if (!canary) return false;
   CANARY.reports += 1;
   if (canary.ok === false) {
     CANARY.mismatches += 1;
-    const tick = typeof canary.tick === 'number' ? canary.tick : null;
-    console.warn(`[hometowns] canary mismatch ${JSON.stringify({ room: room.id, seat: p.seat, tick })}`);
+    const tick = typeof canary.tick === 'number' && Number.isFinite(canary.tick) ? canary.tick : null;
+    const r = recentFor(room, p.seat);
+    if (tick === null || r.loggedTick !== tick) {
+      r.loggedTick = tick;
+      console.warn(`[hometowns] canary mismatch ${JSON.stringify({ room: room.id, seat: p.seat, tick })}`);
+    }
   }
+  return false;
 }
 
-type MoveFn = (room: Room, playerId: string, body: Record<string, unknown>, now: number) => void;
+type MoveFn = (room: Room, playerId: string, body: Record<string, unknown>, now: number) => void | boolean;
 
 export const moves: Record<string, MoveFn> = {
   ...Object.fromEntries(MOVE_TYPES.map((type): [string, MoveFn] => [type, (room, pid, body, now) => playMove(room, pid, type, body, now)])),
-  stats: (room, pid, body) => noteStats(room, pid, body),
+  stats: (room, pid, body, now) => noteStats(room, pid, body, now),
 };
 
 // ---- The wire ------------------------------------------------------------------------------------------

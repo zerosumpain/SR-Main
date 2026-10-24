@@ -41,20 +41,38 @@ test('frames on the fixture metropolis stay inside 8 ms', async ({ page }, info)
   info.annotations.push({ type: 'frame ms', description: `pan p95 ${p95.toFixed(2)} · whole-town repaint ${Math.max(...repaints).toFixed(1)}` });
   console.log(`[frames] ${info.project.name}: ${info.annotations[0].description}`);
   await page.screenshot({ path: info.outputPath('metropolis.png') });
-  expect(p95).toBeLessThanOrEqual(8);
+  // A hosted CI runner draws WebGL in software: there the times are reported, not judged.
+  if (process.env.HOMETOWNS_E2E_NO_GPU !== '1') expect(p95).toBeLessThanOrEqual(8);
 });
 
-test('harness mode founds a town with no network', async ({ page }, info) => {
+test('harness mode founds a town with no network', async ({ page, baseURL }, info) => {
+  // Every way a page reaches the network throws, from before the first script runs (WP6's acceptance).
+  await page.addInitScript(() => {
+    const calls: string[] = [];
+    (window as unknown as { __net: string[] }).__net = calls;
+    const refuse = (name: string) =>
+      function (this: unknown) {
+        calls.push(name);
+        throw new Error(`${name} is not allowed in harness mode`);
+      };
+    Object.assign(window, { fetch: refuse('fetch'), XMLHttpRequest: refuse('XMLHttpRequest'), WebSocket: refuse('WebSocket'), EventSource: refuse('EventSource') });
+    navigator.sendBeacon = refuse('sendBeacon') as never;
+  });
   const requests: string[] = [];
+  page.on('request', (r) => requests.push(r.url()));
   await page.goto('?harness=1&fresh=1&speed=0&seed=3');
   await ready(page);
-  page.on('request', (r) => requests.push(r.url()));
+  const loaded = requests.length;
   await page.getByRole('button', { name: 'Found the town' }).click();
   await expect(page.locator('.tutorial')).toBeVisible();
   await page.getByRole('button', { name: 'Play it all' }).click();
   await page.screenshot({ path: info.outputPath('harness.png') });
-  // Founding and the whole fortnight load nothing: every script was in the bundle before the first tap.
-  expect(requests).toEqual([]);
+  // Loading fetched only the page's own bundle (its directory on the preview server).
+  const own = new URL('.', baseURL!).href;
+  expect(requests.slice(0, loaded).filter((u) => !u.startsWith(own))).toEqual([]);
+  // Founding and the whole fortnight load nothing, and nothing even tried the network.
+  expect(requests.slice(loaded)).toEqual([]);
+  expect(await page.evaluate(() => (window as unknown as { __net: string[] }).__net)).toEqual([]);
 });
 
 test('app mode speaks bridge 1 to a mock app', async ({ page }) => {

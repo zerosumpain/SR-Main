@@ -1,0 +1,70 @@
+name: Hometowns page
+
+# The Hometowns map page's browser checks (spec 2026-10-24 Hometowns §12.2).
+# The one that matters most: Playwright's WebKit, the engine of the iPhone's
+# WKWebView, must reach the same 30-day town hash as Node, because the phone
+# predicts its town tick by tick and the server's canary compares the two.
+# V8 against V8 (the Chromium run anyone can do locally) proves less than
+# JavaScriptCore against V8.
+#
+# Its own workflow, on a disposable hosted runner, only when the page or the
+# engine it bundles changes:
+#
+#  - porkserv cannot launch Playwright's WebKit (about a dozen system
+#    libraries it needs are not installed there), and PR code never runs on
+#    a self-hosted machine anyway.
+#  - It deploys nothing, reads no secret and never gates a release: the page
+#    has no deploy lane yet, and the engine's own gate runs in CI's vitest.
+
+on:
+  pull_request:
+    paths:
+      - 'games/hometowns-view/**'
+      - 'src/lib/games/hometowns/engine/**'
+      - 'scripts/hometowns/**'
+      - '.github/workflows/hometowns-view.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: hometowns-view-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  page:
+    name: Map page (WebKit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # The root install carries Playwright and tsx (e2e/reference.ts runs the
+      # Node side); the page has its own small install (Vite, Pixi, Vitest).
+      - run: npm ci
+      - run: npm ci
+        working-directory: games/hometowns-view
+
+      - run: npm run check
+        working-directory: games/hometowns-view
+      - run: npm test
+        working-directory: games/hometowns-view
+
+      - run: npx playwright install --with-deps webkit
+      - run: npx playwright test -c games/hometowns-view/playwright.config.ts --project webkit
+        env:
+          # No GPU here: the frame-time budget is reported, and judged on a real machine.
+          HOMETOWNS_E2E_NO_GPU: '1'
+
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hometowns-view-results
+          path: games/hometowns-view/test-results
+          retention-days: 7

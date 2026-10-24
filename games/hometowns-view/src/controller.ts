@@ -107,7 +107,13 @@ export class Controller {
   ) {
     this.opts = { thermal: 'nominal', lowPower: false, bubbles: true, ...opts };
     this.plan = new Plan(60, 'plan');
-    this.forecast = new ForecastClient((u) => this.onForecast(u));
+    this.forecast = new ForecastClient(
+      (u) => this.onForecast(u),
+      undefined,
+      (planId, message) => {
+        if (planId === this.plan.planId) this.hooks.out({ type: 'error', msg: `The forecast failed: ${message}`.slice(0, 200) });
+      },
+    );
   }
 
   async start(): Promise<void> {
@@ -147,7 +153,8 @@ export class Controller {
     this.src = src;
     this.space = null;
     this.lensCache = null;
-    this.forecast.setState(src.town, src.snapshot, src.ctx);
+    // The baseline is worked out ahead only when a forecast is likely soon (a plan or a tool in hand).
+    this.forecast.setState(src.town, src.snapshot, src.ctx, !this.plan.empty || this.tool.kind !== 'none');
     // A lens the town no longer has (a fresh hamlet) falls back to the map.
     if (this.lens !== 'none' && !lensesFor(src.town.tier).includes(this.lens)) this.setLens('none');
     this.refreshPlan(false);
@@ -197,12 +204,17 @@ export class Controller {
     return [this.lens, this.map.projection, t.tick, t.planesRev, t.parcels, t.construction.join(','), t.buildings.length, t.buildings.map((b) => b[6]).join(''), this.lensCache?.key ?? '', this.lapse?.version ?? -1].join('|');
   }
 
-  private repaint(urgent: boolean): void {
+  /**
+   * Repaints the map if what it shows changed. Outside the loop it asks for
+   * a frame; the loop's own call (`wake` false) does not, or every frame
+   * would ask for the next one and the page would never sleep (§9.15).
+   */
+  private repaint(urgent: boolean, wake = true): void {
     const s = this.src;
     if (!s || !this.map) return;
     const lens = this.lensNow();
     this.map.update(s.town, () => mapModel(s.town, lens, this.lapse ? this.lapse.mask : null), this.repaintKey(), urgent);
-    this.wake();
+    if (wake) this.wake();
   }
 
   /** Repaints every chunk now (the frame-time check's worst case: a whole new town). */
@@ -314,6 +326,24 @@ export class Controller {
 
   get planPreview(): PlanPreview | null {
     return this.preview;
+  }
+
+  /** A committed plan the server refused: its ghosts come back to be fixed (only onto an empty plan). */
+  restorePlan(planId: string, ops: readonly Op[]): void {
+    if (this.plan.restore(planId, ops)) this.refreshPlan(true);
+  }
+
+  /**
+   * Gazette photos (§9.9) show the town only: while on, the map is painted
+   * with no lens and no ghosts (nothing is said to the app, whose lens stays).
+   */
+  photoMode(on: boolean): void {
+    const s = this.src;
+    if (!s || !this.map) return;
+    this.map.setGhosts(on ? null : this.preview);
+    const lens = on ? null : this.lensNow();
+    const key = on ? `photo|${this.repaintKey()}` : this.repaintKey();
+    this.map.update(s.town, () => mapModel(s.town, lens, null), key, true);
   }
 
   /** "Build it!": the whole plan as one atomic move (§9.3). */
@@ -431,7 +461,7 @@ export class Controller {
         return el;
       }),
     );
-    this.bubbleSizes = Array.from(host.children).map((el) => [(el as HTMLElement).offsetWidth || 120, (el as HTMLElement).offsetHeight || 32]);
+    this.bubbleSizes = Array.from(host.children).map((el) => [(el as HTMLElement).offsetWidth || 120, (el as HTMLElement).offsetHeight || 44]);
     this.placeBubbles();
   }
 
@@ -444,7 +474,7 @@ export class Controller {
       const el = host.children[k] as HTMLElement | undefined;
       if (!el) return;
       const [x, y0] = this.map.tileToScreen(b.x, b.y);
-      const [w, hgt] = this.bubbleSizes[k] ?? [120, 32];
+      const [w, hgt] = this.bubbleSizes[k] ?? [120, 44];
       let y = y0 - hgt * 1.3;
       for (let tries = 0; tries < 4 && placed.some(([px, py, pw, ph]) => Math.abs(px - x) < (pw + w) / 2 && Math.abs(py - y) < (ph + hgt) / 2); tries++) y -= hgt + 4;
       placed.push([x, y, w, hgt]);
@@ -530,9 +560,9 @@ export class Controller {
         this.lapse = null;
         this.hooks.lapseDone?.();
       }
-      this.repaint(true);
+      this.repaint(true, false);
     } else if (this.src) {
-      this.repaint(false);
+      this.repaint(false, false);
     }
     const drew = this.map.render(now);
     this.countFrame(now, drew);
@@ -541,11 +571,18 @@ export class Controller {
     else this.sleep();
   }
 
-  /** With nothing to animate, wake for the next due tick only (the app's exact ticks, §10.9). */
+  /**
+   * With nothing to animate, wake for the next due tick only (the app's
+   * exact ticks, §10.9), or for a repaint the map held back for its throttle.
+   */
   private sleep(): void {
     const due = this.hooks.nextDue?.() ?? null;
-    if (due === null) return;
-    const ms = Math.max(16, Math.min(60_000, due - Date.now()));
+    const held = this.map.deferredAt;
+    const waits: number[] = [];
+    if (due !== null) waits.push(due - Date.now());
+    if (held !== null) waits.push(held - performance.now());
+    if (!waits.length) return;
+    const ms = Math.max(16, Math.min(60_000, ...waits));
     this.sleepTimer = setTimeout(() => {
       this.sleepTimer = null;
       this.wake();

@@ -267,12 +267,15 @@ describe('a Hometowns county is set up by a parent', () => {
     again() {},
     noteParent(room, playerId) {
       (room as County).parents.push(playerId);
+      // Like the real county: being noted changes what the room stores and shows.
+      return true;
     },
     advance: () => false,
     deadline: () => null,
     toWire: (r, _meId, now) => {
       const room = r as County;
-      return { id: room.id, phase: room.phase, serverNow: now, county: room.county, paused: room.paused, parents: room.parents };
+      // A copy, as a real wire is: the join's answer shows the parent only if it was built after they were noted.
+      return { id: room.id, phase: room.phase, serverNow: now, county: room.county, paused: room.paused, parents: [...room.parents] };
     },
     moves: {
       pause: (room, _playerId, body) => {

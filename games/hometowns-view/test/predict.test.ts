@@ -55,6 +55,25 @@ describe('Predictor', () => {
     expect(page.nextDue()).toBeNull();
   });
 
+  it('waits for the server rather than running a long backlog on the main thread', () => {
+    const { page, clock } = setup('town');
+    expect(page.advance(clock.nextTickAt + 20 * clock.tickMs)).toBe(0);
+    // Nothing to wake for until a frame resets the town.
+    expect(page.nextDue()).toBeNull();
+  });
+
+  it('never compares the server with a prediction made from the town a reset replaced', () => {
+    const { page, clock, c, i } = setup('hamlet');
+    const info = { townIndex: i, dayIndex: c.dayIndex, rivalry: c.settings.rivalry, mishaps: c.settings.mishaps, paramsVersion: c.paramsVersion };
+    const start = JSON.parse(JSON.stringify(c.towns[i])) as TownState;
+    page.advance(clock.nextTickAt);
+    const tick = page.town.tick;
+    // A new frame at the old tick (a move from the app changed the inputs): the old prediction of `tick` is gone.
+    page.reset(JSON.parse(JSON.stringify(start)) as TownState, info, c.snapshot, clock);
+    expect(page.check(tick, 'whatever')).toBeNull();
+    expect(page.enabled).toBe(true);
+  });
+
   it('records no canary hashes while an unconfirmed local change is applied', () => {
     const { page, clock } = setup('hamlet');
     page.dirty = true;

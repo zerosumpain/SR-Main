@@ -7,7 +7,9 @@
 // frame (needResync) or another page version (needReload) when it must.
 //
 // The server is always the authority: every frame replaces the predicted
-// town.
+// town. Nothing the app hands in is trusted: a call whose shape is wrong is
+// refused before anything changes, and a frame that cannot be taken leaves
+// the page on the frame it had and asks for a whole one.
 
 import {
   ALL_PARCELS,
@@ -21,12 +23,31 @@ import {
   type VisitView,
 } from './engine';
 import { BRIDGE_VERSION, type BootArgs, type HometownsApi, type PageMessage } from './bridge/protocol';
-import { cleanId, cleanLens, cleanOps, cleanPoint, cleanTool, requestReload } from './bridge/bridge';
+import { cleanId, cleanLens, cleanOps, cleanPoint, cleanSettings, cleanTool, cleanVisit, frameShapeOk, requestReload } from './bridge/bridge';
 import type { Controller, Source } from './controller';
 import { FrameGap, mergeFrame, movesKey, type WireFrame } from './core/frames';
 import { Predictor } from './core/predict';
+import { lensesFor } from './lenses';
 
 const clone = (t: TownState): TownState => JSON.parse(JSON.stringify(t)) as TownState;
+
+/** A plan the server said it took, but no frame has listed in this many frames since: the page stops pretending and asks for a whole frame. */
+const OPTIMISTIC_FRAMES = 3;
+/** Or this long after it was committed, answered or not. */
+const OPTIMISTIC_MS = 60_000;
+/** needResync at most this often: the app's answer is a new stream, and asking again while it opens only restarts it. */
+const RESYNC_GAP_MS = 5_000;
+
+interface Optimistic {
+  planId: string;
+  ops: Op[];
+  /** Server time it was committed. */
+  at: number;
+  /** The app said the server took it (commitResult ok). */
+  confirmed: boolean;
+  /** Frames since it was confirmed that did not list it. */
+  frames: number;
+}
 
 export class AppSession {
   /** The last whole frame, exactly as the server meant it (never mutated: deltas merge against it). */
@@ -34,11 +55,14 @@ export class AppSession {
   private predictor: Predictor | null = null;
   /** Server time minus local time, from the last frame. */
   private offset = 0;
-  /** A committed plan the server has not confirmed yet. */
-  private optimistic: { planId: string; ops: Op[] } | null = null;
+  /** A committed plan no frame has listed yet. */
+  private optimistic: Optimistic | null = null;
+  private lastResyncAt = -Infinity;
   private visiting: VisitView | null = null;
   private profile: 'kid' | 'adult' = 'adult';
   private booted = false;
+  /** The Gazette photo batches, one after another. */
+  private photos: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly c: Controller,
@@ -52,6 +76,14 @@ export class AppSession {
   /** needReload, at most once a minute and never back to a version this phone left (A39). */
   private reload(engineHash: string): void {
     if (cleanId(engineHash) && requestReload(ENGINE_HASH, engineHash, Date.now())) this.post({ type: 'needReload', engineHash });
+  }
+
+  /** Asks the app for a whole frame, at most once every RESYNC_GAP_MS. */
+  private resync(have: number | null): void {
+    const now = Date.now();
+    if (now - this.lastResyncAt < RESYNC_GAP_MS) return;
+    this.lastResyncAt = now;
+    this.post({ type: 'needResync', have });
   }
 
   // ---- App → page ----
@@ -70,33 +102,59 @@ export class AppSession {
     if (t && t.tick - t.lastSeenTick > 4) this.c.timelapse(t.lastSeenTick);
   }
 
+  /**
+   * A frame from the app. Its shape is checked first; if taking it fails
+   * anywhere (a merge, a town this engine cannot read), the page keeps the
+   * frame it had, says why, and asks for a whole frame.
+   */
   apply(frame: WireFrame): void {
-    if (!frame || typeof frame !== 'object' || typeof frame.rev !== 'number') return;
+    if (!frameShapeOk(frame)) return this.post({ type: 'error', msg: 'apply needs a frame with a rev and a clock' });
+    const before = this.held;
+    try {
+      this.take(frame);
+    } catch (e) {
+      // The next delta is then cut against a rev the page does not hold, so it waits for the whole frame.
+      this.held = before;
+      this.post({ type: 'error', msg: `frame ${frame.rev}: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) });
+      this.resync(before?.rev ?? null);
+    }
+  }
+
+  private take(frame: WireFrame): void {
     let merged: WireFrame;
     try {
       merged = mergeFrame(this.held, frame);
     } catch (e) {
-      if (e instanceof FrameGap) return this.post({ type: 'needResync', have: this.held?.rev ?? null });
+      if (e instanceof FrameGap) return this.resync(this.held?.rev ?? null);
       throw e;
     }
     const prev = this.held;
     this.offset = merged.serverNow - Date.now();
     const engine = merged.client?.engineHash;
     if (engine && engine !== ENGINE_HASH) {
-      // The server runs another engine: load the page that matches it (A39 debounce), and only draw meanwhile.
+      // The server runs another engine: load the page that matches it (A39
+      // debounce). Meanwhile the frame is held for the next delta, but this
+      // engine's hash, canary and predictor say nothing about that engine's
+      // town: it is drawn as the server sent it, if this engine can draw it.
       this.reload(engine);
+      this.held = merged;
       if (this.predictor) this.predictor.enabled = false;
+      this.drawAsSent();
+      return;
     }
-    this.held = merged;
     const me = merged.me;
     const town = me?.town;
-    if (!me || !town || !me.snapshot || !me.predict) return;
+    if (!me || !town || !me.snapshot || !me.predict) {
+      this.held = merged;
+      return;
+    }
 
     // The delta must rebuild exactly the server's town: if not, ask for a whole frame.
     if (me.townHash && stateHash(town) !== me.townHash) {
       this.held = null;
-      return this.post({ type: 'needResync', have: merged.rev });
+      return this.resync(merged.rev);
     }
+    this.held = merged;
     // The canary (§10.4 item 8): only when no move of ours landed in between, so both sides had the same inputs.
     if (this.predictor && !this.optimistic && prev && movesKey(prev) === movesKey(merged)) {
       const r = this.predictor.check(town.tick, me.townHash);
@@ -104,12 +162,34 @@ export class AppSession {
         this.c.noteCanary(r);
         if (!r.ok) {
           this.post({ type: 'stats', ...this.c.stats(), canary: r });
-          this.post({ type: 'needResync', have: merged.rev });
+          this.resync(merged.rev);
         }
       }
     }
-    if (this.optimistic && (me.moves ?? []).some((m) => m.id === this.optimistic!.planId)) this.optimistic = null;
+    const o = this.optimistic;
+    if (o) {
+      if ((me.moves ?? []).some((m) => m.id === o.planId)) this.optimistic = null;
+      else if ((o.confirmed && ++o.frames >= OPTIMISTIC_FRAMES) || merged.serverNow - o.at > OPTIMISTIC_MS) {
+        // Taken but never listed (or never answered): the server's town is the truth, whole.
+        this.optimistic = null;
+        this.resync(merged.rev);
+      }
+    }
     this.rebuild();
+  }
+
+  /** Another engine's frame: its town drawn as sent (no prediction), or, if this engine cannot read it, what is drawn stays. */
+  private drawAsSent(): void {
+    const f = this.held;
+    const me = f?.me;
+    if (!f || !me?.town || !me.snapshot || !me.predict || this.visiting) return;
+    try {
+      paramsFor(me.predict.paramsVersion);
+    } catch {
+      return;
+    }
+    const town = clone(me.town);
+    this.c.setSource({ ...this.sourceOf(f, town), live: false }, true);
   }
 
   /** The predicted town from the held frame (plus a plan still waiting for the server). */
@@ -138,10 +218,12 @@ export class AppSession {
   }
 
   private source(): Source {
-    const f = this.held!;
+    return this.sourceOf(this.held!, this.predictor!.town);
+  }
+
+  private sourceOf(f: WireFrame, t: TownState): Source {
     const me = f.me!;
     const p = me.predict!;
-    const t = this.predictor!.town;
     return {
       town: t,
       snapshot: me.snapshot!,
@@ -168,7 +250,7 @@ export class AppSession {
       this.predictor.town = JSON.parse(before) as TownState;
       return e instanceof Error ? e.message : String(e);
     }
-    this.optimistic = { planId, ops };
+    this.optimistic = { planId, ops, at: this.serverNow(), confirmed: false, frames: 0 };
     this.predictor.dirty = true;
     this.predictor.forget();
     this.post({ type: 'commit', planId, ops });
@@ -178,35 +260,51 @@ export class AppSession {
 
   commitResult(r: { planId: string; ok: boolean; error?: string }): void {
     const planId = cleanId(r?.planId);
-    if (!planId || this.optimistic?.planId !== planId) return;
-    if (r.ok) return; // kept until a frame lists it
+    const o = this.optimistic;
+    if (!planId || o?.planId !== planId) return;
+    if (r.ok === true) {
+      // Kept until a frame lists it (or OPTIMISTIC_FRAMES frames do not).
+      o.confirmed = true;
+      return;
+    }
     this.optimistic = null;
     this.post({ type: 'haptic', kind: 'bad' });
     if (typeof r.error === 'string') this.post({ type: 'error', msg: r.error.slice(0, 200) });
+    // The plan comes back as ghosts under its own id, so it can be fixed and
+    // built again (and a retry of one the server did take is answered from its log).
+    this.c.restorePlan(planId, o.ops);
     this.rebuild();
   }
 
   /** Show another town, read-only and without finances (§9.10 Visit), or come home. */
   visit(view: VisitView | null): void {
-    this.visiting = view && typeof view === 'object' && typeof view.planes === 'string' ? view : null;
-    const home = this.predictor?.town;
-    if (!this.visiting) {
-      if (home) this.c.setSource(this.source(), true);
+    if (view === null || view === undefined) {
+      this.visiting = null;
+      if (this.predictor?.town && this.held?.me?.snapshot) this.c.setSource(this.source(), true);
       return;
     }
+    const v = cleanVisit(view);
+    if (!v) return this.post({ type: 'error', msg: 'visit needs a town’s planes, buildings and terrain' });
+    const home = this.predictor?.town;
     if (!home || !this.held?.me?.snapshot) return;
-    const v = this.visiting;
-    // A visited town is drawn from its planes alone: the rest of the record is the viewer's, never shown.
-    const shown = { ...clone(home), seat: v.seat, planes: v.planes, planesRev: -1, lv: v.lv, buildings: v.buildings.map((b) => [...b]), terrainSeed: v.terrainSeed, siteKind: v.siteKind as TownState['siteKind'], terrainEdits: [...v.terrainEdits], construction: [...v.construction], parcels: ALL_PARCELS };
+    let shown: TownState;
+    try {
+      // A visited town is drawn from its planes alone: the rest of the record is the viewer's, never shown.
+      shown = { ...clone(home), seat: v.seat, planes: v.planes, planesRev: -1, lv: v.lv, buildings: v.buildings.map((b) => [...b]), terrainSeed: v.terrainSeed, siteKind: v.siteKind as TownState['siteKind'], terrainEdits: [...v.terrainEdits], construction: [...v.construction], parcels: ALL_PARCELS };
+    } catch (e) {
+      return this.post({ type: 'error', msg: `visit: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) });
+    }
+    this.visiting = v;
     this.c.setTool({ kind: 'none' });
     this.c.setSource({ ...this.source(), town: shown, derived: null }, true);
   }
 
   // ---- The frame loop's hooks ----
 
-  beforeFrame(): void {
+  /** Predicted ticks due by now, within the frame's simulation budget (a month step is the big one). */
+  beforeFrame(budgetMs = Infinity): void {
     if (!this.predictor || this.visiting) return;
-    if (this.predictor.advance(this.serverNow()) > 0) this.c.setSource(this.source(), false);
+    if (this.predictor.advance(this.serverNow(), budgetMs) > 0) this.c.setSource(this.source(), false);
   }
 
   nextDue(): number | null {
@@ -228,7 +326,9 @@ export class AppSession {
       },
       lens: (id) => {
         const lens = cleanLens(id);
-        if (lens) c.setLens(lens);
+        // Only a lens this town's tier has unlocked (§9.4); 'none' always.
+        const tier = this.predictor?.town.tier ?? 0;
+        if (lens && (lens === 'none' || lensesFor(tier).includes(lens))) c.setLens(lens);
       },
       focus: (p) => {
         const pt = cleanPoint(p);
@@ -240,7 +340,10 @@ export class AppSession {
       },
       commitResult: (r) => this.commitResult(r),
       visit: (v) => this.visit(v),
-      renderPhotos: (stories) => void renderPhotos(c, stories, this.post),
+      renderPhotos: (stories) => {
+        // One batch at a time: two interleaved would move each other's camera.
+        this.photos = this.photos.then(() => renderPhotos(c, stories, this.post)).catch(() => {});
+      },
       timelapse: (from) => {
         if (typeof from === 'number' && Number.isFinite(from)) c.timelapse(Math.floor(from));
       },
@@ -249,7 +352,14 @@ export class AppSession {
         if (e && (e.action === 'commit' || e.action === 'undo' || e.action === 'clear') && !this.visiting) c.planEdit(e.action);
       },
       settings: (s) => {
-        if (s && typeof s === 'object') c.settings(s);
+        const clean = cleanSettings(s);
+        if (!clean) return;
+        c.settings(clean);
+        if (clean.copyLevel && clean.copyLevel !== this.profile) {
+          // The plan preview and the forecast read the profile (a child's town has no typed names, §9.12).
+          this.profile = clean.copyLevel;
+          if (this.predictor && this.held?.me?.snapshot && !this.visiting) this.c.setSource(this.source(), true);
+        }
       },
     };
   }
@@ -259,22 +369,32 @@ export class AppSession {
   }
 }
 
-/** Gazette photos (§9.9): the reader's own town, framed on each story's tile, as PNG data URLs. */
+/**
+ * Gazette photos (§9.9): the reader's own town, framed on each story's tile,
+ * as PNG data URLs. The town only: no lens colours and no ghosts, and the
+ * mayor's camera is put back where it was afterwards.
+ */
 async function renderPhotos(c: Controller, stories: unknown, post: (m: PageMessage) => void): Promise<void> {
   if (!Array.isArray(stories)) return;
-  for (const s of stories.slice(0, 8)) {
-    const id = cleanId((s as { storyId?: unknown })?.storyId);
-    if (!id) continue;
-    const pt = cleanPoint(s);
-    if (pt) c.focus(pt.x, pt.y);
-    else c.map.fit();
-    c.map.render(performance.now());
-    try {
-      const png = await c.map.app.renderer.extract.base64({ target: c.map.app.stage, format: 'png' });
-      post({ type: 'photo', storyId: id, png });
-    } catch (e) {
-      post({ type: 'error', msg: `photo ${id}: ${e instanceof Error ? e.message : String(e)}` });
+  const camera = c.map.view();
+  c.photoMode(true);
+  try {
+    for (const s of stories.slice(0, 8)) {
+      const id = cleanId((s as { storyId?: unknown })?.storyId);
+      if (!id) continue;
+      const pt = cleanPoint(s);
+      if (pt) c.map.focus(pt.x, pt.y);
+      else c.map.fit();
+      c.map.render(performance.now());
+      try {
+        const png = await c.map.app.renderer.extract.base64({ target: c.map.app.stage, format: 'png' });
+        post({ type: 'photo', storyId: id, png });
+      } catch (e) {
+        post({ type: 'error', msg: `photo ${id}: ${e instanceof Error ? e.message : String(e)}` });
+      }
     }
+  } finally {
+    c.photoMode(false);
+    c.map.setView(camera);
   }
-  c.map.fit();
 }

@@ -11,6 +11,7 @@
 // grows while you are away and welcome back has something to say.
 
 import {
+  ENGINE_HASH,
   EngineError,
   TICKS_PER_YEAR,
   applyCommand,
@@ -59,6 +60,8 @@ export interface Outcome {
 
 interface Saved {
   v: 1;
+  /** The engine that wrote it: a county from another engine is not reloaded (its shape may differ). */
+  engine: string;
   county: CountyState;
   now: number;
   savedAt: number;
@@ -71,7 +74,8 @@ function load(key: string | null): Saved | null {
     const raw = globalThis.localStorage?.getItem(key);
     if (!raw) return null;
     const s = JSON.parse(raw) as Saved;
-    return s && s.v === 1 && s.county && Number.isFinite(s.now) ? s : null;
+    // Once the engine changes (a new release, the tuning branch) a saved county starts afresh rather than failing to start.
+    return s && s.v === 1 && s.engine === ENGINE_HASH && s.county && Number.isFinite(s.now) ? s : null;
   } catch {
     return null;
   }
@@ -317,6 +321,12 @@ export class LocalCounty {
     this.botTurn();
   }
 
+  /** Game ticks until the next Regional Day, whatever the speed (what a forecast's "exact until" is measured in). */
+  ticksToRegionalDay(): number {
+    const R = nextRegionalDayAt(this.county, this.params.clock.devRegionalTicks);
+    return Math.max(0, (R - this.now) / this.county.tickMs);
+  }
+
   /** Real ms until the next Regional Day at the current speed (Infinity when paused). */
   msToRegionalDay(): number {
     const R = nextRegionalDayAt(this.county, this.params.clock.devRegionalTicks);
@@ -339,14 +349,18 @@ export class LocalCounty {
     if (!force && real - this.lastSave < 5000) return;
     this.lastSave = real;
     try {
-      const s: Saved = { v: 1, county: this.county, now: this.now, savedAt: real, speed: this.speed };
+      const s: Saved = { v: 1, engine: ENGINE_HASH, county: this.county, now: this.now, savedAt: real, speed: this.speed };
       globalThis.localStorage?.setItem(this.key, JSON.stringify(s));
     } catch {
       // A full or blocked store: the county simply is not kept for next time.
     }
   }
 
-  /** Forgets the saved county (a fresh start). */
+  /**
+   * Forgets the saved county (a fresh start), and saves nothing more from
+   * this page: the reload that follows fires `beforeunload`, which would
+   * otherwise write this county straight back.
+   */
   forget(): void {
     if (!this.key) return;
     try {
@@ -354,5 +368,6 @@ export class LocalCounty {
     } catch {
       // See save.
     }
+    this.key = null;
   }
 }

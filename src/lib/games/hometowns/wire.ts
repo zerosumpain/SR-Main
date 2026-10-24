@@ -16,7 +16,9 @@
 //     (see engine/wire.ts for the merge rule); anything else — a first frame,
 //     a phone from before a restart, a rev too old — is a whole frame. Keyed
 //     by the room OBJECT, so a room read back from the table (a restart, or a
-//     lost write race) starts with no memory and can never cut a delta
+//     lost write race) starts with no memory, and its rev moves on past
+//     anything sent before it (hometowns.ts `revive`), so a `since` from the
+//     old timeline never names a rev of the new one: no delta is ever cut
 //     against a state from another timeline.
 //   - THE VIEWER'S TOWN IS CAUGHT UP ON ACCESS (§10.5). Town ticks are not
 //     scheduled one by one; a frame for a seat first brings that seat's own
@@ -416,7 +418,8 @@ export function toWire(room: Room, meId: string, now: number, since: number | nu
   if (seat) {
     const me: Record<string, unknown> = {
       seat,
-      profile: c.settings.perSeat[seat]?.profile ?? 'adult',
+      // A seat with no settings (a damaged row) shows a child's wording: the safe side.
+      profile: c.settings.perSeat[seat]?.profile ?? 'kid',
       isParent: c.parents.includes(seat),
       townHash: t ? stateHash(t) : '',
     };

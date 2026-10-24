@@ -34,11 +34,14 @@ In harness mode `window.__hometowns` exposes `hash()`, `stats()`, `runDays(n)`,
 - **Forecasts** (§9.8): `engine/forecast.ts` (WP6, A41) in a Web Worker: a
   cached no-plan baseline per state, a 1-seed preview, then p10–p90 of the
   plan's effect on monthly money, people and happiness per face over 8 months
-  and 5 seeds, plus "ready in".
+  and 5 seeds, plus "ready in". The worker does one request at a time and
+  only the newest job waits; the baseline is computed seed by seed as far as
+  the request needs, and ahead of time only while a plan or a tool is in hand.
 - **Lenses** (§9.4): all fourteen, two at Hamlet; tap a cell for its value and
   (Land value) its top three terms.
-- **Inspector** (§9.5): a long press; "What would make it grow?" offers a
-  ghost plan the engine accepts.
+- **Inspector** (§9.5): a long press with no drawing tool (with one, the
+  finger draws however long it rests first); "What would make it grow?"
+  offers a ghost plan the engine accepts.
 - **Mood, Why and Ledger** (§9.6): wants bubbles on the map; in harness mode a
   top bar, Wants bar, advisor cards, Why popovers, the Ledger from Town.
 - **Welcome back** (§9.9): the tile-log time-lapse (skipped under Reduce
@@ -83,6 +86,13 @@ npm --prefix games/hometowns-view run build # writes dist/<ENGINE_HASH>/mobile.h
 npx playwright install webkit
 npx playwright test -c games/hometowns-view/playwright.config.ts
 ```
+
+The `Hometowns page` workflow (`.github/workflows/hometowns-view.yml`) runs
+the type check, Vitest and the WebKit project on a hosted runner for every
+pull request that touches this folder, the engine or `scripts/hometowns/`.
+porkserv cannot launch Playwright's WebKit, so that run is where the
+WebKit-equals-Node hash is checked; its frame times are reported, not judged
+(no GPU there).
 
 `.npmrc` sets `legacy-peer-deps`: npm 10 crashes resolving vitest 4's optional
 peers from a nested folder, and the page needs none of them.

@@ -3,7 +3,9 @@
 // and fake timers. A solo county is founded, played by the Balanced bot for a
 // dev-clock day and a half with a restart in the middle, and every frame is
 // checked: deltas merge to the server's town hash, and the phone's exact
-// prediction matches the server at every view (the canary, M1's exit).
+// prediction matches the server at every view (the canary, M1's exit). A
+// second run loses the last session's writes in its restart: the driver must
+// see the whole frame that follows and post the lost moves again (A28).
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,11 +20,14 @@ const T0 = 1_792_497_600_000;
 const host = { id: 'p_host', name: 'Host' };
 const copy = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 
+let store: ReturnType<typeof memoryRoomStore>;
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(T0);
   process.env.HOMETOWNS_DEV_CLOCK = '1';
-  _setRoomStore(memoryRoomStore());
+  store = memoryRoomStore();
+  _setRoomStore(store);
   _setRecorder(async () => ({}));
   _setTurnPusher(async (_kind, _room, ids) => ids);
 });
@@ -99,5 +104,41 @@ describe('drive-local, in process', () => {
     expect(report.canary.checked).toBeGreaterThan(3);
     expect(report.canary.mismatches).toBe(0);
     expect(report.final!.tick).toBeGreaterThan(48);
+  }, 60_000);
+
+  it('posts again the moves a restart lost, and still never mismatches', async () => {
+    let roomId = '';
+    const transport = inProcess();
+    const start = transport.start.bind(transport);
+    transport.start = async (body) => {
+      const w = await start(body);
+      roomId = w.id;
+      return w;
+    };
+    // The row as it was at the start of each session: the restart puts it back, losing what came after.
+    let earlier: ReturnType<typeof store.rows.get> = undefined;
+    const view = transport.view.bind(transport);
+    transport.view = async (id) => {
+      await flush(id);
+      earlier = structuredClone(store.rows.get(id));
+      return view(id);
+    };
+    const report = await driveSolo({
+      transport,
+      clock: { now: () => Date.now(), wait: (ms) => vi.advanceTimersByTimeAsync(ms).then(() => {}) },
+      days: 1.1,
+      devTickMs: 30_000,
+      seed: 3,
+      restart: async () => {
+        await flush(roomId);
+        _resetRooms();
+        if (earlier) store.rows.set(roomId, earlier);
+        await ensureRoom(roomId);
+      },
+    });
+    expect(report.restarts).toBe(1);
+    expect(report.moves.reposted).toBeGreaterThan(0);
+    expect(report.delta.mismatches).toBe(0);
+    expect(report.canary.mismatches).toBe(0);
   }, 60_000);
 });

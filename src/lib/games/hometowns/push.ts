@@ -12,10 +12,12 @@
 //     London; a child's seat also never during weekday school hours);
 //   - only one window per London calendar day, so the dev clock (a Regional
 //     Day every 24 minutes) still rings a phone once a day;
-//   - the window closes at the next `advance` after two hours or 20:00,
-//     whichever is first. `waitingOn` has no `now`, so a window left open
-//     past its time would let a restart (which forgets which phones were
-//     tried) ring somebody at midnight.
+//   - each `advance` drops from an open window the seats that may not be
+//     rung at that moment (a child's once school starts), and the window
+//     closes at the next `advance` after two hours or 20:00, whichever is
+//     first. `waitingOn` has no `now`, so a window left open past its time
+//     would let a restart (which forgets which phones were tried) ring
+//     somebody at midnight.
 // Push is best effort: pull (the lobby poll, the in-game inbox) is the floor,
 // and no mechanic may depend on a push arriving (A37).
 //
@@ -127,6 +129,23 @@ export function openPushWindow(push: PushState, c: CountyState, now: number, sea
   const things = reasons === 1 ? '1 thing is' : `${reasons} things are`;
   push.open = { key: week ? `d${day}g` : `d${day}`, seats, line: `News from ${c.name}: ${things} waiting for you.`, until: closesAt(at) };
   return push.open;
+}
+
+/**
+ * An open window's seats that may not be rung NOW: a child's in weekday
+ * school hours (a window opened at 08:00 runs to 10:00, and a restart
+ * forgets which phones were tried, so a retry could ring a child at 09:00),
+ * or anyone's once the push hours are over. The window shuts when nobody is
+ * left. True when it changed.
+ */
+export function prunePushWindow(push: PushState, c: CountyState, now: number): boolean {
+  const open = push.open;
+  if (!open) return false;
+  const seats = open.seats.filter((seat) => pushAllowedAt(now, c.settings.perSeat[seat]?.profile ?? 'kid'));
+  if (seats.length === open.seats.length) return false;
+  if (seats.length) push.open = { ...open, seats };
+  else push.open = null;
+  return true;
 }
 
 /** Shuts an open window whose time is up. True when it changed. */

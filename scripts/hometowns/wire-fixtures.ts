@@ -10,12 +10,17 @@
 // Files: lobby.json (a county waiting to start), founding.json (seated, no
 // town yet), hamlet.json, town.json, metropolis.json (whole frames),
 // metropolis-delta.json (the frame after a budget move, cut against
-// metropolis.json), visiting.json (the hamlet's mayor visiting a neighbour).
+// metropolis.json), visiting.json (the hamlet's mayor visiting a neighbour),
+// and copy-hash.json: the FNV-1a 64 of engine/copy/en-GB.json's bytes, which
+// the app's tests compare with the copy file it bundles, so a bundled copy
+// that has fallen behind the site's fails a test instead of showing a child
+// a raw key.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { fixture, type FixtureKind } from './fixture';
-import { catchUp, type CountyState } from '../../src/lib/games/hometowns/engine/index';
+import { catchUp, fnv64, type CountyState } from '../../src/lib/games/hometowns/engine/index';
 import { createRoom, moves, start, type Room } from '../../src/lib/games/hometowns/hometowns';
 import { toWire } from '../../src/lib/games/hometowns/wire';
 
@@ -47,6 +52,9 @@ function playedRoom(kind: FixtureKind): { room: Room; now: number } {
 const json = (x: unknown) => JSON.stringify(x, null, 1) + '\n';
 
 export function wireFixtures(): Record<string, unknown> {
+  // The fixtures' terrain is pinned by seed, which the adapter honours only
+  // with the dev clock on (readSetup): this script is the local stack's.
+  process.env.HOMETOWNS_DEV_CLOCK = '1';
   const out: Record<string, unknown> = {};
   const lobby = createRoom({ id: 'g_fixturelob', host: HOST, invite: [{ id: 'p_fixture_child', name: 'Young mayor' }], difficulty: 'easy', options: { county: { name: 'Kingsport County', seed: 1 } }, now: 1_792_497_600_000 });
   out.lobby = toWire(lobby, HOST.id, 1_792_497_600_000);
@@ -75,6 +83,8 @@ export function wireFixtures(): Record<string, unknown> {
       out.visiting = toWire(room, HOST.id, now + 1000);
     }
   }
+  const copy = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../src/lib/games/hometowns/engine/copy/en-GB.json'), 'utf8');
+  out['copy-hash'] = { file: 'src/lib/games/hometowns/engine/copy/en-GB.json', fnv64: fnv64(copy) };
   return out;
 }
 

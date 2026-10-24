@@ -16,7 +16,7 @@
 // town; a magnifier loupe follows a drawing finger on touch screens. A mouse
 // pans with the middle or right button and zooms with the wheel.
 
-import { Application, Container, Graphics, Matrix, RenderTexture, Sprite } from 'pixi.js';
+import { Application, Container, Graphics, Matrix, RenderTexture, Sprite, Ticker } from 'pixi.js';
 import { CAT_ZONE, MAP, Z_INDUSTRY, parcelOf, planesOf, useCat, usePayload, type TownState } from '../engine';
 import type { GhostMark, PlanPreview } from '../plan/plan';
 import { type MapModel } from './model';
@@ -81,6 +81,9 @@ export interface MapView {
   setDecor(on: boolean): void;
   fit(t?: TownState): void;
   focus(x: number, y: number): void;
+  /** The camera as it is (scale and offset), to put back later with `setView`. */
+  view(): { s: number; x: number; y: number };
+  setView(v: { s: number; x: number; y: number }): void;
   tileAt(clientX: number, clientY: number): [number, number] | null;
   /** A tile centre in CSS px relative to the map's host (DOM overlays). */
   tileToScreen(x: number, y: number): [number, number];
@@ -88,6 +91,8 @@ export interface MapView {
   invalidate(): void;
   /** Draws a frame if anything changed or something animates. Returns whether it drew. */
   render(now: number): boolean;
+  /** When (performance.now) a repaint `update` held back for its throttle is due, or null: the loop must wake for it. */
+  readonly deferredAt: number | null;
   /** True while something animates (decoration, sparkles), so the loop keeps going. */
   readonly animating: boolean;
   resize(): void;
@@ -177,8 +182,19 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     // Render on demand (§9.15): the page draws a frame only when something changed.
     autoStart: false,
     preference: 'webgl',
+    // The page reads the canvas's pointer events itself (below): Pixi's own
+    // hit-testing and its hover ticker would only cost frames.
+    eventFeatures: { move: false, globalMove: false, click: false, wheel: false },
   });
   app.ticker.stop();
+  // Pixi's shared and system tickers each run their own animation-frame loop
+  // once anything is added to them (the event system adds its hover check to
+  // the system one); nothing here runs on them, so neither may keep the
+  // phone awake.
+  Ticker.shared.autoStart = false;
+  Ticker.shared.stop();
+  Ticker.system.autoStart = false;
+  Ticker.system.stop();
   host.appendChild(app.canvas);
   const canvas = app.canvas;
   canvas.style.touchAction = 'none';
@@ -233,6 +249,8 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
 
   let lastKey = '';
   let lastPaint = -Infinity;
+  /** A throttled repaint `update` held back, due at this instant (performance.now), or null. */
+  let deferred: number | null = null;
   let lastSig: number[] = [];
   let lastModel: MapModel | null = null;
   let lastTown: TownState | null = null;
@@ -523,6 +541,10 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     const panButton = e.button === 1 || e.button === 2;
     mode = gesture !== 'none' && !panButton ? 'pending' : 'pan';
     clearPress();
+    // With a drawing tool the finger draws: a child often presses, pauses and
+    // then drags, and a long press there must not swallow the drag. Inspecting
+    // is a long press with no tool (or the tap tool's plain tap).
+    if (gesture === 'line' || gesture === 'rect') return;
     pressTimer = setTimeout(() => {
       if ((mode === 'pending' || mode === 'pan') && downTile && pointers.size === 1) {
         mode = 'pressed';
@@ -654,8 +676,13 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     get animating() {
       return (decorOn && puffs.length > 0) || sparkles.length > 0;
     },
+    get deferredAt() {
+      return deferred;
+    },
     fit,
     focus,
+    view: () => ({ s: camera.scale.x, x: camera.position.x, y: camera.position.y }),
+    setView: (v) => setCamera(v.s, v.x, v.y),
     tileAt,
     tileToScreen,
     setGesture(g) {
@@ -665,6 +692,7 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
       lastKey = '';
       lastSig = [];
       lastPaint = -Infinity;
+      deferred = null;
     },
     setProjection(p) {
       if (p === projection) return;
@@ -707,9 +735,17 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
       return true;
     },
     update(t, model, key, urgent = false) {
-      if (key === lastKey && t === lastTown) return false;
+      if (key === lastKey && t === lastTown) {
+        deferred = null;
+        return false;
+      }
       const now = performance.now();
-      if (!urgent && t === lastTown && now - lastPaint < REPAINT_MS) return false; // still due: painted on a later frame
+      if (!urgent && t === lastTown && now - lastPaint < REPAINT_MS) {
+        // Still due: painted on a later frame, which the loop must ask for (it may otherwise sleep).
+        deferred = lastPaint + REPAINT_MS;
+        return false;
+      }
+      deferred = null;
       const parcelsChanged = !lastTown || lastTown.parcels !== t.parcels;
       lastKey = key;
       lastTown = t;

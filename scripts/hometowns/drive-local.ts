@@ -9,8 +9,11 @@
 //     frame's snapshot and `predict` block alone, to the tick of the next
 //     request, and must hash to the server's `townHash` there. That is the
 //     phone's exact prediction, and the M1 exit asks for zero mismatches;
-//   - A28: after any frame whose rev went backwards (a lost write), moves the
-//     server said yes to but no longer lists are posted again.
+//   - A28: after any WHOLE frame (the server reads a county back from its row
+//     with a rev beyond anything it sent before, so the first frame after a
+//     restart or a lost write race is whole) or one whose rev went backwards,
+//     moves the server said yes to but no longer lists are posted again, as
+//     the app's store does.
 // The mayor is the engine's Balanced bot, fed from the wire.
 //
 // Against the local stack (no address or token in this file, A36):
@@ -193,6 +196,8 @@ export async function driveSolo(o: DriveOptions): Promise<DriveReport> {
   let base: HometownsWire | null = null;
   /** Moves the server accepted, newest last (A28 re-posting). */
   const accepted: { id: string; body: Record<string, unknown> }[] = [];
+  /** A re-post is under way: its own answers do not start another. */
+  let reposting = false;
 
   const first = await tx.start({
     game: 'hometowns',
@@ -215,6 +220,8 @@ export async function driveSolo(o: DriveOptions): Promise<DriveReport> {
   async function look(): Promise<HometownsWire> {
     const f = requests.take(await tx.view(id))!;
     r.frames.requests++;
+    // A view is always whole: anything the server answered but no longer lists was lost.
+    if (!reposting) await repost(f);
     const t = f.me?.town;
     if (base?.me?.town && t && t.tick > base.me.town.tick && f.me!.predict?.dayIndex === base.me.predict?.dayIndex) {
       const predicted = predictTown(base, t.tick);
@@ -241,13 +248,14 @@ export async function driveSolo(o: DriveOptions): Promise<DriveReport> {
         const f = await tx.act(id, since === null ? body : { ...body, since });
         r.frames.requests++;
         const whole = requests.take(f) ?? (await look());
+        const wasWhole = f.base === null;
         r.moves.accepted++;
         const mid = (body.planId ?? body.moveId) as string | undefined;
         if (mid && !QUIET.has(String(body.action))) {
           accepted.push({ id: mid, body });
           while (accepted.length > 20) accepted.shift();
         }
-        if (whole.rev < requests.maxRev) await repost(whole);
+        if (!reposting && (whole.rev < requests.maxRev || (wasWhole && requests.maxRev > 0))) await repost(whole);
         requests.maxRev = Math.max(requests.maxRev, whole.rev);
         base = whole;
         return whole;
@@ -267,12 +275,19 @@ export async function driveSolo(o: DriveOptions): Promise<DriveReport> {
     }
   }
 
-  /** A28: after a frame whose rev went backwards, post again what it no longer shows. */
+  /** A28: after a whole frame, or one whose rev went backwards, post again what it no longer shows. */
   async function repost(f: HometownsWire): Promise<void> {
     const shown = new Set((f.me?.moves ?? []).map((m) => m.id));
-    for (const m of accepted.filter((a) => !shown.has(a.id))) {
-      r.moves.reposted++;
-      await post(m.body);
+    const lost = accepted.filter((a) => !shown.has(a.id));
+    if (!lost.length) return;
+    reposting = true;
+    try {
+      for (const m of lost) {
+        r.moves.reposted++;
+        await post(m.body);
+      }
+    } finally {
+      reposting = false;
     }
   }
 

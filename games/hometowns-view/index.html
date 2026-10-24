@@ -51,10 +51,12 @@
 
       /* The map: full bleed in the app, the middle of the harness. */
       .in-app, .in-app .map { height: 100%; }
+      /* A long press inspects a tile: no text selection, magnifier, callout or tap flash in a WKWebView. */
+      .in-app, .map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
       .map { position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
       .map canvas { display: block; position: absolute; left: 0; top: 0; }
       .bubbles { position: absolute; inset: 0; pointer-events: none; }
-      .bubble { position: absolute; left: 0; top: 0; pointer-events: auto; min-height: 32px; padding: 4px 10px; border-radius: 100px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
+      .bubble { position: absolute; left: 0; top: 0; pointer-events: auto; min-height: 44px; padding: 4px 10px; border-radius: 100px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
       .bubble.hatched { background-image: repeating-linear-gradient(45deg, transparent 0 6px, var(--line) 6px 8px); }
 
       /* Harness chrome (SwiftUI's job in the app). One column on a phone, a side panel on a desk. */
@@ -139,6 +141,9 @@
         .forecast { left: 8px; right: 8px; bottom: 8px; width: auto; transform: none; max-height: 45%; overflow-y: auto; }
         .inspector { bottom: 8px; }
         .advisors { left: 8px; right: 8px; top: auto; bottom: 8px; max-width: none; }
+        /* The lens legend goes to the top, clear of the advisor card; the tutorial steps aside while a lens is on. */
+        .legend { top: 8px; bottom: auto; }
+        .legend:not(.hidden) ~ .tutorial { display: none; }
         .advisor:nth-child(n + 2) { display: none; }
         .toast { bottom: auto; top: 140px; }
         .sheet { bottom: 54px; }

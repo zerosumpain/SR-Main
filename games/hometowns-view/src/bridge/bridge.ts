@@ -4,8 +4,8 @@
 // handler, so posts go to an optional local listener (harness mode and the
 // tests) and the page works the same on its own.
 
-import { BRIDGE_VERSION, HANDLER, type HometownsApi, type PageMessage, type Posted } from './protocol';
-import type { Op } from '../engine';
+import { BRIDGE_VERSION, HANDLER, type HometownsApi, type PageMessage, type PageSettings, type Posted, type Thermal } from './protocol';
+import type { Op, VisitView } from '../engine';
 import { LENS_IDS, type LensOrNone } from '../lenses';
 import type { Tool, ToolKind } from '../plan/plan';
 
@@ -117,6 +117,54 @@ export function cleanOps(v: unknown): Op[] | null {
     }
   }
   return out;
+}
+
+const THERMALS: readonly Thermal[] = ['nominal', 'fair', 'serious', 'critical'];
+
+/** Page settings from the app: each field only when it is one the page knows, else left out. */
+export function cleanSettings(v: unknown): PageSettings | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const out: PageSettings = {};
+  if (typeof o.topDown === 'boolean') out.topDown = o.topDown;
+  if (THERMALS.includes(o.thermal as Thermal)) out.thermal = o.thermal as Thermal;
+  if (typeof o.lowPower === 'boolean') out.lowPower = o.lowPower;
+  if (typeof o.reduceMotion === 'boolean') out.reduceMotion = o.reduceMotion;
+  if (o.copyLevel === 'kid' || o.copyLevel === 'adult') out.copyLevel = o.copyLevel;
+  if (o.theme === 'light' || o.theme === 'dark') out.theme = o.theme;
+  return out;
+}
+
+const ints = (v: unknown, max = 1 << 16): v is number[] => Array.isArray(v) && v.length <= max && v.every((n) => typeof n === 'number' && Number.isFinite(n));
+
+/**
+ * Another town to show (`visit`): the whole shape checked before any of it
+ * is used, so a bad call leaves the page exactly as it was.
+ */
+export function cleanVisit(v: unknown): VisitView | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (!cleanId(o.seat) || typeof o.planes !== 'string' || typeof o.lv !== 'string' || typeof o.siteKind !== 'string') return null;
+  if (typeof o.terrainSeed !== 'number' || !Number.isFinite(o.terrainSeed)) return null;
+  if (!ints(o.terrainEdits) || !ints(o.construction)) return null;
+  if (!Array.isArray(o.buildings) || o.buildings.length > 4096 || !o.buildings.every((b) => Array.isArray(b))) return null;
+  return o as unknown as VisitView;
+}
+
+const finite = (n: unknown): boolean => typeof n === 'number' && Number.isFinite(n);
+
+/**
+ * Whether a frame from the app has the shape the merge and the predictor
+ * read (a rev, a base, finite clock fields), before anything is replaced.
+ */
+export function frameShapeOk(v: unknown): boolean {
+  if (!v || typeof v !== 'object') return false;
+  const f = v as Record<string, unknown>;
+  if (!Number.isInteger(f.rev) || !(f.base === null || f.base === undefined || Number.isInteger(f.base))) return false;
+  const c = f.clock as Record<string, unknown> | undefined;
+  if (!c || typeof c !== 'object') return false;
+  if (![c.gridTick, c.tickMs, c.nextTickAt, c.nextRegionalDayAt].every(finite) || (c.tickMs as number) <= 0) return false;
+  return f.me === null || f.me === undefined || typeof f.me === 'object';
 }
 
 // ---- needReload debounce (A39) ------------------------------------------------------------------------

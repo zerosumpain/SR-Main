@@ -23,7 +23,7 @@ import {
   type Room,
 } from './hometowns';
 import { catchUp, countyHash, gridTickAt, nextRegionalDayAt, paramsFor, population } from './engine/index';
-import { londonParts, openPushWindow, emptyPush } from './push';
+import { londonParts, openPushWindow, emptyPush, prunePushWindow } from './push';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -351,6 +351,18 @@ describe('the daily push (§10.11, A29)', () => {
     off.room.county.settings.perSeat.s1.pushes = false;
     drain(off.room, off.at + MIN);
     expect(waitingOn(off.room)).toBeNull();
+  });
+
+  it("drops a child's seat from an open window once school starts, and shuts it when nobody is left", () => {
+    const { room } = sundayCounty();
+    const c = room.county;
+    c.settings.perSeat.s1.profile = 'kid';
+    // A Regional Day at 08:00 on Monday 26 October 2026 (GMT): the window would run to 10:00.
+    const eight = Date.UTC(2026, 9, 26, 8, 0);
+    room.push.open = { key: 'd5', seats: ['s1'], line: 'News', until: eight + 2 * HOUR };
+    expect(prunePushWindow(room.push, c, eight + 10 * MIN)).toBe(false);
+    expect(prunePushWindow(room.push, c, eight + 40 * MIN)).toBe(true);
+    expect(room.push.open).toBeNull();
   });
 
   it('opens at most one window a London day, whatever the clock', () => {
