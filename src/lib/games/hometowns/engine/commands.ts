@@ -97,7 +97,7 @@ export function moveId(cmd: Command): string {
  */
 export const LOG_FULL = 10;
 
-/** A move's client id: up to 64 letters, digits and `_ . : -` (a UUID, or a bot's "seat:time:n:tag"). */
+/** A move's client id or a plan's planId: up to 64 letters, digits and `_ . : -` (a UUID, the page's "plan-<time>-<n>", or a bot's "seat:time:n:tag"). */
 const MOVE_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 function record(c: CountyState, r: CommandRecord): void {
@@ -131,9 +131,11 @@ export function applyCommand(c: CountyState, who: SeatId | Actor, cmd: Command, 
 
   // A28: a repeated id returns the earlier result.
   const id = moveId(cmd);
-  // A client id is an id, never a message: it is kept in the county's log, so
-  // anything typed into it would be stored text (§9.10: no free text).
-  if (cmd.type !== 'build' && id && !MOVE_ID.test(id)) throw new EngineError(400, 'That move’s id is not one this game can use.');
+  // A client id is an id, never a message: it is kept in the county's log (and
+  // a plan's in the town's undo ring), so anything typed into it would be
+  // stored text (§9.10: no free text). A build's planId is checked too: an
+  // undo sent without a moveId is matched by that planId.
+  if (id && !MOVE_ID.test(id)) throw new EngineError(400, cmd.type === 'build' ? 'That plan’s id is not one this game can use.' : 'That move’s id is not one this game can use.');
   let townIndex = townIndexOf(c, seat);
   const own = townIndex >= 0 ? c.towns[townIndex] : null;
   if (id) {

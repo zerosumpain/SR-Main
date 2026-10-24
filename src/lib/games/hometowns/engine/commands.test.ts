@@ -163,6 +163,17 @@ describe('build (§9.3, atomic)', () => {
     refused(() => applyCommand(c, 'ann', { type: 'build', plan: [] } as never, now), 400, /planId/);
   });
 
+  it('keeps no free text in an id: a planId is checked like a moveId, and so is the undo that falls back to it (§9.10)', () => {
+    const { c, t, now } = setup();
+    const before = t.money.reserves;
+    refused(() => build(c, 'my secret plan', [{ op: 'road', kind: 'lane', path: [32, 43, 32, 42] }], now), 400, /plan’s id/);
+    refused(() => build(c, 'x'.repeat(65), [{ op: 'road', kind: 'lane', path: [32, 43, 32, 42] }], now), 400, /plan’s id/);
+    expect(t.money.reserves).toBe(before);
+    expect(t.undo).toEqual([]);
+    refused(() => applyCommand(c, 'ann', { type: 'undo', planId: 'hello there' }, now), 400, /move’s id/);
+    expect(build(c, 'plan-mh3k2-1', [{ op: 'road', kind: 'lane', path: [32, 43, 32, 42] }], now).ok).toBe(true);
+  });
+
   it('bulldozes: a same-day road refunds half, the Town Hall and County Road stay', () => {
     const { c, t, now } = setup();
     build(c, 'r', [{ op: 'road', kind: 'lane', path: [32, 43, 32, 42] }], now);
