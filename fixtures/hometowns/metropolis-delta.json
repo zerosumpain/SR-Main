@@ -16,8 +16,8 @@
   }
  ],
  "client": {
-  "engineHash": "1814b6d0cb3012fd",
-  "page": "/projects/hometowns/d722b412b0c9e803/mobile.html",
+  "engineHash": "6cc785335dbda08f",
+  "page": "/projects/hometowns/d7d5fd9de5a09176/mobile.html",
   "bridge": 1
  },
  "clock": {
@@ -39,56 +39,56 @@
   "seat": "s1",
   "profile": "adult",
   "isParent": true,
-  "townHash": "2bd67e61906cfaf5",
+  "townHash": "4b66f6c787e7509d",
   "derived": {
    "stars": [
-    27.8,
-    50,
-    66.7,
-    7.8,
-    47.7,
-    53.3,
+    41.9,
+    67.3,
+    66.6,
+    7.7,
+    45.8,
+    59.6,
     95.6,
-    78.9,
+    79.1,
     94.6,
-    70,
-    38.1,
-    37.5,
-    25,
-    21.9,
-    54.7,
-    50.7,
-    40.3,
+    70.1,
+    38.7,
+    63,
+    35.3,
+    28.6,
+    70.3,
+    69.8,
+    56.3,
     71.1,
     67,
     57.1
    ],
    "meters": [
-    -33.7,
-    -51,
-    -57.6,
-    -74.2,
-    -74.9,
-    5,
-    -96.6,
-    -66.6
+    -20.6,
+    -53.4,
+    -55.9,
+    -24.7,
+    -23,
+    -4,
+    -68.6,
+    -21.2
    ],
    "wants": [
     {
      "key": "talk.jobs",
-     "severity": 145014,
-     "tile": -1,
-     "hatched": false
-    },
-    {
-     "key": "talk.homes",
-     "severity": 69257,
+     "severity": 101394,
      "tile": -1,
      "hatched": false
     },
     {
      "key": "talk.schools",
-     "severity": 65841,
+     "severity": 69183,
+     "tile": -1,
+     "hatched": false
+    },
+    {
+     "key": "talk.homes",
+     "severity": 44902,
      "tile": -1,
      "hatched": false
     }
@@ -194,7 +194,7 @@
       },
       {
        "key": "busStop",
-       "met": 0.07,
+       "met": 0.06,
        "buildable": true
       },
       {
@@ -214,7 +214,7 @@
       },
       {
        "key": "leisureVenue",
-       "met": 0.27,
+       "met": 0.26,
        "buildable": true
       },
       {
@@ -245,7 +245,7 @@
       },
       {
        "key": "green",
-       "met": 0.13,
+       "met": 0.14,
        "buildable": true
       },
       {
@@ -260,7 +260,7 @@
       },
       {
        "key": "busStop",
-       "met": 0.07,
+       "met": 0.06,
        "buildable": true
       },
       {
@@ -280,7 +280,7 @@
       },
       {
        "key": "leisureVenue",
-       "met": 0.33,
+       "met": 0.32,
        "buildable": true
       },
       {
@@ -290,7 +290,7 @@
       },
       {
        "key": "cultureVenue",
-       "met": 0.54,
+       "met": 0.55,
        "buildable": true
       },
       {
@@ -305,7 +305,7 @@
       },
       {
        "key": "park",
-       "met": 0.13,
+       "met": 0.14,
        "buildable": true
       },
       {
@@ -322,25 +322,25 @@
     }
    ],
    "pipeline": {
-    "homes": 70,
-    "movers": 868
+    "homes": 82,
+    "movers": 802
    },
    "townTalk": [
     [
      "jobs",
-     46
-    ],
-    [
-     "homes",
-     22
+     39
     ],
     [
      "schools",
-     21
+     27
+    ],
+    [
+     "homes",
+     17
     ],
     [
      "safety",
-     11
+     17
     ]
    ]
   },
@@ -355,6 +355,9 @@
    "tick": 2928,
    "tileEvents": "",
    "changed": {
+    "moveIds": [
+     "budget:fixture-budget"
+    ],
     "taxes": {
      "town": 900,
      "homes": [

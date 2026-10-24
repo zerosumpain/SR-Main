@@ -173,6 +173,25 @@ describe('intents to player towns (§5.11, §8.4 hook)', () => {
     expect(intentsTo((c, i) => rival(c, i, { ...better, active: false })).sum).toBe(0);
   });
 
+  it('adds an advert’s bonus to its advertiser, for the advertised cohort only (A20, §8.6)', () => {
+    const better = { perceived: new Array<number>(STAR_COUNT).fill(70) };
+    const advertised = (bit: number) => (c: ReturnType<typeof town>['c'], i: number) => {
+      rival(c, i, better);
+      const f = c.snapshot.flows[i];
+      f.advert = new Array<number>(COHORT_COUNT).fill(0);
+      f.advertBy = new Array<number>(10).fill(0);
+      f.advert[4] = 0.25;
+      f.advertBy[4] = bit;
+    };
+    const cohort = (r: ReturnType<typeof intentsTo>, k: number) => r.slot.intents[COHORT_COUNT + k];
+    const none = intentsTo((c, i) => rival(c, i, better));
+    const mine = intentsTo(advertised(1 << 1));
+    const other = intentsTo(advertised(1 << 2));
+    expect(cohort(mine, 4)).toBeGreaterThan(cohort(none, 4));
+    expect(cohort(mine, 3)).toBeCloseTo(cohort(none, 3), 9);
+    expect(cohort(other, 4)).toBeCloseTo(cohort(none, 4), 9);
+  });
+
   it('runs uphill only with effort: a much bigger rival draws fewer movers than an equal one', () => {
     const same = intentsTo((c, i) => rival(c, i, { perceived: new Array<number>(STAR_COUNT).fill(70) })).sum;
     const big = intentsTo((c, i) => rival(c, i, { perceived: new Array<number>(STAR_COUNT).fill(70), pop: 1e6 })).sum;

@@ -375,6 +375,7 @@
     "why.vis.quality": { "kid": "A clean, pretty town", "adult": "tourism quality", "kidLess": "A bit untidy for visitors", "adultLess": "tourism quality" },
     "why.vis.reputation": { "kid": "Visitors tell their friends", "adult": "reputation", "kidLess": "Visitors weren't happy last time", "adultLess": "reputation" },
     "why.vis.awareness": { "kid": "People know about us", "adult": "awareness", "kidLess": "Few people know about us yet", "adultLess": "low awareness" },
+    "why.vis.hotelTax": { "kid": "Cheap to stay the night", "adult": "hotel tax", "kidLess": "The hotel tax puts some visitors off", "adultLess": "hotel tax" },
     "why.vis.beds": { "kid": "Places to stay", "adult": "hotel beds", "kidLess": "Nowhere to stay", "adultLess": "too few beds" },
     "why.vis.season": { "kid": "The time of year", "adult": "seasonality" },
     "why.vis.world": { "kid": "Times out in the world", "adult": "World tourism cycle" },

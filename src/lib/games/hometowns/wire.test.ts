@@ -232,7 +232,7 @@ describe('budgets (§10.7, §10.8)', () => {
   });
 
   // Measured two days in, with a full command log. The Why ring is still filling then (it is full
-  // after seven days), so the steady state is larger again; see the known gap below.
+  // after seven days), so the steady state is larger again; see the note below.
   it('six metropolises stay under the 400 KB settle-guard line, and their first frames under 80 KB', () => {
     const { c, now } = sixMetropolises();
     const room = roomAround(c);
@@ -242,11 +242,10 @@ describe('budgets (§10.7, §10.8)', () => {
     expect(bytes(frame(room, host.id, now))).toBeLessThanOrEqual(FIRST_FRAME_BUDGET);
   });
 
-  // KNOWN GAP, engine side (reported by WP4): two days in, the six towns alone are 6 × ~47 KB,
-  // because the Why ring (~8.7 KB at two days, ~17 KB once full) and the development memo
-  // (~5.5 KB) are well over §10.8's per-part estimates (Why 5 KB, nothing for the memo).
-  // This turns red the day the room fits: then make it an ordinary `it`.
-  it.fails('six metropolises fit the 320 KB room budget (§10.8)', () => {
+  // Was a known gap (it.fails) until M0's varint Why records and a command log that keeps full
+  // bodies only for its newest moves. Measured two days in: the seven-day steady state, with the
+  // Why ring full, is not measured here and is still open.
+  it('six metropolises fit the 320 KB room budget (§10.8)', () => {
     const { c, now } = sixMetropolises();
     const room = roomAround(c);
     play(room, host.id, 'hello', {}, now);

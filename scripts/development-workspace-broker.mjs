@@ -41,10 +41,12 @@ const PREVIEW_DB_HOST = 'sr-preview-db';
 const PREVIEW_APP_HOST = 'sr-preview-app';
 const validId = (id) => { if (typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error('Invalid build id'); return id; };
 // Crash dumps are core or core.<pid>; core.* would drop source files such as engine/core.ts.
+// The bare core rule also matches folders: the Hometowns map page's src/core/ is source (see .gitignore).
+const included = ['/games/hometowns-view/src/core/'];
 const excluded = ['core', 'core.[0-9]*', '.env', '.env.*', 'keys.json', 'node_modules', '.svelte-kit', '/build', '.git', '/data', '.pi', '/sessions'];
 async function copySource(from, to, removeMissing = false) {
   await mkdir(to, { recursive: true });
-  await command('rsync', ['-a', '--safe-links', ...(removeMissing ? ['--delete'] : []), ...excluded.map((p) => `--exclude=${p}`), `${from}/`, `${to}/`]);
+  await command('rsync', ['-a', '--safe-links', ...(removeMissing ? ['--delete'] : []), ...included.map((p) => `--include=${p}`), ...excluded.map((p) => `--exclude=${p}`), `${from}/`, `${to}/`]);
   // Authored prompts, skills and voice material are source. Other data is runtime and stays out.
   for (const folder of ['prompts', 'skills', 'voice']) {
     if (await stat(join(from, 'data', folder)).catch(() => null)) {

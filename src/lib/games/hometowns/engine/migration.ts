@@ -107,9 +107,10 @@ export function stepMigration(t: TownState, m: MonthContext): void {
   const vOut = mp.outsideGain * (m.world.G - 1);
 
   // The town's own bonuses as a place to live.
+  const ownFlows = snap.flows[own];
   const freshOwn = t.grace !== null && m.dayIndex < t.grace ? mp.freshTown : 0;
   const gemOwn = gem(N, actual[BUZZ], snap.medianPop, m);
-  const uniOwn = hasBuilding(t, 'university') || (snap.flows[own]?.sharedUniversity ?? 0) > 0;
+  const uniOwn = hasBuilding(t, 'university') || (ownFlows?.sharedUniversity ?? 0) > 0;
 
   // Linked player towns a mover may choose. Nothing leaves for players during
   // a holiday, the Fresh Town grace or the fortnight (§8.4 freeze, A23), and
@@ -208,7 +209,10 @@ export function stepMigration(t: TownState, m: MonthContext): void {
     const very = t.happy[k] > mp.veryHappy[0] ? mp.veryHappy[2] : 0;
     const base = w[W_INERTIA] + gemOwn + freshOwn + very;
     const options = dests.filter((d) => hosts(k, d.row.tier >= 3));
-    const vDest = options.map((d) => sumTerms(utilityTerms(k, d.row.perceived, d.row.needs[k] ?? 1, d.row.homesTax[0] ?? 0, m)) + d.bonus);
+    // A20/§8.6: yesterday's adverts aimed at this cohort here add their bonus to each advertiser.
+    const adBonus = ownFlows?.advert?.[k] ?? 0;
+    const adBy = ownFlows?.advertBy?.[k] ?? 0;
+    const vDest = options.map((d) => sumTerms(utilityTerms(k, d.row.perceived, d.row.needs[k] ?? 1, d.row.homesTax[0] ?? 0, m)) + d.bonus + ((adBy >> d.j) & 1 ? adBonus : 0));
     for (const g of groups[k]) {
       if (g.movers <= 0) continue;
       const stay = hosts(k, uniOwn) ? uOwn + base + g.stay : -Infinity;
