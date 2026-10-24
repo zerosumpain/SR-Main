@@ -99,25 +99,36 @@ WebKit-equals-Node hash is checked; its frame times are reported, not judged
 The page is served from the VPS at
 `/projects/hometowns/<ENGINE_HASH>/mobile.html`, one folder per engine hash,
 and the wire's `client.page` names the hash the server runs. So the page for a
-hash must be live **before** the engine change that names it merges. The order,
-for the first release and for every later engine change:
+hash must be live **before** the engine change that names it merges. The order
+(spec §13.4; never `gh pr merge --auto`, and a merge to master deploys):
 
+0. **SR-Main framework PR (WP0)**, first release only. Merge it, then confirm
+   the live sha with `npm run deploy:status`.
 1. **Page PR**, first release only: `hometowns` in `STATIC_PROJECT_KEYS`
    (`src/lib/projects/visibility.ts`, a protected path, merged by hand). It
    makes the page public by default and gives it the first-party bundle CSP;
    the sandboxed CSP stops the forecast's module worker. It has no /projects
    card. Confirm the live sha with `npm run deploy:status` after the merge.
 2. **`scripts/hometowns/deploy-page.sh`** from a clean checkout of the game
-   branch, `--dry-run` first. It refuses an uncommitted or stale engine, builds,
+   branch, `--dry-run` first. It refuses an uncommitted or stale engine (and any
+   gitignored file in the page or engine tree, such as a `.env.local`), builds
+   (a real publish always builds; `--no-build` and `--dist` are dry-run only),
    proves the folder name, `engine-hash.generated.ts`, the page's
    `<meta name="hometowns-engine-hash">` and the bundled engine agree, then
    copies the folder to the VPS **additively** (no `--delete`; a hash already
    on disk must be byte-identical, so a rerun is a no-op and a different build
    under the same hash is refused). It ends by fetching the live URL: 200,
-   `text/html`, no `sandbox` in the CSP, the right marker.
+   `text/html`, no `sandbox` in the CSP, the right marker, and every other file
+   in the build served byte-identical (scripts as JavaScript). Exit 4 means the
+   upload happened but the site does not serve it yet; rerun once it does.
 3. **Game PR**: `node scripts/hometowns/check-client-live.mjs` must pass (the
    `Page is live` job in the `Hometowns page` workflow runs it) before the
-   merge. Rerun that job after step 2.
+   merge. Rerun that job after step 2. It is not a required check, so the
+   person merging must read it.
+4. **SR-AppleApp PR**, after the game PR's merged sha is live. Merging uploads
+   to TestFlight; John tests before anyone else gets the build.
+
+Every later engine change repeats steps 2 and 3.
 
 **Old versions stay on disk.** Nothing deletes a hash folder: a phone that is
 still open on an old revision keeps working, and reloads (at most once a
