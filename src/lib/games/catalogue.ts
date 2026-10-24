@@ -158,6 +158,7 @@ export interface GameRules {
   durable?: {
     schema: number;
     revive?(state: Record<string, unknown>, fromSchema: number): RoomBase | null;
+    reviveAll?: boolean;
     /**
      * Erasing an account (`$lib/people/erase`) deletes every room the person
      * sits in — the right answer for a game that lasts an evening. A game

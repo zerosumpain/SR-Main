@@ -255,7 +255,7 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
     // under way, `joinRunning`) only from a parent: the host role can have
     // passed to a child since the room was made. The lobby is as before.
     const stage = roomStage(id);
-    if (stage && stage.phase !== 'lobby' && PARENT_HOSTED.has(stage.game)) await assertParent(caller);
+    if (stage && stage.phase !== 'lobby' && PARENT_HOSTED.has(stage.game)) await assertParent(caller, stage.game);
     // Resolved against the same roster a new game's invites are, so nobody
     // without games access — or without anywhere to open it — can be named.
     const ids = stringIds(body.invite);
