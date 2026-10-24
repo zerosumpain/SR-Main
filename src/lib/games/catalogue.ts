@@ -143,7 +143,45 @@ export interface GameRules {
    * room MUST be JSON-safe: plain objects, arrays, strings, finite numbers,
    * booleans, null — no Map, Set, Date, functions or class instances.
    */
-  durable?: { schema: number; revive?(state: Record<string, unknown>, fromSchema: number): RoomBase | null };
+  durable?: {
+    schema: number;
+    revive?(state: Record<string, unknown>, fromSchema: number): RoomBase | null;
+    /**
+     * Erasing an account (`$lib/people/erase`) deletes every room the person
+     * sits in — the right answer for a game that lasts an evening. A game
+     * that lasts months and seats a whole family (a Hometowns county) defines
+     * this instead: take `playerId`'s seat out of `room` (remove it, or keep
+     * an anonymous placeholder the game can still play around) and return
+     * the room, which is kept for everyone else. After it, the id must appear
+     * nowhere in the room, and the person's name and anything they wrote must
+     * be gone. If they were hosting, the host passes to another person in
+     * the room who is playing — for a parent-hosted game, one of the parents
+     * the game noted (`noteParent`), or null when there is none. A placeholder
+     * kept in their seat never has a player id ('p_…'). The registry checks
+     * the id, the name as a whole value, that a real person is left and that
+     * a new host is playing, and deletes the room after all if any fails.
+     * Null, or a throw: delete the room as before. Pure; `now` is the
+     * erasure's instant.
+     */
+    erasePlayer?(room: RoomBase, playerId: string, now: number): RoomBase | null;
+  };
+  /**
+   * Somebody may be invited into a room that has already started (a county
+   * a late joiner moves into), not only while it is a lobby. Absent: the
+   * host's invite is refused once the game is under way, as for every game
+   * before this. The invitee answers with the usual `join`, which is the
+   * game's own and decides what a late join means.
+   */
+  joinRunning?: boolean;
+  /**
+   * A `joinRunning` game's seating for a late invite: put `player` in the
+   * running room as an invitee (a new row with status 'invited', or their
+   * old row marked 'invited' again if they declined or left before), or
+   * throw a GameError saying why there is no place (the county is full).
+   * Absent: the lobby's rule (`player(id, name, 'invited')`, or the old row
+   * re-marked). Never called for a lobby.
+   */
+  seat?(room: RoomBase, player: { id: string; name: string }, now: number): void;
   /** The paces a host may pick; absent = ['live']. */
   paces?: readonly Pace[];
   /**
