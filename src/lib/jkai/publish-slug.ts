@@ -7,6 +7,8 @@
  * tool registry or the sandbox.
  */
 
+import { isStaticProjectKey } from '$lib/projects/visibility';
+
 /** Slug form of a title: lowercase, dash-separated, trimmed, 60 chars. */
 export function slugifyTitle(text: string): string {
   return text
@@ -37,10 +39,21 @@ export function resolvePublishSlug(
         error: `slug "${requested}" has no usable characters (a-z, 0-9 and dashes only)`,
       };
     }
+    if (isStaticProjectKey(clean)) {
+      return {
+        ok: false,
+        error: `slug "${clean}" belongs to a hand-deployed page (STATIC_PROJECT_KEYS); a build cannot publish over it`,
+      };
+    }
     return { ok: true, slug: clean };
   }
-  const derived = build.title
-    ? slugifyTitle(build.title)
-    : slugifyTitle((build.prompt ?? '').slice(0, 60));
-  return { ok: true, slug: derived || build.id.slice(0, 8) };
+  const derived =
+    (build.title ? slugifyTitle(build.title) : slugifyTitle((build.prompt ?? '').slice(0, 60))) ||
+    build.id.slice(0, 8);
+  // A static key's folder is hand-deployed (Hometowns keeps one folder per
+  // engine hash there), and publishBuild empties the destination and rsyncs
+  // it with --delete. A build titled "Hometowns" must land beside it instead,
+  // suffixed the same way the publish route suffixes a derived collision.
+  if (isStaticProjectKey(derived)) return { ok: true, slug: `${derived}-${build.id.slice(0, 6)}` };
+  return { ok: true, slug: derived };
 }
