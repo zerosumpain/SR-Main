@@ -30,6 +30,7 @@ export const GENERATED_PAGE = 'src/lib/games/hometowns/page-hash.generated.ts';
 
 /**
  * What `vite build` reads besides the engine (which ENGINE_HASH covers): the
+ * engine folders ENGINE_HASH skips but the page bundles (below), the
  * page's sources and HTML, its build config, the lockfile that pins its
  * node_modules and a public/ folder if one is ever added. vite.config.ts fixes
  * the TypeScript transform's options itself (esbuild.tsconfigRaw), so no
@@ -40,6 +41,13 @@ export const GENERATED_PAGE = 'src/lib/games/hometowns/page-hash.generated.ts';
  */
 const PAGE_FILES = [`${VIEW}/index.html`, `${VIEW}/package.json`, `${VIEW}/package-lock.json`, `${VIEW}/tsconfig.json`, `${VIEW}/vite.config.ts`];
 const PAGE_DIRS = [`${VIEW}/src`, `${VIEW}/public`];
+/**
+ * Engine folders ENGINE_HASH leaves out (engine-hash.mjs NOT_ENGINE) that the
+ * page still bundles: the harness's `bot=1` plays the Lab's Balanced bot from
+ * engine/bots. A bot change is not a simulation change, but it is a page
+ * change, so it must give a new folder. Their tests are not build input.
+ */
+const ENGINE_PAGE_DIRS = ['src/lib/games/hometowns/engine/bots'];
 
 /** The page's build inputs, repository-relative and sorted (dot-files and dot-folders skipped). */
 export function pageFiles(root = REPO) {
@@ -53,6 +61,9 @@ export function pageFiles(root = REPO) {
     }
   };
   for (const d of PAGE_DIRS) if (existsSync(join(root, d))) walk(join(root, d));
+  const before = out.length;
+  for (const d of ENGINE_PAGE_DIRS) if (existsSync(join(root, d))) walk(join(root, d));
+  out.splice(before, out.length - before, ...out.slice(before).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts')));
   return [...new Set(out)].sort();
 }
 

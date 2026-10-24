@@ -105,7 +105,8 @@ Two hashes. `ENGINE_HASH` (`src/lib/games/hometowns/engine/engine-hash.generated
 is the simulation: the page's canary and predictor compare it with the wire's
 `client.engineHash`. `PAGE_HASH` (`src/lib/games/hometowns/page-hash.generated.ts`,
 written by `scripts/hometowns/page-hash.mjs`) is an FNV-1a 64 over `ENGINE_HASH`
-and every file this build reads besides the engine: `src/`, `index.html`,
+and every file this build reads besides the engine: the Lab's bots
+(`engine/bots`, which `ENGINE_HASH` leaves out but the harness bundles), `src/`, `index.html`,
 `vite.config.ts`, `tsconfig.json`, `package.json`, `package-lock.json` and a
 `public/` folder if one is added. It changes with every engine change and
 also with a page-only one. `vite.config.ts` fixes the TypeScript options the

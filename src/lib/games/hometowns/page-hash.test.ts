@@ -2,7 +2,7 @@
 // build input. It must be current, and the wire must name its folder.
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { computePageHash } from '../../../../scripts/hometowns/page-hash.mjs';
+import { computePageHash, pageFiles } from '../../../../scripts/hometowns/page-hash.mjs';
 import { ENGINE_HASH } from './engine/index';
 import { PAGE_HASH } from './page-hash.generated';
 import { createRoom } from './hometowns';
@@ -11,6 +11,13 @@ import { PAGE_PATH, toWire } from './wire';
 describe('PAGE_HASH', () => {
   it('is current (rerun node scripts/hometowns/page-hash.mjs after any engine or page change)', () => {
     expect(PAGE_HASH).toBe(computePageHash());
+  });
+
+  it('covers the Lab bots the harness bundles, which ENGINE_HASH leaves out (a bot change is a page change)', () => {
+    const files = pageFiles();
+    expect(files).toContain('src/lib/games/hometowns/engine/bots/index.ts');
+    expect(files).toContain('src/lib/games/hometowns/engine/bots/mayors.ts');
+    expect(files.some((f) => f.endsWith('.test.ts'))).toBe(false);
   });
 
   it('names a page folder of its own: never the engine hash, so a page-only change cannot collide', () => {
