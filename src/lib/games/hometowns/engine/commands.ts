@@ -18,6 +18,8 @@ import { applyBudget, applyBuild, applyUndo, type OpsEnv } from './ops';
 import { bondMove, loanMove } from './finance';
 import { ordersMove } from './orders';
 import { policyMove } from './policies';
+import { attendMove, contractMove, linkMove, pactMove, shareMove } from './offers';
+import { advertMove, aidMove, bidMove, giftMove, holidayMove, prankMove, prankReplyMove, stampMove, voteMove } from './social';
 import { paramsFor } from './params';
 import {
   EngineError,
@@ -48,22 +50,22 @@ export const HANDLERS: Partial<Record<MoveType, MoveHandler>> = {
   orders: ordersMove, // WP2d orders.ts
   loan: loanMove, // WP2d finance.ts
   bond: bondMove, // WP2d finance.ts
-  deal: notYet, // WP3
-  link: notYet, // WP3 region.ts
-  contract: notYet, // WP3
-  share: notYet, // WP3
-  pact: notYet, // WP3
-  pledge: notYet, // WP3 greatworks.ts
-  vote: notYet, // WP3 council.ts
-  bid: notYet, // WP3
-  advert: notYet, // WP3
-  gift: notYet, // WP3
-  aid: notYet, // WP3
-  prank: notYet, // WP3
-  prankReply: notYet, // WP3
-  stamp: notYet, // WP3
-  attend: notYet, // WP3
-  holiday: notYet, // WP3
+  deal: notYet, // deal buildings (§6.6): not WP3's county layer
+  link: linkMove, // WP3 offers.ts
+  contract: contractMove, // WP3 offers.ts
+  share: (c, i, cmd) => shareMove(c, i, cmd), // WP3 offers.ts
+  pact: (c, i, cmd) => pactMove(c, i, cmd), // WP3 offers.ts
+  pledge: notYet, // M3 greatworks.ts (Great Works)
+  vote: (c, i, cmd) => voteMove(c, i, cmd), // WP3 social.ts (council.ts closes it)
+  bid: (c, i, cmd) => bidMove(c, i, cmd), // WP3 social.ts
+  advert: (c, i, cmd) => advertMove(c, i, cmd), // WP3 social.ts
+  gift: (c, i, cmd) => giftMove(c, i, cmd), // WP3 social.ts
+  aid: (c, i, cmd) => aidMove(c, i, cmd), // WP3 social.ts
+  prank: (c, i, cmd, _a, now) => prankMove(c, i, cmd, now), // WP3 social.ts
+  prankReply: (c, i, cmd) => prankReplyMove(c, i, cmd), // WP3 social.ts
+  stamp: (c, i, cmd) => stampMove(c, i, cmd), // WP3 social.ts
+  attend: (c, i, cmd) => attendMove(c, i, cmd), // WP3 offers.ts
+  holiday: (c, i, cmd, _a, now) => holidayMove(c, i, cmd, now), // WP3 social.ts
   settings: notYet, // WP4 (adapter-level permissions) / WP3
 };
 
@@ -73,6 +75,9 @@ export function moveId(cmd: Command): string {
   const id = (cmd as { moveId?: unknown }).moveId;
   return typeof id === 'string' ? id : '';
 }
+
+/** A move's client id: up to 64 letters, digits and `_ . : -` (a UUID, or a bot's "seat:time:n:tag"). */
+const MOVE_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
 
 function record(c: CountyState, r: CommandRecord): void {
   c.log.push(r);
@@ -98,6 +103,9 @@ export function applyCommand(c: CountyState, who: SeatId | Actor, cmd: Command, 
 
   // A28: a repeated id returns the earlier result.
   const id = moveId(cmd);
+  // A client id is an id, never a message: it is kept in the county's log, so
+  // anything typed into it would be stored text (§9.10: no free text).
+  if (cmd.type !== 'build' && id && !MOVE_ID.test(id)) throw new EngineError(400, 'That move’s id is not one this game can use.');
   if (id) {
     for (let i = c.log.length - 1; i >= 0; i--) {
       const r = c.log[i];

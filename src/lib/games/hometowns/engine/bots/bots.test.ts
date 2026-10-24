@@ -196,8 +196,8 @@ describe('the bot mayors', () => {
       if (bots[i] === 'kid') expect(cmds.filter((x) => x.type !== 'undo').length).toBeLessThanOrEqual(3);
       const r = apply(c, `s${i}`, cmds, now + i * 100_000);
       expect(r.errors, bots[i]).toEqual([]);
-      // Until WP3 lands, the county moves a bot tries are refused politely, never accepted.
-      for (const x of r.refused.filter((y) => y.startsWith('link') || y.startsWith('advert'))) expect(x).toMatch(/isn.t ready yet/);
+      // WP3 has landed: the county moves a bot tries are accepted, or refused with a reason (never "not ready").
+      for (const x of r.refused.filter((y) => y.startsWith('link') || y.startsWith('advert'))) expect(x).not.toMatch(/isn.t ready yet/);
     }
   });
 
