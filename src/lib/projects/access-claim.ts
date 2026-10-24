@@ -16,7 +16,8 @@
 // The gateway also says who is asking (24 Oct 2026): a visitor id, network,
 // browser and whether the request opened a page, all reduced to hashes and
 // labels before they reach here ($lib/projects/share-visitor). Only a share is
-// counted; the owner and a public project's readers never are.
+// counted; the owner (viewing as someone or not) and a public project's readers
+// never are.
 
 import { isOwnerEmail } from '$lib/server/access';
 import { db } from '$lib/db';
@@ -73,12 +74,13 @@ function cookieValue(header: string, name: string): string {
  * previewing a private project; a live share link (`?t=` first, then the
  * project cookie, never falling back from a bad URL token); otherwise none.
  * `email` is the EFFECTIVE person — the view-as target while view-as holds, so
- * the owner viewing as a member sees what that member sees.
+ * the owner viewing as a member sees what that member sees. `count` false (the
+ * owner behind view-as) answers the same and counts no use or visitor.
  */
 export async function projectAccessFor(
   key: string,
   email: string | null,
-  share: { fromUrl: string | null; cookie: string; visit?: ShareVisit | null },
+  share: { fromUrl: string | null; cookie: string; visit?: ShareVisit | null; count?: boolean },
 ): Promise<ProjectClaim> {
   const [vis] = await db
     .select({ projectKey: projectVisibility.projectKey, isPublic: projectVisibility.isPublic })
@@ -88,7 +90,7 @@ export async function projectAccessFor(
   if (isProjectPublic(map, key)) return { key, access: 'public' };
   if (email && isOwnerEmail(email)) return { key, access: 'owner' };
   const token = share.fromUrl || cookieValue(share.cookie, shareCookieName(key));
-  const live = token && token.length <= 512 ? await validateProjectShare(key, token, share.visit ?? null) : null;
+  const live = token && token.length <= 512 ? await validateProjectShare(key, token, share.visit ?? null, share.count !== false) : null;
   if (live) return live.passwordHash ? { key, access: 'share', pass: live.passwordHash } : { key, access: 'share' };
   return { key, access: 'none' };
 }

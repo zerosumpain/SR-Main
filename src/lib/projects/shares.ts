@@ -40,12 +40,14 @@ let visitWarnedAt = 0;
  * link's password verifier (null when it asks for none), or null for no live
  * link. On success, bumps lastUsedAt/useCount and records the visitor
  * (`visit`, from the gateway's session call) fire-and-forget so a slow write
- * can't stall the page.
+ * can't stall the page. `count` false checks the link and counts nothing: the
+ * owner viewing as someone who holds it is still the owner.
  */
 export async function validateProjectShare(
   key: string,
   rawToken: string,
   visit: ShareVisit | null = null,
+  count = true,
 ): Promise<LiveShare | null> {
   if (!rawToken || rawToken.length < 20) return null;
   const hash = hashShareToken(rawToken);
@@ -62,6 +64,7 @@ export async function validateProjectShare(
   if (!row) return null;
   if (row.revokedAt) return null;
   if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
+  if (!count) return { passwordHash: row.passwordHash ?? null };
   // Async last-used bump (do not await — keep the request hot path fast).
   // useCount counts page opens: a gateway that says which requests open a page
   // is counted on those alone; an older one, and Main's own pages, on every

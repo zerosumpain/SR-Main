@@ -36,6 +36,10 @@ const UA = {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/601.2.4 (KHTML, like Gecko) Version/9.0.1 Safari/601.2.4 facebookexternalhit/1.1 Facebot Twitterbot/1.0',
   slack: 'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)',
   curl: 'curl/8.5.0',
+  cubot:
+    'Mozilla/5.0 (Linux; Android 10; CUBOT X30) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36',
+  ahrefs: 'Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)',
+  petal: 'Mozilla/5.0 (compatible; PetalBot; +https://webmaster.petalsearch.com/site/petalbot)',
 };
 
 describe('agent labels', () => {
@@ -48,6 +52,8 @@ describe('agent labels', () => {
     expect(agentLabel(UA.safariMac)).toBe('Safari · macOS');
     expect(agentLabel(UA.chromeAndroid)).toBe('Chrome · Android');
     expect(agentLabel(UA.samsung)).toBe('Samsung Internet · Android');
+    // A handset named …BOT is a person on Chrome, not a bot.
+    expect(agentLabel(UA.cubot)).toBe('Chrome · Android');
   });
 
   it('calls a link previewer a preview and other automation a bot, so the counts can leave them out', () => {
@@ -55,6 +61,8 @@ describe('agent labels', () => {
     expect(agentLabel(UA.imessage)).toBe('Preview · iMessage or Facebook');
     expect(agentLabel(UA.slack)).toBe('Preview · Slack');
     expect(agentLabel(UA.curl)).toBe('Bot');
+    expect(agentLabel(UA.ahrefs)).toBe('Bot');
+    expect(agentLabel(UA.petal)).toBe('Bot');
     expect(isAutomated('Preview · WhatsApp')).toBe(true);
     expect(isAutomated('Bot')).toBe(true);
     expect(isAutomated('Chrome · Windows')).toBe(false);
@@ -184,7 +192,7 @@ describe('visitor stats', () => {
       { rows: 3, opens: 6, browsers: 2, networks: 2, countries: ['IE', 'GB'] },
       [row({ browser: 2, network: 2, country: 'IE' }), row({}), row({ browser: null, network: null, agent: 'Preview · WhatsApp' })],
     );
-    expect(s).toMatchObject({ opens: 6, browsers: 2, networks: 2, countries: ['GB', 'IE'], likelyForwarded: false, hidden: 0 });
+    expect(s).toMatchObject({ opens: 9, browsers: 2, networks: 2, countries: ['GB', 'IE'], likelyForwarded: false, hidden: 0 });
     expect(s.visitors.map((v) => [v.browser, v.network])).toEqual([
       [2, 'B'],
       [1, 'A'],
@@ -213,5 +221,15 @@ describe('visitor stats', () => {
       hidden: 0,
     });
     expect(visitStats(7, { rows: 60, opens: 80, browsers: 60, networks: 4, countries: [] }, [row({})]).hidden).toBe(59);
+  });
+
+  it('keeps the link\'s own count as the headline once visitors are recorded', () => {
+    const totals = (rows: number, opens: number) => ({ rows, opens, browsers: opens ? 1 : 0, networks: 0, countries: [] });
+    // Opened 37 times before visitors were recorded, once since: still 37, not 1.
+    expect(visitStats(37, totals(1, 1), []).opens).toBe(37);
+    // Only a previewer has fetched it: the use count, not 0.
+    expect(visitStats(1, totals(1, 0), []).opens).toBe(1);
+    // The people's own count, should the use count ever lag it.
+    expect(visitStats(2, totals(2, 5), []).opens).toBe(5);
   });
 });

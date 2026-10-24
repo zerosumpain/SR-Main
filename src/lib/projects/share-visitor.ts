@@ -100,7 +100,10 @@ const PREVIEWERS: [RegExp, string][] = [
   [/bingbot|BingPreview/i, 'Bing'],
   [/Applebot/i, 'Apple'],
 ];
-const AUTOMATION = /bot\b|bot\/|crawl|spider|slurp|preview|headless|curl\/|wget\/|python-|httpx|aiohttp|go-http-client|okhttp|node-fetch|undici|axios|java\/|libwww|scrapy/i;
+const AUTOMATION = /bot\/|crawl|spider|slurp|preview|headless|curl\/|wget\/|python-|httpx|aiohttp|go-http-client|okhttp|node-fetch|undici|axios|java\/|libwww|scrapy/i;
+// A bare "…bot" names a bot only when no browser is named: handsets are called
+// things like CUBOT X30, and their Chrome is a person.
+const LOOSE_BOT = /bot\b/i;
 
 /** The label prefix for a link previewer, and the label for any other automation. */
 export const PREVIEW_LABEL = 'Preview';
@@ -143,6 +146,7 @@ export function agentLabel(raw: string | null | undefined): string | null {
   for (const [pattern, name] of PREVIEWERS) if (pattern.test(ua)) return `${PREVIEW_LABEL} · ${name}`;
   if (AUTOMATION.test(ua)) return BOT_LABEL;
   const browser = browserOf(ua);
+  if (!browser && LOOSE_BOT.test(ua)) return BOT_LABEL;
   const system = systemOf(ua);
   if (browser && system) return `${browser} · ${system}`;
   if (browser) return browser;
@@ -179,7 +183,11 @@ export function readShareVisit(headers: Headers, secret: string): ShareVisit {
 
 /** A link's visitor numbers, as the Share panel shows them. Never a hash. */
 export interface ShareVisitStats {
-  /** Page opens by people (previewers and bots left out); the link's own count before any visitor was recorded. */
+  /**
+   * The link's opens: its use count, which goes back before visitors were
+   * recorded and past the row cap, or the people's own opens if ever higher.
+   * Previewers count here, as they always have; the browsers and networks leave them out.
+   */
   opens: number;
   browsers: number;
   networks: number;
@@ -234,13 +242,15 @@ export interface VisitorRow {
 }
 
 /**
- * The Share panel's numbers for one link. A link no visitor was ever recorded
- * for (opened before this, or through Main's own pages) shows its use count.
+ * The Share panel's numbers for one link. The headline count never moves to the
+ * visitor rows: a link opened 37 times before this would read "opened 1×" the
+ * first time someone was recorded, and a link only a previewer has fetched
+ * "opened 0×" beside a last-used date.
  */
 export function visitStats(useCount: number, totals: VisitTotals | undefined, rows: VisitorRow[]): ShareVisitStats {
   const t = totals ?? { rows: 0, opens: 0, browsers: 0, networks: 0, countries: [] };
   return {
-    opens: t.rows > 0 ? t.opens : useCount,
+    opens: Math.max(useCount, t.opens),
     browsers: t.browsers,
     networks: t.networks,
     countries: [...t.countries].sort(),

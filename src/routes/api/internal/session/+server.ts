@@ -33,10 +33,12 @@ export const POST: RequestHandler = async ({ request }) => {
   const projectKey = projectKeyForAudience(audience as string);
   if (projectKey) {
     const fromUrl = request.headers.get('x-sr-session-share');
-    // Who is asking, hashed and labelled here; counted only if it is a share.
+    // Who is asking, hashed and labelled here; counted only if it is a share,
+    // and never when it is the owner, whoever they are viewing as.
     const visit = readShareVisit(request.headers, env.AUTH_SECRET);
+    const count = !(email && isOwnerEmail(email));
     try {
-      claims.project = await projectAccessFor(projectKey, effective, { fromUrl: fromUrl && fromUrl.length <= 512 ? fromUrl : null, cookie, visit });
+      claims.project = await projectAccessFor(projectKey, effective, { fromUrl: fromUrl && fromUrl.length <= 512 ? fromUrl : null, cookie, visit, count });
     } catch (err) {
       // Not "none": a database outage must not read as "this project is private".
       console.warn(`[session] project access for ${projectKey} failed: ${(err as Error).message}`);

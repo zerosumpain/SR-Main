@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   sharePass: null as string | null,
   shareCalls: [] as [string, string][],
   shareVisits: [] as unknown[],
+  shareCounted: [] as boolean[],
 }));
 
 vi.mock('$lib/db', () => {
@@ -71,9 +72,10 @@ vi.mock('$lib/server/view-as', () => ({
 }));
 vi.mock('$lib/projects/shares', () => ({
   shareCookieName: (key: string) => `psh_${key}`,
-  validateProjectShare: async (key: string, token: string, visit: unknown) => {
+  validateProjectShare: async (key: string, token: string, visit: unknown, count = true) => {
     state.shareCalls.push([key, token]);
     state.shareVisits.push(visit);
+    state.shareCounted.push(count);
     return state.shareValid ? { passwordHash: state.sharePass } : null;
   },
 }));
@@ -109,6 +111,7 @@ beforeEach(() => {
   state.sharePass = null;
   state.shareCalls.length = 0;
   state.shareVisits.length = 0;
+  state.shareCounted.length = 0;
 });
 
 describe('session authority claims', () => {
@@ -299,6 +302,27 @@ describe('session authority claims', () => {
     state.queue.push([]);
     await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' });
     expect(state.shareVisits[1]).toEqual({ open: null, visitorHash: null, networkHash: '', agent: null, country: null });
+    expect(state.shareCounted).toEqual([true, true]);
+  });
+
+  it('the owner viewing as a member who holds a share link is answered as that member, and not counted', async () => {
+    state.email = 'owner@x.test';
+    state.shareValid = true;
+    state.queue.push([]);
+    const body = await (await call('sr-spine', 'n'.repeat(40), {
+      cookie: 'sr_view_as=signed-for-ada; psh_spine=sp-token',
+      'x-sr-session-visitor': 'AbCdEfGhIjKlMnOpQrStUv',
+      'x-sr-session-visit': '1',
+    })).json();
+    expect(body.viewingAs).toBe('ada@x.test');
+    expect(body.claims.project.access).toBe('share');
+    expect(state.shareCounted).toEqual([false]);
+
+    // Ada herself, with the same link, is.
+    state.email = 'ada@x.test';
+    state.queue.push([]);
+    await call('sr-spine', 'n'.repeat(40), { cookie: 'psh_spine=sp-token', 'x-sr-session-visit': '1' });
+    expect(state.shareCounted).toEqual([false, true]);
   });
 
   it('only ever answers for the audience\'s own project, and an outage is a 503', async () => {

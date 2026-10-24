@@ -26,8 +26,9 @@
   let freshHasPassword = $state(false);
   const pwLen = $derived(password.trim().length);
   const pwOk = $derived(!askPassword || (pwLen >= 4 && pwLen <= 128));
-  // Say the length rule only once something has been typed that breaks it.
-  const pwHint = $derived(askPassword && pwLen > 0 && !pwOk);
+  // Say the length rule only once something has been typed that breaks it
+  // (spaces too: they are trimmed away, so they alone are too short).
+  const pwHint = $derived(askPassword && password.length > 0 && !pwOk);
   let copied = $state(false);
   let err = $state<string | null>(null);
 
@@ -142,7 +143,7 @@
     s.revokedAt ? 'revoked' : s.expiresAt && new Date(s.expiresAt).getTime() <= Date.now() ? 'expired' : 'active';
   const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
   const day = (d: string | Date) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  /** "opened 4× (last 24 Oct 2026) · 2 browsers · 1 network", the people counts once someone was counted. */
+  /** "opened 4× (last 24 Oct 2026) · 2 browsers · 1 network": the link's own count, then the people once someone was counted. */
   const usage = (s: SharedLink) =>
     `opened ${s.opens}×` +
     (s.lastUsedAt ? ` (last ${fmt(s.lastUsedAt)})` : '') +
@@ -202,13 +203,20 @@
                 required
                 minlength="4"
                 maxlength="128"
+                aria-invalid={pwHint}
+                aria-describedby={pwHint ? 'sh-pw-hint' : undefined}
                 bind:value={password}
               />
-              <button class="sh-show" type="button" onclick={() => (showPassword = !showPassword)}>
+              <button
+                class="sh-show"
+                type="button"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onclick={() => (showPassword = !showPassword)}
+              >
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
-            {#if pwHint}<span class="sh-once">4–128 characters.</span>{/if}
+            {#if pwHint}<span class="sh-once" id="sh-pw-hint">4–128 characters.</span>{/if}
           {/if}
         </div>
       {/if}
@@ -251,8 +259,8 @@
             </div>
             {#if s.visitors.length > 0}
               <details class="sh-vis">
-                <summary>visitors</summary>
-                <p class="sh-vis-note">An estimate: one person on two devices or browsers counts twice. Link previews are listed but not counted.</p>
+                <summary aria-label="{plural(s.visitors.length + s.hidden, 'visitor')} to {s.label || 'Untitled link'}">{plural(s.visitors.length + s.hidden, 'visitor')}</summary>
+                <p class="sh-vis-note">An estimate: one person on two devices or browsers counts twice. Link previews are listed but not counted{s.hasPassword ? '; the password page counts as an open too' : ''}.</p>
                 <ul>
                   {#each s.visitors as v, i (i)}
                     <li class:sh-vis-auto={v.browser === null}>{visitorLine(v)}</li>

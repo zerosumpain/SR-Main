@@ -121,6 +121,14 @@ describe('share link rows', () => {
     ]);
   });
 
+  it('a live link checked for the owner behind view-as counts nothing and records no one', async () => {
+    state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: null }]);
+    const visit = { open: true, visitorHash: 'h'.repeat(32), networkHash: '', agent: null, country: null };
+    expect(await validateProjectShare('spine', 't'.repeat(43), visit, false)).toEqual({ passwordHash: null });
+    expect(state.sets).toHaveLength(0);
+    expect(state.recorded).toHaveLength(0);
+  });
+
   it('a dead link counts nothing and records no one', async () => {
     state.queue.push([{ id: 's1', expiresAt: new Date(Date.now() - 1000), revokedAt: null, passwordHash: null }]);
     const visit = { open: true, visitorHash: 'h'.repeat(32), networkHash: '', agent: null, country: null };

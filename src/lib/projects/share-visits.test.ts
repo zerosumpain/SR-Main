@@ -111,14 +111,14 @@ describe('reading the stats', () => {
       { id: 's3', useCount: 5 },
     ]);
     expect(state.executed).toHaveLength(2);
-    expect(stats.get('s1')).toMatchObject({ opens: 9, browsers: 3, networks: 2, countries: ['GB', 'IE'], likelyForwarded: true, hidden: 2 });
+    expect(stats.get('s1')).toMatchObject({ opens: 40, browsers: 3, networks: 2, countries: ['GB', 'IE'], likelyForwarded: true, hidden: 2 });
     expect(stats.get('s1')!.visitors.map((v) => [v.browser, v.network, v.agent])).toEqual([
       [3, 'B', 'Safari · iPhone'],
       [1, 'A', 'Chrome · Windows'],
     ]);
     expect(stats.get('s1')!.visitors[0].firstSeen).toBeInstanceOf(Date);
-    // Only a previewer came: no one opened it, and its count says so.
-    expect(stats.get('s2')).toMatchObject({ opens: 0, browsers: 0, likelyForwarded: false });
+    // Only a previewer came: no browser, and the link's own count stands.
+    expect(stats.get('s2')).toMatchObject({ opens: 3, browsers: 0, likelyForwarded: false });
     // Nothing recorded yet: the link's own count.
     expect(stats.get('s3')).toMatchObject({ opens: 5, browsers: 0, visitors: [] });
     expect(JSON.stringify([...stats.values()])).not.toMatch(/hash|[0-9a-f]{16}/);

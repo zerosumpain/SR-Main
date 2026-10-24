@@ -66,8 +66,9 @@ describe('share visitor rows', () => {
     await recordShareVisit(id, visit('cc', '', { agent: 'Firefox · macOS', country: null }));
     const other = await link('c');
 
+    // A use count of 0, so the headline is the people's own opens, the preview left out.
     const stats = await shareVisitStats(KEY, [
-      { id, useCount: 99 },
+      { id, useCount: 0 },
       { id: other, useCount: 4 },
     ]);
     const s = stats.get(id)!;
