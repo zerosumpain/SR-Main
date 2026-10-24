@@ -25,6 +25,8 @@
   let freshHasPassword = $state(false);
   const pwLen = $derived(password.trim().length);
   const pwOk = $derived(!askPassword || (pwLen >= 4 && pwLen <= 128));
+  // Say the length rule only once something has been typed that breaks it.
+  const pwHint = $derived(askPassword && pwLen > 0 && !pwOk);
   let copied = $state(false);
   let err = $state<string | null>(null);
 
@@ -72,6 +74,8 @@
         freshUrl = shareUrl(data.token);
         freshHasPassword = withPassword;
         label = '';
+        // The next link starts as this one did: no password unless asked for.
+        askPassword = false;
         password = '';
         showPassword = false;
         void copy(freshUrl);
@@ -182,11 +186,11 @@
                 maxlength="128"
                 bind:value={password}
               />
-              <button class="sh-show" type="button" onclick={() => (showPassword = !showPassword)} aria-pressed={showPassword}>
+              <button class="sh-show" type="button" onclick={() => (showPassword = !showPassword)}>
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
-            {#if !pwOk}<span class="sh-once">4–128 characters.</span>{/if}
+            {#if pwHint}<span class="sh-once">4–128 characters.</span>{/if}
           {/if}
         </div>
       {/if}
