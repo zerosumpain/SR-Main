@@ -64,15 +64,13 @@ void [stubTaxReceipts, stubFinance, stubHappiness, stubRecords]; // WP2d landed;
 import { stepDevelop, stepDevelopMemo, stepSupply } from './develop';
 void [stubDevelop, stubSupply, stubDevelopMemo]; // WP2e landed; the stubs stay for off-rule runs
 // ---- WP3 (county) ----
-const stepCloseBooks = stubCloseBooks; // → './regional-day'
-const stepMoveMoney = stubMoveMoney; // → './regional-day'
-const stepPlayerMigration = stubPlayerMigration; // → './region'
-const stepFixFlows = stubFixFlows; // → './region'
-const stepGreatWork = stubGreatWork; // → './greatworks'
-const stepDeliver = stubDeliver; // → './regional-day'
-const stepYearEnd = stubYearEnd; // → './regional-day' (tier checks: './tiers', WP2d)
-const stepCountyWeek = stubCountyWeek; // → './county-week'
-const stepBulletin = stubBulletin; // → './bulletin'
+import { stepCloseBooks, stepMoveMoney, stepDeliver, stepYearEnd } from './regional-day';
+import { stepPlayerMigration } from './region';
+import { stepFixFlows } from './county-flows';
+import { stepGreatWork } from './greatworks'; // M3 seam: a no-op until Great Works land
+import { stepCountyWeek } from './county-week';
+import { stepBulletin } from './bulletin';
+void [stubCloseBooks, stubMoveMoney, stubPlayerMigration, stubFixFlows, stubGreatWork, stubDeliver, stubYearEnd, stubCountyWeek, stubBulletin]; // WP3 landed; the stubs stay for off-rule runs
 
 /** M1 World: the World is computed into the context before the steps run (§5.16); nothing to write. */
 const stepWorld = () => {};

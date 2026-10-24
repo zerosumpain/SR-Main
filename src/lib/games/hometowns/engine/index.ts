@@ -32,6 +32,12 @@ export {
   TICKS_PER_YEAR,
 } from './clock';
 export { worldAt, eventAt, slowdownAhead } from './world';
+// WP3 (the county layer): what the adapter and the wire read beyond county state itself.
+export { countyExpiry, type Expiry } from './expiry';
+export { regionOf, countyMoney, countyMedian, pairLinks } from './region-state';
+export { offerOpen, runningContracts } from './offers';
+export { advertCost, STICKERS, type Sticker } from './social';
+export { countyWeekDue } from './county-week';
 export { canonical, fnv64, hashOf } from './hash';
 export { ENGINE_HASH } from './engine-hash.generated';
 export * from './types';

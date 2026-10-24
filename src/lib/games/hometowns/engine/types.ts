@@ -253,6 +253,11 @@ export interface CountyState {
   log: CommandRecord[];
   /** Engine alerts (a reverted month, a refused Regional Day), ring of 20. */
   alerts: AlertRecord[];
+  /**
+   * WP3 addition: the county layer's own memory (region-state.ts creates it
+   * on first use; absent on a county no WP3 Regional Day or move has touched).
+   */
+  region?: RegionState;
 }
 
 export interface Link {
@@ -292,6 +297,8 @@ export interface Contract {
   startDay: number;
   endDay: number | null;
   renew: boolean;
+  /** WP3 addition: a mayor ended it (§8.7), so it is never renewed, whatever the standing orders say. */
+  ended?: boolean;
 }
 
 export interface Pact {
@@ -300,6 +307,8 @@ export interface Pact {
   a: number;
   b: number;
   sinceDay: number;
+  /** WP3 addition: the dayIndex a notice to dissolve takes effect (a week's notice, §8.7), or absent. */
+  endDay?: number | null;
 }
 
 export interface Market {
@@ -347,6 +356,15 @@ export interface TownDayFlows {
   advert: number[];
   /** Buzz from stamps and attendance (A20: arrives a day late). */
   buzz: number;
+  /**
+   * WP3 addition: per COHORT, the towns whose adverts the bonus in
+   * `advert[k]` is for, as a bit mask (bit j: town index j; 0: none). An
+   * advert's +0.25 utility applies only to this town's movers choosing one of
+   * those advertisers (§8.6). Several towns may advertise to the same cohort
+   * at once and each gets its bonus, so no fee is paid for nothing and the
+   * order moves arrived in cannot matter. Absent: no adverts.
+   */
+  advertBy?: number[];
 }
 
 export interface GreatWorkState {
@@ -397,6 +415,152 @@ export interface BulletinItem {
   data: Record<string, number | string>;
 }
 
+// ---- WP3 addition: the county layer's memory (region-state.ts) -------------------------
+//
+// Everything here is written only at the Regional Day or by a WP3 move on
+// county state (A20: no town reads it during the day). Arrays indexed by
+// town index grow when a town is founded; pair arrays use (i·6 + j).
+
+/** A cross-town effect waiting for the next Regional Day (A20). */
+export interface Delivery {
+  id: string;
+  kind: 'gift' | 'aid' | 'advert' | 'prank' | 'prankReply' | 'stamp' | 'attend';
+  from: number;
+  to: number;
+  /** The dayIndex of the move. */
+  day: number;
+  /** Gift item, aid kind, prank kind, sticker, reply choice, or an advert's target cohort. */
+  item: string;
+  /** £ held in escrow for it (gift and aid coins, an advert's fee) or goods units sent as aid, else 0. */
+  amount: number;
+}
+
+/** A settled pair flow of players' people (§8.4 item 4). */
+export interface MoveStory {
+  day: number;
+  from: number;
+  to: number;
+  /** COHORT index and persons moved. */
+  cohort: number;
+  n: number;
+  /** The top 2 reasons, STARS keys (or 'needs'), with their utility gaps w·(Ī_j − Ī_i). */
+  reasons: string[];
+  gaps: number[];
+  /** The losing town's best relative strength for this cohort, and a suggested action key. */
+  strength: string | null;
+  action: string;
+}
+
+/** A shared-places agreement (§8.7 item 4, City+). */
+export interface ShareDeal {
+  id: string;
+  service: 'health' | 'university';
+  provider: number;
+  user: number;
+  places: number;
+  /** £ per patient- or student-month. */
+  price: number;
+  startDay: number;
+  endDay: number | null;
+  /**
+   * Places a month the user actually had of this agreement tomorrow, fixed
+   * at step 4 (its share of the user's capped total); the fee at the next
+   * step 2 is charged on this. Absent: none yet (it has not started).
+   */
+  used?: number;
+}
+
+/** An advert campaign in force (§8.6): the advertiser, its target town and cohort, and the last day it runs. */
+export interface Campaign {
+  from: number;
+  to: number;
+  cohort: number;
+  untilDay: number;
+}
+
+/** One town's County Week accumulators: sums of daily samples since the last County Week. */
+export interface WeekTown {
+  days: number;
+  /** Days on holiday (no award points, §2.4). */
+  holidayDays: number;
+  mood: number;
+  happy: number;
+  pollution: number;
+  safety: number;
+  rep: number;
+  around: number;
+  /** Day revenue and spending (£), for the surplus share. */
+  revenue: number;
+  spending: number;
+  /** Kind acts (gifts, aid, stamps, attendance, pledges) sent. */
+  kind: number;
+  visitors: number;
+  /** First and latest samples of population, culture and mood. */
+  pop0: number;
+  pop1: number;
+  culture0: number;
+  culture1: number;
+  mood0: number;
+  mood1: number;
+}
+
+export interface RegionState {
+  /** £ paid by senders at their move and not yet delivered, refunded or paid to Kingsport (escrow). */
+  held: number;
+  outbox: Delivery[];
+  /** Per town index: the town tick at the last Regional Day (months in the day, §2.2). */
+  lastTick: number[];
+  /** Per town index: net persons lost to players at each of the last 7 Regional Days, oldest first. */
+  lossDays: number[][];
+  /** Per town index: population at each of the last 7 Regional Days, oldest first. */
+  popDays: number[][];
+  /** Today's commuters per month, C[(home·T + work)·3 + h], kept to attribute the commuter rule tomorrow. */
+  commute: number[];
+  /** MoveStories of the last Regional Day, and of the week (the Gazette, capped). */
+  stories: MoveStory[];
+  weekStories: MoveStory[];
+  shares: ShareDeal[];
+  campaigns: Campaign[];
+  /** Council outcomes in force (§8.9). */
+  commuterRule: number;
+  cleanAir: boolean;
+  countyTrail: boolean;
+  festivalTheme: string;
+  flag: number;
+  nextTheme: string | null;
+  /** The Great Work the Council chose (M3 seam: greatworks.ts builds it). */
+  greatWorkChoice: string | null;
+  /** A22: County Weeks run this season, and the London day number of the last one (−1: none yet). */
+  seasonWeek: number;
+  lastWeekDay: number;
+  week: WeekTown[];
+  /** Per pair (from·6 + to): adverts and pranks sent this County Week. */
+  adverts: number[];
+  pranks: number[];
+  /** Per pair (i·6 + j, both orders): contact this County Week (friendship weeks). */
+  contact: number[];
+  /** Festival bids this week: town index → bid kind ('' = none). */
+  bids: string[];
+  /** A33: archived town indices already settled, and those whose mayor was erased (erase-mayor.ts). */
+  settled: number[];
+  erased: number[];
+  /**
+   * Per town index: the next serial number for the ids of its offers, links
+   * and deliveries and of the items in its inbox. Ids never carry a move's
+   * client id (free text another town would see), and never repeat.
+   */
+  seq: number[];
+  /** Per town index: when its holiday began (it ends on any build after this), or null. */
+  holidayFrom: (number | null)[];
+  /** Goals board reward: the dayIndex of the Festival Weekend (null: none due). */
+  festivalWeekend: number | null;
+  /** The county month Kingsport last grew to (§8.1). */
+  kingsportMonth: number;
+  /** Gazette newsworthiness (§9.9): each town's usual weekly |change|, and last week's leading town (−1). */
+  usual: number[];
+  leader: number;
+}
+
 export interface AlertRecord {
   at: number;
   town: number | null;
@@ -434,6 +598,13 @@ export interface Snapshot {
    * them here; absent means none.
    */
   allocations?: Allocation[];
+  /**
+   * WP3 addition: the contracts running today (a copy of the started ones in
+   * county.contracts, same indices as RealisedDay.delivered and .shortfall),
+   * so a town's month step can deliver or draw power, water and freight
+   * (§8.7). Absent means none.
+   */
+  contracts?: Contract[];
 }
 
 /** One town's public numbers in the snapshot (§8.3 step 9). */
@@ -888,7 +1059,7 @@ export type Command =
   | { type: 'deal'; moveId: string; offerId: string; accept: boolean }
   | { type: 'link'; moveId: string; propose?: { to: number; kind: Link['kind']; share: number }; answer?: { id: string; yes: boolean }; close?: { id: string } }
   | { type: 'contract'; moveId: string; offer?: Record<string, unknown>; answer?: { id: string; yes: boolean }; end?: { id: string } }
-  | { type: 'share'; moveId: string; offer?: { service: 'health' | 'university'; places: number; price: number }; answer?: { id: string; yes: boolean } }
+  | { type: 'share'; moveId: string; offer?: { service: 'health' | 'university'; places: number; price: number; /** WP3 addition: the linked town offered the places. */ to?: number }; answer?: { id: string; yes: boolean }; /** WP3 addition. */ end?: { id: string } }
   | { type: 'pact'; moveId: string; propose?: { to: number; kind: 'trail' | 'twin' }; answer?: { id: string; yes: boolean }; end?: { id: string } }
   | { type: 'pledge'; moveId: string; stage: number; input: string; amount: number }
   | { type: 'vote'; moveId: string; question: string; choice: number }

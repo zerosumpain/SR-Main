@@ -129,7 +129,9 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   family_steps_event: { email: 'erase' },
   // Keyed by the games' hash of the address (`playerId`), never the address.
   game_results: { player_id: 'erase' },
-  // Durable game rooms they are in (hashed ids too): the game ends for everyone at that table.
+  // Durable game rooms they are in (hashed ids too): the game ends for everyone at that table —
+  // unless the game keeps its rooms through an erasure (`durable.erasePlayer`, a Hometowns
+  // county): then only their seat goes, and the row is rewritten without their id.
   game_rooms: { host_id: 'erase', player_ids: 'erase' },
   // Alarms they raised (their message and position) go; one they stood down
   // for somebody else stays, without their address.
@@ -239,6 +241,8 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
   const pid = target.principalId;
   // Durable game rooms deleted below; once committed, the copies in memory are closed too.
   let gameRoomIds: string[] = [];
+  // Rooms that keep going without them (`durable.erasePlayer`); once committed, memory reloads them.
+  let keptRoomIds: string[] = [];
   const erased = await executor.transaction(async (tx) => {
     const out: ErasedRows = {
       conversations: 0,
@@ -327,6 +331,14 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     const players = addrs.map((a) => playerId(a));
     await tx.delete(gameResults).where(inArray(gameResults.playerId, players));
     if (players.length) {
+      // First the rooms that outlive one seat: rewritten without their ids, so the delete misses them.
+      // If the games module cannot load, nothing is kept and the delete takes every room, as it
+      // always did: keeping a county is a courtesy to the others, the erasure itself is not optional.
+      const keeper = await import('$lib/games/erase-seat.server').catch((err) => {
+        console.error('[account] could not load the games catalogue; deleting their game rooms:', (err as Error)?.message ?? err);
+        return null;
+      });
+      keptRoomIds = keeper ? await keeper.keepErasedSeats(tx, players) : [];
       const rooms = await tx.delete(gameRooms).where(arrayOverlaps(gameRooms.playerIds, players)).returning({ id: gameRooms.id });
       gameRoomIds = rooms.map((r) => r.id);
     }
@@ -436,6 +448,12 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     await import('$lib/games/rooms.server')
       .then((m) => m.dropRooms(gameRoomIds))
       .catch((err) => console.error('[account] could not close erased game rooms in memory:', (err as Error).message));
+  }
+  if (keptRoomIds.length) {
+    const erasedPlayers = target.addresses.map((a) => playerId(a));
+    await import('$lib/games/rooms.server')
+      .then((m) => m.reloadRooms(keptRoomIds, erasedPlayers))
+      .catch((err) => console.error('[account] could not reload kept game rooms in memory:', (err as Error).message));
   }
   return erased;
 }

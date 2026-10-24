@@ -257,8 +257,8 @@ describe('exact ticks and the Regional Day guard (A19)', () => {
 
   it('moves owned by packages that have not landed are refused politely', () => {
     const { c, now } = setup();
-    // WP2d's moves (policy, orders, loan, bond) have landed; a WP3 move still waits.
-    refused(() => applyCommand(c, 'ann', { type: 'vote', moveId: 'x', question: 'q', choice: 0 }, now), 400, /isn’t ready/);
+    // WP2d's and WP3's moves have landed; Great Works (M3) still wait.
+    refused(() => applyCommand(c, 'ann', { type: 'pledge', moveId: 'x', stage: 0, input: 'coins', amount: 1 }, now), 400, /isn’t ready/);
     refused(() => applyCommand(c, 'zed', { type: 'build', planId: 'q', plan: [{ op: 'parcel', p: 1 }] }, now), 404);
   });
 });

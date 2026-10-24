@@ -28,6 +28,7 @@ import {
   invitesFor,
   noteParent,
   roomFor,
+  roomStage,
   roomsFor,
   subscribe,
 } from './rooms.server';
@@ -250,6 +251,11 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
   const me = await playerFor(caller.email);
   await loaded(id);
   if (action === 'invite') {
+    // A game only a parent may host takes a late invite (into a room already
+    // under way, `joinRunning`) only from a parent: the host role can have
+    // passed to a child since the room was made. The lobby is as before.
+    const stage = roomStage(id);
+    if (stage && stage.phase !== 'lobby' && PARENT_HOSTED.has(stage.game)) await assertParent(caller);
     // Resolved against the same roster a new game's invites are, so nobody
     // without games access — or without anywhere to open it — can be named.
     const ids = stringIds(body.invite);
