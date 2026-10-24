@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   shareValid: false,
   sharePass: null as string | null,
   shareCalls: [] as [string, string][],
+  shareVisits: [] as unknown[],
 }));
 
 vi.mock('$lib/db', () => {
@@ -70,8 +71,9 @@ vi.mock('$lib/server/view-as', () => ({
 }));
 vi.mock('$lib/projects/shares', () => ({
   shareCookieName: (key: string) => `psh_${key}`,
-  validateProjectShare: async (key: string, token: string) => {
+  validateProjectShare: async (key: string, token: string, visit: unknown) => {
     state.shareCalls.push([key, token]);
+    state.shareVisits.push(visit);
     return state.shareValid ? { passwordHash: state.sharePass } : null;
   },
 }));
@@ -106,6 +108,7 @@ beforeEach(() => {
   state.shareValid = false;
   state.sharePass = null;
   state.shareCalls.length = 0;
+  state.shareVisits.length = 0;
 });
 
 describe('session authority claims', () => {
@@ -268,6 +271,34 @@ describe('session authority claims', () => {
     state.queue.push([]);
     const owner = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
     expect(owner.claims.project).toEqual({ key: 'spine', access: 'owner' });
+  });
+
+  it('hands the gateway\'s visitor headers to the share check, hashed and labelled, never raw', async () => {
+    state.shareValid = true;
+    state.queue.push([]);
+    const id = 'AbCdEfGhIjKlMnOpQrStUv';
+    const ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+    const body = await (await call('sr-spine', 'n'.repeat(40), {
+      'x-sr-session-share': 'sp-token',
+      'x-sr-session-visitor': id,
+      'x-sr-session-visit': '1',
+      'x-sr-session-client': '::ffff:198.51.100.7',
+      'x-sr-session-agent': ua,
+      'x-sr-session-country': 'GB',
+    })).json();
+    expect(body.claims.project.access).toBe('share');
+    expect(state.shareVisits).toHaveLength(1);
+    const visit = state.shareVisits[0] as Record<string, unknown>;
+    expect(visit).toMatchObject({ open: true, agent: 'Safari · iPhone', country: 'GB' });
+    expect(visit.visitorHash).toMatch(/^[0-9a-f]{32}$/);
+    expect(visit.networkHash).toMatch(/^[0-9a-f]{16}$/);
+    const passed = JSON.stringify(visit);
+    for (const raw of [id, '198.51.100', 'Mozilla']) expect(passed).not.toContain(raw);
+
+    // An older gateway says nothing: every request counts, no one is told apart.
+    state.queue.push([]);
+    await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' });
+    expect(state.shareVisits[1]).toEqual({ open: null, visitorHash: null, networkHash: '', agent: null, country: null });
   });
 
   it('only ever answers for the audience\'s own project, and an outage is a 503', async () => {

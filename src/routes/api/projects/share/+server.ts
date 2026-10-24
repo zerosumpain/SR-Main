@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getAllowedProjectKeys } from '$lib/projects/registry';
-import { createShare, listShares, revokeShare } from '$lib/projects/shares';
+import { createShare, listShares, listSharesWithVisits, revokeShare } from '$lib/projects/shares';
 import {
   normaliseSharePassword,
   sharePasswordAllowed,
@@ -13,7 +13,9 @@ import {
 // (401 for /api/* when unauthed; bypassed on the homeserv LAN), exactly like the
 // visibility endpoint — the signIn allow-list means any authenticated caller is
 // the owner, so this handler does not re-check the session for access. POST
-// mints a link (returns the raw token ONCE), GET lists, DELETE revokes.
+// mints a link (returns the raw token ONCE), GET lists with each link's visitor
+// numbers ($lib/projects/share-visitor: labels and counts, never a hash),
+// DELETE revokes.
 //
 // A link may ask for a password, on a project whose app checks one
 // (SHARE_PASSWORD_KEYS, today only the Spine). The password is never echoed back and
@@ -37,7 +39,7 @@ async function validKey(key: string): Promise<boolean> {
 export const GET: RequestHandler = async ({ url }) => {
   const key = url.searchParams.get('key') ?? '';
   if (!(await validKey(key))) return json({ error: 'Unknown project key' }, { status: 400 });
-  return json({ ok: true, key, shares: await listShares(key) });
+  return json({ ok: true, key, shares: await listSharesWithVisits(key) });
 };
 
 export const POST: RequestHandler = async ({ request, locals }) => {

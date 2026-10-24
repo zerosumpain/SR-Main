@@ -1834,6 +1834,37 @@ export const projectShares = pgTable(
 
 export type ProjectShare = typeof projectShares.$inferSelect;
 
+// Who opened a share link (24 Oct 2026), so the owner can tell a link that
+// reached one person from one that was forwarded. One row per browser per
+// network per link, written where the link is validated ($lib/projects/
+// share-visits). Nothing raw is kept: `visitor_hash` is an HMAC of the
+// gateway's random visitor cookie (or, from a gateway that sends none, of the
+// network and browser together), `network_hash` an HMAC of the address's /24
+// or /48 — '' when no address came, so the unique index needs no NULL rule —
+// and `agent` a short label like "Safari · iPhone", never the User-Agent.
+// Capped at 500 rows a link: past that, only known visitors are updated.
+export const projectShareVisits = pgTable(
+  'project_share_visit',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    shareId: text('share_id')
+      .notNull()
+      .references(() => projectShares.id, { onDelete: 'cascade' }),
+    visitorHash: text('visitor_hash').notNull(),
+    networkHash: text('network_hash').notNull().default(''),
+    agent: text('agent'),
+    country: text('country'),
+    firstSeen: timestamp('first_seen', { withTimezone: true }).notNull().defaultNow(),
+    lastSeen: timestamp('last_seen', { withTimezone: true }).notNull().defaultNow(),
+    opens: integer('opens').notNull().default(0),
+    requests: integer('requests').notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex('project_share_visit_who_idx').on(t.shareId, t.visitorHash, t.networkHash),
+    index('project_share_visit_share_idx').on(t.shareId),
+  ],
+);
+
 // ==========================================
 // sr. decks — presentation capability
 // Spec: docs/superpowers/specs/2026-07-11-decks-presentation-capability.md

@@ -10,6 +10,9 @@ import { checkSharePassword } from './share-password';
 const state = vi.hoisted(() => ({
   queue: [] as unknown[],
   inserted: [] as Record<string, unknown>[],
+  sets: [] as Record<string, unknown>[],
+  recorded: [] as [string, unknown][],
+  statsFail: false,
 }));
 
 vi.mock('$lib/db', () => {
@@ -24,6 +27,7 @@ vi.mock('$lib/db', () => {
           }
           if (key === 'catch') return () => proxy;
           if (key === 'values') return (v: Record<string, unknown>) => (state.inserted.push(v), proxy);
+          if (key === 'set') return (v: Record<string, unknown>) => (state.sets.push(v), proxy);
           return () => proxy;
         },
       },
@@ -33,11 +37,24 @@ vi.mock('$lib/db', () => {
   return { db: { select: chain, insert: chain, update: chain } };
 });
 
-const { createShare, validateProjectShare } = await import('./shares');
+vi.mock('./share-visits', () => ({
+  recordShareVisit: async (id: string, visit: unknown) => {
+    state.recorded.push([id, visit]);
+  },
+  shareVisitStats: async () => {
+    if (state.statsFail) throw new Error('permission denied for table project_share_visit');
+    return new Map();
+  },
+}));
+
+const { createShare, listSharesWithVisits, validateProjectShare } = await import('./shares');
 
 beforeEach(() => {
   state.queue.length = 0;
   state.inserted.length = 0;
+  state.sets.length = 0;
+  state.recorded.length = 0;
+  state.statsFail = false;
 });
 
 describe('share link rows', () => {
@@ -74,5 +91,51 @@ describe('share link rows', () => {
     state.queue.push([]);
     expect(await validateProjectShare('spine', 't'.repeat(43))).toBeNull();
     expect(await validateProjectShare('spine', 'short')).toBeNull();
+  });
+
+  it('counts every request toward use when the gateway does not say which open a page', async () => {
+    const live = { id: 's1', expiresAt: null, revokedAt: null, passwordHash: null };
+    for (let i = 0; i < 2; i++) state.queue.push([live]);
+    await validateProjectShare('spine', 't'.repeat(43));
+    const older = { open: null, visitorHash: null, networkHash: '', agent: null, country: null };
+    await validateProjectShare('spine', 't'.repeat(43), older);
+    expect(state.sets).toHaveLength(2);
+    for (const set of state.sets) expect(set).toHaveProperty('useCount');
+    // Nothing to tell visitors apart by: no visitor row.
+    expect(state.recorded).toHaveLength(0);
+  });
+
+  it('counts only page opens toward use once the gateway says, and records the visitor either way', async () => {
+    const live = { id: 's1', expiresAt: null, revokedAt: null, passwordHash: null };
+    const visit = { visitorHash: 'h'.repeat(32), networkHash: 'n'.repeat(16), agent: 'Chrome · Windows', country: 'GB' };
+    state.queue.push([live], [live]);
+    await validateProjectShare('spine', 't'.repeat(43), { ...visit, open: true });
+    await validateProjectShare('spine', 't'.repeat(43), { ...visit, open: false });
+    expect(state.sets[0]).toHaveProperty('useCount');
+    expect(state.sets[0]).toHaveProperty('lastUsedAt');
+    expect(state.sets[1]).not.toHaveProperty('useCount');
+    expect(state.sets[1]).toHaveProperty('lastUsedAt');
+    expect(state.recorded.map(([id, v]) => [id, (v as { open: boolean }).open])).toEqual([
+      ['s1', true],
+      ['s1', false],
+    ]);
+  });
+
+  it('a dead link counts nothing and records no one', async () => {
+    state.queue.push([{ id: 's1', expiresAt: new Date(Date.now() - 1000), revokedAt: null, passwordHash: null }]);
+    const visit = { open: true, visitorHash: 'h'.repeat(32), networkHash: '', agent: null, country: null };
+    expect(await validateProjectShare('spine', 't'.repeat(43), visit)).toBeNull();
+    expect(state.sets).toHaveLength(0);
+    expect(state.recorded).toHaveLength(0);
+  });
+
+  it('still lists every link, with its own use count, when the visitor numbers fail', async () => {
+    state.statsFail = true;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    state.queue.push([{ id: 's1', label: null, createdAt: new Date(), expiresAt: null, revokedAt: null, lastUsedAt: null, useCount: 6, hasPassword: false }]);
+    const [only] = await listSharesWithVisits('spine');
+    expect(only).toMatchObject({ id: 's1', opens: 6, browsers: 0, likelyForwarded: false, visitors: [] });
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
   });
 });

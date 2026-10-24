@@ -15,6 +15,7 @@ vi.mock('$lib/projects/registry', () => ({
 }));
 vi.mock('$lib/projects/shares', () => ({
   listShares: async () => [],
+  listSharesWithVisits: async () => [],
   revokeShare: async () => true,
   createShare: async (input: Record<string, unknown>) => {
     state.created.push(input);

@@ -12,6 +12,11 @@
 // A share link can ask for a password (24 Oct 2026, the Spine only). Main does
 // not ask it: the claim carries the link's verifier as `pass`, and the app puts
 // the question and checks the answer ($lib/projects/share-password).
+//
+// The gateway also says who is asking (24 Oct 2026): a visitor id, network,
+// browser and whether the request opened a page, all reduced to hashes and
+// labels before they reach here ($lib/projects/share-visitor). Only a share is
+// counted; the owner and a public project's readers never are.
 
 import { isOwnerEmail } from '$lib/server/access';
 import { db } from '$lib/db';
@@ -19,6 +24,7 @@ import { projectVisibility } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { isProjectPublic } from './visibility';
 import { shareCookieName, validateProjectShare } from './shares';
+import type { ShareVisit } from './share-visitor';
 
 /**
  * Which project each audience serves. Fixed here, not taken from the request:
@@ -72,7 +78,7 @@ function cookieValue(header: string, name: string): string {
 export async function projectAccessFor(
   key: string,
   email: string | null,
-  share: { fromUrl: string | null; cookie: string },
+  share: { fromUrl: string | null; cookie: string; visit?: ShareVisit | null },
 ): Promise<ProjectClaim> {
   const [vis] = await db
     .select({ projectKey: projectVisibility.projectKey, isPublic: projectVisibility.isPublic })
@@ -82,7 +88,7 @@ export async function projectAccessFor(
   if (isProjectPublic(map, key)) return { key, access: 'public' };
   if (email && isOwnerEmail(email)) return { key, access: 'owner' };
   const token = share.fromUrl || cookieValue(share.cookie, shareCookieName(key));
-  const live = token && token.length <= 512 ? await validateProjectShare(key, token) : null;
+  const live = token && token.length <= 512 ? await validateProjectShare(key, token, share.visit ?? null) : null;
   if (live) return live.passwordHash ? { key, access: 'share', pass: live.passwordHash } : { key, access: 'share' };
   return { key, access: 'none' };
 }
