@@ -153,7 +153,9 @@
     </header>
     <p class="sh-blurb">Anyone with a link below can open this page — <b>even while it's private</b>, no sign-in needed. Each link is unguessable; revoke any one instantly.</p>
 
-    <div class="sh-create">
+    <!-- A form, so Enter in the label or password creates the link; the
+         password option sits before Create so the flow reads top to bottom. -->
+    <form class="sh-create" onsubmit={(e) => { e.preventDefault(); void create(); }}>
       <input class="sh-in" placeholder="Label (optional) — e.g. for Sam at DfE" bind:value={label} maxlength="80" />
       <select class="sh-sel" bind:value={expiresInDays}>
         <option value={0}>No expiry</option>
@@ -161,36 +163,35 @@
         <option value={30}>30 days</option>
         <option value={90}>90 days</option>
       </select>
-      <button class="sh-create-btn" onclick={create} disabled={creating || !pwOk}>{creating ? '…' : '+ Create link'}</button>
-    </div>
-
-    {#if sharePassword}
-      <div class="sh-pass">
-        <label class="sh-pass-tog">
-          <input type="checkbox" bind:checked={askPassword} />
-          Ask for a password
-        </label>
-        {#if askPassword}
-          <div class="sh-urlrow">
-            <input
-              class="sh-in"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Password the recipient must give"
-              aria-label="Link password"
-              autocomplete="new-password"
-              required
-              minlength="4"
-              maxlength="128"
-              bind:value={password}
-            />
-            <button class="sh-show" type="button" onclick={() => (showPassword = !showPassword)} aria-pressed={showPassword}>
-              {showPassword ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          {#if !pwOk}<span class="sh-once">4–128 characters.</span>{/if}
-        {/if}
-      </div>
-    {/if}
+      {#if sharePassword}
+        <div class="sh-pass">
+          <label class="sh-pass-tog">
+            <input type="checkbox" bind:checked={askPassword} />
+            Ask for a password
+          </label>
+          {#if askPassword}
+            <div class="sh-urlrow">
+              <input
+                class="sh-in"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password the recipient must give"
+                aria-label="Link password"
+                autocomplete="new-password"
+                required
+                minlength="4"
+                maxlength="128"
+                bind:value={password}
+              />
+              <button class="sh-show" type="button" onclick={() => (showPassword = !showPassword)} aria-pressed={showPassword}>
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {#if !pwOk}<span class="sh-once">4–128 characters.</span>{/if}
+          {/if}
+        </div>
+      {/if}
+      <button class="sh-create-btn" type="submit" disabled={creating || !pwOk}>{creating ? '…' : '+ Create link'}</button>
+    </form>
 
     {#if freshUrl}
       <div class="sh-fresh">
@@ -255,7 +256,7 @@
   .sh-create-btn:hover { background: var(--accent-hover); }
   .sh-create-btn:disabled { opacity: 0.5; cursor: default; }
 
-  .sh-pass { margin-top: 9px; }
+  .sh-pass { flex: 1 0 100%; margin: 2px 0; }
   .sh-pass-tog { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-label); color: var(--text-primary); cursor: pointer; }
   .sh-pass-tog input { accent-color: var(--accent); margin: 0; }
   .sh-show { flex-shrink: 0; background: none; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0 11px; font-size: var(--fs-label-xs); color: var(--text-secondary); cursor: pointer; }
