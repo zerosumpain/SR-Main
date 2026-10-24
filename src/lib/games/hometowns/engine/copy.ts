@@ -112,6 +112,7 @@ export const CARD_SLOTS: Readonly<Record<string, readonly string[]>> = {
   'bulletin.steady': ['pop'],
   'bulletin.movedIn': ['n', 'cohort'],
   'bulletin.movedOut': ['n', 'cohort'],
+  'bulletin.moveStory': ['n', 'cohort'],
   'bulletin.opened': ['building'],
   'bulletin.homesBuilt': ['n'],
   'bulletin.homesComing': ['n'],

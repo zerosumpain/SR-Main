@@ -688,6 +688,7 @@
     "bulletin.steady": { "kid": "Everyone stayed put. {pop:n} people live here.", "adult": "Population steady at {pop:n}." },
     "bulletin.movedIn": { "kid": "{n:count:new face:new faces} moved in. Most were {cohort:ref:cohort}.", "adult": "{n:count:arrival:arrivals}, mostly {cohort:ref:cohort}." },
     "bulletin.movedOut": { "kid": "{n:count:person:people} left. Most were {cohort:ref:cohort}.", "adult": "{n:count:departure:departures}, mostly {cohort:ref:cohort}." },
+    "bulletin.moveStory": { "kid": "{n:count:person:people} moved between our towns. Most were {cohort:ref:cohort}.", "adult": "{n:count:mover:movers} between linked towns, mostly {cohort:ref:cohort}." },
     "bulletin.opened": { "kid": "The new {building:ref:buildingName} is open!", "adult": "{building:ref:buildingName} opened." },
     "bulletin.homesBuilt": { "kid": "Builders finished {n:count:new home:new homes}!", "adult": "{n:count:home:homes} completed." },
     "bulletin.homesComing": { "kid": "{n:count:home is:homes are} being built right now.", "adult": "{n:count:home:homes} under construction." },
