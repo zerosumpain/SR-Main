@@ -53,7 +53,7 @@ export function paramsFor(version: ParamsVersion): Params {
   if (hit) return hit;
   const file = FILES[version];
   if (!file) throw new Error(`unknown params version ${String(version)}`);
-  const out = deepFreeze(resolve(file)) as Params;
+  const out = deepFreeze(fastCopy(resolve(file))) as Params;
   RESOLVED[version] = out;
   return out;
 }
@@ -70,7 +70,7 @@ export function paramsFile(version: ParamsVersion): ParamsFile {
  * build modified copies of a file). Not cached.
  */
 export function resolveParams(file: unknown): Params {
-  return deepFreeze(resolve(file)) as Params;
+  return deepFreeze(fastCopy(resolve(file))) as Params;
 }
 
 /** Every leaf path in a file, in file order: the Lab's list of tunables. */
@@ -84,6 +84,39 @@ export function leafPaths(file: unknown, prefix = ''): string[] {
     else if (v && typeof v === 'object' && !Array.isArray(v)) out.push(...leafPaths(v, p));
   }
   return out;
+}
+
+/**
+ * The same object rebuilt so V8 keeps it in fast (hidden-class) mode: built a
+ * key at a time, the larger sections (fields, develop, county: 30–60 keys)
+ * fell into dictionary mode, which made every params read in a hot loop a
+ * hash lookup. A JSON round trip rebuilds it with the same keys, order and
+ * values; it is used only when it is exact (the files are JSON, but the Lab's
+ * variants are built in code).
+ */
+function fastCopy<T>(x: T): T {
+  let y: unknown;
+  try {
+    y = JSON.parse(JSON.stringify(x));
+  } catch {
+    return x;
+  }
+  return sameTree(x, y) ? (y as T) : x;
+}
+
+function sameTree(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a === 'number' && typeof b === 'number') return Object.is(a, b);
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a as object);
+  const kb = Object.keys(b as object);
+  if (ka.length !== kb.length) return false;
+  for (let i = 0; i < ka.length; i++) {
+    if (ka[i] !== kb[i]) return false;
+    if (!sameTree((a as Record<string, unknown>)[ka[i]], (b as Record<string, unknown>)[kb[i]])) return false;
+  }
+  return true;
 }
 
 function deepFreeze<T>(x: T): T {
