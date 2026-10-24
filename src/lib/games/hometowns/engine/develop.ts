@@ -67,7 +67,7 @@ import {
   TILES,
   USE_EMPTY,
   VARIANT_HOTEL,
-  decodeCells,
+  decodeCellsShared,
   makeLvl,
   pairGet,
   pairSet,
@@ -362,22 +362,23 @@ export function fallbackPlace(lv: number, poll: number): Place {
 
 /** L_k(x) for the five field-driven zones, clamped to −100..+100 (Farms: farmDesirability). */
 export function desirability(zone: number, x: Place, p: DevelopParams): number {
+  // Indexed reads, not array destructuring (which goes through the iterator protocol until optimised).
   let L = 0;
   if (zone === ZH) {
-    const [a, b, c, d, e, f, g, h, i, j] = p.lHomes;
-    L = a * (x.lv - b) + c * (x.safety - d) + e * ((x.school + x.nature) / 2 - f) - g * Math.max(0, x.poll - h) - i * Math.max(0, x.noise - j);
+    const k = p.lHomes;
+    L = k[0] * (x.lv - k[1]) + k[2] * (x.safety - k[3]) + k[4] * ((x.school + x.nature) / 2 - k[5]) - k[6] * Math.max(0, x.poll - k[7]) - k[8] * Math.max(0, x.noise - k[9]);
   } else if (zone === ZS) {
-    const [a, b, c, d, e, f] = p.lShops;
-    L = a * (x.cust - b) + c * (x.lv - d) - e * Math.max(0, x.crime - f);
+    const k = p.lShops;
+    L = k[0] * (x.cust - k[1]) + k[2] * (x.lv - k[3]) - k[4] * Math.max(0, x.crime - k[5]);
   } else if (zone === ZL) {
-    const [a, b, c, d, e, f, g, h] = p.lLeisure;
-    L = a * (x.visitor - b) + c * (x.lv - d) + e * (x.fun + x.culture - f) - g * Math.max(0, x.crime - h);
+    const k = p.lLeisure;
+    L = k[0] * (x.visitor - k[1]) + k[2] * (x.lv - k[3]) + k[4] * (x.fun + x.culture - k[5]) - k[6] * Math.max(0, x.crime - k[7]);
   } else if (zone === ZI) {
-    const [a, b, c, d] = p.lIndustry;
-    L = a * (x.freight - b) + c * (d - x.lv);
+    const k = p.lIndustry;
+    L = k[0] * (x.freight - k[1]) + k[2] * (k[3] - x.lv);
   } else if (zone === ZO) {
-    const [a, b, c, d, e, f] = p.lOffices;
-    L = a * (x.lv - b) + c * (x.transit - d) + e * (x.culture - f);
+    const k = p.lOffices;
+    L = k[0] * (x.lv - k[1]) + k[2] * (x.transit - k[3]) + k[4] * (x.culture - k[5]);
   }
   return L < -100 ? -100 : L > 100 ? 100 : L;
 }
@@ -453,10 +454,11 @@ function sparseMask(list: readonly number[], positiveOnly: boolean): Uint8Array 
   return out;
 }
 
+/** A stored cell plane, decoded (shared and read-only: see decodeCellsShared). */
 function cellsOrZero(s: string): Uint8Array {
   if (!s) return new Uint8Array(N_CELLS);
   try {
-    return decodeCells(s);
+    return decodeCellsShared(s);
   } catch {
     return new Uint8Array(N_CELLS);
   }
@@ -486,6 +488,30 @@ function upgradeFrom(f: Facts, i: number): number {
  * it costs little to rebuild every tick.
  */
 function roadMask(use: Uint16Array, reach: number): Uint8Array {
+  // Memoised per decoded use plane on an exact copy of where its roads are (the
+  // plane is changed in place, so the copy is the key): every tick and month
+  // memo asks, and the roads rarely move. The mask is shared: read only.
+  const hit = ROAD_MASKS.get(use);
+  if (hit && hit.reach === reach) {
+    const key = hit.roads;
+    let same = true;
+    for (let i = 0; i < N_TILES; i++)
+      if (key[i] !== (use[i] >>> 12 === 1 ? 1 : 0)) {
+        same = false;
+        break;
+      }
+    if (same) return hit.mask;
+  }
+  const roads = new Uint8Array(N_TILES);
+  for (let i = 0; i < N_TILES; i++) if (use[i] >>> 12 === 1) roads[i] = 1;
+  const mask = roadMaskOf(use, reach);
+  ROAD_MASKS.set(use, { reach, roads, mask });
+  return mask;
+}
+
+const ROAD_MASKS = new WeakMap<Uint16Array, { reach: number; roads: Uint8Array; mask: Uint8Array }>();
+
+function roadMaskOf(use: Uint16Array, reach: number): Uint8Array {
   const row = new Uint8Array(N_TILES);
   for (let y = 0; y < N_MAP; y++) {
     const o = y * N_MAP;
@@ -660,22 +686,32 @@ function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSl
   for (let k = 0; k < N_ZONES; k++) if (live[k]) left++;
   const { use, lvl } = f.pl;
   const parcels = t.parcels;
+  // A free tile's zone test reads only its land value and whether it is flood plain, and the
+  // flags only ever turn on: a pair already tested cannot add anything, so it is skipped.
+  // A built tile's test reads its zone, level, land value and flood plain: the same holds for those.
+  const freeSeen = new Uint8Array(512);
+  const zoneSeen = new Uint8Array(N_ZONES * 8 * 512);
+  const busy = f.busy;
+  const terrain = f.terrain;
+  const lvCells = f.lv;
+  const pollCells = f.poll;
   for (let i = 0; i < N_TILES && left > 0; i++) {
     const u = use[i];
     const isZone = catOf(u) === CAT_Z;
+    if (!isZone && u !== EMPTY) continue;
     const z = isZone ? payloadOf(u) : -1;
     const level = isZone ? levelOf(lvl[i]) : 0;
-    const free = (u === EMPTY || (isZone && level === 0 && !f.busy[i])) && ((parcels >> parcelBit(i)) & 1) === 1 && isBuildable(f.terrain[i]);
+    const free = (u === EMPTY || (isZone && level === 0 && !busy[i])) && ((parcels >> parcelBit(i)) & 1) === 1 && isBuildable(terrain[i]);
     if (!free && !isZone) continue;
     const c = cellAt(i);
-    const lv = f.lv[c];
+    const lv = lvCells[c];
     // A9: a tile "could take" a Homes tier when it is free land in the tier's land-value band, or a
     // built home there that can still level up. A home already at its level cap adds nothing, just
     // as a built shop at its cap does not make Shops reachable below: a town whose every ££-band
     // home is built out reads the hatched +35, not a ££ meter pinned at +100 it cannot act on.
-    const roomToGrow = free || (z === ZH && levelCap(t, ZH, lv, f.terrain[i], p) > level);
+    const roomToGrow = !(homes[1] && homes[2]) && (free || (z === ZH && levelCap(t, ZH, lv, terrain[i], p) > level));
     if (roomToGrow) {
-      const tm = homesTierMax(lv - 0.5 * f.poll[c], p);
+      const tm = homesTierMax(lv - 0.5 * pollCells[c], p);
       if (tm >= 1 && !homes[1]) {
         homes[1] = true;
         left--;
@@ -685,10 +721,22 @@ function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSl
         left--;
       }
     }
+    const river = (terrain[i] & RIVER) !== 0 ? 1 : 0;
+    if (free) {
+      const key = (lv << 1) | river;
+      if (freeSeen[key]) continue;
+      freeSeen[key] = 1;
+    } else {
+      // Only a zone's own tiles can test it (z !== k skips every other zone).
+      if (z < 0 || z >= N_ZONES || level > 7) continue;
+      const key = (((z << 3) | level) << 9) | (lv << 1) | river;
+      if (zoneSeen[key]) continue;
+      zoneSeen[key] = 1;
+    }
     for (let k = 0; k < N_ZONES; k++) {
       if (zone[k] || !live[k]) continue;
       if (free ? !paint[k] : z !== k) continue;
-      const cap = levelCap(t, k, lv, f.terrain[i], p);
+      const cap = levelCap(t, k, lv, terrain[i], p);
       if (free ? cap >= ZMIN[k] : cap > Math.max(level, ZMIN[k] - 1)) {
         zone[k] = true;
         left--;
@@ -739,17 +787,20 @@ export function stepDevelopMemo(t: TownState, m: MonthContext): void {
   const { use, lvl } = f.pl;
   const road = roadMask(use, p.roadReach);
   const zoneInCell = new Uint8Array(N_CELLS);
+  const powered = util ? util.powered : null;
+  const watered = util ? util.watered : null;
+  const busy = f.busy;
   for (let i = 0; i < N_TILES; i++) {
     const u = use[i];
     if (catOf(u) !== CAT_Z) continue;
     const z = payloadOf(u);
     if (z >= N_ZONES) continue;
     zoneInCell[cellAt(i)] |= 1 << z;
-    const unpowered = util ? !util.powered[i] : false;
-    const dry = util ? !util.watered[i] : false;
+    const unpowered = powered ? !powered[i] : false;
+    const dry = watered ? !watered[i] : false;
     let b = (unpowered ? TB_UNPOWERED : 0) | (dry ? TB_DRY : 0);
     const level = levelOf(lvl[i]);
-    if (level > 0 && !f.busy[i]) {
+    if (level > 0 && !busy[i]) {
       const missing = !road[i] || (level >= 2 && (unpowered || dry));
       const before = prev ? tbMissing(prev[M_TILE + i]) : 0;
       if (missing) b |= Math.min(7, before + 1) << 2;
@@ -776,7 +827,7 @@ export function stepDevelopMemo(t: TownState, m: MonthContext): void {
     const u = use[i];
     if (catOf(u) !== CAT_Z) continue;
     const z = payloadOf(u);
-    if (z === ZH || z >= N_ZONES || levelOf(lvl[i]) === 0 || f.busy[i]) continue;
+    if (z === ZH || z >= N_ZONES || levelOf(lvl[i]) === 0 || busy[i]) continue;
     const L = z === ZF ? farmDesirability(t, f.terrain[i], p) : out[M_L + z * N_CELLS + cellAt(i)] - 128;
     sectorL[ZSECTOR[z]].push(L);
   }

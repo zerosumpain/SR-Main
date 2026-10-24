@@ -288,6 +288,22 @@ export function pairGet(list: number[], tile: number): number {
   return 0;
 }
 
+/**
+ * pairGet for every tile at once: out[i] = pairGet(list, i) (the first pair
+ * for a tile wins). One pass instead of a scan of the list per tile.
+ */
+export function pairPlane(list: readonly number[]): Float64Array {
+  const out = new Float64Array(TILES);
+  const seen = new Uint8Array(TILES);
+  for (let k = 0; k + 1 < list.length; k += 2) {
+    const tile = list[k];
+    if (!(tile >= 0 && tile < TILES) || tile !== Math.floor(tile) || seen[tile]) continue;
+    seen[tile] = 1;
+    out[tile] = list[k + 1];
+  }
+  return out;
+}
+
 /** Sets (or, for 0, removes) a pair, keeping the list sorted by tile so its JSON is canonical. */
 export function pairSet(list: number[], tile: number, value: number): void {
   for (let i = 0; i < list.length; i += 2) {
@@ -315,6 +331,24 @@ export function encodeCells(plane: Uint8Array): string {
 
 export function decodeCells(s: string): Uint8Array {
   return decodeU8(s, CELLS);
+}
+
+const SHARED_CELLS = new Map<string, Uint8Array>();
+const SHARED_CELLS_MAX = 64;
+
+/**
+ * decodeCells, memoised on the stored string (strings are immutable, so a
+ * hit is always exact): the land value and pollution lag change once a
+ * month but are read every tick. The array is SHARED: read it, never write
+ * it. Throws as decodeCells does; only good decodes are kept.
+ */
+export function decodeCellsShared(s: string): Uint8Array {
+  const hit = SHARED_CELLS.get(s);
+  if (hit) return hit;
+  const out = decodeU8(s, CELLS);
+  if (SHARED_CELLS.size >= SHARED_CELLS_MAX) SHARED_CELLS.clear();
+  SHARED_CELLS.set(s, out);
+  return out;
 }
 
 /** A 32×32 skyline height map (max level over each 2×2 cell) for the County view. */
