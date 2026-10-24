@@ -78,6 +78,8 @@ export function spread(a: Float64Array, keep: number, side: number, passes: numb
  */
 export function lagStep(prev: number, target: number, share: number): number {
   const next = prev + share * (target - prev);
+  // The stored plane is u8, which would turn a NaN into a silent 0: fail the month instead.
+  if (!Number.isFinite(next)) throw new Error(`pollution lag is ${next}`);
   let r = Math.round(next);
   if (r === prev && (target - prev >= 0.5 || prev - target >= 0.5)) r = prev + (target > prev ? 1 : -1);
   return r < 0 ? 0 : r > 100 ? 100 : r;

@@ -65,7 +65,7 @@ for (const s of STARS) add('happy.*', `happy.${s}`);
 add('happy.*', 'happy.needs', 'happy.overcrowding', 'happy.overqualified', 'happy.irritation');
 add('approval', 'approval.mood', 'approval.checklist', 'approval.tax');
 // Visitors (WP2c), goods (WP2c), commuters (WP2b), safety (WP2a).
-add('visitors', 'vis.attractions', 'vis.quality', 'vis.reputation', 'vis.awareness', 'vis.beds', 'vis.season', 'vis.world', 'vis.satisfaction', 'vis.dayTrips', 'vis.overflow');
+add('visitors', 'vis.attractions', 'vis.quality', 'vis.reputation', 'vis.awareness', 'vis.hotelTax', 'vis.beds', 'vis.season', 'vis.world', 'vis.satisfaction', 'vis.dayTrips', 'vis.overflow');
 add('goodsNet', 'goods.production', 'goods.use', 'goods.allocIn', 'goods.allocOut', 'goods.export', 'goods.import', 'goods.construction');
 add('commutersNet', 'comm.in', 'comm.out');
 add('safety', 'safety.unemployment', 'safety.inequality', 'safety.density', 'safety.fun', 'safety.education', 'safety.youth', 'safety.police', 'safety.policy', 'safety.landValue');
@@ -170,6 +170,8 @@ export class MonthWhy implements WhyWriter {
 // ---- Storage: base64 of [version, monthly count, daily count] + today + records --------------
 
 const MONTHLY_KEEP = 2;
+/** The stored format's version byte. A string in an older format reads as empty (no stored room predates it). */
+const WHY_FORMAT = 2;
 const DAILY_KEEP = 7;
 
 interface WhyRings {
@@ -188,50 +190,87 @@ class Bytes {
   u8(x: number) {
     this.b.push(x & 255);
   }
-  u16(x: number) {
-    this.b.push(x & 255, (x >>> 8) & 255);
+  /** Unsigned LEB128: one byte below 128, so small indices and counts cost a byte. */
+  uv(x: number) {
+    let v = x >>> 0;
+    while (v >= 128) {
+      this.b.push((v & 127) | 128);
+      v >>>= 7;
+    }
+    this.b.push(v);
   }
-  i32(x: number) {
+  /** A signed i32 as a zigzag varint: most Why amounts are small, so most take one to three bytes. */
+  sv(x: number) {
     const v = i32(x);
-    this.b.push(v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255);
+    this.uv((v << 1) ^ (v >> 31));
   }
 }
 
+class Reader {
+  o: number;
+  constructor(
+    readonly b: Uint8Array,
+    o: number,
+  ) {
+    this.o = o;
+  }
+  u8(): number {
+    return this.b[this.o++];
+  }
+  uv(): number {
+    let v = 0;
+    let mul = 1;
+    for (;;) {
+      const c = this.b[this.o++];
+      if (c === undefined) throw new Error('Why record ends early');
+      v += (c & 127) * mul;
+      if (c < 128) return v >>> 0;
+      mul *= 128;
+    }
+  }
+  sv(): number {
+    const z = this.uv();
+    return (z >>> 1) ^ -(z & 1);
+  }
+}
+
+// Format 2 (review amendment, room size §10.8): varints instead of fixed
+// u16/i32 fields roughly halves the stored Why. Format 1 is no longer written.
 function writeRecord(w: Bytes, r: WhyRecord): void {
-  w.i32(r.at);
-  w.u16(r.months);
-  w.u16(r.entries.length);
+  w.sv(r.at);
+  w.uv(r.months);
+  w.uv(r.entries.length);
   for (const e of r.entries) {
     const qi = Q_INDEX[e.q];
     const sc = QUANTITIES[qi].scale;
-    w.u16(qi);
+    w.uv(qi);
     w.u8(e.terms.length);
-    w.i32(e.v * sc);
-    w.i32(e.rest * sc);
+    w.sv(e.v * sc);
+    // The residual is not stored: it is the value less the stored terms, so
+    // reading it back from the rounded numbers keeps v = Σ terms + rest exact.
     for (const [k, a] of e.terms) {
-      w.u16(T_INDEX[k]);
-      w.i32(a * sc);
+      w.uv(T_INDEX[k]);
+      w.sv(a * sc);
     }
   }
 }
 
-function readRecord(b: Uint8Array, at: { o: number }): WhyRecord {
-  const u8 = () => b[at.o++];
-  const u16 = () => b[at.o++] | (b[at.o++] << 8);
-  const s32 = () => b[at.o++] | (b[at.o++] << 8) | (b[at.o++] << 16) | (b[at.o++] << 24);
-  const rec: WhyRecord = { at: s32(), months: u16(), entries: [] };
-  const n = u16();
+function readRecord(r: Reader): WhyRecord {
+  const rec: WhyRecord = { at: r.sv(), months: r.uv(), entries: [] };
+  const n = r.uv();
   for (let i = 0; i < n; i++) {
-    const q = QUANTITIES[u16()];
-    const nt = u8();
-    const v = s32() / q.scale;
-    const rest = s32() / q.scale;
+    const q = QUANTITIES[r.uv()];
+    const nt = r.u8();
+    const vi = r.sv();
+    let restI = vi;
     const terms: [string, number][] = [];
     for (let j = 0; j < nt; j++) {
-      const key = TERMS[u16()].key;
-      terms.push([key, s32() / q.scale]);
+      const key = TERMS[r.uv()].key;
+      const a = r.sv();
+      restI -= a;
+      terms.push([key, a / q.scale]);
     }
-    rec.entries.push({ q: q.id, v, terms, rest });
+    rec.entries.push({ q: q.id, v: vi / q.scale, terms, rest: restI / q.scale });
   }
   return rec;
 }
@@ -241,20 +280,21 @@ const emptyRecord = (at: number): WhyRecord => ({ at, months: 0, entries: [] });
 export function readWhy(t: TownState): WhyRings {
   if (!t.why) return { today: emptyRecord(-1), monthly: [], daily: [] };
   const b = fromBase64(t.why);
-  const at = { o: 3 };
+  if (b[0] !== WHY_FORMAT) return { today: emptyRecord(-1), monthly: [], daily: [] };
+  const at = new Reader(b, 3);
   const nm = b[1];
   const nd = b[2];
-  const today = readRecord(b, at);
+  const today = readRecord(at);
   const monthly: WhyRecord[] = [];
-  for (let i = 0; i < nm; i++) monthly.push(readRecord(b, at));
+  for (let i = 0; i < nm; i++) monthly.push(readRecord(at));
   const daily: WhyRecord[] = [];
-  for (let i = 0; i < nd; i++) daily.push(readRecord(b, at));
+  for (let i = 0; i < nd; i++) daily.push(readRecord(at));
   return { today, monthly, daily };
 }
 
 function writeWhy(t: TownState, r: WhyRings): void {
   const w = new Bytes();
-  w.u8(1);
+  w.u8(WHY_FORMAT);
   w.u8(r.monthly.length);
   w.u8(r.daily.length);
   writeRecord(w, r.today);
@@ -325,5 +365,5 @@ function mergeRecord(a: WhyRecord, b: WhyRecord): WhyRecord {
 function roundTrip(r: WhyRecord): WhyRecord {
   const w = new Bytes();
   writeRecord(w, r);
-  return readRecord(Uint8Array.from(w.b), { o: 0 });
+  return readRecord(new Reader(Uint8Array.from(w.b), 0));
 }

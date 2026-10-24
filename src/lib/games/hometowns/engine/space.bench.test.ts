@@ -6,9 +6,11 @@
 // server and the page run the engine): a test runner's module shim turns
 // every cross-module call into a property lookup and roughly doubles the
 // time. It still shares the machine with the rest of the suite, which runs
-// in parallel, so the gate is on the median (the p95 is logged, and only
-// guarded against a gross regression); `node scripts/hometowns/bench-space.mjs`
-// on a quiet machine gives the p95 figures the spec's budget table means.
+// in parallel, so this is only a guard against a gross regression (on the
+// median; the p95 is logged). A wall-clock limit in the PR gate fails at
+// random on a loaded runner, so the §10.15 budgets are checked by
+// `npx tsx scripts/hometowns/bench.ts --check` on a quiet machine, and the
+// space share alone by `node scripts/hometowns/bench-space.mjs`.
 
 import { describe, expect, it } from 'vitest';
 import { bundledBench } from '../../../../../scripts/hometowns/bench-space.mjs';

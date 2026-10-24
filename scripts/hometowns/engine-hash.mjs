@@ -7,8 +7,8 @@
 //   node scripts/hometowns/engine-hash.mjs           # rewrite the file
 //   node scripts/hometowns/engine-hash.mjs --check   # exit 1 if it is stale
 //
-// engine.test.ts runs the same computation, so a stale hash fails the gate:
-// rerun this script after any engine change.
+// engine/banned.test.ts runs the same computation, so a stale hash fails the
+// gate: rerun this script after any engine change.
 
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';

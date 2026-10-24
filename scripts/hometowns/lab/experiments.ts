@@ -65,7 +65,7 @@ export function buildJobs(cfg: PlanConfig, variant: Variant | null = null): Job[
   const jobs: Job[] = [];
   for (let k = 0; k < cfg.seeds; k++) {
     const seed = cfg.seed0 + k;
-    jobs.push({ kind: 'county', variant, spec: { experiment: 'mixed', seed, bots: lineupFor(seed, cfg.seats), days: cfg.days, timings: k < cfg.timingSeeds, variant: variant?.label } });
+    jobs.push({ kind: 'county', variant, spec: { experiment: 'mixed', seed, bots: lineupFor(seed, cfg.seats), days: cfg.days, variant: variant?.label } });
   }
   for (let k = 0; k < cfg.foundingSeeds; k++) jobs.push({ kind: 'founding', seed: cfg.seed0 + k, variant });
   if (cfg.g2b) {
@@ -95,6 +95,22 @@ export function buildJobs(cfg: PlanConfig, variant: Variant | null = null): Job[
     for (let k = 0; k < cfg.pacing.seeds; k++)
       jobs.push({ kind: 'county', variant, spec: { experiment: 'pacing', seed: 20_000 + cfg.seed0 + k, bots: ['balanced', 'balanced', 'balanced', 'balanced', 'balanced', 'balanced'], days: cfg.pacing.days, variant: variant?.label } });
   // Longest first, so the pool's tail is short.
+  // (The G12 timing runs are separate: timingJobs, run alone after the pool has drained.)
   const cost = (j: Job) => (j.kind === 'founding' ? 0 : j.spec.days * j.spec.bots.length * (j.spec.fork ? 1.5 : 1));
   return jobs.map((j, i) => [j, i] as const).sort((a, b) => cost(b[0]) - cost(a[0]) || a[1] - b[1]).map(([j]) => j);
+}
+
+/**
+ * G12's timed counties: the first mixed lineups again, unobserved, run one at
+ * a time after every other job has finished. Timing a county inside a busy
+ * pool on four cores (and through the observer's bookkeeping) measured the
+ * contention, not "Node on the VPS".
+ */
+export function timingJobs(cfg: PlanConfig, variant: Variant | null = null): Job[] {
+  const jobs: Job[] = [];
+  for (let k = 0; k < Math.min(cfg.timingSeeds, cfg.seeds); k++) {
+    const seed = cfg.seed0 + k;
+    jobs.push({ kind: 'county', variant, spec: { experiment: 'timing', seed, bots: lineupFor(seed, cfg.seats), days: cfg.days, timings: true, observe: false, variant: variant?.label } });
+  }
+  return jobs;
 }

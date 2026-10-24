@@ -1,13 +1,14 @@
 // Integer accounting (spec §4.5, A25). People and pounds are whole numbers.
 // Every named flow is computed as a double and then rounded with a carry: the
-// fractional remainder is kept (as an integer number of thousandths) under the
+// fractional remainder is kept (as an integer number of millionths) under the
 // flow's own key, so 0.3 births a month still add up to a baby every few
-// months instead of rounding to nothing forever. Splits between destinations
+// months instead of rounding to nothing forever. (Thousandths lost any flow
+// under 0.0005 a step outright: the carry rounded to 0 and was deleted.) Splits between destinations
 // use largest-remainder rounding in a fixed key order, so the parts always sum
 // to the whole and ties never depend on iteration order.
 
-/** Thousandths kept per carry. */
-export const CARRY_SCALE = 1000;
+/** Millionths kept per carry (an integer, so the stored carry stays exact in JSON). */
+export const CARRY_SCALE = 1_000_000;
 
 /** Writes −0 as 0. JSON already does, but our hash and copy must too (A25). */
 export function nz(x: number): number {
@@ -25,7 +26,9 @@ export function div1(a: number, b: number): number {
  * exactly. A zero carry is deleted to keep the stored object small.
  */
 export function takeCarry(carry: Record<string, number>, key: string, x: number): number {
-  if (!Number.isFinite(x)) return 0;
+  // A non-finite flow is a bug upstream. Posting nothing would hide it (the
+  // books would still balance), so fail loudly: the driver reverts the month.
+  if (!Number.isFinite(x)) throw new Error(`flow ${key} is ${x}`);
   const total = x + (carry[key] ?? 0) / CARRY_SCALE;
   let out = Math.trunc(total);
   let rem = Math.round((total - out) * CARRY_SCALE);

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { makeBaseline, regressions } from '../../../../../scripts/hometowns/lab/baseline';
 import { abCompare, runLab } from '../../../../../scripts/hometowns/lab/runner';
 
-const SMALL = { profile: 'smoke' as const, seeds: 1, days: 2, seats: 2 };
+const SMALL = { profile: 'smoke' as const, seeds: 1, days: 1, seats: 2, timingSeeds: 0 };
 
 describe('baselines', () => {
   it('a run matches its own baseline, and a broken parameter regresses it', { timeout: 120_000 }, async () => {

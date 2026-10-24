@@ -437,6 +437,7 @@ function exitHelper(t: TownState, m: MonthContext, writeOff: boolean): void {
   deputyNote(t, m, writeOff ? 'helper.writeOff' : 'helper.exit', { owed: Math.round(h.advance), days: m.dayIndex - h.sinceDay });
   mo.helper = null;
   mo.lastHelperDay = m.dayIndex;
+  if (writeOff) mo.lastWriteOffDay = m.dayIndex;
   // The advance left reserves at zero, so the overdraft count starts again: without this a
   // written-off town still showed 3+ overdrawn month ends and re-entered the very next month.
   mo.overdraftMonths = 0;
@@ -510,8 +511,16 @@ export const LINE_COUNT = LEDGER_LINES.length;
 
 // ---- Borrowing moves (§5.13) -------------------------------------------------------------------------------------
 
-/** Why a town may not borrow `amount` more, or null if it may (caps: 2× annual revenue; no borrowing at a DSR ≥ 25%). */
-export function borrowRefusal(t: TownState, amount: number, p: Params): string | null {
+/**
+ * Why a town may not borrow `amount` more, or null if it may (caps: 2×
+ * annual revenue; no borrowing at a DSR ≥ 25%; none in Helper Mode or for
+ * writeOffBorrowBarDays after a write-off, so a write-off cannot be used to
+ * service debt borrowed for the purpose).
+ */
+export function borrowRefusal(t: TownState, amount: number, p: Params, dayIndex: number): string | null {
+  if (t.money.helper) return 'Nobody lends to a town while Kingsport is helping it: let’s get the books straight first.';
+  const w = t.money.lastWriteOffDay ?? null;
+  if (w !== null && dayIndex - w < p.finance.writeOffBorrowBarDays) return 'Kingsport cleared our debts very recently, so the banks are waiting to see us balance the books first.';
   const rev = civicMemo(t).revenue;
   if (rev <= 0) return 'Penny needs a month of the budget before anyone will lend to us.';
   if (debtService(t) / rev >= p.finance.dsrStop) return 'Repayments already take a quarter of our revenue: no new borrowing for now.';
@@ -537,7 +546,7 @@ export function loanMove(c: CountyState, townIndex: number, cmd: Command): Comma
     if (t.money.loan) throw new EngineError(409, 'Pay back the Town Loan before taking a new one.');
     const limit = Math.floor(f.loanMultiple * civicMemo(t).revenue);
     if (amount > limit) throw new EngineError(409, `The Town Loan can be at most ${formatPounds(limit)}, a year of revenue.`);
-    const no = borrowRefusal(t, amount, p);
+    const no = borrowRefusal(t, amount, p, c.dayIndex);
     if (no) throw new EngineError(409, no);
     const rate = baseRate(c, t, p) + f.loanSpread;
     t.money.loan = { principal: amount, rate, monthsLeft: f.loanMonths, payment: levelPayment(amount, rate, f.loanMonths) };
@@ -569,7 +578,7 @@ export function bondMove(c: CountyState, townIndex: number, cmd: Command): Comma
     if (size !== 3 && size !== 6 && size !== 12) throw new EngineError(400, 'A bond is 3, 6 or 12 months of revenue.');
     if (years !== 10 && years !== 20) throw new EngineError(400, 'A bond runs for 10 or 20 years.');
     const amount = Math.floor(size * civicMemo(t).revenue);
-    const no = borrowRefusal(t, amount, p);
+    const no = borrowRefusal(t, amount, p, c.dayIndex);
     if (no) throw new EngineError(409, no);
     const rate = baseRate(c, t, p) + f.bondSpreads[t.money.rating];
     const months = years * 12;

@@ -116,6 +116,8 @@ export interface Style {
   borrowForChecklist: boolean;
   /** Months until the next session: how far ahead Homes zoning stocks lots (4 for three sessions a day). */
   horizonMonths: number;
+  /** Sales tax the bot sets once it can (Town), basis points; absent leaves the default. */
+  salesTax?: number;
 }
 
 export interface BotDef {
@@ -918,6 +920,13 @@ function setTax(c: Ctx, bp: number): void {
   push(c, { type: 'budget', moveId: id(c, 'tax'), taxes });
 }
 
+/** The style's sales tax, once the dial exists (Town, §5.13): the Greedy Taxer's maximum is how the Lab tests that lever. */
+function salesTaxDial(c: Ctx): void {
+  const want = c.s.salesTax;
+  if (want === undefined || c.t.tier < 2 || c.t.taxes.sales === want) return;
+  push(c, { type: 'budget', moveId: id(c, 'sales'), taxes: { sales: want } });
+}
+
 function funding(c: Ctx): void {
   const want = c.s.funding;
   if (c.t.money.helper && want > 0) return;
@@ -1058,6 +1067,7 @@ const dist = (i: number) => {
 function playSession(v: BotView, rng: BotRng, s: Style, actions: number): Command[] {
   const c = newCtx(v, rng, s, actions);
   setTax(c, wantedTax(c));
+  salesTaxDial(c);
   funding(c);
   borrow(c);
   // A hamlet's first want is its market (Bramble's "People want a shop!" at tap 3, §1.5): six
@@ -1237,7 +1247,7 @@ export const STYLES: Record<BotId, Style> = {
   tourist: { ...base, zoneMix: [1, 1.2, 2, 0.25, 0.8, 0.6], tourism: true, power: 'clean', parks: 1.3 },
   industrial: { ...base, zoneMix: [1, 0.8, 0.3, 2.2, 0.6, 1.2], power: 'dirty', services: 0.7, parks: 0.7 },
   suburb: { ...base, zoneMix: [1.6, 0.6, 0.4, 0.3, 0.3, 0.6], services: 1.2, parks: 1.4 },
-  greedy: { ...base, homesTax: 1500, taxBand: [1400, 2000], services: 0, funding: 0, keepMonths: 3, borrowForChecklist: false },
+  greedy: { ...base, homesTax: 1500, taxBand: [1400, 2000], services: 0, funding: 0, keepMonths: 3, borrowForChecklist: false, salesTax: 1000 },
   debt: { ...base, homesTax: 600, taxBand: [400, 800], borrow: true, services: 1.6, tourism: true, keepMonths: 0.25, budgetGuard: false },
   poacher: { ...base, undercut: 100, taxBand: [300, 1200], county: 'poach' },
   hermit: base,

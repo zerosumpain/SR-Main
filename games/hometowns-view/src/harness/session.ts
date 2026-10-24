@@ -1,5 +1,5 @@
 // Harness mode's in-page county (spec §9.16): a one-town county run entirely
-// in the page, on a virtual clock, with the harness bot as its mayor. No
+// in the page, on a virtual clock, with the Lab's Balanced bot as its mayor. No
 // server, no authentication and no network.
 //
 // Time is virtual and advances in whole grid ticks, so a seed always plays
@@ -144,7 +144,7 @@ export class HarnessSession {
   private note(turn: BotTurn, when: string): void {
     const tick = this.town.tick;
     const plans = turn.moves.filter((m) => m !== 'hello');
-    if (plans.length) this.push({ tick, text: `${when}: ${plans.length === 1 ? 'one plan' : `${plans.length} plans`} (${plans.map(planKind).join(', ')})` });
+    if (plans.length) this.push({ tick, text: `${when}: ${plans.length === 1 ? 'one move' : `${plans.length} moves`} (${plans.join(', ')})` });
     for (const r of turn.refused.slice(0, 2)) this.push({ tick, text: `${when}: refused: ${r}` });
   }
 
@@ -169,12 +169,6 @@ export interface HarnessStats {
   alerts: number;
   buildings: number;
   fortnight: boolean;
-}
-
-/** "harness-mayor-grow-41-0" → "grow". */
-function planKind(id: string): string {
-  const parts = id.split('-');
-  return parts.length >= 4 ? parts[parts.length - 3] : id;
 }
 
 export { EngineError };

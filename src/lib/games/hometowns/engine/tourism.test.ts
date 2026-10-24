@@ -11,7 +11,7 @@ import { monthContext, runMonths } from '../../../../../scripts/hometowns/people
 import { neutralFlows } from './core';
 import { neutral } from './derived';
 import { paramsFor } from './params';
-import { attractionsOf, realSeason, satisfaction, stepTourism, touristPoolBase, touristPull, touristShares } from './tourism';
+import { attractionsOf, hotelPrice, realSeason, satisfaction, stepTourism, touristPoolBase, touristPull, touristShares } from './tourism';
 import type { CountyState, DerivedCache, MonthContext, TownState } from './types';
 
 const P = paramsFor('v1');
@@ -102,6 +102,23 @@ describe('the pool, the pull and the shares', () => {
     stepTourism(t, m);
     const sat = m.derived.tourism!.satisfaction;
     expect(m.derived.tourism!.stays).toBeCloseTo(10_000 * 0.1 * (0.6 + (0.4 * sat) / 100), 9);
+  });
+});
+
+describe('hotel tax is a price (§5.13)', () => {
+  it('leaves the pull alone below City and at the default rate, and costs pull above it', () => {
+    const { t } = town('town');
+    t.taxes.hotel = 1200;
+    expect(hotelPrice(t, P)).toBe(1); // a Town has no hotel tax yet
+    t.tier = 3;
+    t.taxes.hotel = P.finance.defaults.hotel;
+    expect(hotelPrice(t, P)).toBeCloseTo(1, 12);
+    t.taxes.hotel = 1200;
+    const high = hotelPrice(t, P);
+    expect(high).toBeCloseTo((1.05 / 1.12) ** 2, 9);
+    t.taxes.hotel = 0;
+    expect(hotelPrice(t, P)).toBeGreaterThan(1);
+    expect(touristPull(10, 50, 1, 1, 1, P, high)).toBeLessThan(touristPull(10, 50, 1, 1, 1, P));
   });
 });
 

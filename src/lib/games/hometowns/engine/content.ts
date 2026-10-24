@@ -355,7 +355,7 @@ export const ORDER_DEFAULTS: readonly OrderDef[] = [
   { kind: 'buyUtilities', kid: true, adult: true, args: [], doc: 'buy missing power and water from Kingsport' },
   { kind: 'fixDamaged', kid: true, adult: true, args: [], doc: 'fix damaged buildings' },
   { kind: 'renewContracts', kid: true, adult: false, args: [], doc: 'renew contracts I made, unless they lost money' },
-  { kind: 'awayZoning', kid: true, adult: false, args: [12, 60, 3], doc: 'while away, zone up to args[0] Homes or Shops tiles a day next to roads when that meter is above args[1] and reserves exceed args[2] months of spending' },
+  { kind: 'awayZoning', kid: true, adult: false, args: [12, 60, 3], doc: 'while away, zone up to args[0] Homes, Shops or job (Industry or Farms) tiles a day next to roads when that meter is above args[1] and reserves exceed args[2] months of spending' },
   { kind: 'repayLoan', kid: false, adult: false, args: [3], doc: 'repay the Town Loan early when reserves exceed args[0] months of spending' },
   { kind: 'hold', kid: false, adult: false, args: [], doc: 'change nothing' },
 ];

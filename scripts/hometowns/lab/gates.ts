@@ -19,6 +19,8 @@ import { maxOf } from './stats';
 
 export interface LabData {
   mixed: CountyResult[];
+  /** G12's timed counties, run alone after the pool (absent in older data: then timed mixed runs are used). */
+  timing?: CountyResult[];
   g2b: CountyResult[];
   pacing: CountyResult[];
   founding: FoundingResult[];
@@ -203,7 +205,57 @@ function g13(d: LabData): GateResult {
     const pos = shareCI(f.map((x) => x.meters3.every((m) => m > 0)), 1000, 15);
     checks.push({ name: 'Homes £, Shops and Farms meters positive at tap 3', value: round(pos.est), target: '≥ 0.90 of sites', ok: pos.est >= 0.9, ci: pos, n: f.length });
   } else checks.push(pend('Founding runs', '≥ 90% in band', 'not run in this profile'));
+  checks.push(...calibration(d));
   return { id: 'G13', title: 'Catalogue and start (A11, A14)', verdict: verdictOf(checks), m0: false, checks };
+}
+
+/** §5.13's calibration table: £ per resident per month at default taxes, by tier (Metropolis is not reached at M0). */
+export const CALIBRATION: readonly [string, number, number][] = [
+  ['Hamlet', 22, 18],
+  ['Village', 32, 31],
+  ['Town', 86, 77],
+  ['City', 120, 108],
+  ['Metropolis', 150, 140],
+];
+
+/**
+ * A14 says the Lab hits this table with civicUpkeepScale. Balanced towns'
+ * town-months by tier (from month 4 of a tier, so the arrival month's
+ * one-offs do not count), within ±25%. Provisional at M0: reported and
+ * tracked, but the economy has not been retuned to it yet, so it does not
+ * fail the gate.
+ */
+function calibration(d: LabData): Check[] {
+  const rev: number[][] = CALIBRATION.map(() => []);
+  const up: number[][] = CALIBRATION.map(() => []);
+  for (const t of towns(d.mixed, 'balanced')) {
+    const mo = t.monthly;
+    if (!mo.tier || !mo.revPer || !mo.upkeepPer) continue;
+    let since = 0;
+    for (let k = 0; k < mo.tier.length; k++) {
+      since = k > 0 && mo.tier[k] === mo.tier[k - 1] ? since + 1 : 0;
+      if (since < 4 || (mo.pop[k] ?? 0) < 50) continue;
+      rev[mo.tier[k]]?.push(mo.revPer[k]);
+      up[mo.tier[k]]?.push(mo.upkeepPer[k]);
+    }
+  }
+  const out: Check[] = [];
+  CALIBRATION.forEach(([name, r, u], tier) => {
+    if (rev[tier].length < 12) return;
+    const mr = median(rev[tier]);
+    const mu = median(up[tier]);
+    const ok = Math.abs(mr / r - 1) <= 0.25 && Math.abs(mu / u - 1) <= 0.25;
+    out.push({
+      name: `§5.13 calibration at ${name}: revenue / upkeep per resident`,
+      value: `£${round(mr, 1)} / £${round(mu, 1)}`,
+      target: `£${r} / £${u} ±25%`,
+      ok,
+      provisional: true,
+      n: rev[tier].length,
+      note: 'Balanced towns, median town-month; provisional until the economy is retuned to the table',
+    });
+  });
+  return out;
 }
 
 function g3(d: LabData): GateResult {
@@ -426,7 +478,7 @@ function g11(d: LabData): GateResult {
 export const BUDGETS = { tickMs: 0.3, monthMs: 3, regionalMs: 15, chunkMs: 40, roomBytes: 320 * 1024 };
 
 function g12(d: LabData): GateResult {
-  const timed = d.mixed.filter((r) => r.timings);
+  const timed = (d.timing?.length ? d.timing : d.mixed).filter((r) => r.timings);
   const pool = (k: 'tick' | 'month' | 'regional' | 'chunk') => timed.flatMap((r) => r.timings![k]);
   const checks: Check[] = [];
   const add = (name: string, xs: number[], budget: number, unit: string) => {
@@ -457,7 +509,7 @@ function g12(d: LabData): GateResult {
       note: metro.length ? `largest metropolis ${perTown} bytes × 6 + county ${overhead}` : `no metropolis yet: largest town (tier ${biggest.tier[biggest.tier.length - 1]}, pop ${biggest.pop[biggest.pop.length - 1]}) ${perTown} bytes × 6 + county ${overhead}`,
     });
   }
-  return { id: 'G12', title: 'Budgets', verdict: verdictOf(checks), m0: true, checks, note: 'Timed with the observer step table on the Lab machine; budgets are §10.15 p95s.' };
+  return { id: 'G12', title: 'Budgets', verdict: verdictOf(checks), m0: true, checks, note: 'Timed on the Lab machine, one county at a time after the pool has drained, without the observer; budgets are §10.15 p95s.' };
 }
 
 export function evaluateGates(d: LabData, base: BaselineRef | null): GateResult[] {

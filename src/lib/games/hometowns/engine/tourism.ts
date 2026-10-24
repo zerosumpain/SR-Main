@@ -20,8 +20,9 @@ import { BEACH, BUILDINGS } from './content';
 import { flowsFor, population } from './core';
 import { clamp, lnFx, powFx, smooth } from './fx';
 import { neutral } from './derived';
+import { bp } from './num';
 import { T_SAND, TF_COAST, terrainKind, terrainOf } from './terrain';
-import { B_DAMAGED, B_KIND, B_X, B_Y, TILES, cellOf, constructionLeft, parcelOpen, tileIndex, tileX, tileY } from './tiles';
+import { B_DAMAGED, B_KIND, B_X, B_Y, CAT_ZONE, MARK_HERITAGE, TILES, cellOf, constructionLeft, parcelOpen, planesOf, tileIndex, tileX, tileY } from './tiles';
 import { eventIs, hasBuildingDone, memoOf, policyOn } from './trade';
 import { COVERAGES, FUNDING_KEYS, STARS, type MonthContext, type TourismSlot, type TownState } from './types';
 import type { Params } from './params';
@@ -80,6 +81,16 @@ export function attractionsOf(t: TownState, m: MonthContext): Attractions {
       cap += BEACH.visitorCap;
     }
   }
+  // Heritage Protection's "tourism appeal +" (§6.7): each protected heritage tile (the Culture star's test) adds appeal.
+  if (policyOn(t, 'heritageProtection')) {
+    const pl = planesOf(t);
+    const oldAge = m.params.stars.heritage[1];
+    for (let k = 0; k + 1 < t.marks.length; k += 2) {
+      const i = t.marks[k];
+      if (!(t.marks[k + 1] & MARK_HERITAGE) || pl.use[i] >>> 12 !== CAT_ZONE || (pl.lvl[i] & 7) < 2 || pl.age[i] < oldAge) continue;
+      appeal += tp.heritageAppeal;
+    }
+  }
   const cultureStar = (100 * t.culture) / (t.culture + m.params.stars.cultureHalf);
   const fun = m.derived.coverage?.town[COV_FUN] ?? 0;
   let scenic = 0;
@@ -101,12 +112,25 @@ export function touristGate(t: TownState, p: Params): number {
   return road + (hasBuildingDone(t, 'airfield') ? air : 0);
 }
 
-/** A town's tourist pull X = (Attr·Q)^1.1 · (Rep/50) · (0.3 + 0.7·Aw) · Gate · Gem (§5.10). */
-export function touristPull(attrQ: number, rep: number, aw: number, gate: number, gem: number, p: Params): number {
+/** A town's tourist pull X = (Attr·Q)^1.1 · (Rep/50) · (0.3 + 0.7·Aw) · Gate · Gem · Price (§5.10). */
+export function touristPull(attrQ: number, rep: number, aw: number, gate: number, gem: number, p: Params, price = 1): number {
   if (!(attrQ > 0)) return 0;
   const [a0, a1] = p.tourism.awareness;
-  return powFx(attrQ, p.tourism.shareExp) * (rep / 50) * (a0 + a1 * aw) * gate * gem;
+  return powFx(attrQ, p.tourism.shareExp) * (rep / 50) * (a0 + a1 * aw) * gate * gem * price;
 }
+
+/**
+ * Hotel tax's price term (§5.13: it "also enters the tourist share as a
+ * price term"), relative to the default rate so the pool calibration holds
+ * at the default: 1 below City (no hotel tax yet), above 1 for a cut, below
+ * for a rise. Without it 12% hotel tax was free money at City.
+ */
+export function hotelPrice(t: TownState, p: Params): number {
+  if (t.tier < HOTEL_TAX_TIER) return 1;
+  const base = 1 + bp(p.finance.defaults.hotel);
+  return powFx(base / (1 + bp(t.taxes.hotel)), p.tourism.hotelTaxElasticity);
+}
+const HOTEL_TAX_TIER = 3;
 
 /**
  * For WP3's Regional Day (§8.3 step 4): each active town's share of the
@@ -171,7 +195,8 @@ export function stepTourism(t: TownState, m: MonthContext): void {
   const gate = touristGate(t, p);
   const median = m.snapshot.medianPop;
   const gem = median > 0 && pop < median && t.rep >= tp.gem[1] ? tp.gem[0] : 1;
-  const pull = touristPull(attrQ, t.rep, t.aw, gate, gem, p);
+  const price = hotelPrice(t, p);
+  const pull = touristPull(attrQ, t.rep, t.aw, gate, gem, p, price);
 
   // The pool and this town's share: fixed at the Regional Day, or, before one has shared it, the
   // town's own estimate from the same formulas (a solo county's first day; or until WP3 lands).
@@ -241,7 +266,7 @@ export function stepTourism(t: TownState, m: MonthContext): void {
   memo.attrQ = attrQ;
   memo.pull = pull;
 
-  whyVisitors(m, { pool: poolBase, share, season, world, sat, stays, demand, dayTrips, repBefore, aw: awBefore, attrQ, gate, gem, fixed });
+  whyVisitors(m, { pool: poolBase, share, season, world, sat, stays, demand, dayTrips, repBefore, aw: awBefore, attrQ, gate, gem, price, fixed });
 }
 
 /**
@@ -253,7 +278,7 @@ export function stepTourism(t: TownState, m: MonthContext): void {
  */
 function whyVisitors(
   m: MonthContext,
-  v: { pool: number; share: number; season: number; world: number; sat: number; stays: number; demand: number; dayTrips: number; repBefore: number; aw: number; attrQ: number; gate: number; gem: number; fixed: boolean },
+  v: { pool: number; share: number; season: number; world: number; sat: number; stays: number; demand: number; dayTrips: number; repBefore: number; aw: number; attrQ: number; gate: number; gem: number; price: number; fixed: boolean },
 ): void {
   const p = m.params;
   m.why.set('visitors', v.stays + v.dayTrips);
@@ -263,14 +288,17 @@ function whyVisitors(
   let shareNeutral = v.share;
   let repF = 1;
   let awF = 1;
+  let priceF = 1;
   if (!v.fixed && v.attrQ > 0) {
     const atRep = touristPull(v.attrQ, 50, 1, v.gate, v.gem, p);
     const atAw = touristPull(v.attrQ, v.repBefore, 1, v.gate, v.gem, p);
-    const now = touristPull(v.attrQ, v.repBefore, v.aw, v.gate, v.gem, p);
+    const atPrice = touristPull(v.attrQ, v.repBefore, v.aw, v.gate, v.gem, p);
+    const now = touristPull(v.attrQ, v.repBefore, v.aw, v.gate, v.gem, p, v.price);
     const sh = (x: number) => touristShares([x], [true], p)[0];
     shareNeutral = sh(atRep);
     repF = sh(atAw) / Math.max(1e-12, shareNeutral);
-    awF = sh(now) / Math.max(1e-12, sh(atAw));
+    awF = sh(atPrice) / Math.max(1e-12, sh(atAw));
+    priceF = sh(now) / Math.max(1e-12, sh(atPrice));
   }
   const [s0, s1] = p.tourism.staySat;
   const satNeutral = s0 + (s1 * p.tourism.sat[0]) / 100;
@@ -280,6 +308,7 @@ function whyVisitors(
     ['vis.world', v.world],
     ['vis.reputation', repF],
     ['vis.awareness', awF],
+    ['vis.hotelTax', priceF],
     ['vis.satisfaction', (s0 + (s1 * v.sat) / 100) / satNeutral],
     ['vis.beds', v.demand > 0 ? v.stays / v.demand : 1],
   ];

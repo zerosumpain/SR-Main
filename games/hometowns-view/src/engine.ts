@@ -8,6 +8,7 @@ export { BUILDINGS, ZONE_DEFS, TIER_DEFS, buildingIndex, roadDef, type BuildingD
 export { formatPounds } from '../../../src/lib/games/hometowns/engine/num';
 export { placeCost } from '../../../src/lib/games/hometowns/engine/ops';
 export { checklistOf } from '../../../src/lib/games/hometowns/engine/tiers';
+export { BOTS, botById, brambleCommands, viewOf, type BotView } from '../../../src/lib/games/hometowns/engine/bots/index';
 export {
   COUNTY_ROAD_X,
   COUNTY_ROAD_END_Y,

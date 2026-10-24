@@ -22,8 +22,12 @@ import {
   EngineError,
   FUNDING_KEYS,
   FUND_LOW,
+  METER_FARMS,
+  METER_INDUSTRY,
   METER_SHOPS,
+  Z_FARMS,
   Z_HOMES,
+  Z_INDUSTRY,
   Z_SHOPS,
   type Actor,
   type Command,
@@ -166,12 +170,23 @@ export function runOrders(t: TownState, m: MonthContext, books: MonthBooks): voi
         const left = Math.max(0, Math.floor(tiles) - memo.zonedToday);
         const homes = zoneAllowed(t, Z_HOMES) && Math.max(t.meters[0], t.meters[1], t.meters[2]) > meterAt;
         const shops = zoneAllowed(t, Z_SHOPS) && t.meters[METER_SHOPS] > meterAt;
-        if (left === 0 || (!homes && !shops)) break;
-        const forHomes = homes ? (shops ? Math.ceil(left / 2) : left) : 0;
-        const h = zoneRoadside(t, Z_HOMES, forHomes);
-        const s = shops ? zoneRoadside(t, Z_SHOPS, left - h) : 0;
-        memo.zonedToday += h + s;
-        if (h + s > 0) deputyNote(t, m, 'awayZoning', { homes: h, shops: s });
+        // Review amendment to §5.18: also the job zone (Industry or Farms, the higher meter) when it is
+        // wanted. With Homes and Shops alone a town whose people had no work sat at a fixed point no
+        // order could leave (Bramble's steps give 10 jobs for 96 founders: G8).
+        const ind = zoneAllowed(t, Z_INDUSTRY) && t.meters[METER_INDUSTRY] > meterAt ? t.meters[METER_INDUSTRY] : -Infinity;
+        const farm = zoneAllowed(t, Z_FARMS) && t.meters[METER_FARMS] > meterAt ? t.meters[METER_FARMS] : -Infinity;
+        const jobZone = ind === -Infinity && farm === -Infinity ? -1 : farm > ind ? Z_FARMS : Z_INDUSTRY;
+        const kinds = (homes ? 1 : 0) + (shops ? 1 : 0) + (jobZone >= 0 ? 1 : 0);
+        if (left === 0 || kinds === 0) break;
+        // An even split, the remainder to Homes first (fixed order: Homes, Shops, jobs).
+        const share = Math.floor(left / kinds);
+        let extra = left - share * kinds;
+        const quota = () => share + (extra-- > 0 ? 1 : 0);
+        const h = homes ? zoneRoadside(t, Z_HOMES, quota()) : 0;
+        const s = shops ? zoneRoadside(t, Z_SHOPS, jobZone >= 0 ? quota() : left - h) : 0;
+        const j = jobZone >= 0 ? zoneRoadside(t, jobZone, left - h - s) : 0;
+        memo.zonedToday += h + s + j;
+        if (h + s + j > 0) deputyNote(t, m, 'awayZoning', { homes: h, shops: s, jobs: j });
         break;
       }
       case 'repayLoan': {

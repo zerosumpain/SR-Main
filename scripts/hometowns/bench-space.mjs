@@ -7,7 +7,9 @@
 //   node scripts/hometowns/bench-space.mjs 600        # more months
 //
 // The space package's acceptance test (space.bench.test.ts) calls
-// bundledBench() and fails if a p95 exceeds the budget × the CI margin.
+// bundledBench() and fails only on a gross regression: the median against
+// the budget × a generous margin (a p95 inside the parallel test run is
+// noise). The §10.15 budgets themselves are checked by bench.ts --check.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';

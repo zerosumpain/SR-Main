@@ -400,7 +400,7 @@ export interface BulletinItem {
 export interface AlertRecord {
   at: number;
   town: number | null;
-  kind: 'month-reverted' | 'regional-day' | 'invariant' | 'other';
+  kind: 'month-reverted' | 'tick-reverted' | 'regional-day' | 'invariant' | 'other';
   message: string;
 }
 
@@ -750,6 +750,12 @@ export interface TownState {
   lag: { poll: string; congestion: number[]; routes?: number[] };
   /** A19: moves stamped atTick, not yet applied (normally empty). */
   pending: CommandRecord[];
+  /**
+   * A28 (review amendment): "type:id" of this seat's last 32 logged moves, so
+   * a late re-post is still recognised after other players' moves have pushed
+   * it out of the county log.
+   */
+  moveIds: string[];
   // -- people (WP2b) --
   people: number[];
   /**
@@ -797,6 +803,8 @@ export interface TownState {
     helper: HelperState | null;
     /** WP2d addition: the dayIndex of the last Helper Mode episode (rating memory). */
     lastHelperDay: number | null;
+    /** Review amendment: the dayIndex of Kingsport's last write-off (no new borrowing for a while after one). */
+    lastWriteOffDay: number | null;
     fundAdvance: number;
   };
   /** Basis points (A25). homes is per tier. */

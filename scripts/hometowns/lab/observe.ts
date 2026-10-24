@@ -10,6 +10,8 @@
 import { STEPS, withSteps } from '../../../src/lib/games/hometowns/engine/steps';
 import { TERMS } from '../../../src/lib/games/hometowns/engine/why';
 import { population } from '../../../src/lib/games/hometowns/engine/core';
+import { REVENUE_LINES } from '../../../src/lib/games/hometowns/engine/finance';
+import { LEDGER_LINES } from '../../../src/lib/games/hometowns/engine/types';
 import type { MonthContext, MonthStep, RegionalStep, StepTable, TickContext, TickStep, TownState, WhyWriter } from '../../../src/lib/games/hometowns/engine/types';
 
 export interface TownMonthly {
@@ -25,7 +27,14 @@ export interface TownMonthly {
   whyRev: number[];
   /** Tier at each month end (G10 ignores meters of zones a tier cannot build). */
   tier?: number[];
+  /** £ per resident this month: recurring revenue and running upkeep (§5.13's calibration table, G13). */
+  revPer?: number[];
+  upkeepPer?: number[];
 }
+
+/** The upkeep side of §5.13's table: running costs of services, roads and utilities, not debt or capital. */
+const UPKEEP_LINES = ['upkeepCivic', 'upkeepRoads', 'upkeepUtilities', 'utilityImports', 'policyCosts', 'repairs'].map((l) => LEDGER_LINES.indexOf(l as never));
+const REVENUE_INDEX = REVENUE_LINES.map((l) => LEDGER_LINES.indexOf(l));
 
 const TERM_Q: Record<string, string> = {};
 for (const d of TERMS) TERM_Q[d.key] = d.q;
@@ -162,7 +171,7 @@ export class Observer {
     if (this.timing && p) push(this.samples.month, performance.now() - p.t0);
     if (!this.notes) return;
     let o = this.towns[m.townIndex];
-    if (!o) o = this.towns[m.townIndex] = { months: 0, meters: [], pop: [], pressure: [], whyPop: [], whyRev: [], tier: [] };
+    if (!o) o = this.towns[m.townIndex] = { months: 0, meters: [], pop: [], pressure: [], whyPop: [], whyRev: [], tier: [], revPer: [], upkeepPer: [] };
     const pop = population(t);
     let waiting = t.squeezed;
     for (const a of t.applicants) waiting += a;
@@ -173,6 +182,13 @@ export class Observer {
     o.whyPop.push(p ? round3(top3Share(p.pop)) : -1);
     o.whyRev.push(p ? round3(top3Share(p.rev)) : -1);
     o.tier!.push(t.tier);
+    let rev = 0;
+    let up = 0;
+    for (const k of REVENUE_INDEX) rev += t.books.lines[k];
+    for (const k of UPKEEP_LINES) up -= t.books.lines[k];
+    const n = Math.max(1, pop);
+    (o.revPer ??= []).push(Math.round((rev / n) * 10) / 10);
+    (o.upkeepPer ??= []).push(Math.round((up / n) * 10) / 10);
   }
 }
 

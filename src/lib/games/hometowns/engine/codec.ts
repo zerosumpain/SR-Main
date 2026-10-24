@@ -10,21 +10,39 @@ const B64_INDEX = (() => {
   return t;
 })();
 
+const B64_CODES = (() => {
+  const t = new Uint8Array(64);
+  for (let i = 0; i < 64; i++) t[i] = B64.charCodeAt(i);
+  return t;
+})();
+/** Characters per String.fromCharCode call: well under every engine's argument limit. */
+const CHUNK = 8192;
+
 export function toBase64(bytes: Uint8Array): string {
-  let out = '';
+  // Character codes into one buffer, then strings a chunk at a time: the
+  // planes are encoded every tick, and four-character concatenations were
+  // most of the cost. The output is the same string.
+  const n = bytes.length;
+  const codes = new Uint16Array(Math.ceil(n / 3) * 4);
+  let o = 0;
   let i = 0;
-  for (; i + 2 < bytes.length; i += 3) {
-    const n = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
-    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63] + B64[n & 63];
+  for (; i + 2 < n; i += 3) {
+    const v = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2];
+    codes[o++] = B64_CODES[(v >> 18) & 63];
+    codes[o++] = B64_CODES[(v >> 12) & 63];
+    codes[o++] = B64_CODES[(v >> 6) & 63];
+    codes[o++] = B64_CODES[v & 63];
   }
-  const left = bytes.length - i;
-  if (left === 1) {
-    const n = bytes[i] << 16;
-    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + '==';
-  } else if (left === 2) {
-    const n = (bytes[i] << 16) | (bytes[i + 1] << 8);
-    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + B64[(n >> 6) & 63] + '=';
+  const left = n - i;
+  if (left > 0) {
+    const v = (bytes[i] << 16) | (left === 2 ? bytes[i + 1] << 8 : 0);
+    codes[o++] = B64_CODES[(v >> 18) & 63];
+    codes[o++] = B64_CODES[(v >> 12) & 63];
+    codes[o++] = left === 2 ? B64_CODES[(v >> 6) & 63] : 61; // '='
+    codes[o++] = 61;
   }
+  let out = '';
+  for (let k = 0; k < o; k += CHUNK) out += String.fromCharCode.apply(null, codes.subarray(k, Math.min(o, k + CHUNK)) as unknown as number[]);
   return out;
 }
 
@@ -55,14 +73,17 @@ export function fromBase64(s: string): Uint8Array {
  * (3–130). Empty map rows compress to almost nothing.
  */
 export function rleEncode(src: Uint8Array): Uint8Array {
-  const out: number[] = [];
-  let i = 0;
   const n = src.length;
+  // Worst case: all literals, one control byte per 128.
+  const out = new Uint8Array(n + Math.ceil(n / 128) + 1);
+  let o = 0;
+  let i = 0;
   while (i < n) {
     let run = 1;
     while (i + run < n && run < 130 && src[i + run] === src[i]) run++;
     if (run >= 3) {
-      out.push(run + 125, src[i]);
+      out[o++] = run + 125;
+      out[o++] = src[i];
       i += run;
       continue;
     }
@@ -74,10 +95,10 @@ export function rleEncode(src: Uint8Array): Uint8Array {
       i++;
       lit++;
     }
-    out.push(lit - 1);
-    for (let j = start; j < start + lit; j++) out.push(src[j]);
+    out[o++] = lit - 1;
+    for (let j = start; j < start + lit; j++) out[o++] = src[j];
   }
-  return Uint8Array.from(out);
+  return out.slice(0, o);
 }
 
 export function rleDecode(src: Uint8Array, expected: number): Uint8Array {

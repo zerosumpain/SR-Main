@@ -55,7 +55,8 @@ export function eventInBlock(seed: number, block: number, p: Params): WorldEvent
   const [lo, hi] = p.world.eventMonths;
   const len = lo + (h32(seed, STREAMS.world, 3, block, 0) % (hi - lo + 1));
   // Calendar-bound events (Cosy Winter) are never drawn here: the deck below skips them, since a
-  // pure function of (seed, month) cannot know the real calendar. WP3 may add them at the Regional Day.
+  // pure function of (seed, month) cannot know the real calendar. calendarEvent() adds Cosy Winter
+  // from the tick's own real instant instead.
   const deck = EVENTS.filter((e) => e.realMonth === undefined);
   const id = deck[h32(seed, STREAMS.world, 4, block, 0) % deck.length].id;
   const fromMonth = startDay * MONTHS_PER_DAY;
@@ -94,4 +95,17 @@ export function worldAt(seed: number, m: number, season: SeasonInfo, p: Params):
 export function slowdownAhead(seed: number, m: number, season: SeasonInfo, p: Params): boolean {
   for (let k = 1; k <= 24; k++) if (cycleG(seed, m + k, p, season.boomBust) < p.world.slowdownAt) return true;
   return false;
+}
+
+/**
+ * §5.16's calendar-bound event: Cosy Winter runs in the real December (London
+ * time) whenever no drawn event is active. The deck cannot hold it, because
+ * World(m) is a pure function of the county month and a pause moves the
+ * calendar against it; the tick's real instant is in its context, so this is
+ * still deterministic, and the Regional Day before a December can announce it.
+ */
+export function calendarEvent(event: WorldEventState | null, calendarMonth: number): WorldEventState | null {
+  if (event) return event;
+  const def = EVENTS.find((e) => e.realMonth !== undefined && e.realMonth === calendarMonth);
+  return def ? { id: def.id, fromMonth: -1, toMonth: -1 } : null;
 }

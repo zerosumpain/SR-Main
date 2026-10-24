@@ -66,10 +66,11 @@ playwright-report/
 corpus.json
 
 # Runtime crash dumps must not enter source scans or candidate snapshots.
+# Linux names them core or core.<pid>; a wider core.* would also hide source
+# files such as the Hometowns engine's core.ts (and the builder's rsync uses
+# the same patterns, see scripts/development-workspace-broker.mjs).
 core
-core.*
-# The Hometowns engine has a source file called core.ts.
-!src/lib/games/hometowns/engine/core.ts
+core.[0-9]*
 
 # Historical Policy build output; keep stale local assets out of source control.
 static/policy-offline/

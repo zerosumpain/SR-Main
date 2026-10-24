@@ -274,6 +274,11 @@ function devOf(t: TownState): DevState {
   return d;
 }
 
+/** Drops the decoded memo (after a revert replaced t.dev: a copy changed in place must not survive it). */
+export function forgetDev(t: TownState): void {
+  DEV_CACHE.delete(t);
+}
+
 function writeDev(t: TownState, d: DevState): void {
   const s = encodeTick(d) + '|' + d.monthSrc;
   d.src = s;
@@ -621,6 +626,14 @@ export function supplyOf(t: TownState, p: Params): DevelopmentSlot {
   const s = neutral.development();
   const f = factsOf(t, devOf(t));
   countSupply(f, p, s);
+  // Farmers' Market's catch (§6.7): farm jobs −10%, open and in the pipeline.
+  if (t.policies.some((a) => a.card === 'farmersMarket')) {
+    const k = ZSECTOR[ZF] * 3;
+    for (let h = 0; h < 3; h++) {
+      s.jobs[k + h] = Math.floor(s.jobs[k + h] * p.firms.farmersMarketFarmJobs);
+      s.pipeJobs[k + h] = Math.floor(s.pipeJobs[k + h] * p.firms.farmersMarketFarmJobs);
+    }
+  }
   reachability(t, f, p.develop, s);
   return s;
 }
@@ -1120,11 +1133,13 @@ export function stepDevelop(t: TownState, ctx: TickContext): void {
     candidates.sort((a, b) => b.score - a.score || a.rank - b.rank || a.tile - b.tile);
     const n = Math.min(allow, candidates.length);
     const w = planesForWrite(t);
+    // The World's Builders' Shortage (§5.16): every start this tick takes one tick longer.
+    const shortage = ctx.world.event?.id === 'buildersShortage' ? 1 : 0;
     for (let k = 0; k < n; k++) {
       const c = candidates[k];
       w.lvl[c.tile] = c.lvl;
       w.age[c.tile] = 0;
-      pairSet(t.construction, c.tile, p.buildTicks[c.level - 1] ?? 2);
+      pairSet(t.construction, c.tile, (p.buildTicks[c.level - 1] ?? 2) + shortage);
       busy[c.tile] = 1;
       if (c.from > 0) pairSet(d.aux, c.tile, aux(AUX_UPGRADE, c.from));
       appendTileEvent(t, ctx.tick, c.tile, c.from > 0 ? 'levelUp' : 'started', c.level);

@@ -212,7 +212,7 @@ function finishSummaries(c: CountyState, seats: Seat[], obs: Observer | null): v
     let n = 0;
     for (let q = 0; q < 16; q++) if ((t.parcels >> q) & 1) n++;
     s.summary.parcelsOpen = n;
-    s.summary.reverted = t.alerts.filter((a) => a.kind === 'month-reverted').length;
+    s.summary.reverted = t.alerts.filter((a) => a.kind === 'month-reverted' || a.kind === 'tick-reverted').length;
     s.summary.bytes = JSON.stringify(t).length;
     if (obs) s.summary.monthly = obs.town(i);
   });

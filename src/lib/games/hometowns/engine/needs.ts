@@ -128,6 +128,21 @@ export function baseStars(t: TownState, m: MonthContext): { schools: number; hea
   return { schools, health, safety, fun, culture, nature, around, buzz };
 }
 
+/**
+ * The household tax rate tier h feels, in homes-tax basis points: homes tax,
+ * plus (from Town, where the dial exists) sales tax's distance from its
+ * default, weighted by the tier's shop and leisure spending against the share
+ * of income that goes on rent (stars.salesTaxRentShare). A shopper pays sales
+ * tax as surely as a householder pays homes tax.
+ */
+export function householdTaxBp(t: TownState, h: number, p: MonthContext['params']): number {
+  const homes = t.taxes.homes[h] ?? 0;
+  if (t.tier < 2) return homes;
+  const f = p.firms;
+  const weight = ((f.retailShare[h] ?? 0) + (f.leisureShare[h] ?? 0)) / p.stars.salesTaxRentShare;
+  return Math.max(0, homes + weight * (t.taxes.sales - p.finance.defaults.sales));
+}
+
 /** The Tax star for homes tax `bpRate` (basis points) at sensitivity `sens` (§5.6). */
 export function taxStar(bpRate: number, sens: number, m: Pick<MonthContext, 'params'>): number {
   return clamp(100 - m.params.stars.taxSlope * (bpRate / 100 - 3) * sens, 0, 100);
@@ -161,7 +176,7 @@ export function townStars(t: TownState, m: MonthContext): TownStars {
     prospect[h] = clamp(50 + 50 * T((lab.vacancies[h] - lab.unemployed[h]) / (sp.prospect[0] * lab.workforce[h] + sp.prospect[1])), 0, 100);
     const [share, homesMin] = m.params.housing.homesVacancy;
     homes[h] = clamp(hs.afford[h] * (0.5 + 0.5 * Math.min(1, hs.vacant[h] / (share * hs.cap[h] + homesMin))), 0, 100);
-    tax[h] = taxStar(t.taxes.homes[h] ?? 0, sp.taxSens[h], m);
+    tax[h] = taxStar(householdTaxBp(t, h, m.params), sp.taxSens[h], m);
     actual[starTier(0, h)] = jobs[h];
     actual[starTier(1, h)] = homes[h];
     actual[starTier(2, h)] = tax[h];
@@ -527,7 +542,9 @@ export function stepStars(t: TownState, m: MonthContext): void {
   const lab = m.derived.labour ?? neutral.labour();
   const squeezed = scratchOf(m).squeezed;
   const tour = m.derived.tourism;
-  const irritate = tour && tour.visitorRatio > m.params.tourism.irritationAt ? Math.min(sp.irritation[1], sp.irritation[0] * (tour.visitorRatio - m.params.tourism.irritationAt)) / sp.happyGain : 0;
+  // Tourism Promotion's catch (§6.7): residents tire of visitors sooner.
+  const irritationAt = m.params.tourism.irritationAt - (hasPolicy(t, 'tourismPromotion') ? m.params.tourism.promotionIrritation : 0);
+  const irritate = tour && tour.visitorRatio > irritationAt ? Math.min(sp.irritation[1], sp.irritation[0] * (tour.visitorRatio - irritationAt)) / sp.happyGain : 0;
   const uHappy = new Array<number>(COHORT_COUNT).fill(0);
   for (let k = 0; k < COHORT_COUNT; k++) {
     const h = k === COHORT_S ? 0 : Math.floor(k / 3);

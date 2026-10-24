@@ -164,6 +164,8 @@ export function nextLandValue(lv: Uint8Array, target: Float64Array, cap: number)
   const out = new Uint8Array(CELLS);
   for (let c = 0; c < CELLS; c++) {
     const cur = lv[c];
+    // A u8 plane would store a NaN as 0 and nothing downstream could tell: fail the month instead.
+    if (!Number.isFinite(target[c])) throw new Error(`land value target of cell ${c} is ${target[c]}`);
     let d = Math.round(target[c]) - cur;
     if (d > cap) d = cap;
     else if (d < -cap) d = -cap;

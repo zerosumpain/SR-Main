@@ -45,6 +45,16 @@ export function checkTown(t: TownState): string[] {
   });
   const r = t.money.reserves;
   if (!finite(r) || !Number.isInteger(r)) out.push(`reserves = ${String(r)}`);
+  // The month's opening balances too: a NaN there would make the balance check below vacuous.
+  if (!finite(t.books.open) || !Number.isInteger(t.books.open)) out.push(`books.open = ${String(t.books.open)}`);
+  if (!finite(t.books.popOpen) || !Number.isInteger(t.books.popOpen)) out.push(`books.popOpen = ${String(t.books.popOpen)}`);
+  const debts = t.money.loan ? [t.money.loan, ...t.money.bonds] : t.money.bonds;
+  for (const d of debts) if (![d.principal, d.rate, d.monthsLeft, d.payment].every(finite) || d.principal < 0) out.push(`debt ${JSON.stringify(d)}`);
+  if (!finite(t.money.fundAdvance) || !finite(t.money.overdraftMonths)) out.push(`money ${t.money.fundAdvance}/${t.money.overdraftMonths}`);
+  const tx = t.taxes;
+  if (![tx.town, tx.business, tx.sales, tx.hotel, ...tx.homes].every((x) => finite(x) && x >= 0)) out.push(`taxes ${JSON.stringify(tx)}`);
+  if (!t.funding.every(finite)) out.push(`funding ${JSON.stringify(t.funding)}`);
+  if (!t.lag.congestion.every((x) => finite(x) && x >= 0)) out.push('lag.congestion is not finite');
   let posted = 0;
   for (const x of t.books.lines) {
     if (!finite(x) || !Number.isInteger(x)) out.push(`ledger line ${String(x)} is not whole`);

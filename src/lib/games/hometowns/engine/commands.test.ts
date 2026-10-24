@@ -143,6 +143,26 @@ describe('build (§9.3, atomic)', () => {
     expect(t.money.reserves).toBe(reserves);
   });
 
+  it('stays idempotent after other players have pushed the record out of the county log (A28)', () => {
+    const { c, t, now } = setup();
+    foundAndSprint(c, 'ben', 1, now);
+    const first = build(c, 'road-1', [{ op: 'road', kind: 'lane', path: [32, 43, 32, 39] }], now + 200_000);
+    const reserves = t.money.reserves;
+    // 150 legal budget moves by someone else, a few a minute.
+    for (let k = 0; k < 150; k++) applyCommand(c, 'ben', { type: 'budget', moveId: `b${k}`, taxes: { town: 500 + (k % 2) * 100 } }, now + 200_000 + 1000 * (k + 1) + 30_000 * Math.floor(k / 50));
+    expect(c.log.some((r) => r.seat === 'ann')).toBe(false);
+    const again = build(c, 'road-1', [{ op: 'road', kind: 'lane', path: [32, 43, 32, 39] }], now + 400_000);
+    expect(again.replayed).toBe(true);
+    expect(first.cost).toBeGreaterThan(0);
+    expect(t.money.reserves).toBe(reserves);
+  });
+
+  it('needs an id for every logged move', () => {
+    const { c, now } = setup();
+    refused(() => applyCommand(c, 'ann', { type: 'budget', taxes: { town: 600 } } as never, now), 400, /moveId/);
+    refused(() => applyCommand(c, 'ann', { type: 'build', plan: [] } as never, now), 400, /planId/);
+  });
+
   it('bulldozes: a same-day road refunds half, the Town Hall and County Road stay', () => {
     const { c, t, now } = setup();
     build(c, 'r', [{ op: 'road', kind: 'lane', path: [32, 43, 32, 42] }], now);
@@ -170,15 +190,17 @@ describe('build (§9.3, atomic)', () => {
 describe('undo', () => {
   it('refunds in full and restores the tiles while unchanged, only on the same day', () => {
     const { c, t, now } = setup();
-    const h = stateHash({ ...t, money: { ...t.money, reserves: 0 }, books: { ...t.books, lines: [], dayLines: [] }, undo: [], tileLog: '', carry: {}, planesRev: 0 });
+    const h = stateHash({ ...t, money: { ...t.money, reserves: 0 }, books: { ...t.books, lines: [], dayLines: [] }, undo: [], moveIds: [], tileLog: '', carry: {}, planesRev: 0 });
     const reserves = t.money.reserves;
     build(c, 'u', [{ op: 'road', kind: 'lane', path: [32, 43, 32, 39] }, { op: 'place', id: 'villageGreen', x: 31, y: 40, rot: 0 }, { op: 'zone', zone: 'homes', rect: [28, 39, 3, 3] }], now);
     applyCommand(c, 'ann', { type: 'undo', planId: 'u', moveId: 'undo-u' }, now + 10);
     expect(t.money.reserves).toBe(reserves);
-    expect(stateHash({ ...t, money: { ...t.money, reserves: 0 }, books: { ...t.books, lines: [], dayLines: [] }, undo: [], tileLog: '', carry: {}, planesRev: 0 })).toBe(h);
+    expect(stateHash({ ...t, money: { ...t.money, reserves: 0 }, books: { ...t.books, lines: [], dayLines: [] }, undo: [], moveIds: [], tileLog: '', carry: {}, planesRev: 0 })).toBe(h);
     build(c, 'v', [{ op: 'road', kind: 'lane', path: [32, 43, 32, 41] }], now + 20);
     catchUp(c, nextRegionalDayAt(c) + 1, 1e9);
-    refused(() => applyCommand(c, 'ann', { type: 'undo', planId: 'v', moveId: 'undo-v' }, nextRegionalDayAt(c) - 3_600_000 * 20), 409, /same day|day they were built/);
+    // The Regional Day closed the day: its plans' undo entries are gone (they could never be used again).
+    refused(() => applyCommand(c, 'ann', { type: 'undo', planId: 'v', moveId: 'undo-v' }, nextRegionalDayAt(c) - 3_600_000 * 20), 404, /no longer in today/);
+    expect(t.undo).toEqual([]);
   });
 
   it('refuses when something has changed since', () => {

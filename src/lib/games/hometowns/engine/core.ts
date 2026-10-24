@@ -3,7 +3,7 @@
 // the conservation invariants can be checked after every town-month), plus
 // the empty records a new town or a new day starts from.
 
-import { commitPlanes } from './tiles';
+import { commitPlanes, countPlanes } from './tiles';
 import { commitRecords } from './records';
 import { takeCarry } from './num';
 import {
@@ -167,5 +167,15 @@ const NEUTRAL_FLOWS: TownDayFlows = (() => {
 /** Writes every decoded working copy back into the stored strings. */
 export function commitTown(t: TownState): void {
   commitPlanes(t);
+  commitRecords(t);
+}
+
+/**
+ * The end of a tick: counts a change of the planes (planesRev) and writes
+ * the small records back, but leaves the planes' encoding to the next
+ * commitTown (the catch-up driver commits once a chunk).
+ */
+export function settleTown(t: TownState): void {
+  countPlanes(t);
   commitRecords(t);
 }

@@ -21,6 +21,7 @@ import type { Params } from './params';
 import { areaClass, modelOf, runFor, scratch, scratchI32, scratchU8, type SpaceModel, type SpaceRun } from './space';
 import { MAP, TILES } from './tiles';
 import { FUNDING_KEYS, Z_FARMS, Z_HOMES, Z_INDUSTRY, Z_OFFICES, type MonthContext, type TownState, type UtilitiesSlot } from './types';
+import { calendarEvent } from './world';
 
 /** Brownout classes in cut order (§3.5). */
 export const CUT_INDUSTRY = 0;
@@ -252,7 +253,7 @@ export function utilitiesOf(run: SpaceRun): UtilitiesSlot {
   if (run.utilities) return run.utilities as UtilitiesSlot;
   const { t, p, ctx } = run;
   const model = modelOf(run);
-  const winter = ctx.world.event?.id === 'cosyWinter';
+  const winter = calendarEvent(ctx.world.event, ctx.calendarMonth)?.id === 'cosyWinter';
   const { units, plants } = unitsOf(t, model, p, winter);
   const imp = autoImport(t, p);
   const pw = serve(model, units, plants, 'power', imp);

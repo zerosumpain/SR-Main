@@ -82,7 +82,7 @@ describe('the county grid and the Regional Day', () => {
     expect(napCheck(c, epoch + 100 * H, 72 * H)).toBe(true);
     expect(c.nap).toEqual({ since: at });
     const g = gridTickAt(c, at);
-    hello(c, epoch + 100 * H + 7);
+    hello(c, epoch + 100 * H + 7, 72 * H);
     expect(c.nap).toBeNull();
     expect(c.pausedMs % c.tickMs).toBe(0);
     // The grid resumes where it slept.

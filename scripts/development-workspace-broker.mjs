@@ -40,7 +40,8 @@ const PREVIEW_DB_HOST = 'sr-preview-db';
 // Matches local-preview-ingress.mjs's upstream check (^sr-preview-).
 const PREVIEW_APP_HOST = 'sr-preview-app';
 const validId = (id) => { if (typeof id !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(id)) throw new Error('Invalid build id'); return id; };
-const excluded = ['core', 'core.*', '.env', '.env.*', 'keys.json', 'node_modules', '.svelte-kit', '/build', '.git', '/data', '.pi', '/sessions'];
+// Crash dumps are core or core.<pid>; core.* would drop source files such as engine/core.ts.
+const excluded = ['core', 'core.[0-9]*', '.env', '.env.*', 'keys.json', 'node_modules', '.svelte-kit', '/build', '.git', '/data', '.pi', '/sessions'];
 async function copySource(from, to, removeMissing = false) {
   await mkdir(to, { recursive: true });
   await command('rsync', ['-a', '--safe-links', ...(removeMissing ? ['--delete'] : []), ...excluded.map((p) => `--exclude=${p}`), `${from}/`, `${to}/`]);

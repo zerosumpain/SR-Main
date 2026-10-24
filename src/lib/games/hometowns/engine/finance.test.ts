@@ -440,6 +440,28 @@ describe('Helper Mode (§5.13, A16)', () => {
   });
 });
 
+describe('no borrowing on Kingsport’s account (review amendment to §5.13)', () => {
+  it('refuses a loan in Helper Mode and for two days after a write-off, then lends again', () => {
+    const { c, t, now } = withRevenue();
+    t.money.helper = { sinceDay: c.dayIndex, sinceTick: t.tick, advance: 0, step: 0 };
+    refused(() => loan(c, t.seat, { take: 1000 }, now, 'h1'), 409, /helping/);
+    t.money.helper = null;
+    t.money.lastWriteOffDay = c.dayIndex;
+    refused(() => loan(c, t.seat, { take: 1000 }, now, 'h2'), 409, /cleared our debts/);
+    c.dayIndex += P.finance.writeOffBorrowBarDays - 1;
+    refused(() => loan(c, t.seat, { take: 1000 }, now, 'h3'), 409, /cleared our debts/);
+    c.dayIndex += 1;
+    expect(loan(c, t.seat, { take: 1000 }, now, 'h4').cost).toBe(-1000);
+  });
+
+  it('a write-off records its day', () => {
+    const { c, i, t } = town();
+    postWhole(t, 'other', -t.money.reserves - 5_000_000);
+    runDays(c, i, 12 * 11, DEFICIT, () => {});
+    expect(t.money.lastWriteOffDay).not.toBeNull();
+  });
+});
+
 describe('the overdraft', () => {
   it('charges r_base + 8% a year on what is overdrawn', () => {
     const { c, i, t } = town();

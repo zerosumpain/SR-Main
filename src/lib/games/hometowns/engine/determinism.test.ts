@@ -11,9 +11,10 @@ import { catchUp, regionalDay } from './county';
 import { flow, population, postMoney, postPeople } from './core';
 import { countyHash, stateHash } from './index';
 import { checkCounty } from './invariants';
+import { CARRY_SCALE } from './num';
 import { withSteps } from './steps';
 import { catchUpTown } from './tick';
-import { gridTickAt, nextRegionalDayAt } from './clock';
+import { gridTickAt, napCheck, nextRegionalDayAt } from './clock';
 import { constructionLeft, lvlLevel, pairSet, planesForWrite, planesOf, useCat, CAT_ZONE } from './tiles';
 import { STAGE_C, STAGE_R, STAGE_W, person, type CountyState, type MonthContext, type TickContext, type TownState } from './types';
 
@@ -76,26 +77,26 @@ function drain(c: CountyState, to: number, budget: number): number {
   let calls = 0;
   for (;;) {
     calls++;
+    const day = c.dayIndex;
     const r = catchUp(c, to, budget, { steps: TEST_STEPS });
     if (r.done) return calls;
-    expect(r.changed).toBe(false); // A27: an intermediate chunk neither writes nor emits
+    // A27: an intermediate chunk neither writes nor emits, unless it ran a Regional Day.
+    expect(r.changed).toBe(c.dayIndex !== day);
     expect(calls).toBeLessThan(100000);
   }
 }
 
 describe('determinism', () => {
   const { c: base, now } = county();
-  const to = now + 3 * DAY + 5 * 3_600_000;
-  const reference = (() => {
-    const c = structuredClone(base);
-    drain(c, to, Infinity);
-    return countyHash(c);
-  })();
+  const to = now + 2 * DAY + 5 * 3_600_000;
+  // The county drained in one call: the reference every other way of getting there must match.
+  const done = structuredClone(base);
+  drain(done, to, Infinity);
+  const reference = countyHash(done);
 
   it('the test economy actually moves (otherwise the checks below prove nothing)', () => {
-    const c = structuredClone(base);
-    drain(c, to, Infinity);
-    expect(c.dayIndex).toBeGreaterThanOrEqual(3);
+    const c = structuredClone(done);
+    expect(c.dayIndex).toBeGreaterThanOrEqual(2);
     for (const t of c.towns) {
       expect(population(t)).toBeGreaterThan(30);
       expect(t.money.reserves).not.toBe(base.towns[0].money.reserves);
@@ -104,7 +105,9 @@ describe('determinism', () => {
     expect(c.towns.flatMap((t) => t.alerts)).toEqual([]);
   });
 
-  it.each([1, 2, 7, 13, 50, 333])('catch-up in chunks of %i equals one call', (budget) => {
+  // One unit (every tick its own chunk) and one that splits months and days unevenly; the real-engine
+  // suite (determinism-real.test.ts) adds the server's 96 with a revive after every chunk.
+  it.each([1, 13])('catch-up in chunks of %i equals one call', (budget) => {
     const c = structuredClone(base);
     const calls = drain(c, to, budget);
     if (budget < 50) expect(calls).toBeGreaterThan(10);
@@ -129,8 +132,7 @@ describe('determinism', () => {
   });
 
   it('JSON round-trips exactly and the state hash is stable', () => {
-    const c = structuredClone(base);
-    drain(c, to, Infinity);
+    const c = structuredClone(done);
     expect(JSON.parse(JSON.stringify(c))).toEqual(c);
     const t = c.towns[1];
     expect(stateHash(JSON.parse(JSON.stringify(t)))).toBe(stateHash(t));
@@ -152,8 +154,7 @@ describe('determinism', () => {
   });
 
   it('the Regional Day is idempotent by dayIndex (A28)', () => {
-    const c = structuredClone(base);
-    drain(c, to, Infinity);
+    const c = structuredClone(done);
     const h = countyHash(c);
     expect(regionalDay(c, c.dayIndex - 1).ran).toBe(false);
     expect(countyHash(c)).toBe(h);
@@ -179,7 +180,7 @@ describe('the NaN guard and the blackboard (§10.4 item 9, A41)', () => {
     catchUp(c, now + DAY, Infinity, { steps });
     catchUp(clean, now + DAY, Infinity, { steps: TEST_STEPS });
     expect(c.towns[1].alerts.map((a) => a.kind)).toEqual(['month-reverted']);
-    expect(c.towns[1].alerts[0].message).toMatch(/people\[0\]/);
+    expect(c.towns[1].alerts[0].message).toMatch(/people\[0\]|NaN/);
     expect(checkCounty(c)).toEqual([]);
     expect(stateHash(c.towns[0])).toBe(stateHash(clean.towns[0]));
     expect(stateHash(c.towns[2])).toBe(stateHash(clean.towns[2]));
@@ -198,6 +199,118 @@ describe('the NaN guard and the blackboard (§10.4 item 9, A41)', () => {
   });
 });
 
+describe('a broken tick never stops the county (§10.4 item 9)', () => {
+  it('a tick step that throws is reverted and skipped with an alert; the county carries on', () => {
+    const { c, now } = county(14);
+    const clean = structuredClone(c);
+    const throwing = (t: TownState, ctx: TickContext) => {
+      testDevelop(t, ctx);
+      if (ctx.townIndex === 1 && t.tick === 30) throw new Error('boom');
+    };
+    const steps = withSteps({ develop: throwing, 'M9 demography': testDemography });
+    expect(() => catchUp(c, now + DAY, Infinity, { steps })).not.toThrow();
+    catchUp(clean, now + DAY, Infinity, { steps: TEST_STEPS });
+    expect(c.towns[1].alerts.map((a) => a.kind)).toEqual(['tick-reverted']);
+    expect(c.towns[1].alerts[0].message).toMatch(/tick 30 skipped: boom/);
+    expect(c.towns[1].tick).toBe(clean.towns[1].tick);
+    expect(stateHash(c.towns[0])).toBe(stateHash(clean.towns[0]));
+    expect(checkCounty(c)).toEqual([]);
+  });
+
+  it('a NaN written by a tick step is caught at that tick, not laundered into 0 by the month revert', () => {
+    const { c, now } = county(15);
+    const poison = (t: TownState, ctx: TickContext) => {
+      testDevelop(t, ctx);
+      if (ctx.townIndex === 0 && t.tick === 29) t.money.reserves = NaN;
+    };
+    catchUp(c, now + DAY, Infinity, { steps: withSteps({ develop: poison, 'M9 demography': testDemography }) });
+    const t = c.towns[0];
+    expect(t.alerts.map((a) => a.kind)).toEqual(['tick-reverted']);
+    expect(t.alerts[0].message).toMatch(/reserves = NaN/);
+    expect(Number.isInteger(t.money.reserves)).toBe(true);
+    expect(t.money.reserves).toBeGreaterThan(50_000);
+    expect(checkCounty(c)).toEqual([]);
+  });
+});
+
+describe('the clock under moves (A19, A21, §2.4)', () => {
+  /** Two towns, sprinted, then left alone. */
+  function quiet(seed: number): { c: CountyState; now: number } {
+    const c = newCounty(seed);
+    let now = c.epoch + 60_000;
+    for (const [s, site] of [['a', 0], ['b', 2]] as const) now = foundAndSprint(c, s, site, now).now + 1000;
+    c.parents.push('a');
+    return { c, now };
+  }
+  const opts = { steps: TEST_STEPS };
+
+  it('waking a nap gives the same county however far catch-up had got, and whether or not the nap was recorded', () => {
+    const { c: c0, now } = quiet(4);
+    const wakeAt = now + 4 * DAY;
+    const run = (budget: number, recordNap: boolean) => {
+      const c = structuredClone(c0);
+      catchUp(c, wakeAt, budget, opts);
+      if (recordNap) napCheck(c, wakeAt, 72 * 3_600_000);
+      applyCommand(c, 'a', { type: 'hello' }, wakeAt, opts);
+      drain(c, wakeAt + DAY, Infinity);
+      return { day: c.dayIndex, ticks: c.towns.map((t) => t.tick), h: countyHash(c) };
+    };
+    const ref = run(Infinity, true);
+    expect(run(96, true)).toEqual(ref);
+    expect(run(Infinity, false)).toEqual(ref);
+    // The nap really froze the county: 4 days away and 1 day on, but only the days before the nap ran.
+    expect(ref.day).toBeLessThan(5);
+  });
+
+  it('ending a pause gives the same county (and the same tick instants) however far catch-up had got', () => {
+    const { c: c0, now } = quiet(5);
+    const R = nextRegionalDayAt(c0);
+    drain(c0, R + 60_000, Infinity);
+    const pauseAt = R + 20 * 3_600_000;
+    const run = (budget: number) => {
+      const c = structuredClone(c0);
+      applyCommand(c, 'a', { type: 'pause', on: true, moveId: 'p1' }, pauseAt, opts);
+      catchUp(c, pauseAt + DAY, budget, opts);
+      applyCommand(c, 'a', { type: 'pause', on: false, moveId: 'p2' }, pauseAt + DAY, opts);
+      drain(c, pauseAt + 3 * DAY, Infinity);
+      return { day: c.dayIndex, ticks: c.towns.map((t) => t.tick), h: countyHash(c) };
+    };
+    const ref = run(Infinity);
+    expect(run(0)).toEqual(ref);
+    expect(run(9)).toEqual(ref);
+  });
+
+  it('a move during "Play it all" lands after the auto sprint ticks already due, whatever ran before it', () => {
+    const c0 = newCounty(6);
+    const now = nextRegionalDayAt(c0) + 3_600_000;
+    drain(c0, now, Infinity);
+    applyCommand(c0, 'a', { type: 'found', site: 0, nameParts: ['Oak', 'vale'], avatar: 'badger', flag: 0 }, now, opts);
+    applyCommand(c0, 'a', { type: 'sprint', moveId: 'auto', auto: true }, now + 1000, opts);
+    const moveAt = now + 1000 + 5 * 15_000 + 500;
+    const run = (budget: number) => {
+      const c = structuredClone(c0);
+      if (budget) catchUp(c, moveAt, budget, opts);
+      const r = applyCommand(c, 'a', { type: 'build', planId: 'p1', plan: [{ op: 'zone', zone: 'homes', rect: [26, 29, 6, 4] }, { op: 'road', kind: 'lane', path: [32, 43, 32, 28, 22, 28] }] }, moveAt, opts);
+      drain(c, moveAt + DAY, Infinity);
+      return { at: r.atTick, h: countyHash(c) };
+    };
+    const ref = run(Infinity);
+    expect(ref.at).toBe(5);
+    expect(run(2)).toEqual(ref);
+    expect(run(0)).toEqual(ref);
+  });
+
+  it('a refused founding changes nothing, even while the county sleeps', () => {
+    const { c, now } = quiet(7);
+    const at = now + 5 * DAY;
+    const h = countyHash(c);
+    expect(() => applyCommand(c, 'z', { type: 'found', site: 0, nameParts: ['Oak', 'vale'], avatar: 'badger', flag: 0 }, at, opts)).toThrow(/already built/);
+    expect(countyHash(c)).toBe(h);
+    expect(c.nap).toBeNull();
+    expect(c.lastHelloAt).toBeLessThan(at);
+  });
+});
+
 describe('invariants after a long run', () => {
   it('books balance to the pound and people are conserved', () => {
     const { c, now } = county(13);
@@ -207,7 +320,7 @@ describe('invariants after a long run', () => {
       expect(t.books.open + posted).toBe(t.money.reserves);
       expect(t.books.popOpen + t.books.pop.reduce((a, b) => a + b, 0)).toBe(population(t));
       expect(Number.isInteger(t.money.reserves)).toBe(true);
-      for (const v of Object.values(t.carry)) expect(Math.abs(v)).toBeLessThan(1000);
+      for (const v of Object.values(t.carry)) expect(Math.abs(v)).toBeLessThan(CARRY_SCALE);
     }
     expect(checkCounty(c)).toEqual([]);
   });

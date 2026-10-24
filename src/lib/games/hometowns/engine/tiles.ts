@@ -6,9 +6,10 @@
 // and the state hash see. Working on it directly would mean decoding on every
 // read, so the engine keeps a decoded copy per TownState object: planesOf(t)
 // for reading, planesForWrite(t) before changing anything, and commitPlanes(t)
-// (the driver calls it after every tick and command) to write the string back.
-// The copy is keyed on the stored string itself, so a revived or reverted town
-// can never be served a stale decode.
+// (the driver calls it after every command and at the end of every catch-up
+// chunk) to write the string back; countPlanes at each tick end keeps
+// planesRev exact in between. The copy is keyed on the stored string itself,
+// so a revived or reverted town can never be served a stale decode.
 
 import { decodeU8, encodeU8, fromBase64, rleDecode, rleEncode, toBase64 } from './codec';
 import type { BuildingRecord, TownState } from './types';
@@ -147,18 +148,33 @@ export function decodePlanes(s: string): Planes {
 interface PlaneEntry {
   src: string;
   planes: Planes;
+  /** Changed since t.planes was last written. */
   dirty: boolean;
   /** Bumped on every write access: keys derived memos (road access). */
   version: number;
   roadAccess: { version: number; reach: number; mask: Uint8Array } | null;
+  /** The planes as of the last change count (countPlanes), and the write version that count saw. */
+  mark: Planes;
+  markVersion: number;
 }
 
 const PLANE_CACHE = new WeakMap<TownState, PlaneEntry>();
 
+function copyPlanes(p: Planes): Planes {
+  return { use: p.use.slice(), lvl: p.lvl.slice(), age: p.age.slice() };
+}
+
+function samePlanes(a: Planes, b: Planes): boolean {
+  for (let i = 0; i < TILES; i++) if (a.use[i] !== b.use[i] || a.lvl[i] !== b.lvl[i] || a.age[i] !== b.age[i]) return false;
+  return true;
+}
+
 function entryOf(t: TownState): PlaneEntry {
   let e = PLANE_CACHE.get(t);
-  if (!e || (!e.dirty && e.src !== t.planes)) {
-    e = { src: t.planes, planes: decodePlanes(t.planes), dirty: false, version: 0, roadAccess: null };
+  // A stored string replaced from outside (a revive, a test, a kit) always wins over the decoded copy.
+  if (!e || e.src !== t.planes) {
+    const planes = decodePlanes(t.planes);
+    e = { src: t.planes, planes, dirty: false, version: 0, roadAccess: null, mark: copyPlanes(planes), markVersion: 0 };
     PLANE_CACHE.set(t, e);
   }
   return e;
@@ -178,8 +194,31 @@ export function planesForWrite(t: TownState): Planes {
   return e.planes;
 }
 
-/** Writes dirty planes back to t.planes (and bumps planesRev). Returns whether anything changed. */
+/**
+ * Counts a change of the planes: bumps planesRev if they differ from what
+ * the last count saw. The driver counts at the end of every tick and every
+ * commit, so planesRev depends only on what happened, never on when the
+ * string happened to be written (catch-up chunks end only at tick ends).
+ */
+export function countPlanes(t: TownState): boolean {
+  const e = PLANE_CACHE.get(t);
+  if (!e || e.version === e.markVersion) return false;
+  e.markVersion = e.version;
+  if (samePlanes(e.mark, e.planes)) return false;
+  e.mark = copyPlanes(e.planes);
+  t.planesRev += 1;
+  return true;
+}
+
+/**
+ * Writes dirty planes back to t.planes, after counting the change. Encoding
+ * is the costly part of a tick, so the catch-up driver does it once at the
+ * end of a chunk, not after every tick; everything that reads the stored
+ * string (a hash, JSON, the wire) is reached only after a commit. Returns
+ * whether the string changed.
+ */
 export function commitPlanes(t: TownState): boolean {
+  countPlanes(t);
   const e = PLANE_CACHE.get(t);
   if (!e || !e.dirty) return false;
   const s = encodePlanes(e.planes);
@@ -187,13 +226,34 @@ export function commitPlanes(t: TownState): boolean {
   e.src = s;
   if (s === t.planes) return false;
   t.planes = s;
-  t.planesRev += 1;
   return true;
 }
 
 /** Drops the decoded copy (after a revert replaced the stored fields). */
 export function forgetPlanes(t: TownState): void {
   PLANE_CACHE.delete(t);
+}
+
+/** The decoded planes as they are now, for putting back with restorePlanes (null: nothing decoded, the string is the truth). */
+export interface PlanesSnapshot {
+  src: string;
+  planes: Planes;
+  dirty: boolean;
+  mark: Planes;
+  counted: boolean;
+}
+
+export function planesSnapshot(t: TownState): PlanesSnapshot | null {
+  const e = PLANE_CACHE.get(t);
+  if (!e || e.src !== t.planes) return null;
+  return { src: e.src, planes: copyPlanes(e.planes), dirty: e.dirty, mark: copyPlanes(e.mark), counted: e.version === e.markVersion };
+}
+
+/** Puts back a snapshot's planes after a revert restored t.planes (and t.planesRev) to the snapshot's time. */
+export function restorePlanes(t: TownState, snap: PlanesSnapshot | null): void {
+  PLANE_CACHE.delete(t);
+  if (!snap || snap.src !== t.planes) return;
+  PLANE_CACHE.set(t, { src: snap.src, planes: snap.planes, dirty: snap.dirty, version: 0, roadAccess: null, mark: snap.mark, markVersion: snap.counted ? 0 : -1 });
 }
 
 /**

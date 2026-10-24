@@ -17,27 +17,22 @@ import {
   townTarget,
 } from './clock';
 import { BUILDINGS, buildingIndex, NAME_FIRST, NAME_SECOND, ORDER_DEFAULTS } from './content';
-import { emptyBooks, emptyRealised, neutralFlows } from './core';
-import { paramsFor, type ParamsVersion } from './params';
+import { commitTown, emptyBooks, emptyRealised, neutralFlows } from './core';
+import { paramsFor, type Params, type ParamsVersion } from './params';
+import { scenicOf } from './landvalue';
+import { terrainNature } from './services';
 import { STREAMS, h32 } from './rand';
 import { snapshotOf } from './snapshot';
 import { STEPS } from './steps';
 import {
   COUNTY_ROAD_END_Y,
   COUNTY_ROAD_X,
-  TF_COAST,
-  TF_RIVER,
   TOWN_HALL_AT,
-  T_FOREST,
-  T_HILL,
-  T_WATER,
   generateTerrain,
   siteKindsFor,
-  terrainKind,
 } from './terrain';
 import {
   CELLS,
-  CELLS_PER_SIDE,
   CENTRAL_PARCELS,
   DISTRICTS,
   MAP,
@@ -49,7 +44,7 @@ import {
   roadUse,
   tileIndex,
 } from './tiles';
-import { COST_REGIONAL_DAY, COST_YEAR_END, catchUpTown, makeContext, sprintTick, tickCost, tickTown } from './tick';
+import { COST_MONTH, COST_REGIONAL_DAY, COST_TICK, COST_YEAR_END, advanceTown, autoSprintDue, catchUpTown, makeContext, sprintTick, tickCost } from './tick';
 import {
   COHORT_COUNT,
   EngineError,
@@ -141,41 +136,34 @@ export function townIndexOf(c: CountyState, seat: SeatId): number {
   return c.towns.findIndex((t) => t.seat === seat);
 }
 
-/** A11: the founding land-value plane, LV* from terrain alone: the base, scenery and nearby nature. */
-export function terrainLandValue(terrain: Uint8Array): Uint8Array {
+/**
+ * A11: the founding land-value plane, LV* of each cell from terrain alone
+ * (no buildings): the §5.7 formula's base, its nature term (terrain trees and
+ * water, as services.ts counts them) and its scenic term (landvalue.ts), with
+ * every other term at zero and Premium neutral. Computed by the same
+ * functions and params as the month step's LV*, so the two can never disagree.
+ */
+export function terrainLandValue(terrain: Uint8Array, p: Params = paramsFor('v1')): Uint8Array {
   const out = new Uint8Array(CELLS);
-  for (let cy = 0; cy < CELLS_PER_SIDE; cy++)
-    for (let cx = 0; cx < CELLS_PER_SIDE; cx++) {
-      let scenic = 0;
-      let nature = 0;
-      for (let dy = -3; dy <= 3; dy++)
-        for (let dx = -3; dx <= 3; dx++) {
-          const x = cx * 2 + dx;
-          const y = cy * 2 + dy;
-          if (x < 0 || y < 0 || x >= MAP || y >= MAP) continue;
-          const v = terrain[tileIndex(x, y)];
-          const near = Math.abs(dx) <= 1 && Math.abs(dy) <= 1;
-          const k = terrainKind(v);
-          const fall = 1 - (Math.abs(dx) + Math.abs(dy)) / 8;
-          if (k === T_FOREST) nature += 6 * fall;
-          if (k === T_WATER) nature += 12 * fall;
-          if (near && (v & TF_COAST) && k !== T_WATER) scenic = Math.max(scenic, 20);
-          if (near && (v & TF_RIVER) && k !== T_WATER) scenic = Math.max(scenic, 15);
-          if (near && k === T_HILL) scenic = Math.max(scenic, 20);
-          if (near && k === T_FOREST) scenic = Math.max(scenic, 8);
-        }
-      const lv = 28 + 0.2 * Math.min(100, nature) + scenic;
-      out[cy * CELLS_PER_SIDE + cx] = Math.max(1, Math.min(250, Math.round(lv)));
-    }
+  const f = p.fields;
+  const nature = terrainNature(terrain, f.natureTree, f.natureWater, f.natureReach).nature;
+  const scenic = scenicOf(terrain, p.landValue.scenic);
+  const wn = p.landValue.weights[1];
+  for (let c = 0; c < CELLS; c++) {
+    const lv = f.lvBase + wn * Math.min(100, nature[c]) + scenic[c];
+    out[c] = Math.max(1, Math.min(250, Math.round(lv)));
+  }
   return out;
 }
 
 const TOWN_HALL = buildingIndex('townHall');
 
-/** §10.3 foundTown: a seat's one town on a free site, with its County Road and Town Hall. */
-export function foundTown(c: CountyState, seat: SeatId, body: FoundBody, now: number): TownState {
-  if (!Number.isFinite(now)) throw new EngineError(400, 'The clock is not ready yet.');
-  const p = paramsFor(c.paramsVersion);
+/**
+ * Validates a founding without changing anything, and returns the town's
+ * name. applyCommand calls it before the founding's implied hello, so a
+ * refused founding leaves the county exactly as it was.
+ */
+export function checkFound(c: CountyState, seat: SeatId, body: FoundBody): string {
   if (c.towns.some((t) => t.seat === seat)) throw new EngineError(409, 'You already have a town.');
   if (c.towns.length >= 6) throw new EngineError(409, 'Kingsport County is full.');
   const site = c.sites[body.site];
@@ -191,6 +179,15 @@ export function foundTown(c: CountyState, seat: SeatId, body: FoundBody, now: nu
     if (name.length < 2 || name.length > 24) throw new EngineError(400, 'A town name is 2 to 24 letters.');
   } else throw new EngineError(400, 'Choose a name for your town.');
   if (typeof body.avatar !== 'string' || body.avatar.length > 32) throw new EngineError(400, 'Pick a mayor.');
+  return name;
+}
+
+/** §10.3 foundTown: a seat's one town on a free site, with its County Road and Town Hall. */
+export function foundTown(c: CountyState, seat: SeatId, body: FoundBody, now: number): TownState {
+  if (!Number.isFinite(now)) throw new EngineError(400, 'The clock is not ready yet.');
+  const p = paramsFor(c.paramsVersion);
+  const name = checkFound(c, seat, body);
+  const site = c.sites[body.site];
   const index = c.towns.length;
   const profile = c.settings.perSeat[seat]?.profile ?? 'adult';
   const terrain = generateTerrain(site.terrainSeed, site.kind);
@@ -231,10 +228,11 @@ export function foundTown(c: CountyState, seat: SeatId, body: FoundBody, now: nu
     terrainEdits: [],
     construction: [],
     marks: [],
-    lv: encodeCells(terrainLandValue(terrain)),
+    lv: encodeCells(terrainLandValue(terrain, p)),
     buildings: [newBuilding(TOWN_HALL, hx, hy, 0, 0, 1)],
     lag: { poll: encodeCells(new Uint8Array(CELLS)), congestion: new Array<number>(DISTRICTS).fill(1000) },
     pending: [],
+    moveIds: [],
     people: new Array<number>(PEOPLE_COUNT).fill(0),
     applicants: new Array<number>(COHORT_COUNT).fill(0),
     aspirants: [0, 0],
@@ -252,7 +250,7 @@ export function foundTown(c: CountyState, seat: SeatId, body: FoundBody, now: nu
     aw: s.aw,
     ps: s.ps,
     goodsStock: [0, 0],
-    money: { reserves: s.reserves, loan: null, bonds: [], rating: s.rating, ratingHold: 0, overdraftMonths: 0, helper: null, lastHelperDay: null, fundAdvance: 0 },
+    money: { reserves: s.reserves, loan: null, bonds: [], rating: s.rating, ratingHold: 0, overdraftMonths: 0, helper: null, lastHelperDay: null, lastWriteOffDay: null, fundAdvance: 0 },
     taxes: {
       town: p.finance.defaults.town,
       homes: [p.finance.defaults.homes, p.finance.defaults.homes, p.finance.defaults.homes],
@@ -342,15 +340,29 @@ export function regionalDay(c: CountyState, dayIndex: number, opts: DriveOptions
   }
   c.dayIndex = dayIndex + 1;
   c.lastRegionalDayAt = at;
+  for (const t of c.towns) commitTown(t);
   return report;
 }
 
 // ---- Catch-up ---------------------------------------------------------------------------------------
 
+/** The work units of the sprint ticks a Regional Day will run for unfinished fortnights (A23). */
+function sprintBacklogCost(c: CountyState): number {
+  let units = 0;
+  for (const t of c.towns) {
+    if (t.archived || t.gridBase !== null) continue;
+    for (let k = 0; k < t.sprintLeft; k++) units += COST_TICK + ((t.tick + k) % 4 === 3 ? COST_MONTH : 0);
+  }
+  return units;
+}
+
 /**
  * §10.5 catchUp: advances the county toward `now` in at most `budget` work
- * units (tick 1, month step +6, Regional Day 20 + 8 per town). Always makes
- * progress: the first unit of work runs even if it alone exceeds the budget.
+ * units (tick 1, month step +COST_MONTH, Regional Day 20 + 8 per town plus
+ * the sprint ticks it finishes). Always makes progress: the first unit of
+ * work runs even if it alone exceeds the budget. A27: `changed` is false for
+ * an intermediate chunk unless it ran a Regional Day or advanced a town
+ * someone is streaming.
  */
 export function catchUp(c: CountyState, now: number, budget: number, opts: DriveOptions = {}): CatchUpResult {
   if (!Number.isFinite(now)) return { used: 0, done: true, changed: false };
@@ -361,15 +373,23 @@ export function catchUp(c: CountyState, now: number, budget: number, opts: Drive
   let ranDay = false;
   let streamed = false;
   const over = (cost: number) => used > 0 && used + cost > budget;
+  // Every exit writes the towns' stored strings back (ticks leave the planes' encoding to here).
+  const commitAll = () => {
+    for (const t of c.towns) commitTown(t);
+  };
+  const partial = (): CatchUpResult => {
+    commitAll();
+    return { used, done: false, changed: streamed || ranDay };
+  };
   for (;;) {
     const R = nextRegionalDayAt(c, p.clock.devRegionalTicks);
     const limit = Math.min(eff, R);
     // "Play it all": automatic sprint ticks every sprintAutoMs, up to the limit.
     for (let i = 0; i < c.towns.length; i++) {
       const t = c.towns[i];
-      while (t.sprintAuto && t.gridBase === null && t.sprintLeft > 0 && t.sprintAt + p.clock.sprintAutoMs <= limit) {
+      while (autoSprintDue(t, limit, p.clock.sprintAutoMs)) {
         const cost = tickCost(t);
-        if (over(cost)) return { used, done: false, changed: streamed };
+        if (over(cost)) return partial();
         sprintTick(c, i, t.sprintAt + p.clock.sprintAutoMs, steps);
         used += cost;
         if (opts.streaming?.includes(i)) streamed = true;
@@ -380,20 +400,21 @@ export function catchUp(c: CountyState, now: number, budget: number, opts: Drive
       const t = c.towns[i];
       while (t.tick < townTarget(t, g)) {
         const cost = tickCost(t);
-        if (over(cost)) return { used, done: false, changed: streamed };
-        tickTown(t, makeContext(c, i, t.tick), steps);
+        if (over(cost)) return partial();
+        advanceTown(t, makeContext(c, i, t.tick), steps);
         used += cost;
         if (opts.streaming?.includes(i)) streamed = true;
       }
     }
     if (g > c.gridTick) c.gridTick = g;
     if (R > eff) break;
-    const cost = COST_REGIONAL_DAY + COST_YEAR_END * c.towns.length;
-    if (over(cost)) return { used, done: false, changed: streamed };
+    const cost = COST_REGIONAL_DAY + COST_YEAR_END * c.towns.length + sprintBacklogCost(c);
+    if (over(cost)) return partial();
     regionalDay(c, c.dayIndex, opts);
     used += cost;
     ranDay = true;
   }
+  commitAll();
   return { used, done: true, changed: ranDay || used > 0 || streamed };
 }
 

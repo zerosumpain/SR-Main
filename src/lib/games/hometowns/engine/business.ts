@@ -76,6 +76,8 @@ export interface SectorBooks {
   wages: number;
   rent: number;
   tax: number;
+  /** Sales tax on the retail and leisure takings (from Town): the till hands it to the town. */
+  salesTax: number;
   inputs: number;
   cost: number;
   /** The business-tax base: takings less a Start-up Holiday's exempt share. */
@@ -94,6 +96,9 @@ export interface SectorBooks {
  * Town, Farms only up to Town)? A9 caps a meter the mayor cannot act on;
  * WP2e's supply count also reports tiles no zoned land could serve.
  */
+/** Sales tax is collected from Town tier (§5.13). */
+const SALES_TAX_TIER = 2;
+
 export function zoneOpen(t: TownState, zone: number): boolean {
   const z = ZONE_DEFS[zone];
   return t.tier >= z.unlock && t.tier <= z.zoneUntil;
@@ -128,9 +133,16 @@ export function sectorBooks(t: TownState, m: MonthContext, s: number, rev: numbe
   const exempt = policyOn(t, 'startupHoliday') ? (bootstrap ? 1 : st.jobs[s] > 0 ? st.young[s] / st.jobs[s] : 0) : 0;
   const taxable = rev * (1 - exempt);
   const tax = bp(t.taxes.business) * taxable;
+  // Sales tax is a wedge in the shops' and cafés' margins (§5.17, §18 row 22:
+  // "bases that bite in margins"): the town's sales-tax line is a share of
+  // their takings, so the firms keep the rest. Without this a 10% sales tax
+  // was free money for any town without a linked neighbour to shop in.
+  // Hotel rooms pay hotel tax instead (it bites through the tourist share).
+  const salesBase = t.tier < SALES_TAX_TIER ? 0 : s === S_SHOPS ? rev : s === S_LEISURE ? Math.min(rev, sc?.leisureSales ?? rev) : 0;
+  const salesTax = bp(t.taxes.sales) * salesBase;
   const factor = s === S_SHOPS ? f.shopFoodShare * pf[FOOD] + (1 - f.shopFoodShare) * pf[GOOD] : s === S_LEISURE ? pf[GOOD] : 1;
   const inputs = f.inputs[s] * rev * factor;
-  let cost = wages + rent + tax + inputs;
+  let cost = wages + rent + tax + salesTax + inputs;
   if (s === S_INDUSTRY && policyOn(t, 'cleanAirRules')) cost *= f.cleanAirCost;
   // A6: jobs still under construction will cost what a filled job costs now.
   const filled = m.derived.labour?.sectorFilled[s] ?? 0;
@@ -144,7 +156,7 @@ export function sectorBooks(t: TownState, m: MonthContext, s: number, rev: numbe
     if (margin > f.bootstrapMarginCap) margin = f.bootstrapMarginCap;
     if (marginPipe > f.bootstrapMarginCap) marginPipe = f.bootstrapMarginCap;
   }
-  return { rev, wages, rent, tax, inputs, cost, taxable, jobs, pipeCost, bootstrap, margin, marginPipe };
+  return { rev, wages, rent, tax, salesTax, inputs, cost, taxable, jobs, pipeCost, bootstrap, margin, marginPipe };
 }
 
 /** STEP M8 (WP2c): sector revenue, cost and margins; business meters → derived.firms (+ t.margins, t.meters[Shops…Farms]). */
@@ -255,7 +267,7 @@ function whyMeter(
   const gain = m.params.meters.bizGain;
   const c = Math.max(1, b.cost + b.pipeCost);
   // Cost lines scaled to the cost (Clean Air Rules multiply the whole), so they sum to it.
-  const raw = b.wages + b.rent + b.tax + b.inputs;
+  const raw = b.wages + b.rent + b.tax + b.salesTax + b.inputs;
   const sc = raw > 0 ? b.cost / raw : 1;
   const parts: [string, number][] = b.bootstrap
     ? [['meter.biz.bootstrap', v.arg]]
@@ -263,7 +275,8 @@ function whyMeter(
         ['meter.biz.demand', (gain * b.rev) / c],
         ['meter.biz.wages', (-gain * b.wages * sc) / c],
         ['meter.biz.rent', (-gain * b.rent * sc) / c],
-        ['meter.biz.tax', (-gain * b.tax * sc) / c],
+        // Business tax and, for shops and leisure, sales tax: one "taxes" term.
+        ['meter.biz.tax', (-gain * (b.tax + b.salesTax) * sc) / c],
         ['meter.biz.inputs', (-gain * b.inputs * sc) / c],
         // The normal 8% a firm needs, and the cost of the jobs already being built (A6).
         ['meter.biz.margin', -gain * m.params.meters.normalMargin - (gain * b.pipeCost) / c],

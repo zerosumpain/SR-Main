@@ -1,43 +1,11 @@
-// The harness bot (src/harness/bot.ts): its street grid, its arithmetic, and
-// that it plays legal, deterministic moves through the real move API.
+// The harness's mayor (src/harness/bot.ts) is the Lab's Balanced bot: it
+// takes Bramble's three steps at founding, plays legal, deterministic moves
+// through the real move API, and grows a real town.
 
 import { describe, expect, it } from 'vitest';
-import { CAT_ZONE, MAP, TILES, checkTown, planesOf, roadAccess, useCat, usePayload } from '../src/engine';
-import { CENTRE, GRID_X, GRID_Y, SEGMENTS, apportion, botTurn, emptyLots, findSpot, lotsBeside, nextSegments, onGrid, segmentTiles } from '../src/harness/bot';
+import { BOTS, CAT_ZONE, TILES, brambleCommands, checkTown, planesOf, roadAccess, useCat, usePayload, viewOf } from '../src/engine';
+import { SESSION_MONTHS, botTurn, sessionRng } from '../src/harness/bot';
 import { HarnessSession, HARNESS_SEAT } from '../src/harness/session';
-
-describe('street grid', () => {
-  it('runs through the County Road column and the founding row', () => {
-    expect(GRID_X).toContain(CENTRE[0]);
-    expect(GRID_Y).toContain(CENTRE[1]);
-    expect(GRID_X.every((x, k) => k === 0 || x - GRID_X[k - 1] === 5)).toBe(true);
-    expect(GRID_X[GRID_X.length - 1]).toBeLessThan(MAP);
-  });
-
-  it('has segments of six tiles between neighbouring nodes', () => {
-    expect(SEGMENTS.length).toBe(GRID_X.length * (GRID_Y.length - 1) + GRID_Y.length * (GRID_X.length - 1));
-    for (const s of SEGMENTS) expect(segmentTiles(s)).toHaveLength(6);
-  });
-
-  it('leaves every block tile within two tiles of a grid line (the development rule)', () => {
-    for (let y = GRID_Y[0]; y <= GRID_Y[GRID_Y.length - 1]; y++)
-      for (let x = GRID_X[0]; x <= GRID_X[GRID_X.length - 1]; x++) {
-        const dx = Math.min(...GRID_X.map((g) => Math.abs(g - x)));
-        const dy = Math.min(...GRID_Y.map((g) => Math.abs(g - y)));
-        expect(Math.min(dx, dy) <= 2 || onGrid(x, y)).toBe(true);
-        expect(Math.max(dx, dy)).toBeLessThanOrEqual(2);
-      }
-  });
-});
-
-describe('apportion', () => {
-  it('splits lots by weight with the largest remainder and never loses one', () => {
-    expect(apportion(10, [1, 1, 0])).toEqual([5, 5, 0]);
-    expect(apportion(7, [3, 1, 0, 0])).toEqual([5, 2, 0, 0]);
-    expect(apportion(5, [0, 0])).toEqual([0, 0]);
-    for (let n = 0; n < 20; n++) expect(apportion(n, [5, 3, 2, 7]).reduce((a, b) => a + b, 0)).toBe(n);
-  });
-});
 
 describe('founding (Bramble’s three steps)', () => {
   it('draws a lane off the County Road, 12 Homes, 2 Farms and a Well, with no refusals', () => {
@@ -59,11 +27,17 @@ describe('founding (Bramble’s three steps)', () => {
     for (let i = 0; i < TILES; i++) if (useCat(p.use[i]) === CAT_ZONE) expect(reach[i]).toBe(1);
   });
 
-  it('works on every site kind around Kingsport', () => {
+  it('is the engine’s own Bramble plan, on every site kind around Kingsport', () => {
     for (let site = 0; site < 6; site++) {
       const s = new HarnessSession({ seed: 11, site });
-      expect(emptyLots(s.town).zoned).toBeGreaterThanOrEqual(12);
+      let zoned = 0;
+      const p = planesOf(s.town);
+      for (let i = 0; i < TILES; i++) if (useCat(p.use[i]) === CAT_ZONE) zoned++;
+      expect(zoned).toBeGreaterThanOrEqual(12);
     }
+    // The same commands the Lab's bots take at founding.
+    const fresh = new HarnessSession({ seed: 1 });
+    expect(brambleCommands(viewOf(fresh.county, HARNESS_SEAT, fresh.now)!).length).toBeGreaterThan(0);
   });
 });
 
@@ -80,21 +54,9 @@ describe('a bot town over ten days', () => {
     expect(st.buildings).toBeGreaterThan(5);
   });
 
-  it('keeps the town valid: invariants hold and no month was reverted', () => {
+  it('keeps the town valid: invariants hold and no tick or month was reverted', () => {
     expect(checkTown(t)).toEqual([]);
-    expect(t.alerts).toEqual([]);
-    expect(s.county.alerts.filter((a) => a.kind === 'month-reverted')).toEqual([]);
-  });
-
-  it('never zones a grid-line tile, so later roads always have room', () => {
-    const p = planesOf(t);
-    for (let i = 0; i < TILES; i++) if (useCat(p.use[i]) === CAT_ZONE) expect(onGrid(i % MAP, (i - (i % MAP)) / MAP)).toBe(false);
-  });
-
-  it('only plans legal moves: next segments are open and touch the network, lots are free', () => {
-    for (const seg of nextSegments(t).slice(0, 5)) for (const [x, y] of lotsBeside(t, seg)) expect(planesOf(t).use[y * MAP + x]).toBe(0);
-    const spot = findSpot(t, 1, 1, true);
-    if (spot) expect(spot[0]).toBeGreaterThanOrEqual(0);
+    expect(t.alerts.filter((a) => a.kind === 'month-reverted' || a.kind === 'tick-reverted')).toEqual([]);
   });
 
   it('is a pure function of the seed (same seed, same town; another seed, another town)', () => {
@@ -106,9 +68,20 @@ describe('a bot town over ten days', () => {
     expect(other.hash()).not.toBe(s.hash());
   });
 
-  it('reports refusals instead of throwing', () => {
-    const turn = botTurn(s.county, 'nobody', s.now);
-    expect(turn).toEqual({ moves: [], refused: [], retry: false });
+  it('plays only on session months, at most a Balanced session’s actions, and reports refusals instead of throwing', () => {
+    expect(botTurn(s.county, 'nobody', s.now)).toEqual({ moves: [], refused: [], retry: false });
     expect(() => botTurn(s.county, HARNESS_SEAT, s.now)).not.toThrow();
+    const turn = botTurn(s.county, HARNESS_SEAT, s.now + 7);
+    const month = Math.floor(s.town.tick / 4);
+    if (month % SESSION_MONTHS !== 0) expect(turn.moves).toEqual(['hello']);
+    expect(turn.moves.length - 1).toBeLessThanOrEqual(BOTS.balanced.sessions.actions);
+  });
+
+  it('draws the same choices for the same session', () => {
+    const a = sessionRng(9, 123_456_000);
+    const b = sessionRng(9, 123_456_000);
+    const xs = [a(), a(), a()];
+    expect([b(), b(), b()]).toEqual(xs);
+    for (const x of xs) expect(x >= 0 && x < 1).toBe(true);
   });
 });

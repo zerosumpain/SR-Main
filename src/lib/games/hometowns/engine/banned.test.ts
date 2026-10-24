@@ -41,7 +41,11 @@ describe('engine purity (banned APIs)', () => {
     [/\.toFixed\(|\.toPrecision\(/, 'toFixed/toPrecision'],
     [/Math\.(exp|expm1|log|log1p|log2|log10|pow|tanh|sinh|cosh|asinh|acosh|atanh|sin|cos|tan|asin|acos|atan|atan2|cbrt|hypot)\b/, 'transcendental Math.*'],
     [/\*\*/, 'the ** operator (Math.pow in disguise)'],
-    [/\bprocess\.|\bwindow\.|\bdocument\.|\blocalStorage\b|\bcrypto\./, 'a platform global'],
+    [/\bprocess\.|\bwindow\.|\bdocument\.|\blocalStorage\b|\bcrypto\.|\bglobalThis\b/, 'a platform global'],
+    // The same rules reached sideways: Math['exp'], a dynamic import or require, or code built from a string.
+    [/\bMath\s*\[/, 'Math[...] (bracket access dodges the list above)'],
+    [/\brequire\s*\(|\bimport\s*\(/, 'require() or a dynamic import()'],
+    [/\beval\s*\(|\bnew\s+Function\b/, 'eval or new Function'],
   ];
 
   it('finds the engine sources', () => {

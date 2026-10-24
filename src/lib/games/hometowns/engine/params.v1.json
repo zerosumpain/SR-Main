@@ -90,6 +90,7 @@
     "alpha": {"value":0.125,"min":0.125,"max":0.5,"unit":"share","doc":"Meter smoothing step, D ← D + α(Target − D) (spec 0.25, τ 4 months; Lab round 2: 0.125, τ 8). The meters sit near their equilibrium and flip on month-to-month noise (construction lumps, the ±15 needs steps), not on a lag cycle: α 0.5 doubled G10's sign changes, 0.125 halved them, and the Founding Fortnight still reaches Village on day 2.","loop":"B7"},
     "homesGain": {"value":5,"min":1.25,"max":5,"unit":"factor","doc":"Target_H = 100·T(gain·(ratio − 1)) (§5.8; spec 2.5, Lab round 1: 5: at 2.5 a town turning away hundreds of newcomers a day read about +15, below the wants line).","loop":"B7"},
     "vacancyTarget": {"value":0.05,"min":0.025,"max":0.15,"unit":"share","doc":"The Homes meter aims at this vacancy.","loop":null},
+    "homesSlackTicks": {"value":1.5,"min":0,"max":4,"unit":"ticks of starts","doc":"Review amendment to §5.8's '+5': the Homes ratio's denominator is at least this many ticks of the builders' starts (Builders/4 L1 tiles of 8 persons a tick), so an empty or tiny tier needs a build's worth of waiting demand before its meter swings; with the bare +5, 5 waiting gave 0 and 8 gave +99 (G10's pinned, sign-flipping ££ meter). A tier larger than that is unchanged. 0 gives the bare formula. Quick Lab A/B: 1 left G10's short-cycle share at 0.11, 1.5 brought it to 0.097 and kept every other passing check (2 cost 15% of the population).","loop":"B7"},
     "needPenalty": {"value":15,"min":7.5,"max":30,"unit":"meter","doc":"Homes meter penalty per unmet need item (A10).","loop":null},
     "needFloor": {"value":60,"min":30,"max":120,"unit":"meter","doc":"The needs penalty is floored at −this.","loop":null},
     "unreachableCap": {"value":35,"min":0,"max":60,"unit":"meter","doc":"A meter no zoned tile could serve is capped here (A9).","loop":null},
@@ -234,6 +235,7 @@
     "bargainWeek": {"value":1.1,"min":1,"max":1.3,"unit":"factor","doc":"Bargain Week event: shop spending ×this (§5.16).","loop":null},
     "bumperHarvest": {"value":0.8,"min":0.5,"max":1,"unit":"factor","doc":"Bumper Harvest event: food prices ×this (§5.16).","loop":null},
     "farmersMarket": {"value":10,"min":0,"max":30,"unit":"meter","doc":"Farmers' Market: Shops meter target + this (§6.7).","loop":null},
+    "farmersMarketFarmJobs": {"value":0.9,"min":0.7,"max":1,"unit":"factor","doc":"Farmers' Market's catch, farm jobs ×this (§6.7 'farm jobs −10%'; review amendment: it was printed on the card but never applied).","loop":null},
     "cleanAirCost": {"value":1.06,"min":1,"max":1.2,"unit":"factor","doc":"Clean Air Rules: industry costs ×this (§6.7).","loop":"B5"},
     "leakCap": {"value":0.25,"min":0,"max":0.5,"unit":"share","doc":"Most of residents' retail spend that may leak to linked towns' shops (§5.12).","loop":null},
     "shopAppeal": {"value":[0.7,0.3],"min":[0.35,0.15],"max":[1,0.6],"unit":"[exponent, per Fun]","doc":"Shop appeal SA = ShopJobs^[0]·(1 + [1]·Fun/100), before the sales-tax gap (§5.12).","loop":null}
@@ -354,6 +356,7 @@
   },
   "stars": {
     "taxSens": {"value":[0.8,1,1.3,0.5],"min":[0.4,0.5,0.65,0.25],"max":[1.6,2,2.6,1],"unit":"factor","doc":"Tax star sensitivity: £, ££, £££, Students (§5.6).","loop":null},
+    "salesTaxRentShare": {"value":0.3,"min":0.15,"max":0.6,"unit":"share","doc":"Review amendment (§5.17, §18 row 22: 'bases that bite in affordability'): the Tax star feels sales tax as homes tax, scaled by what a household spends in shops and on leisure (α_h + β_h) against this share of income that goes on rent, and measured from the default sales tax so the default calibration is unchanged. Without it 10% sales tax was free money for any town without a linked neighbour to shop in.","loop":null},
     "taxSlope": {"value":6.5,"min":3.25,"max":13,"unit":"stars/%","doc":"Tax star slope per point of homes tax above 3%.","loop":null},
     "cultureHalf": {"value":250,"min":125,"max":500,"unit":"points","doc":"Culture star = 100·CS/(CS + this).","loop":null},
     "cultureTau": {"value":36,"min":24,"max":60,"unit":"months","doc":"Culture stock τ.","loop":"R5"},
@@ -396,6 +399,7 @@
     "overdraftSpread": {"value":0.08,"min":0.04,"max":0.16,"unit":"rate/year","doc":"Overdraft interest above r_base.","loop":null},
     "civicUpkeepScale": {"value":0.85,"min":0.5,"max":1.5,"unit":"ratio","doc":"Scales every civic upkeep (A14 calibration; Lab round 1: 0.85, which gives a growing Town the ~10% surplus of §5.13's table).","loop":null},
     "helperWriteOffDays": {"value":10,"min":5,"max":30,"unit":"days","doc":"Kingsport writes off a Helper Mode advance after this many days (A16).","loop":null},
+    "writeOffBorrowBarDays": {"value":2,"min":0,"max":10,"unit":"days","doc":"No new loan or bond for this many days (24 game months, the rating's memory) after Kingsport writes off an advance, and none at all in Helper Mode. Review amendment: borrowing to the cap and letting the write-off service the debt was a repeatable money machine; A16's guaranteed write-off itself is unchanged.","loop":null},
     "taxHappyWeightMin": {"value":0.6,"min":0.3,"max":1.2,"unit":"weight","doc":"Tax weight floor in U_happy (A13).","loop":null},
     "fares": {"value":1.2,"min":0.6,"max":2.4,"unit":"£/trip","doc":"Bus or rail fare.","loop":null},
     "fundingMult": {"value":[0.7,1,1.3],"min":[0.5,1,1.1],"max":[0.9,1,1.6],"unit":"ratio","doc":"Civic upkeep × this by funding Low, Normal, High (§5.13).","loop":null},
@@ -468,12 +472,15 @@
     "stayShopShare": {"value":0.5,"min":0.2,"max":0.8,"unit":"share","doc":"Share of a stay's £60 a night spent in shops; the rest in leisure (WP2c choice: §5.10 gives the sum only).","loop":null},
     "dayTripShops": {"value":0.6,"min":0.3,"max":0.9,"unit":"share","doc":"Share of a day trip's spend in shops; the rest in leisure (§5.10).","loop":null},
     "promotion": {"value":3,"min":1,"max":6,"unit":"factor","doc":"Tourism Promotion: awareness innovation ×this (§6.7).","loop":null},
+    "promotionIrritation": {"value":0.1,"min":0,"max":0.3,"unit":"ratio","doc":"Tourism Promotion's catch: residents' irritation threshold − this (§6.7; review amendment: printed on the card but never applied).","loop":"B3"},
+    "heritageAppeal": {"value":1,"min":0,"max":3,"unit":"appeal/tile","doc":"Heritage Protection's 'tourism appeal +' (§6.7): appeal per protected heritage tile (built, level ≥ 2, aged as the Culture star's heritage). Review amendment: it was never applied.","loop":"R4"},
     "litterQuality": {"value":1.03,"min":1,"max":1.1,"unit":"factor","doc":"Litter Pickers: tourism quality ×this (§6.7).","loop":null},
     "shortLetBeds": {"value":0.9,"min":0.7,"max":1,"unit":"factor","doc":"Short-let Limits: hotel beds ×this (§6.7).","loop":null},
     "ferryFun": {"value":1.2,"min":1,"max":1.5,"unit":"factor","doc":"Ferry Fun event: coast-site tourist pool ×this (§5.16).","loop":null},
     "eventDayTrips": {"value":[1.4,1.25],"min":[1,1],"max":[2,2],"unit":"factor","doc":"Day trips × [0] in a Sunny Weekend and × [1] in a Big Concert (§5.16).","loop":null},
     "staySat": {"value":[0.6,0.4],"min":[0.3,0.2],"max":[0.9,0.7],"unit":"[base, per Sat]","doc":"Stays = pool·share·([0] + [1]·Sat/100), before the beds cap (§5.10).","loop":"B3"},
-    "awareness": {"value":[0.3,0.7],"min":[0.1,0.35],"max":[0.6,0.9],"unit":"[base, per Aw]","doc":"Tourist pull × ([0] + [1]·Aw) (§5.10).","loop":"R4"}
+    "awareness": {"value":[0.3,0.7],"min":[0.1,0.35],"max":[0.6,0.9],"unit":"[base, per Aw]","doc":"Tourist pull × ([0] + [1]·Aw) (§5.10).","loop":"R4"},
+    "hotelTaxElasticity": {"value":2,"min":1,"max":4,"unit":"exponent","doc":"Hotel tax's price term in the tourist pull (§5.13 'also enters the tourist share as a price term'; the §5.10 Share formula omits it): pull × ((1 + default rate)/(1 + HotelTax))^ε from City, so the default 5% leaves the pool calibration as it was and 12% costs about 12% of the pull. Review amendment.","loop":"B3"}
   },
   "world": {
     "period": {"value":120,"min":60,"max":240,"unit":"months","doc":"World cycle period (§5.16).","loop":null},

@@ -31,7 +31,11 @@ function run(base: TownState, s: Snapshot, months: number, seed: number, o: Fore
   const t = JSON.parse(JSON.stringify(base)) as TownState;
   const env: TownEnv = { params, snapshot: s, rivalry: o.rivalry ?? 'friendly', mishaps: 'mild', dayIndex: s.dayIndex + 1 };
   const runSeed = h32(t.seed, STREAMS.forecast, seed, 0, 0);
-  for (let k = 0; k < months * 4; k++) tickTown(t, townContext(t, o.townIndex ?? 0, t.tick, env, s.at, false, runSeed), o.steps ?? STEPS);
+  // The town's own row in the snapshot (its day flows, links and allocations
+  // are indexed by it). A town founded since the snapshot has none (−1), and
+  // then reads the neutral flows, exactly as the server's month step would.
+  const index = o.townIndex ?? s.towns.findIndex((r) => r.seat === t.seat);
+  for (let k = 0; k < months * 4; k++) tickTown(t, townContext(t, index, t.tick, env, s.at, false, runSeed), o.steps ?? STEPS);
   return t;
 }
 

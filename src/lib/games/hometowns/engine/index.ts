@@ -2,12 +2,13 @@
 // the map page, the bots and the Lab all code against. Pure and import-free
 // beyond the engine's own files.
 
+import { commitTown } from './core';
 import { hashOf } from './hash';
 import type { CountyState, TownState } from './types';
 import type { Params } from './params';
 
 export { createCounty, foundTown, regionalDay, catchUp, behind, townIndexOf, terrainLandValue, type CreateCountyInput, type DriveOptions } from './county';
-export { applyCommand, moveId, HANDLERS, LOG_KEEP, type MoveHandler } from './commands';
+export { applyCommand, moveId, HANDLERS, LOG_KEEP, LOG_FULL, SEAT_IDS_KEEP, type MoveHandler } from './commands';
 export { tickTown, monthStep, sprintTick, makeContext, townContext, catchUpTown, tickCost, type TownEnv } from './tick';
 export { snapshotOf, publicCard, cohortsOf, facesOf, inFortnight } from './snapshot';
 export { forecast, type ForecastOptions } from './forecast';
@@ -37,11 +38,13 @@ export * from './types';
 
 /** §10.3 stateHash: FNV-1a 64 of the town's canonical serialisation (the canary). */
 export function stateHash(t: TownState): string {
+  commitTown(t); // the stored strings are what is hashed: write any decoded changes back first
   return hashOf(t);
 }
 
 /** The whole county's hash (determinism tests, the Lab). */
 export function countyHash(c: CountyState): string {
+  for (const t of c.towns) commitTown(t);
   return hashOf(c);
 }
 

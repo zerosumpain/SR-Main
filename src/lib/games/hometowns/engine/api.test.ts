@@ -10,7 +10,13 @@ describe('the public API', () => {
     for (const name of ['createCounty', 'foundTown', 'applyCommand', 'catchUp', 'regionalDay', 'tickTown', 'snapshotOf', 'forecast', 'stateHash', 'publicCard'] as const)
       expect(typeof E[name]).toBe('function');
     expect(E.ENGINE_HASH).toMatch(/^[0-9a-f]{16}$/);
-    expect(E.paramsHash(E.paramsFor('v1'))).toBe(E.paramsHash(E.paramsFor('v1')));
+    // A params hash is a hash of the params' content: equal content, equal hash; any change, a new one.
+    const h = E.paramsHash(E.paramsFor('v1'));
+    expect(h).toMatch(/^[0-9a-f]{16}$/);
+    expect(E.paramsHash(JSON.parse(JSON.stringify(E.paramsFor('v1'))))).toBe(h);
+    const changed = JSON.parse(JSON.stringify(E.paramsFor('v1')));
+    changed.develop.buildersBase += 1;
+    expect(E.paramsHash(changed)).not.toBe(h);
   });
 
   it('runs the Regional Day steps in the §8.3 order and publishes the snapshot', () => {

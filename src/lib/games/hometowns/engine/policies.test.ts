@@ -12,6 +12,9 @@ import { POLICIES } from './content';
 import { lineIndex, population } from './core';
 import { stateHash } from './index';
 import { policyMove, policySlots } from './policies';
+import { supplyOf } from './develop';
+import { paramsFor } from './params';
+import { S_FARMS } from './trade';
 import { MARK_AFFORDABLE, MARK_DAMAGED, MARK_HERITAGE, marksAt, pairSet, tileIndex } from './tiles';
 import { EngineError, type CountyState } from './types';
 
@@ -141,6 +144,7 @@ describe('a card switched off is bit-identical to never having had it', () => {
     const painted = POLICIES.find((p) => p.id === card)!.painted ? [8, 8, 6, 6] : undefined;
     policy(b.c, b.t.seat, card, true, b.now, painted);
     policy(b.c, b.t.seat, card, false, b.now);
+    b.t.moveIds = []; // the seat's A28 id ring remembers the two moves; the economy must not
     runMonths(a.c, a.i, 24, civicSteps(RICH));
     runMonths(b.c, b.i, 24, civicSteps(RICH));
     expect(stateHash(b.t)).toBe(stateHash(a.t));
@@ -152,9 +156,24 @@ describe('a card switched off is bit-identical to never having had it', () => {
     const on = town();
     policy(b.c, b.t.seat, 'nightMarket', true, b.now);
     policy(b.c, b.t.seat, 'nightMarket', false, b.now);
+    b.t.moveIds = [];
     policy(on.c, on.t.seat, 'nightMarket', true, on.now);
     for (const s of [a, b, on]) runMonths(s.c, s.i, 6, liveSteps());
     expect(stateHash(b.t)).toBe(stateHash(a.t));
     expect(stateHash(on.t)).not.toBe(stateHash(a.t));
+  });
+});
+
+describe('every card has its catch (§6.7)', () => {
+  it("Farmers' Market costs a tenth of the farm jobs", () => {
+    const { t } = town('hamlet');
+    const P = paramsFor('v1');
+    const farmJobs = () => supplyOf(t, P).jobs.slice(S_FARMS * 3, S_FARMS * 3 + 3).reduce((a, b) => a + b, 0);
+    const before = farmJobs();
+    expect(before).toBeGreaterThan(10);
+    t.policies.push({ card: 'farmersMarket', sinceTick: 0, sinceDay: 0, area: null });
+    const after = farmJobs();
+    expect(after).toBeLessThan(before);
+    expect(after).toBeGreaterThanOrEqual(Math.floor(0.9 * before) - 3);
   });
 });

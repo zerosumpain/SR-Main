@@ -7,7 +7,7 @@
 import { ENGINE_HASH } from '../../../src/lib/games/hometowns/engine/engine-hash.generated';
 import { hashOf } from '../../../src/lib/games/hometowns/engine/hash';
 import { paramsFile, resolveParams } from '../../../src/lib/games/hometowns/engine/params';
-import { buildJobs, PROFILES, type PlanConfig, type Profile } from './experiments';
+import { buildJobs, PROFILES, timingJobs, type PlanConfig, type Profile } from './experiments';
 import { evaluateGates, composite, type LabData } from './gates';
 import type { FoundingResult, Job, JobResult } from './jobs';
 import { runJobs } from './pool';
@@ -24,6 +24,8 @@ export interface LabOptions {
   days?: number;
   /** Seats per mixed county (default: the profile's). */
   seats?: number;
+  /** G12's timed counties (default: the profile's, at most one per seed); 0 skips them. */
+  timingSeeds?: number;
   workers?: number;
   variant?: Variant | null;
   /** Compare against this baseline (null: none). Default: the profile's file. */
@@ -43,7 +45,7 @@ export function variantParamsHash(v: Variant | null): string {
   return hashOf(resolveParams(file));
 }
 
-export function configFor(o: Pick<LabOptions, 'profile' | 'seeds' | 'days' | 'seats'>): PlanConfig {
+export function configFor(o: Pick<LabOptions, 'profile' | 'seeds' | 'days' | 'seats' | 'timingSeeds'>): PlanConfig {
   const base = PROFILES[o.profile];
   return {
     ...base,
@@ -51,7 +53,7 @@ export function configFor(o: Pick<LabOptions, 'profile' | 'seeds' | 'days' | 'se
     days: o.days ?? base.days,
     seats: o.seats ?? base.seats,
     foundingSeeds: o.seeds !== undefined ? Math.min(base.foundingSeeds, o.seeds * 2) : base.foundingSeeds,
-    timingSeeds: Math.min(base.timingSeeds, o.seeds ?? base.seeds),
+    timingSeeds: Math.min(o.timingSeeds ?? base.timingSeeds, o.seeds ?? base.seeds),
     // Fewer seeds scale the side experiments down with the main run.
     g2b: base.g2b && o.seeds !== undefined ? { ...base.g2b, seeds: Math.max(1, Math.min(base.g2b.seeds, Math.ceil(o.seeds / 10))) } : base.g2b,
     pacing: base.pacing && o.seeds !== undefined ? { ...base.pacing, seeds: Math.max(1, Math.min(base.pacing.seeds, Math.ceil(o.seeds / 25))) } : base.pacing,
@@ -59,12 +61,13 @@ export function configFor(o: Pick<LabOptions, 'profile' | 'seeds' | 'days' | 'se
 }
 
 export function splitResults(jobs: Job[], results: JobResult[], cfg: PlanConfig): LabData {
-  const d: LabData = { mixed: [], g2b: [], pacing: [], founding: [], days: cfg.days, pacingDays: cfg.pacing?.days ?? 0 };
+  const d: LabData = { mixed: [], timing: [], g2b: [], pacing: [], founding: [], days: cfg.days, pacingDays: cfg.pacing?.days ?? 0 };
   results.forEach((r) => {
     if (r.kind === 'founding') d.founding.push(...(r.results as FoundingResult[]));
     else
       for (const c of r.results as CountyResult[]) {
         if (c.spec.experiment === 'g2b') d.g2b.push(c);
+        else if (c.spec.experiment === 'timing') d.timing!.push(c);
         else if (c.spec.experiment === 'pacing') d.pacing.push(c);
         else d.mixed.push(c);
       }
@@ -93,7 +96,10 @@ export async function runLab(o: LabOptions): Promise<{ scorecard: Scorecard; dat
       }
     },
   });
-  const data = splitResults(jobs, results, cfg);
+  // G12's timings: one county at a time on a quiet machine (the pool has drained).
+  const timed = timingJobs(cfg, variant);
+  const timedResults = timed.length ? await runJobs(timed, { workers: Math.min(1, o.workers ?? 1) }) : [];
+  const data = splitResults([...jobs, ...timed], [...results, ...timedResults], cfg);
   const baseline = o.baseline === undefined ? loadBaseline(cfg.profile) : o.baseline;
   const gates = evaluateGates(data, { spectralThreshold: baseline?.spectralThreshold ?? null });
   const scorecard = scorecardOf({

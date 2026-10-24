@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { paramsFor } from './params';
-import { cycleG, eventAt, slowdownAhead, worldAt } from './world';
+import { calendarEvent, cycleG, eventAt, slowdownAhead, worldAt } from './world';
 
 const p = paramsFor('v1');
 const season = { startMonth: 0, boomBust: false };
@@ -49,6 +49,23 @@ describe('the World', () => {
     }
     expect(events).toBeGreaterThanOrEqual(15);
     expect(events).toBeLessThanOrEqual(25);
-    expect(typeof slowdownAhead(4, 100, season, p)).toBe('boolean');
+  });
+
+  it('telegraphs a slowdown exactly when G falls below the threshold within 24 months', () => {
+    const saw = [false, false];
+    for (let m = 0; m < 240; m++) {
+      let below = false;
+      for (let k = 1; k <= 24; k++) if (cycleG(4, m + k, p, false) < p.world.slowdownAt) below = true;
+      expect(slowdownAhead(4, m, season, p)).toBe(below);
+      saw[below ? 1 : 0] = true;
+    }
+    expect(saw).toEqual([true, true]);
+  });
+
+  it("Cosy Winter runs in the real December when no drawn event is on, never instead of one", () => {
+    expect(calendarEvent(null, 11)?.id).toBe('cosyWinter');
+    expect(calendarEvent(null, 10)).toBeNull();
+    const drawn = { id: 'rainySpell', fromMonth: 0, toMonth: 12 };
+    expect(calendarEvent(drawn, 11)).toBe(drawn);
   });
 });

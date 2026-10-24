@@ -10,8 +10,12 @@
 // names a dotfile, lists a folder that has no index.html, and says so
 // plainly when the Lab has not written a report yet. The host-side bind
 // address belongs to whoever runs it (the compose file publishes it on the
-// tailnet address only); inside the container it listens on all interfaces.
+// tailnet address only). Inside a container it listens on all interfaces,
+// which only the container's own network can reach; anywhere else --host is
+// required, because porkserv also serves public production and an
+// accidental all-interfaces bind there would publish the reports.
 
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { extname, join, relative, resolve, sep } from 'node:path';
@@ -27,7 +31,8 @@ function arg(name, fallback) {
 
 const ROOT = resolve(arg('root', join(here, 'reports')));
 const PORT = Number(arg('port', process.env.PORT ?? '8080'));
-const HOST = arg('host', '0.0.0.0');
+const IN_CONTAINER = existsSync('/.dockerenv') || existsSync('/run/.containerenv');
+const HOST = arg('host', IN_CONTAINER ? '0.0.0.0' : '');
 
 /** @type {Record<string, string>} */
 const TYPES = {
@@ -131,5 +136,9 @@ export function createReportServer(root = ROOT) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (!HOST) {
+    console.error('serve-reports: say where to listen, e.g. --host 127.0.0.1 (or the tailnet address). Only a container defaults to all interfaces.');
+    process.exit(2);
+  }
   createReportServer().listen(PORT, HOST, () => console.log(`Hometowns Lab reports: serving ${ROOT} on ${HOST}:${PORT}`));
 }

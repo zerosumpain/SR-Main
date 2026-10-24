@@ -539,9 +539,9 @@ export function applyBudget(t: TownState, taxes: TaxPatch | undefined, funding: 
     }
     const h = t.money.helper;
     if (h) {
-      // Helper Mode floors (§5.13 step 3, A16 escalation at day 6).
-      const homesMin = h.step >= 2 ? 1200 : 1000;
-      const bizMin = h.step >= 2 ? 600 : 500;
+      // Helper Mode floors (§5.13 step 3, A16 escalation at day 6): the same params finance.ts applies.
+      const homesMin = f.helperHomesFloor[h.step >= 2 ? 1 : 0];
+      const bizMin = f.helperBusinessFloor[h.step >= 2 ? 1 : 0];
       if (next.homes.some((v) => v < homesMin) || next.business < bizMin) throw new EngineError(409, 'Bramble is keeping taxes up until the budget recovers.');
     }
   }

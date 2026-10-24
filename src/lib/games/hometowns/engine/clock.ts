@@ -132,12 +132,29 @@ function shiftGrid(c: CountyState, since: number, now: number): number {
   return ms;
 }
 
-/** A hello: records presence and wakes a napping county. */
-export function hello(c: CountyState, now: number): void {
-  if (c.nap) {
-    shiftGrid(c, c.nap.since, now);
-    c.nap = null;
-  }
+/** Whether the county is asleep at `now`: napping, or past the instant its nap is due (A21). */
+export function asleep(c: CountyState, now: number, napAfterMs: number): boolean {
+  return c.nap !== null || (!c.pause && napStartAt(c, napAfterMs) <= now);
+}
+
+/**
+ * Wakes a napping county (or one whose nap is due but not yet recorded:
+ * napCheck runs first, so the nap starts at its deterministic instant rather
+ * than whenever the adapter last looked). The caller must have caught the
+ * county up to the nap instant first; otherwise the backlog would run on the
+ * shifted grid. Returns whether it woke.
+ */
+export function wake(c: CountyState, now: number, napAfterMs: number): boolean {
+  napCheck(c, now, napAfterMs);
+  if (!c.nap) return false;
+  shiftGrid(c, c.nap.since, now);
+  c.nap = null;
+  return true;
+}
+
+/** A hello: wakes a napping county, then records presence. */
+export function hello(c: CountyState, now: number, napAfterMs: number): void {
+  wake(c, now, napAfterMs);
   if (now > c.lastHelloAt) c.lastHelloAt = now;
 }
 

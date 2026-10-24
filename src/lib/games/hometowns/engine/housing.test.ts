@@ -8,7 +8,7 @@ import { monthContext, supplyFromPlanes } from '../../../../../scripts/hometowns
 import { population } from './core';
 import { neutral } from './derived';
 import { M, T } from './fx';
-import { allocate, cohortPersons, homeTiles, homesTarget, houseNewcomers, stepHouseholds, stepHousing } from './housing';
+import { allocate, cohortPersons, homeTiles, homesSlack, homesTarget, houseNewcomers, stepHouseholds, stepHousing } from './housing';
 import { paramsFor } from './params';
 import { memoFor } from './people';
 import { readTileLog } from './records';
@@ -226,5 +226,22 @@ describe('cohortPersons', () => {
     p[person(1, 1)] = 7;
     p[person(2, 1)] = 9;
     expect(cohortPersons(p)[4]).toBe(16);
+  });
+});
+
+describe('the Homes meter of an empty tier (review amendment to §5.8)', () => {
+  const P = paramsFor('v1');
+  const m = { params: P };
+  it('needs a build step of waiting demand, and rises over a span of it instead of between 5 and 8 people', () => {
+    const slack = homesSlack(1000, P);
+    expect(slack).toBeGreaterThanOrEqual(24);
+    const at = (w: number) => homesTarget(0, 0, w, 0, 0, 0, 0, true, m, slack).value;
+    expect(at(8)).toBe(0);
+    expect(at(Math.round(slack))).toBeLessThan(10);
+    expect(at(Math.round(1.1 * slack))).toBeLessThan(60);
+    expect(at(2 * slack)).toBeGreaterThan(90);
+    // A tier well above one step reads exactly as before.
+    const big = (s: number) => homesTarget(950, 0, 20, 0, 1000, 0, 0, true, m, s).value;
+    expect(big(slack)).toBe(big(5));
   });
 });

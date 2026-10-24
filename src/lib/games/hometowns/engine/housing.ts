@@ -438,13 +438,16 @@ export function stepHousing(t: TownState, m: MonthContext): void {
   // The Homes meters (§5.8): occupied, squeezed and waiting against 95% of capacity plus the pipeline.
   const unmet = m.derived.needs?.unmet ?? [0, 0, 0];
   const keys = ['meter.homesL', 'meter.homesM', 'meter.homesH'];
+  let pop = 0;
+  for (const n of p) pop += n;
+  const slack = homesSlack(pop, m.params);
   for (let h = 0; h < 3; h++) {
     let waiting = 0;
     for (let kind = 0; kind < 3; kind++) waiting += t.applicants[h * 3 + kind];
     if (h === 0) waiting += t.applicants[COHORT_S];
     const asp = h > 0 ? t.aspirants[h - 1] : 0;
     const pipe = hs.pipeline[h];
-    const target = homesTarget(alloc.occ[h], alloc.squeezedTier[h], waiting, asp, cap[h], pipe, unmet[h], hs.reachable[h], m);
+    const target = homesTarget(alloc.occ[h], alloc.squeezedTier[h], waiting, asp, cap[h], pipe, unmet[h], hs.reachable[h], m, slack);
     const prev = t.meters[h];
     t.meters[h] = clamp(prev + mp.alpha * (target.value - prev), -100, 100);
     hs.target[h] = target.value;
@@ -457,6 +460,18 @@ export function stepHousing(t: TownState, m: MonthContext): void {
   hs.occ = alloc.occ;
   hs.vacant = alloc.vacant;
   hs.squeezed = squeezed;
+}
+
+/**
+ * The least a Homes ratio's denominator may be: `homesSlackTicks` ticks of
+ * construction starts (Builders/4 a tick, §5.2) of L1 homes. The town adds
+ * homes in steps of that size, so demand smaller than one step is noise, not
+ * a signal to build, and an empty tier no longer flips from 0 to +99 between
+ * 5 and 8 people waiting.
+ */
+export function homesSlack(pop: number, p: Pick<MonthContext, 'params'>['params']): number {
+  const d = p.develop;
+  return p.meters.homesSlackTicks * ((d.buildersBase + pop / d.buildersPer) / 4) * ZONE_DEFS[Z_HOMES].capacity[0];
 }
 
 /**
@@ -475,10 +490,12 @@ export function homesTarget(
   unmet: number,
   reachable: boolean,
   m: Pick<MonthContext, 'params'>,
+  slack = 5,
 ): { value: number; ratio: number; terms: [string, number][] } {
   const mp = m.params.meters;
   const occTarget = 1 - mp.vacancyTarget;
-  const denom = occTarget * (cap + pipeline) + 5;
+  // §5.8's "+5", floored at a build increment (homesSlackTicks): see homesSlack.
+  const denom = Math.max(occTarget * (cap + pipeline) + 5, slack);
   const ratio = (occ + squeezed + waiting + aspirants) / denom;
   let core = 100 * T(mp.homesGain * (ratio - 1));
   // A tier with no homes built or building has nothing to be over-supplied with: its vacancy side reads
@@ -488,7 +505,7 @@ export function homesTarget(
   const empty = cap + pipeline <= 0 && m.params.rules.emptyHomesFloor;
   if (empty && core < 0) core = 0;
   // Parts of (ratio − 1): each against capacity alone, then the pipeline's discount.
-  const d0 = occTarget * cap + 5;
+  const d0 = Math.max(occTarget * cap + 5, slack);
   const parts: [string, number][] = [
     ['meter.homes.vacancy', occ / d0 - 1],
     ['meter.homes.squeezed', squeezed / d0],

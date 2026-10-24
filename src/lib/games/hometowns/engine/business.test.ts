@@ -102,6 +102,20 @@ describe('business tax bites honestly (§5.12)', () => {
     expect(open).toBeGreaterThanOrEqual(3);
   });
 
+  it('raising sales tax lowers the shops’ margin and meter, and leaves industry alone (§5.17)', () => {
+    const run = (bp: number) => {
+      const { c, i, t } = town();
+      t.taxes.sales = bp;
+      const months = runMonths(c, i, 8, scripted());
+      return { first: months[0].firms!, t };
+    };
+    const low = run(0);
+    const high = run(1000);
+    expect(high.first.margin[S_SHOPS]).toBeLessThan(low.first.margin[S_SHOPS] - 0.05);
+    expect(high.t.meters[METER_SHOPS]).toBeLessThan(low.t.meters[METER_SHOPS]);
+    expect(high.first.margin[S_INDUSTRY]).toBeCloseTo(low.first.margin[S_INDUSTRY], 9);
+  });
+
   it('the tax is a named cost in the meter’s Why', () => {
     const { c, i, t } = town();
     t.taxes.business = 1200;
