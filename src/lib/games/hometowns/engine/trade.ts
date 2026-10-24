@@ -21,7 +21,7 @@ import { ZONE_DEFS, buildingIndex } from './content';
 import { flowsFor } from './core';
 import { clamp, smooth } from './fx';
 import { neutral } from './derived';
-import { B_KIND, B_X, B_Y, CAT_ZONE, TILES, cellOf, constructionLeft, decodeCells, lvlLevel, planesOf, tileIndex, useCat, usePayload } from './tiles';
+import { B_KIND, B_X, B_Y, CAT_ZONE, TILES, cellOf, constructionLeft, decodeCells, lvlLevel, pairPlane, planesOf, tileIndex, useCat, usePayload } from './tiles';
 import {
   SECTOR_COUNT,
   ZONE_SECTOR,
@@ -272,6 +272,7 @@ export function sectorTiles(t: TownState, m: MonthContext): SectorTiles {
     zonedTiles: 0,
     startsPerMonth: 0,
   };
+  const building = pairPlane(t.construction);
   for (let i = 0; i < TILES; i++) {
     if (useCat(p.use[i]) !== CAT_ZONE) continue;
     const z = usePayload(p.use[i]);
@@ -279,7 +280,7 @@ export function sectorTiles(t: TownState, m: MonthContext): SectorTiles {
     out.lvAll += lv[cellOf(i)];
     const level = lvlLevel(p.lvl[i]);
     if (level === 0) continue;
-    const left = constructionLeft(t, i);
+    const left = building[i];
     if (left > 0) {
       // A start of `level` takes ticks[level − 1] ticks, so it accounts for 4/ticks starts a month.
       out.startsPerMonth += 4 / Math.max(1, ticks[level - 1] ?? 1);

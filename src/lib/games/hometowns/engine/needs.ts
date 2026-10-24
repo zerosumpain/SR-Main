@@ -301,7 +301,11 @@ function reachMasks(t: TownState, busy: Uint8Array): Uint8Array {
     for (let cy = 0; cy < N_CELLS_SIDE; cy++) {
       const dy = Math.abs(4 * cy + 2 - cy2);
       if (dy > r2) continue;
-      for (let cx = 0; cx < N_CELLS_SIDE; cx++) if (dy + Math.abs(4 * cx + 2 - cx2) <= r2) out[cy * N_CELLS_SIDE + cx] |= bits;
+      // dy + |4·cx + 2 − cx2| ≤ r2 is an interval of cx (the division by 4 is exact).
+      const R = r2 - dy;
+      const lo = Math.max(0, Math.ceil((cx2 - 2 - R) / 4));
+      const hi = Math.min(N_CELLS_SIDE - 1, Math.floor((cx2 - 2 + R) / 4));
+      for (let cx = lo; cx <= hi; cx++) out[cy * N_CELLS_SIDE + cx] |= bits;
     }
   }
   return out;

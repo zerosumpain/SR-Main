@@ -41,6 +41,7 @@ import {
   VARIANT_HOTEL,
   cellOf,
   decodeCells,
+  decodeCellsShared,
   districtOf,
   footprint,
   lvlLevel,
@@ -236,36 +237,34 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
   }
 
   // Attachment: the nearest road tile within `reach` (a lot "touches" the road it is served from).
+  // Each road tile offers itself to the tiles around it; the order (Chebyshev, then Manhattan,
+  // then tile index) is total, so this is the same argmin as a scan of every tile's window.
   const attach = new Int32Array(TILES).fill(-1);
   const attachDist = new Int8Array(TILES).fill(127);
-  for (let i = 0; i < TILES; i++) {
-    const x = tileX(i);
-    const y = tileY(i);
-    let best = -1;
-    let bc = 99;
-    let bm = 99;
-    for (let dy = -reach; dy <= reach; dy++) {
-      const yy = y + dy;
-      if (yy < 0 || yy >= MAP) continue;
-      for (let dx = -reach; dx <= reach; dx++) {
-        const xx = x + dx;
-        if (xx < 0 || xx >= MAP) continue;
-        const j = yy * MAP + xx;
-        if (kind[j] < 0) continue;
-        const c = dx < 0 ? -dx : dx;
-        const cy = dy < 0 ? -dy : dy;
+  const attachMan = new Uint8Array(TILES).fill(99);
+  for (let k = 0; k < roads.length; k++) {
+    const j = roads[k];
+    const jx = tileX(j);
+    const jy = tileY(j);
+    const y0 = jy - reach < 0 ? 0 : jy - reach;
+    const y1 = jy + reach > MAP - 1 ? MAP - 1 : jy + reach;
+    const x0 = jx - reach < 0 ? 0 : jx - reach;
+    const x1 = jx + reach > MAP - 1 ? MAP - 1 : jx + reach;
+    for (let yy = y0; yy <= y1; yy++) {
+      const cy = yy < jy ? jy - yy : yy - jy;
+      for (let xx = x0; xx <= x1; xx++) {
+        const i = yy * MAP + xx;
+        const c = xx < jx ? jx - xx : xx - jx;
         const cheb = c > cy ? c : cy;
         const man = c + cy;
-        if (cheb < bc || (cheb === bc && (man < bm || (man === bm && j < best)))) {
-          best = j;
-          bc = cheb;
-          bm = man;
+        const bc = attachDist[i];
+        const bm = attachMan[i];
+        if (cheb < bc || (cheb === bc && (man < bm || (man === bm && j < attach[i])))) {
+          attach[i] = j;
+          attachDist[i] = cheb;
+          attachMan[i] = man;
         }
       }
-    }
-    if (best >= 0) {
-      attach[i] = best;
-      attachDist[i] = bc;
     }
   }
 
@@ -377,6 +376,8 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
   const signNode = Int32Array.from(SIGNPOSTS.map((s) => (isRoad(s) ? nodeOf[s] : -1)));
   // The district each cell's access is measured from.
   const cellDistrict = new Int16Array(CELLS).fill(-1);
+  const ported: number[] = [];
+  for (let d = 0; d < DISTRICTS; d++) if (port[d] >= 0) ported.push(d);
   for (let c = 0; c < CELLS; c++) {
     const cx = c % CELLS_PER_SIDE;
     const cy = (c - cx) / CELLS_PER_SIDE;
@@ -384,8 +385,8 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
     const dy = cy >> 2;
     let best = -1;
     let bd = 99;
-    for (let d = 0; d < DISTRICTS; d++) {
-      if (port[d] < 0) continue;
+    for (let k = 0; k < ported.length; k++) {
+      const d = ported[k];
       const ex = d % DISTRICTS_PER_SIDE;
       const ey = (d - ex) / DISTRICTS_PER_SIDE;
       const m = Math.abs(ex - dx) + Math.abs(ey - dy);
@@ -923,6 +924,11 @@ export function buildModel(t: TownState, p: Params): SpaceModel {
   }
 
   const workforce = [0, 1, 2].map((h) => part.W * P[person(STAGE_W, h)] + part.P * P[person(STAGE_P, h)] + (h === 0 ? part.S * students : 0));
+  let nPop = 0;
+  for (let c = 0; c < CELLS; c++) if (cellRes[c] > 0) nPop++;
+  const popCells = new Int32Array(nPop);
+  nPop = 0;
+  for (let c = 0; c < CELLS; c++) if (cellRes[c] > 0) popCells[nPop++] = c;
   return {
     net,
     terrain,
@@ -938,7 +944,7 @@ export function buildModel(t: TownState, p: Params): SpaceModel {
     cellFamilies,
     cellRetired,
     cellJobs,
-    popCells: Int32Array.from(Array.from(cellRes.keys()).filter((c) => cellRes[c] > 0)),
+    popCells,
     cellDistrict,
     distWorkers,
     distJobsT,
@@ -1011,11 +1017,15 @@ export function falloff(d: number, radiusTiles: number): number {
   return (r - d) / (r / 2);
 }
 
-/** Decodes a stored 32×32 plane, falling back to `fill` for a missing or broken string. */
-export function cellsOr(s: string | undefined, fill: number): Uint8Array {
+/**
+ * Decodes a stored 32×32 plane, falling back to `fill` for a missing or broken
+ * string. With `shared`, a good decode is the memoised copy (decodeCellsShared):
+ * the caller must only read it.
+ */
+export function cellsOr(s: string | undefined, fill: number, shared = false): Uint8Array {
   if (typeof s === 'string' && s.length > 0) {
     try {
-      return decodeCells(s);
+      return shared ? decodeCellsShared(s) : decodeCells(s);
     } catch {
       // fall through
     }

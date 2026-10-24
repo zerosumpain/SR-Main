@@ -15,7 +15,7 @@ import { population } from './core';
 import { neutral } from './derived';
 import { civicMemo } from './finance';
 import { paramsFor } from './params';
-import { B_KIND, B_X, B_Y, CAT_ZONE, CELLS, TILES, cellOf, constructionLeft, lvlLevel, planesOf, tileIndex, useCat, usePayload } from './tiles';
+import { B_KIND, B_X, B_Y, CAT_ZONE, CELLS, TILES, cellOf, constructionLeft, lvlLevel, pairPlane, planesOf, tileIndex, useCat, usePayload } from './tiles';
 import { COVERAGES, STARS, Z_HOMES, Z_SHOPS, type CountyState, type MonthContext, type RegionalContext, type TownState } from './types';
 
 /** Everything a checklist item looks at, gathered once per month end. */
@@ -116,10 +116,11 @@ export function checkFacts(t: TownState, m: MonthContext): CheckFacts {
   let homes = 0;
   let watered = 0;
   let shopTiles = 0;
+  const left = pairPlane(t.construction);
   for (let i = 0; i < TILES; i++) {
     if (useCat(p.use[i]) !== CAT_ZONE) continue;
     const level = lvlLevel(p.lvl[i]);
-    if (level === 0 || constructionLeft(t, i) > 0) continue;
+    if (level === 0 || left[i] > 0) continue;
     const z = usePayload(p.use[i]);
     if (z === Z_SHOPS) shopTiles++;
     if (z !== Z_HOMES) continue;
@@ -140,7 +141,8 @@ export function checkFacts(t: TownState, m: MonthContext): CheckFacts {
   let landmarks = 0;
   for (const b of t.buildings) {
     const def = BUILDINGS[b[B_KIND]];
-    if (!def || constructionLeft(t, tileIndex(b[B_X], b[B_Y])) > 0) continue;
+    const anchor = tileIndex(b[B_X], b[B_Y]);
+    if (!def || (anchor >= 0 && anchor < TILES ? left[anchor] > 0 : constructionLeft(t, anchor) > 0)) continue;
     built[def.id] = (built[def.id] ?? 0) + 1;
     if (def.group === 'landmark') landmarks++;
   }

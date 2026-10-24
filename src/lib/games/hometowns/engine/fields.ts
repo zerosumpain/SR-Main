@@ -186,23 +186,37 @@ export function fieldsOf(run: SpaceRun): FieldsOut {
   const carFreeOn = policyOn(t, 'carFreeCentre');
   const carFree = scratchU8('fd.carFree', CELLS);
   const roadCell = scratchU8('fd.roadCell', CELLS);
-  for (let i = 0; i < TILES; i++) {
-    const c = CELL_OF[i];
-    if (net.kind[i] >= 0) {
-      roadCell[c] = 1;
-      if (tr.load[i] > maxLoad[c]) maxLoad[c] = tr.load[i];
+  {
+    // Locals for the 4,096-tile pass (the same reads, hoisted out of the loop).
+    const kind = net.kind;
+    const rail = net.rail;
+    const load = tr.load;
+    const marks = m.marks;
+    const level = m.level;
+    const zone = m.zone;
+    const noiseRail = f.noiseRail;
+    const noiseIndustry = f.noiseIndustry;
+    const noiseLeisure = f.noiseLeisure;
+    const noiseNightMarket = f.noiseNightMarket;
+    const industryEmissions = f.industryEmissions;
+    for (let i = 0; i < TILES; i++) {
+      const c = CELL_OF[i];
+      if (kind[i] >= 0) {
+        roadCell[c] = 1;
+        if (load[i] > maxLoad[c]) maxLoad[c] = load[i];
+      }
+      if (rail[i] && noiseRail > noiseSrc[c]) noiseSrc[c] = noiseRail;
+      if (carFreeOn && marks[i] & MARK_CARFREE) carFree[c] = 1;
+      const lv = level[i];
+      if (lv === 0) continue;
+      const z = zone[i];
+      if (z === Z_INDUSTRY) {
+        emit[c] += industryEmissions[lv - 1] * cleanAir;
+        if (lv >= 3 && noiseIndustry > noiseSrc[c]) noiseSrc[c] = noiseIndustry;
+      } else if (z === Z_LEISURE && lv >= 3) {
+        if (noiseLeisure > noiseSrc[c]) noiseSrc[c] = noiseLeisure;
+      } else if (z === Z_SHOPS && nightMarket && noiseNightMarket > noiseSrc[c]) noiseSrc[c] = noiseNightMarket;
     }
-    if (net.rail[i] && f.noiseRail > noiseSrc[c]) noiseSrc[c] = f.noiseRail;
-    if (carFreeOn && m.marks[i] & MARK_CARFREE) carFree[c] = 1;
-    const lv = m.level[i];
-    if (lv === 0) continue;
-    const z = m.zone[i];
-    if (z === Z_INDUSTRY) {
-      emit[c] += f.industryEmissions[lv - 1] * cleanAir;
-      if (lv >= 3 && f.noiseIndustry > noiseSrc[c]) noiseSrc[c] = f.noiseIndustry;
-    } else if (z === Z_LEISURE && lv >= 3) {
-      if (f.noiseLeisure > noiseSrc[c]) noiseSrc[c] = f.noiseLeisure;
-    } else if (z === Z_SHOPS && nightMarket && f.noiseNightMarket > noiseSrc[c]) noiseSrc[c] = f.noiseNightMarket;
   }
   for (const b of m.buildings) {
     if (!b.active) continue;
@@ -215,33 +229,45 @@ export function fieldsOf(run: SpaceRun): FieldsOut {
         if (nz > noiseSrc[c]) noiseSrc[c] = nz;
       }
   }
-  for (let c = 0; c < CELLS; c++) {
-    const r = f.roadPollution * maxLoad[c];
-    emit[c] += r > f.roadPollutionCap ? f.roadPollutionCap : r;
+  {
+    const roadPollution = f.roadPollution;
+    const roadPollutionCap = f.roadPollutionCap;
+    for (let c = 0; c < CELLS; c++) {
+      const r = roadPollution * maxLoad[c];
+      emit[c] += r > roadPollutionCap ? roadPollutionCap : r;
+    }
   }
   if (ctx.rivalry === 'spirited' && flows.airIn > 0) for (let cy = 0; cy < CELLS_PER_SIDE; cy++) emit[cy * CELLS_PER_SIDE] += flows.airIn;
   const spreadP = spread(emit, f.pollKeep, f.pollSpread, f.pollPasses);
   const trees = svc.trees;
   const treeF = policyOn(t, 'treePlanting') ? f.treePlanting : 1;
-  const prevPoll = cellsOr(t.lag.poll, 0);
+  const prevPoll = cellsOr(t.lag.poll, 0, true);
   const poll = new Uint8Array(CELLS);
   const pollution = new Float64Array(CELLS);
-  for (let c = 0; c < CELLS; c++) {
-    let v = spreadP[c] - f.parkAbsorb * svc.parkTiles[c] - f.treeAbsorb * trees[c];
-    v = (v < 0 ? 0 : v > 100 ? 100 : v) * treeF;
-    poll[c] = lagStep(prevPoll[c], v, f.pollLag);
-    pollution[c] = poll[c];
+  {
+    const parkAbsorb = f.parkAbsorb;
+    const treeAbsorb = f.treeAbsorb;
+    const parkTiles = svc.parkTiles;
+    const pollLag = f.pollLag;
+    for (let c = 0; c < CELLS; c++) {
+      let v = spreadP[c] - parkAbsorb * parkTiles[c] - treeAbsorb * trees[c];
+      v = (v < 0 ? 0 : v > 100 ? 100 : v) * treeF;
+      poll[c] = lagStep(prevPoll[c], v, pollLag);
+      pollution[c] = poll[c];
+    }
   }
 
   // ---- Noise ------------------------------------------------------------------------
   const noise0 = scratch('fd.noise0', CELLS);
+  const noiseRoad = f.noiseRoad;
   for (let c = 0; c < CELLS; c++) {
-    const v = noiseSrc[c] + f.noiseRoad * maxLoad[c];
+    const v = noiseSrc[c] + noiseRoad * maxLoad[c];
     noise0[c] = v > 100 ? 100 : v;
   }
   const noise = spread(noise0, f.pollKeep, f.pollSpread, f.noisePasses);
+  const carFreeNoise = f.carFreeNoise;
   for (let c = 0; c < CELLS; c++) {
-    let v = noise[c] * (carFree[c] ? f.carFreeNoise : 1);
+    let v = noise[c] * (carFree[c] ? carFreeNoise : 1);
     v = v < 0 ? 0 : v > 100 ? 100 : v;
     noise[c] = v;
   }
@@ -252,8 +278,11 @@ export function fieldsOf(run: SpaceRun): FieldsOut {
   let psum = 0;
   let dsum = 0;
   const dens = scratch('fd.dens', CELLS);
+  const cellRes = m.cellRes;
+  const cellJobs = m.cellJobs;
+  const densityRef = f.densityRef;
   for (let c = 0; c < CELLS; c++) {
-    const d = (m.cellRes[c] + m.cellJobs[c]) / f.densityRef;
+    const d = (cellRes[c] + cellJobs[c]) / densityRef;
     dens[c] = d > 1 ? 1 : d;
     if (w[c] > 0) {
       wsum += w[c];
@@ -270,7 +299,7 @@ export function fieldsOf(run: SpaceRun): FieldsOut {
   let policy = 1;
   if (policyOn(t, 'neighbourhoodWatch')) policy *= p.safety.neighbourhoodWatch;
   if (nightMarket) policy *= p.safety.nightMarket;
-  const lvNow = cellsOr(t.lv, 1);
+  const lvNow = cellsOr(t.lv, 1, true);
   const ci: CrimeInputs = {
     uL: lab.u[0],
     gini,

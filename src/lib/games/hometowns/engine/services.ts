@@ -298,27 +298,37 @@ export function servicesOf(run: SpaceRun): Services {
   const nat = cov[COV.nature];
   const cul = cov[COV.culture];
   const tr = cov[COV.transit];
+  const tnNature = tn.nature;
+  const fromStock = p.fields.cultureFromStock * cultureIndex;
   for (let c = 0; c < CELLS; c++) {
-    nat[c] += tn.nature[c] + parks[c];
-    cul[c] += p.fields.cultureFromStock * cultureIndex;
+    nat[c] += tnNature[c] + parks[c];
+    cul[c] += fromStock;
     tr[c] = bus[c] + rail[c];
     if (youth[c] > 1) youth[c] = 1;
-    for (let k = 0; k < cov.length; k++) {
-      const v = cov[k][c];
-      cov[k][c] = v > 100 ? 100 : v < 0 ? 0 : v;
+  }
+  // Each cell's clamp follows its own updates above, so clamping array by array is the same.
+  for (let k = 0; k < cov.length; k++) {
+    const a = cov[k];
+    for (let c = 0; c < CELLS; c++) {
+      const v = a[c];
+      a[c] = v > 100 ? 100 : v < 0 ? 0 : v;
     }
   }
 
   // Population-weighted town coverage.
   const town = new Array<number>(COVERAGES.length).fill(0);
   const pc = m.popCells;
+  const cellRes = m.cellRes;
   let resT = 0;
-  for (let j = 0; j < pc.length; j++) resT += m.cellRes[pc[j]];
+  for (let j = 0; j < pc.length; j++) resT += cellRes[pc[j]];
   if (resT > 0)
     for (let k = 0; k < cov.length; k++) {
       const a = cov[k];
       let s = 0;
-      for (let j = 0; j < pc.length; j++) s += m.cellRes[pc[j]] * a[pc[j]];
+      for (let j = 0; j < pc.length; j++) {
+        const c = pc[j];
+        s += cellRes[c] * a[c];
+      }
       town[k] = s / resT;
     }
 

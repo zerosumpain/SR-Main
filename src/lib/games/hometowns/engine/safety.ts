@@ -139,6 +139,8 @@ interface SpatialFactors {
   lv: Float64Array;
   police: Float64Array;
   weights: Float64Array;
+  /** The cells with a positive weight, ascending (the only ones Safety's mean reads). */
+  active: Int32Array;
   /** Neutral values: no youth club, density ½, land value at the neutral point, no police. */
   neutral: { youth: number; dens: number; lv: number; police: number };
 }
@@ -170,7 +172,12 @@ function spatial(i: CrimeInputs, p: Params): SpatialFactors {
     police[c] = 1 - (pm * pol) / (pol + ph);
     weights[c] = any ? (i.weights[c] > 0 ? i.weights[c] : 0) : 1;
   }
-  const out: SpatialFactors = { youth, dens, lv, police, weights, neutral: { youth: 1, dens: db + ds * 0.5, lv: 1, police: 1 } };
+  let na = 0;
+  for (let c = 0; c < CELLS; c++) if (weights[c] > 0) na++;
+  const active = new Int32Array(na);
+  na = 0;
+  for (let c = 0; c < CELLS; c++) if (weights[c] > 0) active[na++] = c;
+  const out: SpatialFactors = { youth, dens, lv, police, weights, active, neutral: { youth: 1, dens: db + ds * 0.5, lv: 1, police: 1 } };
   FACTORS.set(i, out);
   return out;
 }
@@ -189,6 +196,22 @@ export function crimeField(i: CrimeInputs, p: Params, off: SafetyFactor | null =
   let wsum = 0;
   let csum = 0;
   let ysum = 0;
+  if (!keepField) {
+    // Only the weighted cells reach the mean: the same sums, in the same order, without the rest.
+    const act = f.active;
+    for (let k = 0; k < act.length; k++) {
+      const c = act[k];
+      const y = Y ? Y[c] : n.youth;
+      let v = cp0 * y * (D ? D[c] : n.dens) * (L ? L[c] : n.lv) * (P ? P[c] : n.police);
+      v = v < 0 ? 0 : v > 100 ? 100 : v;
+      const wc = w[c];
+      wsum += wc;
+      csum += wc * v;
+      ysum += wc * y;
+    }
+    const mean0 = wsum > 0 ? csum / wsum : 0;
+    return { crime, cp: cp0 * (wsum > 0 ? ysum / wsum : 1), safety: 100 - mean0 };
+  }
   for (let c = 0; c < CELLS; c++) {
     const y = Y ? Y[c] : n.youth;
     let v = cp0 * y * (D ? D[c] : n.dens) * (L ? L[c] : n.lv) * (P ? P[c] : n.police);
