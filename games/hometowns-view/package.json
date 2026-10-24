@@ -1,0 +1,22 @@
+{
+  "name": "hometowns-view",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The Hometowns map page: a Vite + Pixi v8 bundle that runs the same pure engine as the server (spec §9.15, §10.10).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "check": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "pixi.js": "8.22.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vitest": "4.1.0"
+  }
+}

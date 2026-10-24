@@ -1,0 +1,237 @@
+// The Deputy's standing orders (spec §5.18): deterministic, logged to the
+// inbox, bounded by their thresholds, switched off by Hold, and editable
+// only as far as the seat's profile allows.
+
+import { describe, expect, it } from 'vitest';
+import { civicSteps, type CivicScript } from '../../../../../scripts/hometowns/civic-kit';
+import { fixture } from '../../../../../scripts/hometowns/fixture';
+import { kitTown, road } from '../../../../../scripts/hometowns/space-kit';
+import { runMonths } from '../../../../../scripts/hometowns/people-kit';
+import { applyCommand } from './commands';
+import { ORDER_DEFAULTS } from './content';
+import { lineIndex, postWhole } from './core';
+import { civicMemo, upkeepOf } from './finance';
+import { stateHash } from './index';
+import { renewsContracts } from './orders';
+import { paramsFor } from './params';
+import { CAT_ROAD, CAT_ZONE, MAP, planesOf, useCat, usePayload } from './tiles';
+import { EngineError, FUNDING_KEYS, METER_SHOPS, Z_HOMES, Z_SHOPS, type StandingOrder } from './types';
+
+const P = paramsFor('v1');
+
+function refused(f: () => unknown, status: number, text?: RegExp): void {
+  try {
+    f();
+  } catch (e) {
+    expect(e).toBeInstanceOf(EngineError);
+    expect((e as EngineError).status).toBe(status);
+    if (text) expect((e as Error).message).toMatch(text);
+    return;
+  }
+  throw new Error('expected a refusal');
+}
+
+const town = (kind: 'hamlet' | 'town' = 'town') => {
+  const f = fixture(kind);
+  return { c: f.county, i: f.town, t: f.county.towns[f.town], now: f.now };
+};
+
+const only = (...kinds: string[]): StandingOrder[] => ORDER_DEFAULTS.map((o) => ({ kind: o.kind, on: kinds.includes(o.kind), args: [...o.args] }));
+
+/** The town fixture's running costs, and a script that misses them by `gap` a month. */
+function shortBy(t: ReturnType<typeof town>['t'], gap: number): CivicScript {
+  const u = upkeepOf(t, P);
+  return { housing: { rent: [0, 0, 0], occ: [0, 0, 0] }, firms: { turnover: (u.civic + u.utilities + u.roads - gap) / 0.04 } };
+}
+
+describe('Keep the budget healthy', () => {
+  it('first sets Fun and Culture to Low, then raises homes tax 0.5 points a month, 2 points at most, never borrowing', () => {
+    const { c, i, t } = town();
+    t.orders = only('budgetHealthy');
+    const script = shortBy(t, 20_000);
+    // A month and a half of spending in reserve: under the 2-month line.
+    postWhole(t, 'other', -t.money.reserves + 600_000);
+    const seen: string[] = [];
+    runMonths(c, i, 7, civicSteps(script), () => seen.push(`${t.funding[FUNDING_KEYS.indexOf('fun')]}${t.funding[FUNDING_KEYS.indexOf('culture')]}:${t.taxes.homes.join('/')}`));
+    expect(seen).toEqual(['00:800/800/800', '00:850/850/850', '00:900/900/900', '00:950/950/950', '00:1000/1000/1000', '00:1000/1000/1000', '00:1000/1000/1000']);
+    expect(civicMemo(t).deputyRaised).toBe(200);
+    expect(t.money.loan).toBeNull();
+    expect(t.money.bonds).toEqual([]);
+    // Logged once per kind per day, with the amounts summed.
+    const tax = t.inbox.find((x) => x.kind === 'deputy.budgetHealthy.tax')!;
+    expect(tax.data.bp).toBe(200);
+    expect(tax.data.times).toBe(4);
+    expect(t.inbox.filter((x) => x.kind === 'deputy.budgetHealthy.funding')).toHaveLength(1);
+  });
+
+  it('does nothing while reserves are healthy, and forgets its raise once they are', () => {
+    const { c, i, t } = town();
+    t.orders = only('budgetHealthy');
+    civicMemo(t).deputyRaised = 150;
+    postWhole(t, 'other', 1e8);
+    runMonths(c, i, 2, civicSteps(shortBy(t, -50_000)));
+    expect(t.taxes.homes).toEqual([800, 800, 800]);
+    expect(t.funding.every((f) => f === 1)).toBe(true);
+    expect(civicMemo(t).deputyRaised).toBe(0);
+  });
+
+  it('is switched off by Hold, and by its own switch', () => {
+    for (const orders of [only('budgetHealthy', 'hold'), only()]) {
+      const { c, i, t } = town();
+      t.orders = orders;
+      postWhole(t, 'other', -t.money.reserves + 600_000);
+      runMonths(c, i, 3, civicSteps(shortBy(t, 20_000)));
+      expect(t.taxes.homes).toEqual([800, 800, 800]);
+      expect(t.inbox.some((x) => x.kind.startsWith('deputy.budgetHealthy'))).toBe(false);
+    }
+  });
+});
+
+describe('While I am away, zone next to roads', () => {
+  type Town = ReturnType<typeof town>['t'];
+  const zoned = (t: Town, z: number) => {
+    const p = planesOf(t);
+    let n = 0;
+    for (let k = 0; k < MAP * MAP; k++) if (useCat(p.use[k]) === CAT_ZONE && usePayload(p.use[k]) === z) n++;
+    return n;
+  };
+  const roadside = (t: Town, k: number) => {
+    const p = planesOf(t);
+    const x = k % MAP;
+    const y = (k - x) / MAP;
+    return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => x + dx >= 0 && x + dx < MAP && y + dy >= 0 && y + dy < MAP && useCat(p.use[(y + dy) * MAP + x + dx]) === CAT_ROAD);
+  };
+
+  it('zones up to 12 Homes or Shops tiles a day when the meter is above 60 and reserves exceed 3 months', () => {
+    // An empty Village with one long street: plenty of roadside land.
+    const { c, i, t } = kitTown({ tier: 1 });
+    road(t, 4, 30, 60, 30, 'street');
+    t.orders = only('awayZoning');
+    t.away.lastHelloAt = 0; // long gone
+    postWhole(t, 'other', 1e7);
+    t.meters[0] = 80;
+    t.meters[METER_SHOPS] = 70;
+    const homes0 = zoned(t, Z_HOMES);
+    const shops0 = zoned(t, Z_SHOPS);
+    const before = planesOf(t).use.slice();
+    const hold = (tt: typeof t) => {
+      tt.meters[0] = 80;
+      tt.meters[METER_SHOPS] = 70;
+      return {};
+    };
+    runMonths(c, i, 12, civicSteps(hold));
+    const homes = zoned(t, Z_HOMES) - homes0;
+    const shops = zoned(t, Z_SHOPS) - shops0;
+    expect(homes + shops).toBe(12); // one day's allowance
+    expect(homes).toBe(6);
+    expect(shops).toBe(6);
+    const after = planesOf(t).use;
+    for (let k = 0; k < MAP * MAP; k++) if (after[k] !== before[k]) expect(roadside(t, k)).toBe(true);
+    expect(t.inbox.find((x) => x.kind === 'deputy.awayZoning')!.data.homes).toBe(6);
+    c.dayIndex += 1;
+    runMonths(c, i, 1, civicSteps(hold));
+    expect(zoned(t, Z_HOMES) - homes0 + zoned(t, Z_SHOPS) - shops0).toBe(24);
+  });
+
+  it('does not zone for a mayor who said hello today, or with thin reserves', () => {
+    for (const setup of ['present', 'poor'] as const) {
+      const { c, i, t } = town('hamlet');
+      t.orders = only('awayZoning');
+      t.away.lastHelloAt = setup === 'present' ? 9e15 : 0;
+      if (setup === 'poor') postWhole(t, 'other', -t.money.reserves);
+      const before = planesOf(t).use.slice();
+      runMonths(c, i, 2, civicSteps((tt) => ((tt.meters[0] = 80), {})));
+      expect(Array.from(planesOf(t).use)).toEqual(Array.from(before));
+    }
+  });
+});
+
+describe('Pay back the Town Loan early', () => {
+  it('repays what keeps three months of spending in hand, with the 1% fee', () => {
+    const { c, i, t } = town();
+    t.orders = only('repayLoan');
+    t.money.loan = { principal: 2_000_000, rate: 0.05, monthsLeft: 120, payment: 21_213 };
+    postWhole(t, 'other', 3e6);
+    const [d] = runMonths(c, i, 1, civicSteps({ housing: { rent: [300, 450, 800], occ: [1000, 2000, 500] }, firms: { turnover: 10_000_000 } }));
+    const repaid = -d.ledger!.lines[lineIndex('repayment')];
+    expect(repaid).toBeGreaterThan(0);
+    expect(t.money.reserves).toBeGreaterThanOrEqual(Math.floor(3 * civicMemo(t).spending) - 1);
+    expect(-d.ledger!.lines[lineIndex('interest')]).toBe(Math.round(repaid * 0.01));
+    expect(t.inbox.some((x) => x.kind === 'deputy.repayLoan')).toBe(true);
+  });
+});
+
+describe('orders run deterministically', () => {
+  it('gives the same town, inbox and all, every time', () => {
+    const run = () => {
+      const { c, i, t } = town();
+      t.orders = only('budgetHealthy', 'buyUtilities', 'repayLoan', 'awayZoning');
+      t.away.lastHelloAt = 0;
+      postWhole(t, 'other', -t.money.reserves + 700_000);
+      runMonths(c, i, 30, civicSteps((tt) => ({ ...shortBy(tt, ((tt.tick * 7919) % 50_000) - 20_000), utilities: { importCost: 1000, powerImported: 250 } })));
+      return { hash: stateHash(t), inbox: JSON.stringify(t.inbox) };
+    };
+    const a = run();
+    expect(run()).toEqual(a);
+    expect(a.inbox).toContain('deputy.buyUtilities');
+  });
+});
+
+describe('the other orders', () => {
+  it('reports the month’s repair bill (WP2e repairs under "Fix damaged buildings")', () => {
+    const { c, i, t } = town();
+    t.orders = only('fixDamaged');
+    postWhole(t, 'repairs', -12_500);
+    runMonths(c, i, 1, civicSteps({ firms: { turnover: 10_000_000 } }));
+    expect(t.inbox.find((x) => x.kind === 'deputy.fixDamaged')!.data.cost).toBe(12_500);
+  });
+
+  it('tells WP3 whether to renew contracts', () => {
+    const { t } = town();
+    t.orders = only('renewContracts');
+    expect(renewsContracts(t)).toBe(true);
+    t.orders = only('renewContracts', 'hold');
+    expect(renewsContracts(t)).toBe(false);
+  });
+});
+
+describe('the orders move', () => {
+  it('lets an adult reorder, drop and retune orders within bounds', () => {
+    const { c, t, now } = town();
+    const next: StandingOrder[] = [
+      { kind: 'repayLoan', on: true, args: [6] },
+      { kind: 'budgetHealthy', on: true, args: [3, 100] },
+    ];
+    applyCommand(c, { seat: t.seat, profile: 'adult' }, { type: 'orders', moveId: 'o1', orders: next }, now);
+    expect(t.orders).toEqual(next);
+    let k = 0;
+    const bad = (orders: unknown, text: RegExp) => refused(() => applyCommand(c, { seat: t.seat, profile: 'adult' }, { type: 'orders', moveId: `bad${k++}`, orders: orders as StandingOrder[] }, now), 400, text);
+    bad([{ kind: 'conquer', on: true, args: [] }], /knows/);
+    bad([{ kind: 'hold', on: true, args: [] }, { kind: 'hold', on: false, args: [] }], /once/);
+    bad([{ kind: 'budgetHealthy', on: true, args: [3] }], /settings/);
+    bad([{ kind: 'budgetHealthy', on: true, args: [3, 9000] }], /range/);
+    bad(new Array(9).fill({ kind: 'hold', on: true, args: [] }), /up to 8/);
+  });
+
+  it('lets a child switch orders on and off, but not change how they work', () => {
+    const { c, t, now } = town();
+    const flipped = t.orders.map((o) => ({ ...o, on: !o.on, args: [...o.args] }));
+    applyCommand(c, { seat: t.seat, profile: 'kid' }, { type: 'orders', moveId: 'k1', orders: flipped }, now);
+    expect(t.orders).toEqual(flipped);
+    const retuned = t.orders.map((o) => (o.kind === 'budgetHealthy' ? { ...o, args: [4, 200] } : o));
+    refused(() => applyCommand(c, { seat: t.seat, profile: 'kid' }, { type: 'orders', moveId: 'k2', orders: retuned }, now), 403, /grown-up/);
+    refused(() => applyCommand(c, { seat: t.seat, profile: 'kid' }, { type: 'orders', moveId: 'k3', orders: [...t.orders].reverse() }, now), 403);
+  });
+
+  it('starts every town with the §5.18 defaults for its seat', () => {
+    expect(ORDER_DEFAULTS.map((o) => [o.kind, o.kid, o.adult])).toEqual([
+      ['budgetHealthy', true, true],
+      ['buyUtilities', true, true],
+      ['fixDamaged', true, true],
+      ['renewContracts', true, false],
+      ['awayZoning', true, false],
+      ['repayLoan', false, false],
+      ['hold', false, false],
+    ]);
+  });
+});
