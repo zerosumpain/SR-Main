@@ -13,12 +13,19 @@ const engine = decodeURIComponent(new URL('../../src/lib/games/hometowns/engine/
 /**
  * The app loads `/projects/hometowns/<ENGINE_HASH>/mobile.html` (§10.7 `client.page`), so the built
  * page is written under that name; the dev server keeps serving index.html.
+ *
+ * The page also carries its engine hash in a meta tag, so `scripts/hometowns/deploy-page.sh` and
+ * `check-client-live.mjs` can prove that the file served at a hash's URL is that hash's build.
  */
+const HASH_META = 'hometowns-engine-hash';
 const mobileHtml: Plugin = {
   name: 'hometowns-mobile-html',
   apply: 'build',
   // After Vite's own HTML plugin has put index.html into the bundle.
   enforce: 'post',
+  transformIndexHtml() {
+    return [{ tag: 'meta', attrs: { name: HASH_META, content: ENGINE_HASH }, injectTo: 'head' }];
+  },
   generateBundle(_options, bundle) {
     const page = bundle['index.html'];
     if (!page) return;

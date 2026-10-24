@@ -13,8 +13,15 @@ name: Hometowns page
 #  - porkserv cannot launch Playwright's WebKit (about a dozen system
 #    libraries it needs are not installed there), and PR code never runs on
 #    a self-hosted machine anyway.
-#  - It deploys nothing, reads no secret and never gates a release: the page
-#    has no deploy lane yet, and the engine's own gate runs in CI's vitest.
+#  - It deploys nothing and reads no secret; the engine's own gate runs in
+#    CI's vitest.
+#
+# The `live` job is the release gate of §10.10/§13.4: the page for this
+# branch's ENGINE_HASH must already be published at
+# /projects/hometowns/<ENGINE_HASH>/mobile.html (scripts/hometowns/deploy-page.sh)
+# before the game PR merges. It is red on purpose until then; rerun it after
+# the deploy. It only reads the public site, and it is not a required check,
+# so it never blocks master: the person merging reads it.
 
 on:
   pull_request:
@@ -68,3 +75,17 @@ jobs:
           name: hometowns-view-results
           path: games/hometowns-view/test-results
           retention-days: 7
+
+  live:
+    name: Page is live for this ENGINE_HASH (release gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+
+      # No install: the check is plain Node (fetch) over the public site.
+      - run: node scripts/hometowns/check-client-live.mjs

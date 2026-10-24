@@ -94,5 +94,39 @@ porkserv cannot launch Playwright's WebKit, so that run is where the
 WebKit-equals-Node hash is checked; its frame times are reported, not judged
 (no GPU there).
 
+## Releasing the page (§10.10, §13.4)
+
+The page is served from the VPS at
+`/projects/hometowns/<ENGINE_HASH>/mobile.html`, one folder per engine hash,
+and the wire's `client.page` names the hash the server runs. So the page for a
+hash must be live **before** the engine change that names it merges. The order,
+for the first release and for every later engine change:
+
+1. **Page PR**, first release only: `hometowns` in `STATIC_PROJECT_KEYS`
+   (`src/lib/projects/visibility.ts`, a protected path, merged by hand). It
+   makes the page public by default and gives it the first-party bundle CSP;
+   the sandboxed CSP stops the forecast's module worker. It has no /projects
+   card. Confirm the live sha with `npm run deploy:status` after the merge.
+2. **`scripts/hometowns/deploy-page.sh`** from a clean checkout of the game
+   branch, `--dry-run` first. It refuses an uncommitted or stale engine, builds,
+   proves the folder name, `engine-hash.generated.ts`, the page's
+   `<meta name="hometowns-engine-hash">` and the bundled engine agree, then
+   copies the folder to the VPS **additively** (no `--delete`; a hash already
+   on disk must be byte-identical, so a rerun is a no-op and a different build
+   under the same hash is refused). It ends by fetching the live URL: 200,
+   `text/html`, no `sandbox` in the CSP, the right marker.
+3. **Game PR**: `node scripts/hometowns/check-client-live.mjs` must pass (the
+   `Page is live` job in the `Hometowns page` workflow runs it) before the
+   merge. Rerun that job after step 2.
+
+**Old versions stay on disk.** Nothing deletes a hash folder: a phone that is
+still open on an old revision keeps working, and reloads (at most once a
+minute, never back to a hash it left, A39) when a wire names a new hash.
+
+The folder is keyed by the **engine** hash, so a page-only change (renderer,
+copy, harness) with an unchanged engine cannot be published: its folder exists
+and differs, and `deploy-page.sh` refuses it. Ship page-only changes together
+with an engine change, or give the folder a key that covers the page too.
+
 `.npmrc` sets `legacy-peer-deps`: npm 10 crashes resolving vitest 4's optional
 peers from a nested folder, and the page needs none of them.
