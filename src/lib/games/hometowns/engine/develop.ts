@@ -1058,9 +1058,12 @@ export function stepDevelop(t: TownState, ctx: TickContext): void {
     } else D = meters[ZMETER[z]];
     const target = level === 0 ? ZMIN[z] : level + 1;
     // Hamlet L1 tiles need neither; anything at or growing to L2 and above needs power and water (§3.5).
-    const needsService = (level === 0 ? target : level) >= 2;
-    const penalty = needsService ? (tb & TB_UNPOWERED ? p.unpoweredPenalty : 0) + (tb & TB_DRY ? p.dryPenalty : 0) : 0;
-    const score = D + L - penalty;
+    // The growth score judges the level the tile would grow into (an L1 cottage cannot level up to
+    // L2 on a dark, dry road and then fall back three months later); the decline score judges the
+    // level it stands at, so an L1 cottage never declines for want of power.
+    const missing = (tb & TB_UNPOWERED ? p.unpoweredPenalty : 0) + (tb & TB_DRY ? p.dryPenalty : 0);
+    const score = D + L - (target >= 2 ? missing : 0);
+    const stayScore = D + L - (level >= 2 ? missing : 0);
     const cap = levelCap(t, z, lvCells[c], terrain[i], p);
     const homesBlocked = z === ZH && poll > p.homesPollutionBlock;
 
@@ -1087,7 +1090,7 @@ export function stepDevelop(t: TownState, ctx: TickContext): void {
       candidates.push({ tile: i, score, rank: ctx.rng('rank', i, 0), level: target, lvl: makeLvl(target, bits, styleOf(l)), from: level });
       continue;
     }
-    if (!holdDeclines && ctx.rng('develop', i, SALT_DECLINE) / U32 < declineChance(score, p)) {
+    if (!holdDeclines && ctx.rng('develop', i, SALT_DECLINE) / U32 < declineChance(stayScore, p)) {
       declines.push(i, declineTo(z, level));
       occ.declined(z, level, bits, declineTo(z, level));
     }
@@ -1268,7 +1271,7 @@ export function explainGrowth(t: TownState, tile: number, P: Params): GrowthExpl
   }
   const D = z === ZH ? t.meters[h] : t.meters[ZMETER[z]];
   const target = level === 0 ? ZMIN[z] : level + 1;
-  const needsService = (level === 0 ? target : level) >= 2;
+  const needsService = target >= 2;
   const unp = needsService && tb & TB_UNPOWERED ? -p.unpoweredPenalty : 0;
   const dry = needsService && tb & TB_DRY ? -p.dryPenalty : 0;
   const score = D + L + unp + dry;

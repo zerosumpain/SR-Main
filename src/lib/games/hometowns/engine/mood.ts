@@ -285,7 +285,10 @@ function advisorFacts(t: TownState, m: MonthContext, mood: number, check: { met:
     pollution: d.fields ? d.fields.pollutionPop : 0,
     starAround: stars[star('around')],
     checklistLeft: t.tier >= 4 ? 0 : missing,
-    checklistNear: t.tier < 4 && missing === 1 && population(t) >= 0.8 * TIER_DEFS[tier].population ? 1 : 0,
+    // "Almost there" (§9.7): the people are nearly in place and only a few checklist items stand in the
+    // way. With one item only, a town short of two (often fire and police cover) had no card at all,
+    // so a child following the cards never saw what its next tier needed.
+    checklistNear: t.tier < 4 && missing >= 1 && missing <= 3 && population(t) >= 0.8 * TIER_DEFS[tier].population ? 1 : 0,
     struggling: memo.struggling ? 1 : 0,
     pop: N,
   } satisfies AdvisorFacts;

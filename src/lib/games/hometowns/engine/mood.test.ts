@@ -69,7 +69,7 @@ describe('happiness and Mood', () => {
 });
 
 describe('Approval (§5.15, A13)', () => {
-  it('follows 0.70·Mood + 0.25·(100 − 10·#unmet) − 1.5·max(0, HomesTax% − 10) with τ 6', () => {
+  it('follows 0.70·Mood + w·(100 − 10·#unmet) − 1.5·max(0, HomesTax% − 10) with τ 6 (w: civic.approvalChecklist, §5.15 says 0.25)', () => {
     const { c, i, t } = town();
     t.taxes.homes = [1400, 1400, 1400];
     const before = t.approval;
@@ -79,7 +79,7 @@ describe('Approval (§5.15, A13)', () => {
     const term = (k: string) => e.terms.find(([key]) => key === k)?.[1] ?? 0;
     expect(term('approval.mood')).toBeCloseTo(0.7 * d.mood!.mood, 1);
     expect(term('approval.tax')).toBeCloseTo(-1.5 * 4, 6);
-    const unmet = (100 - term('approval.checklist') / 0.25) / 10;
+    const unmet = (100 - term('approval.checklist') / P.civic.approvalChecklist) / 10;
     expect(Math.abs(unmet - Math.round(unmet))).toBeLessThan(1e-3);
     const target = term('approval.mood') + term('approval.checklist') + term('approval.tax');
     expect(t.approval).toBeCloseTo(before + (target - before) / 6, 1);

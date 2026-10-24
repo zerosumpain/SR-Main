@@ -184,8 +184,11 @@ describe('the §5.2 chances', () => {
   });
 
   it('Builders = 6 + Pop/250 starts a month, a quarter each tick', () => {
-    expect(buildersPerTick(0, D)).toBe(1.5);
-    expect(buildersPerTick(1000, D)).toBe(2.5);
+    // The §5.2 formula at the spec's starting base; the Lab tunes the base in params.
+    const spec = { ...D, buildersBase: 6 };
+    expect(buildersPerTick(0, spec)).toBe(1.5);
+    expect(buildersPerTick(1000, spec)).toBe(2.5);
+    expect(buildersPerTick(1000, D)).toBe((D.buildersBase + 1000 / D.buildersPer) / 4);
   });
 });
 
@@ -280,7 +283,7 @@ describe('growth and the Builders cap', () => {
     const starts: number[] = [];
     for (let k = 0; k < 8; k++) {
       const tick = t.tick;
-      devTick(x, { params: tuned({ pGrow: 1, zScale: 0.001, cartsPerTick: 0 }), sprint: true });
+      devTick(x, { params: tuned({ pGrow: 1, zScale: 0.001, cartsPerTick: 0, buildersBase: 6 }), sprint: true });
       starts.push(events(t, 'started', tick).length);
     }
     // Pop 0: 6 starts a month, 1.5 a tick: the carry makes it 1, 2, 1, 2, …
@@ -380,6 +383,32 @@ describe('growth and the Builders cap', () => {
 // ---- Level-ups, declines and the supply count -----------------------------------------------------------
 
 describe('level-ups, declines and the supply count', () => {
+  it('an L1 cottage levels up to L2 only with power and water (§3.5), and never declines for want of them', () => {
+    const x = town(23);
+    const { c, t } = x;
+    road(t, 20);
+    const tile = tileIndex(20, 21);
+    paint(t, [tile], Z_HOMES, 1, 0, 6);
+    setLv(t, 60);
+    t.meters[0] = 100;
+    t.people[person(STAGE_W, 0)] = 8; // full: occupancy ≥ 90%
+    t.books.popOpen = 8;
+    // Dark and dry: growing into L2 costs the full −60 −40, so even a "certain" roll at zMid fails.
+    const dark = { ...neutral.utilities(), powered: new Uint8Array(4096), watered: new Uint8Array(4096) };
+    stepDevelopMemo(t, monthContext(c, 0, { utilities: dark }));
+    const why = explainGrowth(t, tile, P);
+    expect(why.terms.find(([k]) => k === 'grow.unpowered')![1]).toBe(-D.unpoweredPenalty);
+    expect(why.terms.find(([k]) => k === 'grow.dry')![1]).toBe(-D.dryPenalty);
+    const sure = tuned({ pLevel: 1, zScale: 0.001, zMid: 10, pDecline: 1, declineMid: 0, declineScale: 0.001 });
+    for (let k = 0; k < 4; k++) devTick(x, { params: sure });
+    // Neither levelled up nor declined: the cottage's own score has no service penalty.
+    expect(lvlLevel(planesOf(t).lvl[tile])).toBe(1);
+    // Powered and watered, the same roll levels it up.
+    stepDevelopMemo(t, monthContext(c, 0, {}));
+    for (let k = 0; k < 4; k++) devTick(x, { params: tuned({ pLevel: 1, zScale: 0.001 }) });
+    expect(events(t, 'levelUp').some((e) => e.tile === tile && e.value === 2)).toBe(true);
+  });
+
   it('a level-up keeps the old homes open and counts the increment as pipeline until it completes', () => {
     const x = town(19);
     const { t } = x;
@@ -634,18 +663,19 @@ describe('incidents (§5.2 step 3)', () => {
 // ---- Founders' carts ------------------------------------------------------------------------------------
 
 describe("founders' carts (§2.3, A12)", () => {
+  // At the spec's 20 carts a tick (the Lab tunes the rate in params).
   it('bring min(20, £ vacancy) a tick, half Workers and half Families, never beyond the homes', () => {
     const x = town(45, 0, true);
     const { t } = x;
     road(t, 20);
     paint(t, row(21, 16, 18), Z_HOMES, 1); // 24 homes
-    devTick(x, { sprint: true, params: tuned({ pGrow: 0 }) });
+    devTick(x, { sprint: true, params: tuned({ pGrow: 0, cartsPerTick: 20 }) });
     expect(t.people[person(STAGE_W, 0)]).toBe(10);
     expect(t.people[person(STAGE_P, 0)]).toBe(5);
     expect(t.people[person(STAGE_C, 0)]).toBe(5);
-    devTick(x, { sprint: true, params: tuned({ pGrow: 0 }) });
+    devTick(x, { sprint: true, params: tuned({ pGrow: 0, cartsPerTick: 20 }) });
     expect(population(t)).toBe(24);
-    devTick(x, { sprint: true, params: tuned({ pGrow: 0 }) });
+    devTick(x, { sprint: true, params: tuned({ pGrow: 0, cartsPerTick: 20 }) });
     expect(population(t)).toBe(24);
     expect(t.books.pop[6]).toBe(24); // the 'carts' flow
     expect(checkTown(t)).toEqual([]);
@@ -654,7 +684,7 @@ describe("founders' carts (§2.3, A12)", () => {
   it('put those who found no home on the £ waiting list, up to a month of carts', () => {
     const x = town(47, 0, true);
     const { t } = x;
-    for (let k = 0; k < 10; k++) devTick(x, { sprint: true, params: tuned({ pGrow: 0 }) });
+    for (let k = 0; k < 10; k++) devTick(x, { sprint: true, params: tuned({ pGrow: 0, cartsPerTick: 20 }) });
     expect(t.applicants[cohort(0, 0)] + t.applicants[cohort(0, 1)]).toBe(80);
     expect(t.applicants[cohort(0, 0)]).toBe(40);
     expect(population(t)).toBe(0);
@@ -666,15 +696,15 @@ describe("founders' carts (§2.3, A12)", () => {
     paint(t, row(21, 16, 47), Z_HOMES, 2); // 640 homes
     t.people[person(STAGE_W, 0)] = 300;
     t.books.popOpen = 300;
-    devTick(x, { params: tuned({ pGrow: 0 }) });
+    devTick(x, { params: tuned({ pGrow: 0, cartsPerTick: 20 }) });
     expect(population(t)).toBe(300);
     t.people[person(STAGE_W, 0)] = 100;
     t.books.popOpen = 100;
     t.tick = 21 * 48 + 12;
-    devTick(x, { params: tuned({ pGrow: 0 }) });
+    devTick(x, { params: tuned({ pGrow: 0, cartsPerTick: 20 }) });
     expect(population(t)).toBe(100);
     t.tick = 21 * 48 + 8;
-    devTick(x, { params: tuned({ pGrow: 0 }) });
+    devTick(x, { params: tuned({ pGrow: 0, cartsPerTick: 20 }) });
     expect(population(t)).toBe(120);
   });
 });

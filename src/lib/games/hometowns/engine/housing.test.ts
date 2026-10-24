@@ -54,7 +54,7 @@ describe('the Homes meter target (§5.8, A9, A10)', () => {
   it('aims at 5% vacancy through tanh of the waiting-list ratio', () => {
     const r = homesTarget(950, 0, 100, 0, 1000, 0, 0, true, { params: P });
     expect(r.ratio).toBeCloseTo(1050 / 955, 12);
-    expect(r.value).toBeCloseTo(100 * T(2.5 * (1050 / 955 - 1)), 12);
+    expect(r.value).toBeCloseTo(100 * T(P.meters.homesGain * (1050 / 955 - 1)), 12);
     // The Why terms explain the whole value.
     expect(r.terms.reduce((s, [, a]) => s + a, 0)).toBeCloseTo(r.value, 9);
   });

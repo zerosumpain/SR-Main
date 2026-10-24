@@ -117,15 +117,16 @@ describe('upkeep (A14)', () => {
       else if (useCat(p.use[k]) === CAT_RAIL) roads += RAIL_DEF.upkeep;
     }
     const u = upkeepOf(t, P);
-    expect(u.civic).toBeCloseTo(civic, 6);
-    expect(u.utilities).toBeCloseTo(utilities, 6);
+    const scale = P.finance.civicUpkeepScale;
+    expect(u.civic).toBeCloseTo(civic * scale, 6);
+    expect(u.utilities).toBeCloseTo(utilities * scale, 6);
     expect(u.roads).toBe(roads);
 
     // Funding Low ×0.7 and High ×1.3 by each building's own dial.
     t.funding.fill(FUND_LOW);
-    expect(upkeepOf(t, P).civic).toBeCloseTo(civic * 0.7, 6);
+    expect(upkeepOf(t, P).civic).toBeCloseTo(civic * scale * 0.7, 6);
     t.funding.fill(FUND_HIGH);
-    expect(upkeepOf(t, P).utilities).toBeCloseTo(utilities * 1.3, 6);
+    expect(upkeepOf(t, P).utilities).toBeCloseTo(utilities * scale * 1.3, 6);
     expect(upkeepOf(t, P).roads).toBeCloseTo(roads * 1.3, 6);
     // The Lab's calibration knob scales every civic building, not the roads.
     const scaled = { ...P, finance: { ...P.finance, civicUpkeepScale: 1.25 } };
@@ -139,7 +140,7 @@ describe('upkeep (A14)', () => {
     const before = upkeepOf(t, P).civic;
     const b = t.buildings.find((x) => BUILDINGS[x[0]].id === 'museum')!;
     pairSet(t.construction, tileIndex(b[1], b[2]), 2);
-    expect(upkeepOf(t, P).civic).toBeCloseTo(before - BUILDINGS.find((d) => d.id === 'museum')!.upkeep, 6);
+    expect(upkeepOf(t, P).civic).toBeCloseTo(before - BUILDINGS.find((d) => d.id === 'museum')!.upkeep * P.finance.civicUpkeepScale, 6);
   });
 });
 

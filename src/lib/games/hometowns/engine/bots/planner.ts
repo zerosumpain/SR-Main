@@ -470,9 +470,9 @@ function coveredTiles(m: TownMap, kind: CoverageKind, margin = 0): Uint8Array {
 }
 
 /** Share of homes weight (built and planned) inside `kind` coverage: the §7 checklist's "within reach of N% of homes". */
-export function coverageShare(m: TownMap, kind: CoverageKind): number {
+export function coverageShare(m: TownMap, kind: CoverageKind, margin = 2): number {
   const w = homesWeight(m);
-  const cov = coveredTiles(m, kind, 2);
+  const cov = coveredTiles(m, kind, margin);
   let all = 0;
   let inside = 0;
   for (let i = 0; i < TILES; i++) {
@@ -496,6 +496,26 @@ export interface Site {
   y: number;
   rot: 0 | 1;
   score: number;
+  /** Built zoned tiles the plan must bulldoze first (a clearing site, see findSite). */
+  clear?: number[];
+}
+
+/**
+ * What clearing a built zoned tile costs a clearing site, in the cover goal's
+ * units (persons of homes): farms first, then low-level homes, workshops and
+ * shops. Offices, leisure and anything above level 2 are never cleared.
+ */
+function clearCost(m: TownMap, i: number): number {
+  const u = m.use[i];
+  if (useCat(u) !== CAT_ZONE) return Infinity;
+  const z = usePayload(u);
+  const level = lvlLevel(m.lvl[i]);
+  if (z === Z_FARMS) return 3;
+  if (level > 2) return Infinity;
+  const cap = ZONE_DEFS[z].capacity[Math.max(0, level - 1)] ?? 0;
+  if (z === Z_HOMES) return cap;
+  if (z === Z_INDUSTRY || z === Z_SHOPS) return 2 * cap;
+  return Infinity;
 }
 
 /**
@@ -503,16 +523,27 @@ export interface Site {
  * land off the lattice, at least one within reach of a road, best by the goal
  * (ties: lower y, then lower x, then rot 0). Null if nowhere fits.
  */
-export function findSite(m: TownMap, id: string, goal: SiteGoal): Site | null {
+export function findSite(m: TownMap, id: string, goal: SiteGoal, clearing = false): Site | null {
   const def = BUILDINGS[buildingIndex(id)];
   if (!def) return null;
   const okTile = new Uint8Array(TILES);
+  // A clearing search (a checklist building in a town with no free land left) may also take built zoned tiles, at a cost.
+  const cost = clearing ? new Float64Array(TILES) : null;
   for (let i = 0; i < TILES; i++) {
     const x = i % MAP;
-    if (m.land[i] && m.free[i] && !m.claimed[i] && !m.road[i] && !isLattice(x, (i - x) / MAP)) okTile[i] = 1;
+    if (!m.land[i] || m.claimed[i] || m.road[i] || isLattice(x, (i - x) / MAP)) continue;
+    if (m.free[i]) okTile[i] = 1;
+    else if (cost) {
+      const k = clearCost(m, i);
+      if (k < Infinity) {
+        okTile[i] = 1;
+        cost[i] = k;
+      }
+    }
   }
-  if (def.requires) return requiredSite(m, def, okTile);
+  if (def.requires) return clearing ? null : requiredSite(m, def, okTile);
   const S_ok = sat(okTile);
+  const S_cost = cost ? sat(cost) : null;
   const S_reach = sat(m.reach);
   const forest = new Uint8Array(TILES);
   for (let i = 0; i < TILES; i++) if (terrainKind(m.terrain[i]) === T_FOREST) forest[i] = 1;
@@ -545,10 +576,17 @@ export function findSite(m: TownMap, id: string, goal: SiteGoal): Site | null {
           score = gain - 0.01 * c - 0.5 * trees;
         } else if (goal.kind === 'central') score = -c - 2 * trees;
         else score = c - 2 * trees;
+        if (S_cost) score -= box(S_cost, x, y, x + w, y + h);
         if (!best || score > best.score) best = { x, y, rot, score };
       }
   }
   if (best && goal.kind === 'cover' && best.score <= 0) return null;
+  if (best && cost) {
+    const [w, h] = footprint(def.w, def.h, best.rot);
+    const clear: number[] = [];
+    for (let y = best.y; y < best.y + h; y++) for (let x = best.x; x < best.x + w; x++) if (!m.free[tileIndex(x, y)]) clear.push(tileIndex(x, y));
+    best.clear = clear;
+  }
   return best;
 }
 
