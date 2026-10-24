@@ -29,9 +29,16 @@ describe('/projects card ↔ registry parity', () => {
   it.each(keys)('registers card key "%s"', (key) => {
     expect(STATIC_PROJECT_KEYS).toContain(key);
   });
+
+  it('keeps the Hometowns map page registered but card-less', () => {
+    // The app loads /projects/hometowns/<ENGINE_HASH>/mobile.html; there is
+    // nothing at /projects/hometowns/ for a card to link to.
+    expect(STATIC_PROJECT_KEYS).toContain('hometowns');
+    expect(keys).not.toContain('hometowns');
+  });
 });
 
 // NOT asserted in reverse: a registered key with no card is legitimate.
-// `pulse` is a relocated static bundle, reachable by URL only, and is listed in
+// `pulse` (and `hometowns`) is a relocated static bundle, reachable by URL only, and is listed in
 // STATIC_PROJECT_KEYS so the build default does not 404 it — see the note above
 // STATIC_PROJECT_KEYS in ./visibility.

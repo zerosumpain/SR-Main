@@ -57,6 +57,11 @@ describe('defaultsPublic', () => {
     expect(defaultsPublic('pulse')).toBe(true);
   });
 
+  it('makes the card-less Hometowns map page public with no row', () => {
+    expect(isStaticProjectKey('hometowns')).toBe(true);
+    expect(defaultsPublic('hometowns')).toBe(true);
+  });
+
   it('makes the Marbler game public with no row', () => {
     expect(isStaticProjectKey('marbler')).toBe(true);
     expect(defaultsPublic('marbler')).toBe(true);
