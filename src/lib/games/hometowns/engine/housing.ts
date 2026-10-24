@@ -222,11 +222,43 @@ export function allocate(cohorts: readonly number[], cap: readonly number[]): Al
   return { occ, vacant: avail, housed, squeezed, squeezedTier };
 }
 
+const SQ_HOUSED: number[] = new Array<number>(COHORT_COUNT).fill(0);
+const SQ_AVAIL: number[] = [];
+
+/**
+ * Σ allocate(cohorts, cap).squeezed, in cohort order, without building the
+ * allocation: houseNewcomers' binary search calls it a few hundred times a
+ * month. The same arithmetic as allocate, on two reused arrays.
+ */
 function squeezedTotal(cohorts: readonly number[], cap: readonly number[]): number {
+  const housed = SQ_HOUSED;
+  housed.fill(0);
+  const avail = SQ_AVAIL;
+  avail.length = cap.length;
+  for (let h = 0; h < cap.length; h++) avail[h] = Math.max(0, Math.floor(cap[h]));
+  const take = (k: number, h: number) => {
+    const n = Math.min(cohorts[k] - housed[k], avail[h]);
+    if (n <= 0) return;
+    housed[k] += n;
+    avail[h] -= n;
+  };
+  for (let a = 0; a < 3; a++) {
+    const kind = TAKE_OWN[a];
+    for (let h = 0; h < 3; h++) take(h * 3 + kind, h);
+  }
+  for (let a = 0; a < 2; a++) {
+    const kind = TAKE_DOWN[a];
+    for (let h = 1; h < 3; h++) take(h * 3 + kind, h - 1);
+  }
+  take(COHORT_S, 0);
+  take(COHORT_S, 1);
   let n = 0;
-  for (const x of allocate(cohorts, cap).squeezed) n += x;
+  for (let k = 0; k < cohorts.length; k++) n += cohorts[k] - housed[k];
   return n;
 }
+/** allocate's kind orders: own tier (Families, Retirees, Workers), then one tier down. */
+const TAKE_OWN = [1, 2, 0];
+const TAKE_DOWN = [1, 2];
 
 /** Newcomers housed in the allocation's priority order: Families, Retirees, Workers, then Students. */
 const NEWCOMER_ORDER = [1, 4, 7, 2, 5, 8, 0, 3, 6, 9];

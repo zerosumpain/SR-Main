@@ -85,9 +85,15 @@ export const termIndex = (key: string): number => T_INDEX[key] ?? -1;
 /** Does term `key` explain quantity `q`? ('*' families match by prefix.) */
 export function termFits(def: TermDef, q: string): boolean {
   if (def.q === '*') return true;
-  if (def.q.endsWith('*')) return q.startsWith(def.q.slice(0, -1));
+  if (def.q.endsWith('*')) {
+    // The family's prefix, cut once per pattern rather than on every add.
+    let prefix = FAMILY_PREFIX.get(def.q);
+    if (prefix === undefined) FAMILY_PREFIX.set(def.q, (prefix = def.q.slice(0, -1)));
+    return q.startsWith(prefix);
+  }
   return def.q === q;
 }
+const FAMILY_PREFIX = new Map<string, string>();
 
 /** The default quantity for a term (its own, or the money line's revenue/spending total). */
 function defaultQuantity(def: TermDef, amount: number): string | null {

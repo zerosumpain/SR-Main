@@ -368,7 +368,14 @@ export function townNeeds(t: TownState, m: MonthContext): NeedsSlot {
   // Only districts with something in them matter (ascending, as the full scan visits them).
   const busyD: number[] = [];
   for (let b = 0; b < N_DISTRICTS; b++) if (flags[b] || highStreet[b]) busyD.push(b);
-  for (let a = 0; a < N_DISTRICTS; a++)
+  // Only the districts that hold homes are read below.
+  const homeD = new Uint8Array(N_DISTRICTS);
+  for (let k = 0; k < homes.count; k++) {
+    const tile = homes.tile[k];
+    homeD[((tile >> 9) << 3) | ((tile & 63) >> 3)] = 1;
+  }
+  for (let a = 0; a < N_DISTRICTS; a++) {
+    if (!homeD[a]) continue;
     for (let j = 0; j < busyD.length; j++) {
       const b = busyD[j];
       const f = flags[b];
@@ -376,6 +383,7 @@ export function townNeeds(t: TownState, m: MonthContext): NeedsSlot {
       for (let k = 0; k < D_KINDS; k++) if (f & (1 << k) && mins < near[a * D_KINDS + k]) near[a * D_KINDS + k] = mins;
       if (highStreet[b] && mins <= WITHIN.highStreet) streets[a] += highStreet[b];
     }
+  }
   const university = hasBuilding(t, 'university');
   const masks = reachMasks(t, busy);
   const seatShare = (level: 'primary' | 'secondary') => (cov && cov.pupils[level] > 0 ? Math.min(1, cov.seats[level] / cov.pupils[level]) : 1);
@@ -420,9 +428,15 @@ export function townNeeds(t: TownState, m: MonthContext): NeedsSlot {
     const h = homes.tier[k];
     weight[h] += w;
     weight[3] += w;
+    // A zero item adds +0, which changes no sum (w is a finite capacity): skip it.
+    const hi = h * items;
+    const ai = 3 * items;
     for (let i = 0; i < items; i++) {
-      sums[h * items + i] += w * v[i];
-      sums[3 * items + i] += w * v[i];
+      const x = v[i];
+      if (x === 0) continue;
+      const y = w * x;
+      sums[hi + i] += y;
+      sums[ai + i] += y;
     }
   }
   // A tier with no homes yet is judged on all homes, and a town with none at all on nothing (0).
@@ -533,6 +547,23 @@ export function utilityTerms(k: number, stars: readonly number[], needs: number,
   return out;
 }
 
+/** sumTerms(utilityTerms(…)) without the array: the same terms, added in the same order. */
+export function utilitySum(k: number, stars: readonly number[], needs: number, homesTaxL: number, m: Pick<MonthContext, 'params'>, taxWeightMin = 0): number {
+  const w = m.params.migration.weights[k];
+  const h = k === COHORT_S ? 0 : Math.floor(k / 3);
+  let s = 0;
+  for (let f = 0; f < STAR_TOWN; f++) {
+    let star = stars[f];
+    if (f === STAR_JOBS) star = stars[starTier(0, h)];
+    else if (f === STAR_HOMES) star = stars[starTier(1, h)];
+    else if (f === STAR_TAX) star = k === COHORT_S ? taxStar(homesTaxL, m.params.stars.taxSens[3], m) : stars[starTier(2, h)];
+    const weight = f === STAR_TAX ? Math.max(w[f], taxWeightMin) : w[f];
+    s += (weight * (star - 50)) / 50;
+  }
+  s += w[STAR_TOWN] * (2 * needs - 1);
+  return s;
+}
+
 export function sumTerms(xs: readonly number[]): number {
   let s = 0;
   for (const x of xs) s += x;
@@ -561,7 +592,7 @@ export function stepStars(t: TownState, m: MonthContext): void {
   for (let k = 0; k < COHORT_COUNT; k++) {
     const h = k === COHORT_S ? 0 : Math.floor(k / 3);
     const kind = k === COHORT_S ? 0 : k % 3;
-    let u = sumTerms(utilityTerms(k, stars.actual, needs.cohort[k], t.taxes.homes[0] ?? 0, m, m.params.finance.taxHappyWeightMin));
+    let u = utilitySum(k, stars.actual, needs.cohort[k], t.taxes.homes[0] ?? 0, m, m.params.finance.taxHappyWeightMin);
     const persons = tierPersons(t, h, h === 0);
     let sq = 0;
     for (let j = 0; j < COHORT_COUNT; j++) if ((j === COHORT_S ? 0 : Math.floor(j / 3)) === h) sq += squeezed[j];

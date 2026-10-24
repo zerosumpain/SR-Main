@@ -30,7 +30,7 @@ import { allocate, cohortPersons, houseNewcomers } from './housing';
 import { largestRemainder } from './num';
 import { byRivalry } from './params';
 import { hasBuilding, housingOf, memoFor, scratchOf } from './people';
-import { sumTerms, utilityTerms } from './needs';
+import { sumTerms, utilityTerms, utilitySum } from './needs';
 import {
   COHORTS,
   COHORT_COUNT,
@@ -58,6 +58,7 @@ const OFFICES = SECTORS.indexOf('offices');
 /** The Why term keys of the 11 star terms and the needs term, in weight order. */
 const IN_KEYS = [...STARS.map((s) => `mig.in.${s}`), 'mig.in.needs'];
 const OUT_KEYS = [...STARS.map((s) => `mig.out.${s}`), 'mig.out.needs'];
+const IN_KEYS_ALL = [...IN_KEYS, 'mig.in.gem', 'mig.in.fresh'];
 
 /** Softmax over utilities at temperature T (stable: shifted by the maximum). */
 export function logit(v: readonly number[], temp: number): number[] {
@@ -212,7 +213,7 @@ export function stepMigration(t: TownState, m: MonthContext): void {
     // A20/§8.6: yesterday's adverts aimed at this cohort here add their bonus to each advertiser.
     const adBonus = ownFlows?.advert?.[k] ?? 0;
     const adBy = ownFlows?.advertBy?.[k] ?? 0;
-    const vDest = options.map((d) => sumTerms(utilityTerms(k, d.row.perceived, d.row.needs[k] ?? 1, d.row.homesTax[0] ?? 0, m)) + d.bonus + ((adBy >> d.j) & 1 ? adBonus : 0));
+    const vDest = options.map((d) => utilitySum(k, d.row.perceived, d.row.needs[k] ?? 1, d.row.homesTax[0] ?? 0, m) + d.bonus + ((adBy >> d.j) & 1 ? adBonus : 0));
     for (const g of groups[k]) {
       if (g.movers <= 0) continue;
       const stay = hosts(k, uniOwn) ? uOwn + base + g.stay : -Infinity;
@@ -255,7 +256,7 @@ export function stepMigration(t: TownState, m: MonthContext): void {
     let rivals = 0;
     for (const r of others) {
       if (!hosts(k, r.tier >= 3)) continue;
-      const u = sumTerms(utilityTerms(k, r.perceived, r.needs[k] ?? 1, r.homesTax[0] ?? 0, m)) + gem(r.pop, r.perceived[BUZZ], snap.medianPop, m) + (r.grace ? mp.freshTown : 0);
+      const u = utilitySum(k, r.perceived, r.needs[k] ?? 1, r.homesTax[0] ?? 0, m) + gem(r.pop, r.perceived[BUZZ], snap.medianPop, m) + (r.grace ? mp.freshTown : 0);
       rivals += Math.sqrt(r.pop + mp.massOffset) * mp.gate[0] * expFx(u / temp);
     }
     const mine = massOwn * gateOwn * expFx(uArr / temp);
@@ -331,7 +332,7 @@ export function stepMigration(t: TownState, m: MonthContext): void {
     const qOut = `depart.${COHORTS[k]}`;
     if (cameK[k] !== 0 || arriveRaw[k] > 0) {
       m.why.add('mig.in.base', arriveRef[k], qIn);
-      share(m, qIn, arriveRaw[k] - arriveRef[k], arriveTerms[k], [...IN_KEYS, 'mig.in.gem', 'mig.in.fresh']);
+      share(m, qIn, arriveRaw[k] - arriveRef[k], arriveTerms[k], IN_KEYS_ALL);
       m.why.add('mig.in.housing', housedBeforeCap[k] - arrive[k], qIn);
       m.why.add('mig.in.cap', -capped[k], qIn);
       m.why.set(qIn, cameK[k]);

@@ -682,6 +682,47 @@ const REACH_FREE = new Int32Array(512);
 const REACH_ZONE = new Int32Array(N_ZONES * 8 * 512);
 const REACH_CELL = new Int32Array(N_CELLS);
 
+interface FreeEmpty {
+  key: Uint16Array;
+  parcels: number;
+  terrain: Uint8Array;
+  /** Distinct (cell << 1 | flood plain) of the empty, open, buildable tiles, in tile order. */
+  combos: Int32Array;
+}
+const FREE_EMPTY = new WeakMap<Uint16Array, FreeEmpty>();
+
+/**
+ * What A9 reads of the empty land: an empty tile in an open parcel on
+ * buildable terrain is free, and its tests read only its cell and whether it
+ * is flood plain. Memoised per decoded use plane on an exact copy of it, the
+ * open parcels and the terrain plane (a new plane on every edit).
+ */
+function freeEmptyCombos(use: Uint16Array, parcels: number, terrain: Uint8Array): Int32Array {
+  const hit = FREE_EMPTY.get(use);
+  if (hit && hit.parcels === parcels && hit.terrain === terrain) {
+    const key = hit.key;
+    let same = true;
+    for (let i = 0; i < N_TILES; i++)
+      if (key[i] !== use[i]) {
+        same = false;
+        break;
+      }
+    if (same) return hit.combos;
+  }
+  const seen = new Uint8Array(2 * N_CELLS);
+  const list: number[] = [];
+  for (let i = 0; i < N_TILES; i++) {
+    if (use[i] !== EMPTY || ((parcels >> parcelBit(i)) & 1) !== 1 || !isBuildable(terrain[i])) continue;
+    const combo = (cellAt(i) << 1) | ((terrain[i] & RIVER) !== 0 ? 1 : 0);
+    if (seen[combo]) continue;
+    seen[combo] = 1;
+    list.push(combo);
+  }
+  const combos = Int32Array.from(list);
+  FREE_EMPTY.set(use, { key: use.slice(), parcels, terrain, combos });
+  return combos;
+}
+
 function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSlot): void {
   const homes = [true, false, false];
   const zone = new Array<boolean>(N_ZONES).fill(false);
@@ -696,10 +737,12 @@ function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSl
   for (let k = 0; k < N_ZONES; k++) if (live[k]) left++;
   const { use, lvl } = f.pl;
   const parcels = t.parcels;
-  // A free tile's zone test reads only its land value and whether it is flood plain, and the
-  // flags only ever turn on: a pair already tested cannot add anything, so it is skipped.
-  // A built tile's test reads its zone, level, land value and flood plain: the same holds for those.
-  // (Stamps of this call's generation in module scratch, so nothing needs clearing.)
+  // Each tile's tests are pure and the flags only ever turn on, so the flags are the OR over
+  // tiles in any order: the zoned tiles are walked, then the distinct (cell, flood plain) pairs
+  // of the free empty land. A free tile's zone test reads only its land value and flood plain,
+  // its Homes test only its cell; a built tile's zone test its zone, level, land value and flood
+  // plain: a test already run cannot add anything, so it is skipped. (Stamps of this call's
+  // generation in module scratch, so nothing needs clearing.)
   const gen = ++REACH_GEN;
   const freeSeen = REACH_FREE;
   const zoneSeen = REACH_ZONE;
@@ -708,38 +751,49 @@ function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSl
   const terrain = f.terrain;
   const lvCells = f.lv;
   const pollCells = f.poll;
-  for (let i = 0; i < N_TILES && left > 0; i++) {
+  // A9: a tile "could take" a Homes tier when it is free land in the tier's land-value band, or a
+  // built home there that can still level up. A home already at its level cap adds nothing, just
+  // as a built shop at its cap does not make Shops reachable below: a town whose every ££-band
+  // home is built out reads the hatched +35, not a ££ meter pinned at +100 it cannot act on.
+  const homesTest = (c: number, lv: number) => {
+    const tm = homesTierMax(lv - 0.5 * pollCells[c], p);
+    if (tm >= 1 && !homes[1]) {
+      homes[1] = true;
+      left--;
+    }
+    if (tm >= 2 && !homes[2]) {
+      homes[2] = true;
+      left--;
+    }
+  };
+  const zoneTest = (free: boolean, z: number, level: number, lv: number, terrainByte: number) => {
+    for (let k = 0; k < N_ZONES; k++) {
+      if (zone[k] || !live[k]) continue;
+      if (free ? !paint[k] : z !== k) continue;
+      const cap = levelCap(t, k, lv, terrainByte, p);
+      if (free ? cap >= ZMIN[k] : cap > Math.max(level, ZMIN[k] - 1)) {
+        zone[k] = true;
+        left--;
+      }
+    }
+  };
+  const zoned = zonedTiles(use);
+  for (let q = 0; q < zoned.length && left > 0; q++) {
+    const i = zoned[q];
     const u = use[i];
-    const isZone = catOf(u) === CAT_Z;
-    if (!isZone && u !== EMPTY) continue;
-    const z = isZone ? payloadOf(u) : -1;
-    const level = isZone ? levelOf(lvl[i]) : 0;
-    const free = (u === EMPTY || (isZone && level === 0 && !busy[i])) && ((parcels >> parcelBit(i)) & 1) === 1 && isBuildable(terrain[i]);
-    if (!free && !isZone) continue;
+    if (catOf(u) !== CAT_Z) continue;
+    const z = payloadOf(u);
+    const level = levelOf(lvl[i]);
+    const free = level === 0 && !busy[i] && ((parcels >> parcelBit(i)) & 1) === 1 && isBuildable(terrain[i]);
     const c = cellAt(i);
     const lv = lvCells[c];
-    // A9: a tile "could take" a Homes tier when it is free land in the tier's land-value band, or a
-    // built home there that can still level up. A home already at its level cap adds nothing, just
-    // as a built shop at its cap does not make Shops reachable below: a town whose every ££-band
-    // home is built out reads the hatched +35, not a ££ meter pinned at +100 it cannot act on.
-    // A free tile's Homes test reads only its cell (land value and pollution): once per cell.
-    let roomToGrow = false;
     if (!(homes[1] && homes[2])) {
       if (free) {
-        roomToGrow = cellSeen[c] !== gen;
-        cellSeen[c] = gen;
-      } else roomToGrow = z === ZH && levelCap(t, ZH, lv, terrain[i], p) > level;
-    }
-    if (roomToGrow) {
-      const tm = homesTierMax(lv - 0.5 * pollCells[c], p);
-      if (tm >= 1 && !homes[1]) {
-        homes[1] = true;
-        left--;
-      }
-      if (tm >= 2 && !homes[2]) {
-        homes[2] = true;
-        left--;
-      }
+        if (cellSeen[c] !== gen) {
+          cellSeen[c] = gen;
+          homesTest(c, lv);
+        }
+      } else if (z === ZH && levelCap(t, ZH, lv, terrain[i], p) > level) homesTest(c, lv);
     }
     const river = (terrain[i] & RIVER) !== 0 ? 1 : 0;
     if (free) {
@@ -748,24 +802,53 @@ function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSl
       freeSeen[key] = gen;
     } else {
       // Only a zone's own tiles can test it (z !== k skips every other zone).
-      if (z < 0 || z >= N_ZONES || level > 7) continue;
+      if (z >= N_ZONES || level > 7) continue;
       const key = (((z << 3) | level) << 9) | (lv << 1) | river;
       if (zoneSeen[key] === gen) continue;
       zoneSeen[key] = gen;
     }
-    for (let k = 0; k < N_ZONES; k++) {
-      if (zone[k] || !live[k]) continue;
-      if (free ? !paint[k] : z !== k) continue;
-      const cap = levelCap(t, k, lv, terrain[i], p);
-      if (free ? cap >= ZMIN[k] : cap > Math.max(level, ZMIN[k] - 1)) {
-        zone[k] = true;
-        left--;
-      }
+    zoneTest(free, z, level, lv, terrain[i]);
+  }
+  const combos = freeEmptyCombos(use, parcels, terrain);
+  for (let q = 0; q < combos.length && left > 0; q++) {
+    const c = combos[q] >> 1;
+    const river = combos[q] & 1;
+    const lv = lvCells[c];
+    if (!(homes[1] && homes[2]) && cellSeen[c] !== gen) {
+      cellSeen[c] = gen;
+      homesTest(c, lv);
     }
+    const key = (lv << 1) | river;
+    if (freeSeen[key] === gen) continue;
+    freeSeen[key] = gen;
+    // levelCap reads only the flood-plain bit of the terrain byte.
+    zoneTest(true, -1, 0, lv, river ? RIVER : 0);
   }
   s.reachableHomes = homes;
   s.reachableZone = zone;
 }
+
+/**
+ * The k-th smallest of xs (what xs.sort((a, b) => a − b)[k] reads). The L
+ * values are whole numbers in [−100, 100], so a count finds it without the
+ * sort; anything else falls back to sorting a copy.
+ */
+function orderStatistic(xs: number[], k: number): number {
+  const counts = ORDER_COUNTS;
+  counts.fill(0);
+  for (let i = 0; i < xs.length; i++) {
+    const x = xs[i];
+    if (!(x >= -100 && x <= 100) || x !== Math.floor(x) || Object.is(x, -0)) return [...xs].sort((a, b) => a - b)[k];
+    counts[x + 100]++;
+  }
+  let seen = 0;
+  for (let v = 0; v < 201; v++) {
+    seen += counts[v];
+    if (seen > k) return v - 100;
+  }
+  return [...xs].sort((a, b) => a - b)[k];
+}
+const ORDER_COUNTS = new Int32Array(201);
 
 /** STEP M1b (WP2e): supply from tiles → derived.development. */
 export function stepSupply(t: TownState, m: MonthContext): void {
@@ -834,9 +917,12 @@ export function stepDevelopMemo(t: TownState, m: MonthContext): void {
   // Per cell: fire coverage, the hotel test, and L for each zone the cell holds.
   const lv = f.lv;
   const fire = cov.cov[COV_FIRE];
+  const visitorAccess = fields.visitorAccess;
+  const hotelVisitorAccess = p.hotelVisitorAccess;
   for (let c = 0; c < N_CELLS; c++) {
-    const vis = fields.visitorAccess[c] > p.hotelVisitorAccess;
-    out[M_CELL + c] = CB_KNOWN | Math.max(0, Math.min(20, Math.round((fire?.[c] ?? 0) / 5))) | (vis ? CB_VISITOR : 0);
+    const vis = visitorAccess[c] > hotelVisitorAccess;
+    const fc = fire ? fire[c] : undefined;
+    out[M_CELL + c] = CB_KNOWN | Math.max(0, Math.min(20, Math.round((fc ?? 0) / 5))) | (vis ? CB_VISITOR : 0);
     const zs = zoneInCell[c];
     if (!zs) continue;
     const place = placeFrom(c, lv, fields, cov);
@@ -858,8 +944,7 @@ export function stepDevelopMemo(t: TownState, m: MonthContext): void {
   for (let s = 0; s < N_SECTORS; s++) {
     const xs = sectorL[s];
     if (xs.length === 0) continue;
-    xs.sort((a, b) => a - b);
-    out[M_CLOSE + s] = encL(xs[Math.min(xs.length - 1, Math.floor(xs.length * p.closeQuantile))]);
+    out[M_CLOSE + s] = encL(orderStatistic(xs, Math.min(xs.length - 1, Math.floor(xs.length * p.closeQuantile))));
   }
 
   d.month = out;

@@ -18,7 +18,7 @@
 // Cap/(N/250 + N_R/150) compares.
 
 import { utilitiesOf } from './utilities';
-import { cellBox, cellDistance, falloff, modelOf, scratch, type BuildingInfo, type SpaceRun } from './space';
+import { cellBox, falloff, modelOf, scratch, type BuildingInfo, type SpaceRun } from './space';
 import { CELLS, CELLS_PER_SIDE, TILES, cellOf } from './tiles';
 import { T_FOREST, T_WATER, terrainKind } from './terrain';
 import { flowsFor } from './core';
@@ -104,15 +104,24 @@ function demandWithin(run: SpaceRun, b: BuildingInfo): { cap: number; demand: nu
   let ret = 0;
   const r = def.radius / 2;
   const [x0, x1, y0, y1] = cellBox(b.cx, b.cy, def.radius);
-  for (let cy = y0; cy <= y1; cy++)
+  const cellRes = m.cellRes;
+  const px = b.cx;
+  const py = b.cy;
+  for (let cy = y0; cy <= y1; cy++) {
+    const dy = 2 * cy + 1 - py;
+    const ay = dy < 0 ? -dy : dy;
     for (let cx = x0; cx <= x1; cx++) {
       const c = cy * CELLS_PER_SIDE + cx;
-      if (m.cellRes[c] === 0) continue;
-      if (r !== Infinity && cellDistance(c, b.cx, b.cy) > r) continue;
-      res += m.cellRes[c];
+      if (cellRes[c] === 0) continue;
+      if (r !== Infinity) {
+        const dx = 2 * cx + 1 - px;
+        if (((dx < 0 ? -dx : dx) + ay) / 2 > r) continue; // cellDistance(c, px, py) > r
+      }
+      res += cellRes[c];
       kids += m.cellChildren[c];
       ret += m.cellRetired[c];
     }
+  }
   const sec = p.people.secondaryShare;
   if (group === 'primary') return { cap: def.seats ?? 0, demand: kids * (1 - sec) };
   if (group === 'secondary') return { cap: def.seats ?? 0, demand: kids * sec };
@@ -127,13 +136,19 @@ function reachShare(buildings: BuildingInfo[], weights: Float64Array, binary = f
   for (const b of buildings) {
     const radius = b.def.radius;
     const [x0, x1, y0, y1] = cellBox(b.cx, b.cy, radius);
-    for (let cy = y0; cy <= y1; cy++)
+    const px = b.cx;
+    const py = b.cy;
+    for (let cy = y0; cy <= y1; cy++) {
+      const dy = 2 * cy + 1 - py;
+      const ay = dy < 0 ? -dy : dy;
       for (let cx = x0; cx <= x1; cx++) {
         const c = cy * CELLS_PER_SIDE + cx;
         if (weights[c] === 0) continue;
-        const d = cellDistance(c, b.cx, b.cy);
+        const dx = 2 * cx + 1 - px;
+        const d = ((dx < 0 ? -dx : dx) + ay) / 2; // cellDistance(c, px, py)
         f[c] += binary ? (radius === Infinity || d <= radius / 2 ? 1 : 0) : falloff(d, radius);
       }
+    }
   }
   let tot = 0;
   let got = 0;
@@ -169,10 +184,14 @@ function spreadBuilding(
   const nArr = arrs.length;
   const reach = Math.max(radius > 0 ? radius : 0, cultureS > 0 ? cRadius : 0) / 2;
   const [x0, x1, y0, y1] = cellBox(px, py, 2 * reach);
-  for (let cy = y0; cy <= y1; cy++)
+  for (let cy = y0; cy <= y1; cy++) {
+    // cellDistance, with the row's term hoisted: (|dx| + |dy|) / 2 from the cell centres 2·c + 1.
+    const dy = 2 * cy + 1 - py;
+    const ay = dy < 0 ? -dy : dy;
     for (let cx = x0; cx <= x1; cx++) {
       const c = cy * CELLS_PER_SIDE + cx;
-      const d = cellDistance(c, px, py);
+      const dx = 2 * cx + 1 - px;
+      const d = ((dx < 0 ? -dx : dx) + ay) / 2;
       if (d >= reach) continue;
       const fall = radius > 0 ? falloff(d, radius) : 0;
       if (fall > 0) {
@@ -185,6 +204,7 @@ function spreadBuilding(
         if (cf > 0) culture[c] += cultureS * cf;
       }
     }
+  }
 }
 
 /** Seat-weighted quality of a school level × the education dial, capped at 1; and effective seats. */
