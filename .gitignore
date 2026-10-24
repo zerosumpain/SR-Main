@@ -68,8 +68,11 @@ corpus.json
 # Runtime crash dumps must not enter source scans or candidate snapshots.
 core
 core.*
-# The Hometowns engine has a source file called core.ts.
+# The Hometowns engine has a source file called core.ts, and its map page a
+# src/core/ folder and a forecast/core.ts.
 !src/lib/games/hometowns/engine/core.ts
+!games/hometowns-view/src/core/
+!games/hometowns-view/src/forecast/core.ts
 
 # Historical Policy build output; keep stale local assets out of source control.
 static/policy-offline/

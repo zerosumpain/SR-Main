@@ -1,0 +1,1515 @@
+{
+ "id": "g_fixtureham",
+ "game": "hometowns",
+ "phase": "running",
+ "serverNow": 1792670400000,
+ "rev": 1,
+ "base": null,
+ "hostId": "p_fixture_host",
+ "meId": "p_fixture_host",
+ "players": [
+  {
+   "id": "p_fixture_host",
+   "name": "Mayor",
+   "status": "joined",
+   "seat": "s1"
+  }
+ ],
+ "client": {
+  "engineHash": "1814b6d0cb3012fd",
+  "page": "/projects/hometowns/1814b6d0cb3012fd/mobile.html",
+  "bridge": 1
+ },
+ "clock": {
+  "gridTick": 96,
+  "tickMs": 1800000,
+  "nextTickAt": 1792672200000,
+  "nextRegionalDayAt": 1792688400000,
+  "nextGazetteAt": 1792951200000,
+  "paused": false,
+  "napping": false,
+  "season": {
+   "n": 1,
+   "theme": "founders",
+   "day": 2,
+   "daysLeft": 40
+  }
+ },
+ "me": {
+  "seat": "s1",
+  "profile": "adult",
+  "isParent": true,
+  "townHash": "01e643922e48b726",
+  "derived": {
+   "stars": [
+    18.3,
+    28.6,
+    70.7,
+    7.1,
+    6.7,
+    72.4,
+    5.4,
+    7.4,
+    76.8,
+    96.3,
+    40.5,
+    15.5,
+    47.2,
+    51,
+    28.4,
+    8.7,
+    15.5,
+    72.9,
+    65.4,
+    57.3
+   ],
+   "meters": [
+    18.3,
+    53.4,
+    33.9,
+    -31.4,
+    35,
+    47.3,
+    35,
+    93.9
+   ],
+   "wants": [
+    {
+     "key": "power",
+     "severity": 275,
+     "tile": -1,
+     "hatched": false
+    },
+    {
+     "key": "water",
+     "severity": 275,
+     "tile": -1,
+     "hatched": false
+    },
+    {
+     "key": "talk.homes",
+     "severity": 205,
+     "tile": -1,
+     "hatched": false
+    }
+   ],
+   "advisors": [
+    {
+     "advisor": "bramble",
+     "key": "bramble.power",
+     "data": {
+      "action": "build:power"
+     }
+    },
+    {
+     "advisor": "bramble",
+     "key": "bramble.water",
+     "data": {
+      "action": "build:water"
+     }
+    },
+    {
+     "advisor": "mo",
+     "key": "mo.squeezed",
+     "data": {
+      "action": "zone:homes"
+     }
+    }
+   ],
+   "needs": [
+    {
+     "cohort": 1,
+     "tier": 0,
+     "items": [
+      {
+       "key": "water",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "primary",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 1,
+       "buildable": false
+      }
+     ]
+    },
+    {
+     "cohort": 4,
+     "tier": 1,
+     "items": [
+      {
+       "key": "water",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "primary",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "secondary",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "police",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "highStreet",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "leisureVenue",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "library",
+       "met": 1,
+       "buildable": false
+      }
+     ]
+    },
+    {
+     "cohort": 7,
+     "tier": 2,
+     "items": [
+      {
+       "key": "water",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "primary",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "secondary",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "police",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "highStreet",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "leisureVenue",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "library",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "cultureVenue",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "cleanAir",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "safeStreets",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "park",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "topJobs",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "restaurants",
+       "met": 1,
+       "buildable": false
+      }
+     ]
+    }
+   ],
+   "pipeline": {
+    "homes": 12,
+    "movers": 94
+   },
+   "townTalk": [
+    [
+     "homes",
+     33
+    ],
+    [
+     "fun",
+     23
+    ],
+    [
+     "jobs",
+     22
+    ],
+    [
+     "health",
+     22
+    ]
+   ]
+  },
+  "affordances": {
+   "unlocked": [
+    "well",
+    "windmill",
+    "schoolHouse",
+    "villageGreen",
+    "pocketPark",
+    "road:lane",
+    "zone:homes",
+    "zone:shops",
+    "zone:industry",
+    "zone:farms"
+   ],
+   "costs": {
+    "busDepot": 60000,
+    "busStop": 5000,
+    "railStation": 250000,
+    "freightYard": 150000,
+    "harbour": 900000,
+    "airfield": 5000000,
+    "well": 1500,
+    "windmill": 12000,
+    "generator": 20000,
+    "waterTower": 25000,
+    "windTurbine": 120000,
+    "coalPlant": 400000,
+    "gasPlant": 650000,
+    "pumpingStation": 180000,
+    "solarFarm": 700000,
+    "waterWorks": 600000,
+    "constablePost": 25000,
+    "policeStation": 250000,
+    "fireVolunteers": 20000,
+    "fireStation": 220000,
+    "surgery": 30000,
+    "healthCentre": 300000,
+    "hospital": 3000000,
+    "schoolHouse": 12000,
+    "villageSchool": 50000,
+    "primarySchool": 400000,
+    "secondarySchool": 1400000,
+    "library": 150000,
+    "university": 6000000,
+    "villageGreen": 2000,
+    "pocketPark": 3000,
+    "park": 8000,
+    "playground": 5000,
+    "communityHall": 60000,
+    "viewpoint": 15000,
+    "sportsPitches": 60000,
+    "swimmingPool": 400000,
+    "cinema": 250000,
+    "youthClub": 80000,
+    "botanicGarden": 900000,
+    "museum": 600000,
+    "theatre": 1500000,
+    "stadium": 6000000,
+    "clockTower": 1000000,
+    "grandPier": 2000000,
+    "townLandmark": 4000000,
+    "road:lane": 1500,
+    "road:street": 4000,
+    "road:avenue": 12000,
+    "road:rail": 20000
+   },
+   "initiatives": 1,
+   "slots": 0,
+   "canUndo": []
+  },
+  "snapshot": {
+   "worldSeed": 101,
+   "dayIndex": 1,
+   "at": 1792602000000,
+   "month": 14,
+   "towns": [
+    {
+     "seat": "s1",
+     "active": true,
+     "tier": 0,
+     "pop": 345,
+     "cohorts": [
+      131,
+      155,
+      42,
+      0,
+      15,
+      2,
+      0,
+      0,
+      0,
+      0
+     ],
+     "perceived": [
+      45.30175565343715,
+      60.852077430943204,
+      55.91785957736878,
+      43.75,
+      41.666666666666664,
+      64.79072006829207,
+      33.333333333333336,
+      41.01276035707524,
+      68.68683411495911,
+      77.08333333333333,
+      44.039345724995634,
+      38.84533476759411,
+      56.71945927249892,
+      56.25,
+      52.66840058085684,
+      50.475858706920285,
+      47.58728163191782,
+      67.05555555555556,
+      54.65277777777778,
+      55.145833333333336
+     ],
+     "needs": [
+      0.3333333333333333,
+      0.25,
+      0.3333333333333333,
+      0.3333333333333333,
+      0.25,
+      0.3333333333333333,
+      0.6,
+      0.5,
+      0.6,
+      0.3333333333333333
+     ],
+     "vacancies": [
+      0,
+      2,
+      0
+     ],
+     "unemployed": [
+      43,
+      0,
+      0
+     ],
+     "jobs": [
+      118,
+      6,
+      0
+     ],
+     "attrQ": 6.257328368484737,
+     "rep": 53.54251281896836,
+     "aw": 0.05391527073567708,
+     "shopAppeal": 10.04510856630514,
+     "goodsSurplus": 62.343324760413395,
+     "foodSurplus": 261.21845056753733,
+     "linkTimes": [
+      -1
+     ],
+     "homesTax": [
+      800,
+      800,
+      800
+     ],
+     "salesTax": 200,
+     "hotelTax": 500,
+     "holiday": false,
+     "grace": false,
+     "skyline": ""
+    }
+   ],
+   "kingsport": {
+    "pop": 40000,
+    "stars": [
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60
+    ]
+   },
+   "sumN": 345,
+   "medianPop": 345,
+   "prices": {
+    "goods": 1,
+    "food": 1
+   },
+   "universitySeats": 0,
+   "season": {
+    "n": 1,
+    "theme": "founders",
+    "startMonth": 0,
+    "boomBust": false
+   },
+   "event": {
+    "id": "ferryFun",
+    "fromMonth": 12,
+    "toMonth": 35
+   },
+   "flows": [
+    {
+     "commutersIn": [
+      0,
+      0,
+      0
+     ],
+     "commutersOut": [
+      0,
+      0,
+      0
+     ],
+     "shoppersIn": 0,
+     "leak": 0,
+     "dayTripsIn": 0,
+     "touristShare": 0,
+     "touristPool": 0,
+     "sharedHealth": 0,
+     "sharedUniversity": 0,
+     "airIn": 0,
+     "advert": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "buzz": 0
+    }
+   ],
+   "allocations": []
+  },
+  "inbox": [],
+  "predict": {
+   "townIndex": 0,
+   "dayIndex": 2,
+   "rivalry": "friendly",
+   "mishaps": "mild",
+   "paramsVersion": "v1"
+  },
+  "moves": [],
+  "welcomeBack": [
+   {
+    "key": "welcomeBack.away",
+    "data": {
+     "ticks": 96
+    }
+   },
+   {
+    "key": "welcomeBack.people",
+    "data": {
+     "pop": 283
+    }
+   }
+  ],
+  "town": {
+   "seat": "s1",
+   "ownerId": "s1",
+   "name": "Sunnyvale",
+   "avatar": "badger",
+   "flag": 0,
+   "site": 0,
+   "siteKind": "flatland",
+   "terrainSeed": 3830542273,
+   "seed": 2152391530,
+   "foundedAt": 1792497601000,
+   "foundGrid": 0,
+   "gridBase": 0,
+   "tick": 96,
+   "sprintLeft": 0,
+   "sprintAt": 1792497601000,
+   "sprintAuto": false,
+   "archived": false,
+   "tier": 0,
+   "tierHold": 0,
+   "parcels": 1632,
+   "parcelRights": 0,
+   "planes": "/wD/AP8A/wD/AP8A/wD/AIMAAQUEugAAAf8A/wD/AP8AygAAA/8A/wD/AP8A/wCpAAEBAfoABAUAAAMDhAAAAq0ABwUDAAEBAAABtgAAAYEAAAW3AAYDAAUABQADswAAAYQAAAG4AAADuQADAwAAA7wAgAMBAAO3AAIBAwW7AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAAD/wD/AP8A/wD/AP8A/wD/AKIAAUBAugAAQP8A/wD/AP8AygAAQP8A/wD/AP8A/wCmAAEwEIAwtwCEELUAgDAAEIIwhAAAQKsAgTAAEIIwABCyAIEwABCCMAAQsgCBMAAQgjAAELIAgTAAEIIwABCyAIIQAUBAgRCzAIAwAhBAQIAwtQACMDAQgTC3AAEwEIAwuQAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAEP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/ANcAA8EAAEH3AAgBYSEAQcFBoeGzAAkBgQGBAMGhIeHhtQAHAeEAAQEAQaGzAAmhAOFBAAGhAeEBswAJgQDBQQBBAMHhAvQAAoEAYYAAAuEAIbUABoEAACHBwSK3AAPhAIFh/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AMUAA9IAAED3AAhWTJMAzwpLB56zAAk0ij0IANd/FAdEtQAHipMAAwAAvKazAAkGAAUGAFx20wYBswAIMACmCACSAAKJ9QACPwCGgAACCAAltQAGGQAAUwNCA7cAA8kANgX/AP8A/wD/AP8A/wD/AP8AigA=",
+   "planesRev": 35,
+   "terrainEdits": [],
+   "construction": [
+    2789,
+    2
+   ],
+   "marks": [],
+   "lv": "gB0MHiEtKSwsKi4kIiAeHYEgCyEjLzQvLzQwJCEgIIEdCx4pLTAwLy0nKCYgHoIgByEkMDQzMCUhgCCCHQseISIjJS82OTYwISGCIAUhJCYmJCGBIIMdAx4eICWBMgI4KCKDIAMhIiIhgiCFHQkfIzE5MjI6NSYhgyAAIYQgFR0dHh8eHR0eJygrMzg6MjkzJCEgICGHIAQdHyIjIIAeDicoKigrNzIyNiYhICIjIYYgBR8jMDEtIIAeDiAjJic1OjI2JSEiJScjIYUgGCIwNS4yJCAdHyIkJicsOjI1JiMlMzUvIyGEIBgjMC4vMyQgHh0fISQkJzUvMyUlKTozNCUhhCAGHyswMS0gHoAdDh8hICEvMS4jJTQ9NDgnIYQgBR0fIiMgHoIdDh8dHiorIiInNjQ2OykkIYMgAR0dgB6GHQ0eICEkKjg2NzwtKCUiIYEgjB0NHiMwNjc8PTk5NzQpJCGAIAAdgB6HHRYeICc2MTgwMjk9ND07MyQhICAeICEgHoYdCB4gKTgyNywsOIE0CjcnIyEgICQnJiAehh0XICY0LzMnJzY9NDQ9NyYiICAsMjc2LiAehh0MIi8xLiIjKTs0PTsrJIAgBi82MjIzIx6GHRYgIiMiICEkMzY2LyslISAgJDQ6MjIjHoUdBBwfHx4fgCAOJSk0ODgzJSEgIyo6PTQlgiGAIAQfHiQlJIElDiguOjk6Pi8qJiEnOD02KIEkCCMhICAfHiUlJIAlHCYoLjo4Oj8yLSgiJzk1PTkuLCsqKCQhIB8fJSYlgCYOJyotNzs9Ozs5NCQqPDU1gj0YNzAkISAgJSQjJSYnKjU2NS8xOz01OiUpO4Q1AzMzJSKBIRIgICEjJjEqLycoMzcxNiUnNT09gDUGPT03MCMhIoAhgCAeISMuLywiIiUyNDEuLigtOz01PTsuJyMhIisqIiEgIIAhOCMkIiEiIiUnJCctJSYpNTc1KykkISEiLCsiISAhIiIhISIhIyUjIiIhKCYcHB0hIiItLiodHBwlJYAbDhwfIR0bGx0pLCkdGxseHIAbCR0hIzEsMSIdHByAGw4cHywtKR0eIS8pLiEdGxyBGwccHyU0LzMkHoIbDB4iLygsIB8jMCswIh6EGwYeIzItMSIeghsNHiIuJysfHiAtMCwfHBs=",
+   "buildings": [
+    [
+     0,
+     33,
+     44,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     7,
+     21,
+     17,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     8,
+     45,
+     39,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     24,
+     43,
+     26,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     30,
+     23,
+     16,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     31,
+     22,
+     16,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ]
+   ],
+   "lag": {
+    "poll": "/wD/AP8A/wDHAAABmQAEAQECBQGXAAQBBAIBApgABQIEAgEDAZYABQEDAgIBApgABQEBAwQFAZkAgAH/AOgA",
+    "congestion": [
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000
+    ],
+    "routes": [
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000
+    ]
+   },
+   "pending": [],
+   "people": [
+    90,
+    0,
+    0,
+    67,
+    6,
+    0,
+    69,
+    5,
+    0,
+    43,
+    3,
+    0,
+    0
+   ],
+   "applicants": [
+    35,
+    29,
+    2,
+    9,
+    7,
+    1,
+    6,
+    4,
+    1,
+    0
+   ],
+   "aspirants": [
+    1,
+    0
+   ],
+   "squeezed": 51,
+   "longUnemployed": [
+    19,
+    1,
+    0
+   ],
+   "carry": {
+    "dev.incidents": 320,
+    "dev.builders": 668,
+    "£.homesTax": 391,
+    "ppl.births.0": 171,
+    "ppl.settle.0": 648,
+    "ppl.grow.0": 667,
+    "ppl.nest.0": 609,
+    "ppl.retW.0": 627,
+    "ppl.retP.0": 640,
+    "ppl.dieR.0": 671,
+    "ppl.dieW.0": 142,
+    "ppl.dieP.0": 89,
+    "ppl.asp.0": 154,
+    "mig.out.0": 457,
+    "mig.out.1": 477,
+    "mig.out.2": 773,
+    "mig.in.0": 918,
+    "mig.in.1": 46,
+    "mig.in.2": 772,
+    "mig.in.3": 496,
+    "mig.in.4": 248,
+    "mig.in.5": 978,
+    "mig.in.6": 317,
+    "mig.in.7": 533,
+    "mig.in.8": 774,
+    "mig.kidsOut.0": 592,
+    "mig.kidsIn.1": 500,
+    "£.businessTax": 610,
+    "lab.promote.0": 30,
+    "ppl.births.1": 270,
+    "ppl.grow.1": 462,
+    "ppl.nest.1": 481,
+    "ppl.retP.1": 171,
+    "ppl.dieR.1": 247,
+    "mig.out.4": 118,
+    "mig.out.5": 890,
+    "mig.wait.5": 250,
+    "ppl.dieP.1": 10,
+    "ppl.up.0": 320,
+    "lab.long.0": 166,
+    "lab.long.1": 166,
+    "mig.kidsOut.1": 17,
+    "mig.wait.7": 250,
+    "ppl.young.0": 168,
+    "mig.wait.6": 750,
+    "mig.wait.3": 250,
+    "house.aspDecay.0": 300,
+    "mig.wait.0": 500,
+    "mig.wait.1": 500,
+    "mig.wait.2": 500,
+    "mig.wait.4": 250
+   },
+   "meters": [
+    18.25208855196555,
+    53.37599667358574,
+    33.89132767915726,
+    -31.423381616533838,
+    35,
+    47.25360424762301,
+    35,
+    93.93863530965724
+   ],
+   "margins": [
+    0.6066500554987122,
+    0.2575418182202269,
+    -0.014710938871774108,
+    0.20336435234615263,
+    0.2930312025547028,
+    0.6066500554987122,
+    0.22925692716253498,
+    -0.014710938871774108,
+    0.20336435234615263,
+    0.2930312025547028
+   ],
+   "perceived": [
+    18.269357724651144,
+    28.587412370474087,
+    70.74709505501536,
+    7.065869251430752,
+    6.729399287076904,
+    72.41885005141683,
+    5.383519429661524,
+    7.412324130705228,
+    76.80716195459162,
+    96.2988303921077,
+    40.49404320987842,
+    15.461000450393339,
+    47.15198725368146,
+    51.009409893061544,
+    28.427807590735537,
+    8.697646202997799,
+    15.53713006662804,
+    72.87843345215384,
+    65.42510188648461,
+    57.3294125445577
+   ],
+   "happy": [
+    21.751260694810064,
+    11.705218037434234,
+    25.48888613862219,
+    9.46254363590607,
+    4.486861725941136,
+    6.444419158018776,
+    65.8168127444204,
+    48.444356114391766,
+    36.24149251291118,
+    11.69982695893822
+   ],
+   "approval": 35.51164280882113,
+   "culture": 3.1348104238149723,
+   "edu": 14.263185112296576,
+   "rep": 67.12350440244016,
+   "aw": 0.0760496472417911,
+   "ps": 1.987365579543857,
+   "goodsStock": [
+    12.49432058825344,
+    101.40588717568512
+   ],
+   "money": {
+    "reserves": 171171,
+    "loan": null,
+    "bonds": [],
+    "rating": 0,
+    "ratingHold": 0,
+    "overdraftMonths": 0,
+    "helper": null,
+    "lastHelperDay": null,
+    "fundAdvance": 0
+   },
+   "taxes": {
+    "town": 800,
+    "homes": [
+     800,
+     800,
+     800
+    ],
+    "business": 400,
+    "sales": 200,
+    "hotel": 500
+   },
+   "funding": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "policies": [],
+   "orders": [
+    {
+     "kind": "budgetHealthy",
+     "on": true,
+     "args": [
+      2,
+      200
+     ]
+    },
+    {
+     "kind": "buyUtilities",
+     "on": true,
+     "args": []
+    },
+    {
+     "kind": "fixDamaged",
+     "on": true,
+     "args": []
+    },
+    {
+     "kind": "renewContracts",
+     "on": false,
+     "args": []
+    },
+    {
+     "kind": "awayZoning",
+     "on": false,
+     "args": [
+      12,
+      60,
+      3
+     ]
+    },
+    {
+     "kind": "repayLoan",
+     "on": false,
+     "args": [
+      3
+     ]
+    },
+    {
+     "kind": "hold",
+     "on": false,
+     "args": []
+    }
+   ],
+   "initiatives": 1,
+   "away": {
+    "lastHelloAt": 1792584000000,
+    "weekStartPop": 0,
+    "weekLoss": 0
+   },
+   "holiday": {
+    "until": null,
+    "usedDays": 0
+   },
+   "grace": null,
+   "shield": null,
+   "improvement": [],
+   "history": "gQAADIAAAAGAAAABgAB/RgEAAFkBAABuAQAAZAEAAFoBAABQAQAARgEAAD0BAAA0AQAAKgEAACIBAAAbAQAAUxIBAGM4AQCAYwEA0o8BALm0AQDc1wEAWPcBAOQaAgA/OgIAZV4CADd+AgCjnAIADTwAABlAAAA7RQAAZkYAAPE+AAAjPQAAcjkAAHk9AAABPzmAABw+AACkOQAANzgAAPYZAAAJGgAAHhoAABQaAAAKGoAAYBoAAPYZAADtGQAA5BkAANoZAADSGQAAyxkAAGQSAAB7DwAA0w0AAGwKAAAMCAAAgwYAAEkFAADYBAAAcgQAAMQFAADXBQAAggYAAPsWAABCFgAAdhUAAGcUAAA+EwAAGRKAABcRAAAJEAAALw8AAKEOAAAsDgAA3w0AAHOAAAB8gAAAhYAAAHyAAABzgAAAc4AAAHOAAAB8gAAAc4AAAHyAAABwgAAAcIAAACuAAAArgAAAKYAAADqAAAA9gAAAN4AAADCAAAAhgAAAJIAAABWAAAAbgAAAFbAAbAsFAAD1BQAALgcAAGwGAABmBQAAjQUAAGUFAABpBgAAZQUAAGUGAACOBQAAZQUAAGMMAAA6CgAACQ0AACYPAAC7EAAA7BEAANASAAB7EwAA+xMAAFsUAACjFAAA2hQAADgKAAB1BQAAyQEAAB2A/3/t/P//B/v//1X5///j9///c/b//y/1//9Y9P//uvP//08FAABaBQAArQYAAAcJAAC5CwAAQg4AAGkPAACIEAAAohAAAPMQAAClEQAAdRIAAHscAADWHAAAyRwAAHAbAADOGgAAQRsAABobAAAPHQAAAxwAACQeAAB/HQAAAx4AAAFZAf8AoQACYzgB/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wDiAA==",
+   "why": "AQIBFwAAAAoAKAAAAAPC/////f///wMAqP///wIAGgAAAAAAAwAAAAEAAwkAAADn////HgCEAAAACQDB////GwDd////AgADNQAAACUAAAAfABkAAAAxAPH///8yAAYAAAADAAMGAAAA3v///x4AWQAAAAkA3f///xsA8v///wQAAxYAAAAPAAAAHwAKAAAAMQD5////IAAEAAAABQADAQAAAP3///8eABMAAAANAPf///8bAPr///8GAAMAAAAAAQAAADEA/////yMAAAAAADIAAAAAAAcAAwAAAADP////HgBMAAAAGwDe////EgAHAAAACQADCAAAANf///8eAGoAAAAMANf///8bAPD///8KAAMMAAAACAAAACIABAAAADEA/f///ywAAgAAAAsAAwIAAAD7////HgAUAAAADQD3////GwD8////DAADAQAAAAEAAAAjAAAAAAAsAAAAAAAgAAAAAAANAAMAAAAA/f///x4AFAAAABsA7P///xIAAwAAAA8AAwAAAAAJAAAAHgAUAAAAGwDv////DADz////EQADAAAAAP7///8eAAoAAAAbAPv///8NAP3///8VAANYAwAAhQAAADYAOFD//zgAmV4AADMAAlQAABYAA/S2AAAyaAAAMwDvFgEANgA4UP//NQCa5///FwAD8nIAALtZ//8zAN2PAgA1AP71/v83AFyT//8YAAPGvf//xQL//0IAZzoFAD8A3Yf9/0EAvPj9/xkAAnR4AAAe5f//PQCjxQAAQwCzzf//GgADT48AACUz/v9CANRHBwA/AErm/P9BAAwu/v8bAAJugQAAtuz//z0A/fMAAEMAu6D//xwAA3xAAQDNVv//QgCxPgQAPwCpF/7/QQBUk///HQACumcCAAAAAABGAF2aAQBFAF3NAAAeAAOG/P7/AAAAAFcALiz//1kAKNj//1gAMPj//x8AAV3NAAD/////agBezQAARAADNlUAAESoAABxALuo//96AMArAAByAHfY//9FAANuMgAASdMAAHEAbbL//3QAQNT//3IAd9j//0YAA5NyAAB5zgAAdQBws///cgAf3v//dgCKEgAARwAAk1YAAJNWAABIAAPiNwAAF9wAAHQAgKj//3IAu8///3EAkOP//0kAA2ozAACpwQAAdQD4rf//cgB12v//eABU6f//SgAAx/YAAMf2AABLAADGtwAAxrcAAEwAAB6MAAAejAAATQAAPTsAAD07AABOAAIYqgAA7SkAAIEAIE4AAIAACzIAAE8AAAAAAAAAAAAAUAADGDsAAAAAAACNAFRCAACOAGT5//+TAGD///9SAAMaHAEADhUBAJgAbEAAAJYAcdX//54AL/H//xYAAAABACgAAAAB+P///wAAAAADAPj///8BAAMAAAAA/f///x4ADgAAAAkA+f///xsA/P///wIAAwUAAAADAAAAHwACAAAAMgABAAAAKAD/////AwADAAAAAPz///8eAAoAAAAJAPz///8MAP7///8EAAMBAAAAAQAAADEA/////x8AAQAAACIAAAAAAAUAAwAAAAAAAAAAHgACAAAAGwD/////DQD/////BgADAAAAAAAAAAAjAAAAAAAyAAAAAAAgAAAAAAAHAAMAAAAA+P///x4ACAAAAA8A/f///xIAAwAAAAkAAwAAAAD9////HgALAAAADAD7////CgD9////CgADAgAAAAEAAAAiAAAAAAAsAAAAAAAfAAAAAAALAAMAAAAAAAAAAB4AAgAAABsA/////w0A/////wwAAwAAAAAAAAAAIwAAAAAALAAAAAAAIAAAAAAADQADAAAAAAEAAAAeAAIAAAAbAP7///8QAP7///8PAAMAAAAAAQAAAB4AAgAAABsA/v///wwA/v///xEAAwAAAAABAAAAGwD/////HgABAAAADQD/////FQADQQUAAJv7//8zAH8UAAA2AGzu//84ALsGAAAWAAOjFAAA8vn//zMAcBcAADgA1RQAADYAbO7//xcAAxgNAAC08///MwBvPwAANQCa5///NwBb8v//GAADWPT//1Ld//9CAJqkAAA/AD+y//9BACzA//8ZAAKsDQAAAAAAAD0AvRMAAEMA7/n//xoAA6URAAC25v//QgDOhgAAPwDVxf//QQBM3v//GwACrA0AAAAAAAA9ANkaAABDANPy//8cAANJJAAAtfH//0IA0XIAAD8APsv//0EAhfT//x0AAqQ5AAAAAAAARgCdJgAARQAHEwAAHgADLub//wAAAABXAPLq//9ZAAT8//9YADj///8fAAEHEwAAAQAAAGoABhMAAEQAA5YHAAA3DwAAcQAV+P//egBgBAAAcgDq+///RQADvwMAAD8TAABxAPb4//90AKD7//9yAOr7//9GAAPkCQAAQhIAAHUAWPj//3IAgPz//3YAygIAAEcAAIsFAACLBQAASAADoQIAAGkXAAB0AED3//9xAOT4//9yABT7//9JAAOKAgAAOQsAAHUAzPf//3IALPz//3YAWQMAAEoAAHYZAAB2GQAASwAAqhIAAKoSAABMAADrDQAA6w0AAE0AAEEEAABBBAAATgACLA4AAEYCAACBANAHAACAABYEAABPAAAAAAAAAAAAAFAAAo4FAAAAAAAAjQArBgAAjgBj////UgADfx0AACwcAACYAN0FAACWAM/8//+eAKf+//8XAAAAAQAoAAAAAvn///8AAAAAAwD4////AAABAAAAAQADAAAAAPX///8eAA4AAAAJAPn///8SAAQAAAACAAMEAAAAAwAAADEA/v///ywAAgAAAB8AAQAAAAMAAwAAAAD8////HgAJAAAACQD9////DAD+////BAADAgAAAAIAAAAxAP////8fAAEAAAAiAAAAAAAFAAMAAAAAAAAAAB4AAgAAAA0A/////woAAAAAAAYAAwAAAAAAAAAAIwAAAAAAMgAAAAAAIAAAAAAABwADAAAAAP7///8eAAgAAAAPAP3///8bAP3///8JAAMAAAAA/f///x4ACwAAAAwA+////woA/f///woAAwIAAAABAAAAIgAAAAAALAAAAAAAHwAAAAAACwADAAAAAAAAAAAeAAIAAAANAP////8KAAAAAAAMAAMAAAAAAAAAACMAAAAAACwAAAAAACAAAAAAAA0AAwAAAAABAAAAHgACAAAAGwD+////EAD+////DwADAAAAAAAAAAAeAAIAAAAMAP7///8bAP////8RAAMAAAAAAAAAAB4AAQAAAA0A/////xAAAAAAABUAAyEHAABI9///MwBrFQAANgBs7v//OAACDAAAFgAD2hQAAJT5//8zAJgYAAA4AEEUAAA2AGzu//8XAAM9DQAA2fP//zMAQ0cAADUAnN///zcAhfL//xgAA7rz///p3///QgAMlQAAPwAbuP//QQCpxv//GQACrA0AAAAAAAA9ANoRAABDANL7//8aAAN1EgAAYeT//0IAgZIAAD8AM8D//0EAYNv//xsAAqwNAAAAAAAAPQAKGwAAQwCi8v//HAADsiQAAPvx//9CAONzAAA/AGrK//9BAGn0//8dAAI3OAAAAAAAAEYAuSYAAEUAfhEAAB4AAzXm//8AAAAAVwD56v//WQAE/P//WAA4////HwABfhEAAAAAAABqAH4RAABEAAN/CAAAdQ0AAHEAlfr//3oAYAQAAHIAFfz//0UAA5MEAACuEQAAcQAv+///dACg+///cgAV/P//RgAD9QkAAAkSAAB1AFj4//9yAKT8//92AO8CAABHAACyAwAAsgMAAEgAA8EBAACJFgAAdABA9///cQDk+P//cgAU+///SQADhAIAAAcLAAB1AMz3//9yACz8//92AIYDAABKAAC2GQAAthkAAEsAAOwSAADsEgAATAAAKA4AACgOAABNAACSBAAAkgQAAE4AAt8NAACBAQAAgQDQBwAAgACOBAAATwAAAAAAAAAAAABQAANlBQAAAAAAAI0AKQYAAI4AZP///5MA2P///1IAAwMeAABmHAAAmACOBQAAlgBd/f//ngCy/v//AQAAAAIAKAAAAAM5AAAAAAAAAAIALQAAAAYAFAAAAAMA+P///wEAAxAAAAD9////HgAVAAAAHAD4////EgAGAAAAAgADBQAAAAEAAAAfAAIAAAAyAAIAAAAoAP////8DAAMKAAAAAwAAAB4ADgAAABwA+////xQA/v///wQAAwMAAAAAAAAAHwACAAAAMgAAAAAAIgAAAAAABQADAgAAAAEAAAAeAAIAAAAcAP7///8bAAEAAAAGAAMAAAAAAAAAACMAAAAAADIAAAAAACQAAAAAAAcAAwAAAAD/////GwDy////HgALAAAAEgAEAAAACQADDwAAAAoAAAAeAA8AAAAcAPn///8UAP3///8KAAMAAAAAAAAAACIAAAAAADIAAAAAAB8AAAAAAAsAAwIAAAABAAAAHgACAAAAHAD/////DgAAAAAADAADAAAAAAAAAAAjAAAAAAAyAAAAAAAmAAAAAAANAAMAAAAAAgAAABsA+v///x4AAwAAABIAAgAAAA8AAwAAAAACAAAAGwD6////HgADAAAAEQACAAAAEQADAAAAAAAAAAAbAP7///8eAAIAAAAOAAAAAAAVAAPMBwAAMh8AADYAbO7//zQAfvv//zUAsf7//xYAA1sIAACo8P//MwAVSgAANQBE3P//NgBa8f//FwADswQAACHp//8zAJpaAAA1AIvH//83AG35//8YAAPXBwAArAEAAEIAdzcAAD8AruT//0EAB+r//xkAAXgBAACG/P//PQDzBAAAGgADVQUAAF0aAABCAETE//8/AMUXAABBAO8OAAAbAAGkAwAAP/j//z0AZgsAABwAA1sSAAB48f//QgD1SAAAPwA53///QQC0+P//HQACJnwAAAAAAABGAGRPAABFAMIsAAAeAAMBzP//AAAAAFcAidX//1kACPj//1gAcP7//x8AAcIsAAD/////agDDLAAARAADbREAAC0aAABxACj2//96AGAEAAB3ALj8//9FAAPRDwAAqRkAAHEAQPf//3QAoPv//3oASAMAAEYAAwYTAABPGgAAdQBY+P//dgCPAgAAdwDQ/f//RwAAsRYAALEWAABIAAP0EgAAsBUAAHQAoPv//3EAjgMAAHcAFv7//0kAAwcRAAAzFQAAdQDm+///eABe/v//dgCQAQAASgAAKxgAACsYAABLAAAuFQAALhUAAEwAAA8TAAAPEwAATQAAEhAAABIQAABOAAKfFgAA8wIAAIAA2wsAAIEA0AcAAE8AAAAAAAAAAAAAUAADAAsAAAAAAACNAOgMAACOALj+//+TAGD///9SAAOoHAAAshsAAJgAVwYAAJYAmfv//54ACP///w==",
+   "tileLog": "f0IAQgAwAAAingIxAAAytgIxAADyoQIyAAAgngAyAABCogIyAABCngIzAADwoQAzAAAwtgA0AABAngA0AABAogA0AAAjngE0AAAirgI1AADyrQI2AAAgrgA2AADCqQI2AABCqgI3AADwrQA4AADAqQA4AABAqgA5AADyqQI7AADwf6kAPAAA4qkCPQAAM64APQAA86EBPQAAM6YAPQAAM7YBPQAA860BPgAA4KkAPgAAw6UAPwAA06UAQAAAI64BQgAAQ7YAQgAAQ6IBQgAAQ54BQwAA060AQwAAEqYCRAAAI64ARAAAIroCRAAAIr4CRQAAEKYARQAA86kBRgAAILoAf0YAACC+AEYAAEOqAUYAAMOpAUcAANOpAEgAAOOpAUgAACO+AUgAAOO1AEkAAPO5AEkAADO+AEsAAFKqAk0AAFCqAFAAACO6AVAAACKmAlIAACCmAFIAAEK6AlMAABOmAVQAAEC6AFUAADGuAVcAADCuAFkAADOWAFsAAFOqAVwADwAjpgFfAAATlgBfAABSrgL/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wDRAA==",
+   "undo": [],
+   "inbox": [],
+   "stamps": [],
+   "trophies": [],
+   "residents": [],
+   "lastSeenTick": 0,
+   "books": {
+    "open": 171171,
+    "lines": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "popOpen": 283,
+    "pop": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "dayLines": [
+     52573,
+     105053,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     -54226,
+     -2000,
+     -10200,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "dayPop": [
+     3,
+     -3,
+     26,
+     -88,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "realised": {
+    "day": 2,
+    "commutersIn": [
+     0,
+     0,
+     0
+    ],
+    "commutersOut": [
+     0,
+     0,
+     0
+    ],
+    "shopperSpendIn": 0,
+    "shopperSpendOut": 0,
+    "dayTripSpend": 0,
+    "touristSpend": 0,
+    "visitorsHosted": 0,
+    "dayTripsHosted": 0,
+    "shipped": [],
+    "received": [],
+    "delivered": [],
+    "shortfall": [],
+    "sharedUsed": [
+     0,
+     0
+    ]
+   },
+   "dev": "AQEAAQDlChE=|hQAAEoAAAD+AAAAYiAACt3ly/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8AugABAwCAA/YAgAMAAIIDswCBAwAAggOzAIEDAACCA7MAgQMAAIIDswCBAwAAggP0AIADgACAA7UAAgMDAIADAA+3AAEDAIAD/wD/AP8A/wD/AP8A/wD/AIkA/4D/gP+A/4D/gIOAAYGBmoCBgZiAg4GYgIGBmoABgYH/gOmA/wD/AP8A/wDEAAFsbpoAA2xrAG6ZAARtbXJycZgABG5tc3JymQADbgBzc5kAAm8Acv8A/wD/AP8A/wD/ANAAAHW6AABxgHuYAABxgAAAe7kAAHL/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A4wAAdpkAAHmcAAN5AAB+mAAAeZ4AgH7/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A6AA=",
+   "alerts": [],
+   "peopleMemo": {
+    "displaced": [
+     0,
+     0,
+     0
+    ],
+    "young": [
+     1,
+     0,
+     0
+    ],
+    "vacHigh": 0,
+    "needs": [
+     0.3333333333333333,
+     0.25,
+     0.3333333333333333,
+     0.3333333333333333,
+     0.25,
+     0.3333333333333333,
+     0.6,
+     0.5,
+     0.6,
+     0.3333333333333333
+    ],
+    "vacancies": [
+     0,
+     0,
+     0
+    ],
+    "unemployed": [
+     20,
+     1,
+     0
+    ],
+    "jobs": [
+     109,
+     3,
+     0
+    ]
+   },
+   "marketMemo": {
+    "surplus": [
+     141.95940429048255,
+     579.179301311834
+    ],
+    "lowMonths": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "sat": 78.77191207290882,
+    "visitors": 0,
+    "bedDemand": 4.976985306113898,
+    "attrQ": 6.954601853673425,
+    "pull": 5.098243824445881,
+    "shopAppeal": 9.250130700826242
+   },
+   "civicMemo": {
+    "revenue": 14391,
+    "spending": 6603,
+    "deputyRaised": 0,
+    "zonedDay": -1,
+    "zonedToday": 0,
+    "paused": [],
+    "check": {
+     "tier": 1,
+     "met": 6,
+     "items": 5
+    },
+    "mood": 16.658070516056977,
+    "talk": [
+     [
+      "jobs",
+      32
+     ],
+     [
+      "homes",
+      29
+     ],
+     [
+      "fun",
+      20
+     ],
+     [
+      "health",
+      19
+     ]
+    ],
+    "wants": [
+     {
+      "key": "power",
+      "severity": 283
+     },
+     {
+      "key": "water",
+      "severity": 283
+     },
+     {
+      "key": "talk.jobs",
+      "severity": 238.74284707540522
+     }
+    ],
+    "advisors": [
+     "bramble.power",
+     "bramble.water",
+     "mo.squeezed"
+    ],
+    "peak": 345,
+    "struggling": false
+   }
+  }
+ },
+ "county": {
+  "name": "Kingsport County",
+  "sites": [
+   {
+    "index": 0,
+    "kind": "flatland",
+    "terrainSeed": 3830542273,
+    "owner": 0
+   },
+   {
+    "index": 1,
+    "kind": "river",
+    "terrainSeed": 1650374677,
+    "owner": null
+   },
+   {
+    "index": 2,
+    "kind": "forest",
+    "terrainSeed": 3046473872,
+    "owner": null
+   },
+   {
+    "index": 3,
+    "kind": "coast",
+    "terrainSeed": 1869250613,
+    "owner": null
+   },
+   {
+    "index": 4,
+    "kind": "hills",
+    "terrainSeed": 1107367573,
+    "owner": null
+   },
+   {
+    "index": 5,
+    "kind": "coast",
+    "terrainSeed": 3067474800,
+    "owner": null
+   }
+  ],
+  "kingsport": {
+   "seat": "kingsport",
+   "name": "Kingsport",
+   "avatar": "kingsport",
+   "flag": 0,
+   "tier": 4,
+   "pop": 40000,
+   "faces": [],
+   "stars": [
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60
+   ],
+   "taxes": {
+    "homes": [
+     0,
+     0,
+     0
+    ],
+    "business": 0,
+    "sales": 0,
+    "hotel": 0
+   },
+   "holiday": false,
+   "archived": false,
+   "inFortnight": false,
+   "skyline": "",
+   "mayor": "",
+   "linked": []
+  },
+  "links": [],
+  "offers": [],
+  "contracts": [],
+  "pacts": [],
+  "market": {
+   "goods": {
+    "p": 1,
+    "band": [
+     0.8,
+     1.25
+    ]
+   },
+   "food": {
+    "p": 1,
+    "band": [
+     0.8,
+     1.25
+    ]
+   }
+  },
+  "flowsSummary": {
+   "commutersIn": 0,
+   "commutersOut": 0,
+   "shoppersIn": 0,
+   "shoppersOut": 0,
+   "dayTrips": 0,
+   "touristShare": 0
+  },
+  "greatWork": null,
+  "goals": {
+   "week": 0,
+   "goals": []
+  },
+  "council": {
+   "question": null,
+   "options": [],
+   "myVote": null,
+   "totals": null
+  },
+  "awards": {
+   "week": 0,
+   "recent": []
+  },
+  "fund": 0,
+  "bulletin": []
+ },
+ "visiting": null,
+ "towns": [
+  {
+   "seat": "s1",
+   "name": "Sunnyvale",
+   "avatar": "badger",
+   "flag": 0,
+   "tier": 0,
+   "pop": 283,
+   "faces": [
+    90,
+    0,
+    147,
+    46,
+    0
+   ],
+   "stars": [
+    18.269357724651144,
+    28.587412370474087,
+    70.74709505501536,
+    7.065869251430752,
+    6.729399287076904,
+    72.41885005141683,
+    5.383519429661524,
+    7.412324130705228,
+    76.80716195459162,
+    96.2988303921077,
+    40.49404320987842
+   ],
+   "taxes": {
+    "homes": [
+     800,
+     800,
+     800
+    ],
+    "business": 400,
+    "sales": 200,
+    "hotel": 500
+   },
+   "holiday": false,
+   "archived": false,
+   "inFortnight": false,
+   "skyline": "/wD/AIMAAQIC/wCkAAAC/wCUAAIBAAGZAIIBgAAAApQAggGYAIEBAAKYAAQBAQICAZkAgAEAAv8A/wCGAA==",
+   "mayor": "Mayor",
+   "linked": []
+  }
+ ]
+}

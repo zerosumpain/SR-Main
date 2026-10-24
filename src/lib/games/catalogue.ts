@@ -24,6 +24,7 @@ import * as passThePlate from './pass-the-plate';
 import * as fireworks from './fireworks';
 import * as manhunt from './manhunt';
 import * as homestead from './homestead';
+import * as hometowns from './hometowns/hometowns';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -47,6 +48,7 @@ export const GAME_IDS = [
   'fireworks',
   'manhunt',
   'homestead',
+  'hometowns',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -384,5 +386,15 @@ export const GAMES: Record<GameId, GameRules> = {
       skip: (room, p, _b, now) => homestead.skip(room as homestead.Room, p, now),
       end: (room, p, _b, now) => homestead.end(room as homestead.Room, p, now),
     },
+  },
+  // A county of up to six towns over months (spec 2026-10-24 Hometowns §10.1).
+  // Exports durable = { schema, revive }, paces = ['async'], maxPlayers = 6,
+  // revision, waitingOn, noteParent and its moves: every engine move by name
+  // (`build`, `budget`, `sprint` …) plus `stats`. Each move types its own body.
+  hometowns: {
+    ...hometowns,
+    moves: Object.fromEntries(
+      Object.entries(hometowns.moves).map(([name, fn]): [string, Move] => [name, (room, p, b, now) => fn(room as hometowns.Room, p, b, now)]),
+    ),
   },
 };

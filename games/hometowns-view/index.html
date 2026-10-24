@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex" />
     <title>Hometowns map</title>
+    <meta name="color-scheme" content="light dark" />
     <style>
       :root {
         --bg: #f3eee3;
@@ -15,6 +16,7 @@
         --accent: #b4632e;
         --pos: #3a8658;
         --neg: #b54a3a;
+        --scrim: rgba(43, 38, 32, 0.45);
         color-scheme: light;
       }
       @media (prefers-color-scheme: dark) {
@@ -27,44 +29,126 @@
           --accent: #e08a52;
           --pos: #6cbf8a;
           --neg: #e07a6a;
+          --scrim: rgba(0, 0, 0, 0.55);
           color-scheme: dark;
         }
       }
       * { box-sizing: border-box; }
-      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; }
-      #app { display: flex; height: 100%; }
-      .map { flex: 1; min-width: 0; position: relative; touch-action: none; }
-      .map canvas { display: block; }
-      .hud { width: 300px; flex: none; overflow-y: auto; padding: 16px; background: var(--panel); border-left: 1px solid var(--line); }
-      .hud h1 { font-size: 18px; margin: 0; }
-      .hud h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 16px 0 6px; }
-      .hud-sub { margin: 2px 0 12px; color: var(--muted); }
-      .hud-stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; }
-      .hud-stats dt { color: var(--muted); }
-      .hud-stats dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
-      .meter { display: grid; grid-template-columns: 76px 1fr 34px; align-items: center; gap: 6px; margin: 3px 0; }
-      .meter-label { color: var(--muted); font-size: 12px; }
-      .meter-track { position: relative; height: 8px; background: var(--line); border-radius: 2px; }
-      .meter-track::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--muted); }
-      .meter-fill { position: absolute; top: 0; bottom: 0; background: var(--pos); border-radius: 2px; }
-      .meter-fill.neg { background: var(--neg); }
-      .meter-value { text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; }
-      .hud-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
-      button { font: inherit; padding: 4px 8px; border: 1px solid var(--line); border-radius: 2px; background: transparent; color: var(--ink); cursor: pointer; }
-      button[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
-      .hud-legend { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12px; }
-      .hud-legend li { display: flex; align-items: center; gap: 6px; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 15px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; overscroll-behavior: none; }
+      #app { height: 100%; }
+      .hidden { display: none !important; }
+      .muted { color: var(--muted); }
+      button { font: inherit; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 2px; background: var(--panel); color: var(--ink); cursor: pointer; }
+      button[aria-pressed='true'], button[aria-selected='true'] { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button.primary { background: var(--pos); border-color: var(--pos); color: #fff; font-weight: 600; }
+      button.primary[disabled] { opacity: 0.5; cursor: not-allowed; }
+      button.quiet { background: transparent; }
+      button.locked, button[aria-disabled='true'] { opacity: 0.6; }
+      select, input { font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 2px; background: var(--panel); color: var(--ink); }
+      h2 { font-size: 18px; margin: 0 0 8px; }
+      h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 14px 0 6px; }
+      p { margin: 6px 0; }
+
+      /* The map: full bleed in the app, the middle of the harness. */
+      .in-app, .in-app .map { height: 100%; }
+      .map { position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
+      .map canvas { display: block; position: absolute; left: 0; top: 0; }
+      .bubbles { position: absolute; inset: 0; pointer-events: none; }
+      .bubble { position: absolute; left: 0; top: 0; pointer-events: auto; min-height: 32px; padding: 4px 10px; border-radius: 100px; background: var(--panel); border: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
+      .bubble.hatched { background-image: repeating-linear-gradient(45deg, transparent 0 6px, var(--line) 6px 8px); }
+
+      /* Harness chrome (SwiftUI's job in the app). One column on a phone, a side panel on a desk. */
+      .harness { display: grid; grid-template-rows: auto auto 1fr auto; grid-template-columns: minmax(0, 1fr); height: 100%; overflow: hidden; }
+      .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+      .topbar .town { display: inline-flex; align-items: center; gap: 6px; }
+      .topbar .num { font-variant-numeric: tabular-nums; }
+      .topbar button.num { min-height: 32px; padding: 2px 8px; }
+      .flag { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+      .layers { display: inline-flex; gap: 2px; margin-left: auto; }
+      .layers button { min-height: 30px; padding: 2px 8px; font-size: 13px; }
+      .wantsbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 4px 10px; padding: 6px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+      .want { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 6px; min-height: 30px; padding: 2px 4px; border: 0; background: transparent; text-align: left; }
+      .want-label { font-size: 12px; color: var(--muted); }
+      .want-track { position: relative; height: 8px; background: var(--line); border-radius: 2px; }
+      .want-track::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--muted); }
+      .want-fill { position: absolute; top: 0; bottom: 0; background: var(--pos); border-radius: 2px; }
+      .want-fill.neg { background: var(--neg); }
+      .want-tiers { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+      .stage { position: relative; min-height: 0; min-width: 0; overflow: hidden; }
+      .stage > section, .legend, .readout, .advisors { position: absolute; z-index: 2; max-width: min(360px, calc(100% - 32px)); background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 10px 12px; }
+      .legend { left: 16px; bottom: 16px; }
+      .legend ol { list-style: none; margin: 6px 0; padding: 0; font-size: 13px; }
+      .legend li { display: flex; align-items: center; gap: 6px; }
       .swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
-      .hud-inspect { min-height: 2.8em; margin: 10px 0 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 2px; font-size: 12px; }
-      .hud-seed { display: flex; gap: 6px; }
-      .hud-seed input { width: 90px; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 2px; background: transparent; color: var(--ink); }
-      .hud-log { list-style: none; padding: 0; margin: 0; font-size: 12px; color: var(--muted); }
+      .readout { left: 16px; top: 16px; font-size: 13px; margin: 0; }
+      .advisors { right: 16px; top: 16px; display: flex; flex-direction: column; gap: 8px; background: transparent; border: 0; padding: 0; }
+      .art { display: block; }
+      .advisor .art { float: left; margin: 0 8px 4px 0; }
+      .avatar-button { padding: 2px; min-height: 44px; }
+      .advisor { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 2px; padding: 8px 10px; }
+      .advisor p { margin: 4px 0 6px; }
+      .advisor button { margin-right: 6px; }
+      .tutorial { left: 16px; top: 16px; }
+      .tutorial ol { margin: 6px 0; padding-left: 20px; }
+      .tutorial li { margin: 4px 0; }
+      .tutorial li.done { color: var(--muted); }
+      .tutorial li button { margin-left: 6px; min-height: 30px; padding: 2px 8px; }
+      .tutorial > button { margin: 4px 6px 0 0; }
+      .inspector { right: 16px; bottom: 16px; }
+      .forecast { left: 50%; bottom: 16px; transform: translateX(-50%); width: min(420px, calc(100% - 32px)); }
+      .card-rows { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 6px 0; font-size: 14px; }
+      .card-rows dt { color: var(--muted); }
+      .card-rows dd { margin: 0; font-variant-numeric: tabular-nums; }
+      .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+      .refused { color: var(--neg); }
+      .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 16px calc(6px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line); }
+      .toolbar button { min-height: 44px; white-space: nowrap; }
+      .perf { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
+      .sheet { position: fixed; z-index: 5; left: 0; right: 0; bottom: 58px; max-height: 55vh; overflow-y: auto; background: var(--panel); border-top: 1px solid var(--line); padding: 12px 16px 16px; }
+      .sheet .close { float: right; }
+      .tabs, .tools { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+      .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+      .item { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 2px; }
+      .item .muted { font-size: 12px; }
+      .item[aria-pressed='true'] .muted { color: #fff; }
+      .dial { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
+      .dial-label { min-width: 110px; }
+      .dial-value { min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; }
+      .order { display: block; margin: 6px 0; }
+      .done { color: var(--muted); }
+      .overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--scrim); }
+      .panel { width: min(460px, 100%); max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 16px; }
+      .choices { display: flex; flex-wrap: wrap; gap: 4px; }
+      .name { display: flex; gap: 6px; }
+      .swatch-button { width: 36px; min-height: 36px; }
+      .swatch-button[aria-pressed='true'] { outline: 3px solid var(--ink); }
+      .panel .primary { margin-top: 14px; }
+      .welcome .big { font-size: 20px; }
+      .toast { position: fixed; z-index: 11; left: 50%; bottom: 72px; transform: translateX(-50%); max-width: calc(100% - 32px); margin: 0; padding: 8px 12px; background: var(--ink); color: var(--bg); border-radius: 2px; font-size: 14px; }
       .placeholder { margin: auto; max-width: 420px; padding: 16px; }
       .placeholder a { color: var(--accent); }
       @media (max-width: 720px) {
-        #app { flex-direction: column; }
-        .map { flex: 1 1 60%; }
-        .hud { width: auto; flex: 1 1 40%; border-left: 0; border-top: 1px solid var(--line); }
+        .topbar { padding: 6px 8px; gap: 2px 8px; font-size: 14px; }
+        .wantsbar { grid-auto-flow: column; grid-auto-columns: minmax(84px, 1fr); grid-template-columns: none; overflow-x: auto; padding: 4px 8px; }
+        .want-tiers { display: none; }
+        .toolbar { flex-wrap: nowrap; overflow-x: auto; padding: 4px 8px calc(4px + env(safe-area-inset-bottom)); }
+        .perf { display: none; }
+        .stage > section, .legend, .readout { left: 8px; right: 8px; max-width: none; padding: 8px 10px; font-size: 14px; }
+        .tutorial { top: 8px; }
+        .tutorial li.done { display: none; }
+        .forecast { left: 8px; right: 8px; bottom: 8px; width: auto; transform: none; max-height: 45%; overflow-y: auto; }
+        .inspector { bottom: 8px; }
+        .advisors { left: 8px; right: 8px; top: auto; bottom: 8px; max-width: none; }
+        .advisor:nth-child(n + 2) { display: none; }
+        .toast { bottom: auto; top: 140px; }
+        .sheet { bottom: 54px; }
+      }
+      @media (min-width: 900px) {
+        .harness { grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto auto 1fr auto; }
+        .topbar, .wantsbar, .toolbar { grid-column: 1 / -1; }
+        .stage { grid-column: 1; grid-row: 3; }
+        .sheet { position: static; grid-column: 2; grid-row: 3; max-height: none; border-top: 0; border-left: 1px solid var(--line); }
+        .harness:has(.sheet.hidden) .stage { grid-column: 1 / -1; }
       }
     </style>
   </head>

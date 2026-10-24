@@ -59,6 +59,7 @@ async function finished(game: GameId, options: Record<string, unknown> = {}): Pr
 const OWN_SUITE: readonly string[] = [
   'manhunt', // three players and a play area; manhunt.test.ts records its own finish
   'homestead',
+  'hometowns', // a county never finishes: towns are kept forever
 ];
 
 describe('recording a finished round, in every game in the catalogue', () => {
