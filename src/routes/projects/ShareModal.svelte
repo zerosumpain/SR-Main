@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { PublicShare } from '$lib/projects/shares';
+  import type { SharedLink } from '$lib/projects/shares';
+  import type { ShareVisitor } from '$lib/projects/share-visitor';
 
   interface Props {
     projectKey: string;
@@ -12,7 +13,7 @@
   }
   let { projectKey, href, shareBase, sharePassword = false, title = '', onClose }: Props = $props();
 
-  let shares = $state<PublicShare[]>([]);
+  let shares = $state<SharedLink[]>([]);
   let loading = $state(true);
   let creating = $state(false);
   let label = $state('');
@@ -137,8 +138,25 @@
 
   const fmt = (d: string | Date | null) =>
     d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
-  const statusOf = (s: PublicShare): 'active' | 'revoked' | 'expired' =>
+  const statusOf = (s: SharedLink): 'active' | 'revoked' | 'expired' =>
     s.revokedAt ? 'revoked' : s.expiresAt && new Date(s.expiresAt).getTime() <= Date.now() ? 'expired' : 'active';
+  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  const day = (d: string | Date) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  /** "opened 4× (last 24 Oct 2026) · 2 browsers · 1 network", the people counts once someone was counted. */
+  const usage = (s: SharedLink) =>
+    `opened ${s.opens}×` +
+    (s.lastUsedAt ? ` (last ${fmt(s.lastUsedAt)})` : '') +
+    (s.browsers > 0 ? ` · ${plural(s.browsers, 'browser')} · ${plural(s.networks, 'network')}` : '');
+  /** "Browser 1 · Chrome · Windows · GB · network A · 4 opens · first 22 Oct, last 24 Oct". */
+  const visitorLine = (v: ShareVisitor) =>
+    [
+      v.browser !== null ? `Browser ${v.browser}` : null,
+      v.agent ?? 'Unknown browser',
+      v.country,
+      v.network ? `network ${v.network}` : null,
+      plural(v.opens, 'open'),
+      day(v.firstSeen) === day(v.lastSeen) ? day(v.lastSeen) : `first ${day(v.firstSeen)}, last ${day(v.lastSeen)}`,
+    ].filter(Boolean).join(' · ');
 
   onMount(() => { load(); });
   function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
@@ -226,10 +244,23 @@
               <span class="sh-row-label">{s.label || 'Untitled link'}</span>
               <span class="sh-badge sh-{st}">{st}</span>
               {#if s.hasPassword}<span class="sh-badge sh-pw">password</span>{/if}
+              {#if s.likelyForwarded}<span class="sh-badge sh-fwd">likely forwarded</span>{/if}
             </div>
             <div class="sh-row-meta">
-              created {fmt(s.createdAt)} · {s.expiresAt ? `expires ${fmt(s.expiresAt)}` : 'no expiry'} · opened {s.useCount}×{s.lastUsedAt ? ` (last ${fmt(s.lastUsedAt)})` : ''}
+              created {fmt(s.createdAt)} · {s.expiresAt ? `expires ${fmt(s.expiresAt)}` : 'no expiry'} · {usage(s)}
             </div>
+            {#if s.visitors.length > 0}
+              <details class="sh-vis">
+                <summary>visitors</summary>
+                <p class="sh-vis-note">An estimate: one person on two devices or browsers counts twice. Link previews are listed but not counted.</p>
+                <ul>
+                  {#each s.visitors as v, i (i)}
+                    <li class:sh-vis-auto={v.browser === null}>{visitorLine(v)}</li>
+                  {/each}
+                </ul>
+                {#if s.hidden > 0}<p class="sh-vis-note">{plural(s.hidden, 'earlier row')} not shown.</p>{/if}
+              </details>
+            {/if}
             {#if st === 'active'}
               <button class="sh-revoke" onclick={() => revoke(s.id)}>Revoke</button>
             {/if}
@@ -282,14 +313,22 @@
   .sh-muted { margin: 8px 0 0; font-size: var(--fs-label-xs); color: var(--text-secondary); }
   .sh-row { position: relative; margin-top: 8px; padding: 9px 11px; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); background: var(--bg); }
   .sh-row.dead { opacity: 0.6; }
-  .sh-row-top { display: flex; align-items: center; gap: 8px; }
+  .sh-row-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding-right: 64px; }
   .sh-row-label { font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); }
   .sh-badge { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; border-radius: var(--radius-sharp); }
   .sh-active { background: var(--success-bg); color: var(--success); }
   .sh-revoked { background: var(--surface-overlay); color: var(--text-secondary); }
   .sh-expired { background: var(--warn-bg); color: var(--warn); }
   .sh-pw { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+  .sh-fwd { background: var(--warn-bg); color: var(--warn); }
   .sh-row-meta { margin-top: 3px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); padding-right: 64px; }
+  .sh-vis { margin-top: 5px; font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .sh-vis summary { font-family: var(--font-mono); cursor: pointer; width: fit-content; }
+  .sh-vis summary:hover { color: var(--text-primary); }
+  .sh-vis-note { margin: 5px 0 0; }
+  .sh-vis ul { margin: 5px 0 0; padding: 0; list-style: none; font-family: var(--font-mono); }
+  .sh-vis li { padding: 2px 0; color: var(--text-primary); overflow-wrap: anywhere; }
+  .sh-vis li.sh-vis-auto { color: var(--text-secondary); }
   .sh-revoke { position: absolute; top: 9px; right: 10px; background: none; border: 1px solid var(--error-border); color: var(--error); border-radius: var(--radius-sharp); padding: 3px 9px; font-size: var(--fs-label-xs); cursor: pointer; }
   .sh-revoke:hover { background: var(--error-bg); }
 </style>
