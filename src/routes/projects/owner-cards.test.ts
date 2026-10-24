@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { OWNER_ONLY_CARDS } from './owner-cards.server';
 import { PROJECT_CARDS } from './cards';
+import { SHARE_PASSWORD_KEYS, sharePasswordAllowed } from '$lib/projects/share-password';
 import { STATIC_PROJECT_KEYS } from '$lib/projects/registry';
 
 // The inverse of registry-cards.test.ts. That one forces every PUBLIC card's
@@ -57,5 +58,16 @@ describe('share links on a project’s own domain', () => {
     for (const c of PROJECT_CARDS) {
       if (c.shareBase) expect(c.shareBase).toMatch(/^https:\/\/[a-z0-9.-]+\/$/);
     }
+  });
+});
+
+describe('share links that ask for a password', () => {
+  it('only the Spine checks a link password, so only its links may set one', () => {
+    // The card shows the toggle; the API reads SHARE_PASSWORD_KEYS. They must agree.
+    expect(PROJECT_CARDS.filter((c) => c.sharePassword).map((c) => c.key)).toEqual([...SHARE_PASSWORD_KEYS]);
+    expect([...SHARE_PASSWORD_KEYS]).toEqual(['spine']);
+    expect(sharePasswordAllowed('spine')).toBe(true);
+    expect(sharePasswordAllowed('policy-engine')).toBe(false);
+    expect(sharePasswordAllowed('no-such-project')).toBe(false);
   });
 });

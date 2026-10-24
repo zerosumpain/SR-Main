@@ -6,10 +6,11 @@
     projectKey: string;
     href: string;        // the project's route path, e.g. /projects/policy-engine or /projects/terminal-descent/
     shareBase?: string;  // the project's own domain, when it has one (https://data-spine.com/)
+    sharePassword?: boolean; // the project's app can ask a link's recipient for a password (the Spine)
     title?: string;
     onClose: () => void;
   }
-  let { projectKey, href, shareBase, title = '', onClose }: Props = $props();
+  let { projectKey, href, shareBase, sharePassword = false, title = '', onClose }: Props = $props();
 
   let shares = $state<PublicShare[]>([]);
   let loading = $state(true);
@@ -17,6 +18,13 @@
   let label = $state('');
   let expiresInDays = $state(0); // 0 = no expiry
   let freshUrl = $state<string | null>(null);
+  // Off by default: a link opens with no password unless the owner asks for one.
+  let askPassword = $state(false);
+  let password = $state('');
+  let showPassword = $state(false);
+  let freshHasPassword = $state(false);
+  const pwLen = $derived(password.trim().length);
+  const pwOk = $derived(!askPassword || (pwLen >= 4 && pwLen <= 128));
   let copied = $state(false);
   let err = $state<string | null>(null);
 
@@ -43,19 +51,29 @@
   }
 
   async function create() {
+    if (!pwOk) return;
     creating = true;
     err = null;
     freshUrl = null;
+    const withPassword = sharePassword && askPassword;
     try {
       const res = await fetch('/api/projects/share', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: projectKey, label: label || undefined, expiresInDays: expiresInDays || undefined }),
+        body: JSON.stringify({
+          key: projectKey,
+          label: label || undefined,
+          expiresInDays: expiresInDays || undefined,
+          password: withPassword ? password : undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.token) {
         freshUrl = shareUrl(data.token);
+        freshHasPassword = withPassword;
         label = '';
+        password = '';
+        showPassword = false;
         void copy(freshUrl);
         await load();
       } else {
@@ -143,8 +161,36 @@
         <option value={30}>30 days</option>
         <option value={90}>90 days</option>
       </select>
-      <button class="sh-create-btn" onclick={create} disabled={creating}>{creating ? '…' : '+ Create link'}</button>
+      <button class="sh-create-btn" onclick={create} disabled={creating || !pwOk}>{creating ? '…' : '+ Create link'}</button>
     </div>
+
+    {#if sharePassword}
+      <div class="sh-pass">
+        <label class="sh-pass-tog">
+          <input type="checkbox" bind:checked={askPassword} />
+          Ask for a password
+        </label>
+        {#if askPassword}
+          <div class="sh-urlrow">
+            <input
+              class="sh-in"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password the recipient must give"
+              aria-label="Link password"
+              autocomplete="new-password"
+              required
+              minlength="4"
+              maxlength="128"
+              bind:value={password}
+            />
+            <button class="sh-show" type="button" onclick={() => (showPassword = !showPassword)} aria-pressed={showPassword}>
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {#if !pwOk}<span class="sh-once">4–128 characters.</span>{/if}
+        {/if}
+      </div>
+    {/if}
 
     {#if freshUrl}
       <div class="sh-fresh">
@@ -154,6 +200,7 @@
           <button class="sh-copy" onclick={() => copy(freshUrl ?? '')}>{copied ? '✓ Copied' : 'Copy'}</button>
         </div>
         {#if copyFailed}<span class="sh-err">Couldn't copy automatically — select the link above and copy it.</span>{/if}
+        {#if freshHasPassword}<span class="sh-once sh-fresh-pw">Asks for a password — send it separately, not with the link.</span>{/if}
         <span class="sh-once">Copy it now — the link itself is shown only once.</span>
       </div>
     {/if}
@@ -173,6 +220,7 @@
             <div class="sh-row-top">
               <span class="sh-row-label">{s.label || 'Untitled link'}</span>
               <span class="sh-badge sh-{st}">{st}</span>
+              {#if s.hasPassword}<span class="sh-badge sh-pw">password</span>{/if}
             </div>
             <div class="sh-row-meta">
               created {fmt(s.createdAt)} · {s.expiresAt ? `expires ${fmt(s.expiresAt)}` : 'no expiry'} · opened {s.useCount}×{s.lastUsedAt ? ` (last ${fmt(s.lastUsedAt)})` : ''}
@@ -207,6 +255,12 @@
   .sh-create-btn:hover { background: var(--accent-hover); }
   .sh-create-btn:disabled { opacity: 0.5; cursor: default; }
 
+  .sh-pass { margin-top: 9px; }
+  .sh-pass-tog { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-label); color: var(--text-primary); cursor: pointer; }
+  .sh-pass-tog input { accent-color: var(--accent); margin: 0; }
+  .sh-show { flex-shrink: 0; background: none; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0 11px; font-size: var(--fs-label-xs); color: var(--text-secondary); cursor: pointer; }
+  .sh-show:hover { color: var(--text-primary); }
+
   .sh-fresh { margin-top: 12px; padding: 11px 13px; border-radius: var(--radius-sharp); background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
   .sh-fresh-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
   .sh-urlrow { display: flex; gap: 6px; margin: 6px 0 5px; }
@@ -214,6 +268,7 @@
   .sh-copy { flex-shrink: 0; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); padding: 0 12px; font-size: var(--fs-label-xs); font-weight: 600; cursor: pointer; transition: background var(--t-fast) var(--ease-out); }
   .sh-copy:hover { background: var(--accent-hover); }
   .sh-once { font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .sh-fresh-pw { display: block; margin-bottom: 2px; color: var(--text-primary); }
 
   .sh-err { margin: 10px 0 0; font-size: var(--fs-label-xs); color: var(--error); }
 
@@ -228,6 +283,7 @@
   .sh-active { background: var(--success-bg); color: var(--success); }
   .sh-revoked { background: var(--surface-overlay); color: var(--text-secondary); }
   .sh-expired { background: var(--warn-bg); color: var(--warn); }
+  .sh-pw { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
   .sh-row-meta { margin-top: 3px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); padding-right: 64px; }
   .sh-revoke { position: absolute; top: 9px; right: 10px; background: none; border: 1px solid var(--error-border); color: var(--error); border-radius: var(--radius-sharp); padding: 3px 9px; font-size: var(--fs-label-xs); cursor: pointer; }
   .sh-revoke:hover { background: var(--error-bg); }

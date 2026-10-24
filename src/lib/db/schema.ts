@@ -1821,6 +1821,10 @@ export const projectShares = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     useCount: integer('use_count').notNull().default(0),
+    // The link's password verifier ($lib/projects/share-password), null when
+    // the link asks for none. Never sent to a browser: listShares says only
+    // hasPassword. The app checks the answer; Main only mints.
+    passwordHash: text('password_hash'),
   },
   (t) => ({
     byTokenHash: uniqueIndex('project_share_token_hash_idx').on(t.tokenHash),

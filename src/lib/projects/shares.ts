@@ -8,6 +8,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { projectShares, type ProjectShare } from '$lib/db/schema';
+import { hashSharePassword } from './share-password';
 
 /** 32 random bytes, base64url → ~43 unguessable URL-safe chars. Shown once. */
 export function generateShareToken(): string {
@@ -24,39 +25,57 @@ export function shareCookieName(key: string): string {
   return 'psh_' + key.replace(/[^a-zA-Z0-9_-]/g, '');
 }
 
+/** A live link, as the access decision needs it: whether it asks for a password, and which. */
+export interface LiveShare {
+  passwordHash: string | null;
+}
+
 /**
  * Is this raw token a live share link for `key`? Checks the hash matches an
- * un-revoked, un-expired row for that exact project. On success, bumps
- * lastUsedAt/useCount fire-and-forget so a slow write can't stall the page.
+ * un-revoked, un-expired row for that exact project, and answers with the
+ * link's password verifier (null when it asks for none), or null for no live
+ * link. On success, bumps lastUsedAt/useCount fire-and-forget so a slow write
+ * can't stall the page.
  */
-export async function validateProjectShare(key: string, rawToken: string): Promise<boolean> {
-  if (!rawToken || rawToken.length < 20) return false;
+export async function validateProjectShare(key: string, rawToken: string): Promise<LiveShare | null> {
+  if (!rawToken || rawToken.length < 20) return null;
   const hash = hashShareToken(rawToken);
   const [row] = await db
-    .select({ id: projectShares.id, expiresAt: projectShares.expiresAt, revokedAt: projectShares.revokedAt })
+    .select({
+      id: projectShares.id,
+      expiresAt: projectShares.expiresAt,
+      revokedAt: projectShares.revokedAt,
+      passwordHash: projectShares.passwordHash,
+    })
     .from(projectShares)
     .where(and(eq(projectShares.tokenHash, hash), eq(projectShares.projectKey, key)))
     .limit(1);
-  if (!row) return false;
-  if (row.revokedAt) return false;
-  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return false;
+  if (!row) return null;
+  if (row.revokedAt) return null;
+  if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
   // Async last-used bump (do not await — keep the request hot path fast).
   void db
     .update(projectShares)
     .set({ lastUsedAt: new Date(), useCount: sql`${projectShares.useCount} + 1` })
     .where(eq(projectShares.id, row.id))
     .catch(() => {});
-  return true;
+  return { passwordHash: row.passwordHash ?? null };
 }
 
-/** Mint a new share link for a project. Returns the RAW token once (never stored). */
+/**
+ * Mint a new share link for a project. Returns the RAW token once (never
+ * stored). With a password, the row keeps only its scrypt verifier; the caller
+ * has already checked the project's app asks for one and the length.
+ */
 export async function createShare(input: {
   projectKey: string;
   createdBy: string;
   label?: string | null;
   expiresAt?: Date | null;
+  password?: string | null;
 }): Promise<{ id: string; token: string }> {
   const token = generateShareToken();
+  const passwordHash = input.password ? await hashSharePassword(input.password) : null;
   const [row] = await db
     .insert(projectShares)
     .values({
@@ -65,6 +84,7 @@ export async function createShare(input: {
       label: input.label?.trim()?.slice(0, 80) || null,
       createdBy: input.createdBy,
       expiresAt: input.expiresAt ?? null,
+      passwordHash,
     })
     .returning({ id: projectShares.id });
   return { id: row.id, token };
@@ -78,9 +98,11 @@ export interface PublicShare {
   revokedAt: Date | null;
   lastUsedAt: Date | null;
   useCount: number;
+  /** The link asks for a password. The verifier itself never leaves the server. */
+  hasPassword: boolean;
 }
 
-/** All links for a project (newest first), never exposing the token hash. */
+/** All links for a project (newest first), never exposing the token hash or password verifier. */
 export async function listShares(projectKey: string): Promise<PublicShare[]> {
   const rows = await db
     .select({
@@ -91,11 +113,12 @@ export async function listShares(projectKey: string): Promise<PublicShare[]> {
       revokedAt: projectShares.revokedAt,
       lastUsedAt: projectShares.lastUsedAt,
       useCount: projectShares.useCount,
+      hasPassword: sql<boolean>`${projectShares.passwordHash} is not null`,
     })
     .from(projectShares)
     .where(eq(projectShares.projectKey, projectKey))
     .orderBy(desc(projectShares.createdAt));
-  return rows;
+  return rows.map((r) => ({ ...r, hasPassword: r.hasPassword === true }));
 }
 
 /** Revoke a link (id must belong to projectKey). Returns true if a row changed. */

@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   allowed: new Set<string>(),
   driveOpen: true,
   shareValid: false,
+  sharePass: null as string | null,
   shareCalls: [] as [string, string][],
 }));
 
@@ -51,6 +52,7 @@ vi.mock('$env/dynamic/private', () => ({
       'sr-supply-chain-monitor': 'm'.repeat(40),
       'sr-local-plan-navigator': 'l'.repeat(40),
       'sr-wildmind': 'w'.repeat(40),
+      'sr-spine': 'n'.repeat(40),
     }),
   },
 }));
@@ -70,7 +72,7 @@ vi.mock('$lib/projects/shares', () => ({
   shareCookieName: (key: string) => `psh_${key}`,
   validateProjectShare: async (key: string, token: string) => {
     state.shareCalls.push([key, token]);
-    return state.shareValid;
+    return state.shareValid ? { passwordHash: state.sharePass } : null;
   },
 }));
 vi.mock('$lib/access/catalogue', async (importOriginal) => {
@@ -102,6 +104,7 @@ beforeEach(() => {
   state.allowed = new Set(['ada@x.test', 'bo@x.test']);
   state.driveOpen = true;
   state.shareValid = false;
+  state.sharePass = null;
   state.shareCalls.length = 0;
 });
 
@@ -242,6 +245,29 @@ describe('session authority claims', () => {
     state.shareValid = false;
     state.queue.push([]);
     expect((await (await call('sr-wildmind', 'w'.repeat(40), { 'x-sr-session-share': 'stale' })).json()).claims.project.access).toBe('none');
+  });
+
+  it('a Spine share carries its link\'s password verifier as pass, and only a share does', async () => {
+    const verifier = 'scrypt$' + 'a'.repeat(22) + '$' + 'b'.repeat(43);
+    state.shareValid = true;
+    state.sharePass = verifier;
+    state.queue.push([]); // no visibility row: private by default
+    const body = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(body.claims.project).toEqual({ key: 'spine', access: 'share', pass: verifier });
+
+    // A link with no password: no pass key at all, exactly as before.
+    state.sharePass = null;
+    state.queue.push([]);
+    const open = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(open.claims.project).toEqual({ key: 'spine', access: 'share' });
+    expect('pass' in open.claims.project).toBe(false);
+
+    // The owner previewing is not a share, so never learns a verifier.
+    state.email = 'owner@x.test';
+    state.sharePass = verifier;
+    state.queue.push([]);
+    const owner = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(owner.claims.project).toEqual({ key: 'spine', access: 'owner' });
   });
 
   it('only ever answers for the audience\'s own project, and an outage is a 503', async () => {
