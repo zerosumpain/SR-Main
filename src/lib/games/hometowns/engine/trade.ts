@@ -21,7 +21,7 @@ import { ZONE_DEFS, buildingIndex } from './content';
 import { flowsFor } from './core';
 import { clamp, smooth } from './fx';
 import { neutral } from './derived';
-import { B_KIND, B_X, B_Y, CAT_ZONE, TILES, cellOf, constructionLeft, decodeCells, lvlLevel, pairPlane, planesOf, tileIndex, useCat, usePayload } from './tiles';
+import { B_KIND, B_X, B_Y, CAT_ZONE, TILES, cellOf, constructionLeft, decodeCells, lvlLevel, pairPlane, planesOf, tileIndex, useCat, usePayload, zonedTiles } from './tiles';
 import {
   SECTOR_COUNT,
   ZONE_SECTOR,
@@ -273,7 +273,9 @@ export function sectorTiles(t: TownState, m: MonthContext): SectorTiles {
     startsPerMonth: 0,
   };
   const building = pairPlane(t.construction);
-  for (let i = 0; i < TILES; i++) {
+  const zoned = zonedTiles(p.use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     if (useCat(p.use[i]) !== CAT_ZONE) continue;
     const z = usePayload(p.use[i]);
     out.zonedTiles += 1;

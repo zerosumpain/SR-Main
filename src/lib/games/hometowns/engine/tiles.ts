@@ -333,6 +333,36 @@ export function decodeCells(s: string): Uint8Array {
   return decodeU8(s, CELLS);
 }
 
+const ZONED = new WeakMap<Uint16Array, { key: Uint16Array; list: Int32Array }>();
+
+/**
+ * The zoned tiles of a use plane, ascending: most of the map is empty, and a
+ * dozen month and tick loops look only at zoned tiles. Memoised per decoded
+ * plane on an exact copy of it (the plane is changed in place, so the copy
+ * is the key, and checking it costs one comparison per tile). Shared: read
+ * only.
+ */
+export function zonedTiles(use: Uint16Array): Int32Array {
+  const hit = ZONED.get(use);
+  if (hit) {
+    const key = hit.key;
+    let same = true;
+    for (let i = 0; i < TILES; i++)
+      if (key[i] !== use[i]) {
+        same = false;
+        break;
+      }
+    if (same) return hit.list;
+  }
+  let n = 0;
+  for (let i = 0; i < TILES; i++) if (use[i] >>> 12 === CAT_ZONE) n++;
+  const list = new Int32Array(n);
+  n = 0;
+  for (let i = 0; i < TILES; i++) if (use[i] >>> 12 === CAT_ZONE) list[n++] = i;
+  ZONED.set(use, { key: use.slice(), list });
+  return list;
+}
+
 const SHARED_CELLS = new Map<string, Uint8Array>();
 const SHARED_CELLS_MAX = 64;
 

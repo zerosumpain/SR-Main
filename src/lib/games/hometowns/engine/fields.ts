@@ -50,25 +50,42 @@ export function spread(a: Float64Array, keep: number, side: number, passes: numb
   let cur = a;
   for (let k = 0; k < passes; k++) {
     const out = new Float64Array(CELLS);
-    for (let c = 0; c < CELLS; c++) {
-      const v = cur[c];
-      if (v === 0) continue;
-      const x = c % CELLS_PER_SIDE;
-      const y = (c - x) / CELLS_PER_SIDE;
-      let kept = keep;
-      if (y > 0) out[c - CELLS_PER_SIDE] += v * side;
-      else kept += side;
-      if (x > 0) out[c - 1] += v * side;
-      else kept += side;
-      if (x < CELLS_PER_SIDE - 1) out[c + 1] += v * side;
-      else kept += side;
-      if (y < CELLS_PER_SIDE - 1) out[c + CELLS_PER_SIDE] += v * side;
-      else kept += side;
-      out[c] += v * kept;
-    }
+    spreadPass(cur, keep, side, out);
     cur = out;
   }
   return passes > 0 ? cur : Float64Array.from(a);
+}
+
+/** spread() into two scratch arrays (ping-pong), for a result read only inside this module. */
+function spreadScratch(a: Float64Array, keep: number, side: number, passes: number): Float64Array {
+  if (passes <= 0) return spread(a, keep, side, passes);
+  let cur = a;
+  for (let k = 0; k < passes; k++) {
+    const out = scratch(k % 2 === 0 ? 'fd.spreadA' : 'fd.spreadB', CELLS);
+    spreadPass(cur, keep, side, out);
+    cur = out;
+  }
+  return cur;
+}
+
+/** One pass of the conserving kernel from `cur` into a zeroed `out` (the body of spread). */
+function spreadPass(cur: Float64Array, keep: number, side: number, out: Float64Array): void {
+  for (let c = 0; c < CELLS; c++) {
+    const v = cur[c];
+    if (v === 0) continue;
+    const x = c % CELLS_PER_SIDE;
+    const y = (c - x) / CELLS_PER_SIDE;
+    let kept = keep;
+    if (y > 0) out[c - CELLS_PER_SIDE] += v * side;
+    else kept += side;
+    if (x > 0) out[c - 1] += v * side;
+    else kept += side;
+    if (x < CELLS_PER_SIDE - 1) out[c + 1] += v * side;
+    else kept += side;
+    if (y < CELLS_PER_SIDE - 1) out[c + CELLS_PER_SIDE] += v * side;
+    else kept += side;
+    out[c] += v * kept;
+  }
 }
 
 /**
@@ -187,28 +204,42 @@ export function fieldsOf(run: SpaceRun): FieldsOut {
   const carFree = scratchU8('fd.carFree', CELLS);
   const roadCell = scratchU8('fd.roadCell', CELLS);
   {
-    // Locals for the 4,096-tile pass (the same reads, hoisted out of the loop).
-    const kind = net.kind;
-    const rail = net.rail;
+    // Only roads, rail, marked tiles and built zoned tiles contribute, so those lists are walked
+    // instead of all 4,096 tiles. Every update here is a max or a set, except Industry's
+    // emissions, which are added in ascending tile order as before.
     const load = tr.load;
-    const marks = m.marks;
+    const roads = net.roads;
+    for (let k = 0; k < roads.length; k++) {
+      const i = roads[k];
+      const c = CELL_OF[i];
+      roadCell[c] = 1;
+      if (load[i] > maxLoad[c]) maxLoad[c] = load[i];
+    }
+    const noiseRail = f.noiseRail;
+    const railTiles = net.railTiles;
+    for (let k = 0; k < railTiles.length; k++) {
+      const c = CELL_OF[railTiles[k]];
+      if (noiseRail > noiseSrc[c]) noiseSrc[c] = noiseRail;
+    }
+    if (carFreeOn) {
+      const ml = t.marks;
+      for (let k = 0; k + 1 < ml.length; k += 2) {
+        const i = ml[k];
+        if (i >= 0 && i < TILES && m.marks[i] & MARK_CARFREE) carFree[CELL_OF[i]] = 1;
+      }
+    }
     const level = m.level;
     const zone = m.zone;
-    const noiseRail = f.noiseRail;
     const noiseIndustry = f.noiseIndustry;
     const noiseLeisure = f.noiseLeisure;
     const noiseNightMarket = f.noiseNightMarket;
     const industryEmissions = f.industryEmissions;
-    for (let i = 0; i < TILES; i++) {
-      const c = CELL_OF[i];
-      if (kind[i] >= 0) {
-        roadCell[c] = 1;
-        if (load[i] > maxLoad[c]) maxLoad[c] = load[i];
-      }
-      if (rail[i] && noiseRail > noiseSrc[c]) noiseSrc[c] = noiseRail;
-      if (carFreeOn && marks[i] & MARK_CARFREE) carFree[c] = 1;
+    const zoned = m.zoned;
+    for (let q = 0; q < zoned.length; q++) {
+      const i = zoned[q];
       const lv = level[i];
       if (lv === 0) continue;
+      const c = CELL_OF[i];
       const z = zone[i];
       if (z === Z_INDUSTRY) {
         emit[c] += industryEmissions[lv - 1] * cleanAir;
@@ -238,7 +269,8 @@ export function fieldsOf(run: SpaceRun): FieldsOut {
     }
   }
   if (ctx.rivalry === 'spirited' && flows.airIn > 0) for (let cy = 0; cy < CELLS_PER_SIDE; cy++) emit[cy * CELLS_PER_SIDE] += flows.airIn;
-  const spreadP = spread(emit, f.pollKeep, f.pollSpread, f.pollPasses);
+  // Read only below (pollution is published from the lag step): the spread can work in scratch.
+  const spreadP = spreadScratch(emit, f.pollKeep, f.pollSpread, f.pollPasses);
   const trees = svc.trees;
   const treeF = policyOn(t, 'treePlanting') ? f.treePlanting : 1;
   const prevPoll = cellsOr(t.lag.poll, 0, true);
@@ -383,7 +415,8 @@ export function accessFields(run: SpaceRun, tr: TravelSlot, pollution: Float64Ar
   const bedsD = scratch('ac.beds', DISTRICTS);
   const appealD = scratch('ac.appeal', DISTRICTS);
   const pl = planesOf(t);
-  for (let i = 0; i < TILES; i++) {
+  for (let q = 0; q < m.zoned.length; q++) {
+    const i = m.zoned[q];
     if (m.zone[i] !== Z_LEISURE || m.level[i] === 0) continue;
     const a = net.attach[i];
     if (a < 0) continue;

@@ -15,7 +15,7 @@ import { population } from './core';
 import { neutral } from './derived';
 import { civicMemo } from './finance';
 import { paramsFor } from './params';
-import { B_KIND, B_X, B_Y, CAT_ZONE, CELLS, TILES, cellOf, constructionLeft, lvlLevel, pairPlane, planesOf, tileIndex, useCat, usePayload } from './tiles';
+import { B_KIND, B_X, B_Y, CAT_ZONE, CELLS, TILES, cellOf, constructionLeft, lvlLevel, pairPlane, planesOf, tileIndex, useCat, usePayload, zonedTiles } from './tiles';
 import { COVERAGES, STARS, Z_HOMES, Z_SHOPS, type CountyState, type MonthContext, type RegionalContext, type TownState } from './types';
 
 /** Everything a checklist item looks at, gathered once per month end. */
@@ -117,7 +117,9 @@ export function checkFacts(t: TownState, m: MonthContext): CheckFacts {
   let watered = 0;
   let shopTiles = 0;
   const left = pairPlane(t.construction);
-  for (let i = 0; i < TILES; i++) {
+  const zoned = zonedTiles(p.use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     if (useCat(p.use[i]) !== CAT_ZONE) continue;
     const level = lvlLevel(p.lvl[i]);
     if (level === 0 || left[i] > 0) continue;

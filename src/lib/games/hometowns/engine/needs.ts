@@ -36,6 +36,7 @@ import {
   planesOf,
   tileIndex,
   VARIANT_HOTEL,
+  zonedTiles,
 } from './tiles';
 import {
   COHORT_COUNT,
@@ -336,7 +337,9 @@ export function townNeeds(t: TownState, m: MonthContext): NeedsSlot {
   // Where things are, by district.
   const flags = new Uint8Array(N_DISTRICTS);
   const highStreet = new Float64Array(N_DISTRICTS);
-  for (let i = 0; i < N_TILES; i++) {
+  const zoned = zonedTiles(use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     const u = use[i];
     if (u >>> 12 !== CAT_ZONE || busy[i]) continue;
     const z = u & 0xfff;
@@ -362,10 +365,13 @@ export function townNeeds(t: TownState, m: MonthContext): NeedsSlot {
   // Minutes to the nearest district of each kind, and high-street tiles within 15 minutes.
   const near = new Float64Array(N_DISTRICTS * D_KINDS).fill(Infinity);
   const streets = new Float64Array(N_DISTRICTS);
+  // Only districts with something in them matter (ascending, as the full scan visits them).
+  const busyD: number[] = [];
+  for (let b = 0; b < N_DISTRICTS; b++) if (flags[b] || highStreet[b]) busyD.push(b);
   for (let a = 0; a < N_DISTRICTS; a++)
-    for (let b = 0; b < N_DISTRICTS; b++) {
+    for (let j = 0; j < busyD.length; j++) {
+      const b = busyD[j];
       const f = flags[b];
-      if (!f && !highStreet[b]) continue;
       const mins = minutes ? minutes[a * N_DISTRICTS + b] : a === b ? 0 : Infinity;
       for (let k = 0; k < D_KINDS; k++) if (f & (1 << k) && mins < near[a * D_KINDS + k]) near[a * D_KINDS + k] = mins;
       if (highStreet[b] && mins <= WITHIN.highStreet) streets[a] += highStreet[b];
@@ -485,7 +491,9 @@ export function cultureInflow(t: TownState, m: MonthContext): number {
   const marks = facts.marks;
   const [perTile, oldAge, protectedMult] = sp.heritage;
   let heritage = 0;
-  for (let i = 0; i < N_TILES; i++) {
+  const zoned = zonedTiles(use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     if (use[i] >>> 12 !== CAT_ZONE || (lvl[i] & 7) < 2 || age[i] < oldAge) continue;
     heritage += marks[i] & HERITAGE ? protectedMult : 1;
   }

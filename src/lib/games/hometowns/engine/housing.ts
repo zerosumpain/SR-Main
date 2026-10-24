@@ -41,6 +41,7 @@ import {
   planesForWrite,
   planesOf,
   tileIndex,
+  zonedTiles,
 } from './tiles';
 import {
   COHORT_COUNT,
@@ -110,16 +111,20 @@ function scanTiles(t: TownState): TileFacts {
   const lvl = p.lvl;
   const busy = constructionMask(t);
   const marks = marksMask(t);
+  // Every home is a zoned tile, so the zoned count bounds the list (readers stop at count).
+  const zoned = zonedTiles(use);
+  const cap = zoned.length;
   const homes: HomeTiles = {
     count: 0,
-    tile: new Int32Array(N_TILES),
-    tier: new Uint8Array(N_TILES),
-    level: new Uint8Array(N_TILES),
-    persons: new Float64Array(N_TILES),
-    affordable: new Uint8Array(N_TILES),
+    tile: new Int32Array(cap),
+    tier: new Uint8Array(cap),
+    level: new Uint8Array(cap),
+    persons: new Float64Array(cap),
+    affordable: new Uint8Array(cap),
   };
   const jobs = new Uint8Array(N_DISTRICTS);
-  for (let i = 0; i < N_TILES; i++) {
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     const u = use[i];
     if (u >>> 12 !== CAT_ZONE) continue;
     const level = lvl[i] & 7;

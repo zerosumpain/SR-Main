@@ -53,6 +53,7 @@ import {
   tileY,
   useCat,
   usePayload,
+  zonedTiles,
 } from './tiles';
 import { FUNDING_KEYS, PERSON_S, STAGE_C, STAGE_P, STAGE_R, STAGE_W, ZONE_SECTOR, Z_HOMES, Z_LEISURE, person, type DerivedCache, type TickContext, type TownState } from './types';
 
@@ -125,6 +126,8 @@ export interface RoadNet {
   /** Per tile: road kind (ROAD_KINDS index) or −1. */
   kind: Int8Array;
   rail: Uint8Array;
+  /** Rail tiles in ascending order. */
+  railTiles: Int32Array;
   hasRail: boolean;
   /** Road tiles in ascending order. */
   roads: Int32Array;
@@ -204,11 +207,15 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
   const kind = new Int8Array(TILES).fill(-1);
   const rail = new Uint8Array(TILES);
   const roadList: number[] = [];
+  const railList: number[] = [];
   for (let i = 0; i < TILES; i++) {
     if (key[i] >= 1 && key[i] <= 4) {
       kind[i] = key[i] - 1;
       roadList.push(i);
-    } else if (key[i] === 8) rail[i] = 1;
+    } else if (key[i] === 8) {
+      rail[i] = 1;
+      railList.push(i);
+    }
   }
   const roads = Int32Array.from(roadList);
   const isRoad = (i: number) => i >= 0 && kind[i] >= 0;
@@ -378,11 +385,11 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
   const cellDistrict = new Int16Array(CELLS).fill(-1);
   const ported: number[] = [];
   for (let d = 0; d < DISTRICTS; d++) if (port[d] >= 0) ported.push(d);
-  for (let c = 0; c < CELLS; c++) {
-    const cx = c % CELLS_PER_SIDE;
-    const cy = (c - cx) / CELLS_PER_SIDE;
-    const dx = cx >> 2;
-    const dy = cy >> 2;
+  // The answer depends only on the cell's own district (dx, dy): find it once per district.
+  const nearestPorted = new Int16Array(DISTRICTS);
+  for (let own = 0; own < DISTRICTS; own++) {
+    const dx = own % DISTRICTS_PER_SIDE;
+    const dy = (own - dx) / DISTRICTS_PER_SIDE;
     let best = -1;
     let bd = 99;
     for (let k = 0; k < ported.length; k++) {
@@ -395,7 +402,12 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
         best = d;
       }
     }
-    cellDistrict[c] = best;
+    nearestPorted[own] = best;
+  }
+  for (let c = 0; c < CELLS; c++) {
+    const cx = c % CELLS_PER_SIDE;
+    const cy = (c - cx) / CELLS_PER_SIDE;
+    cellDistrict[c] = nearestPorted[(cy >> 2) * DISTRICTS_PER_SIDE + (cx >> 2)];
   }
 
   return {
@@ -403,7 +415,8 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
     reach,
     kind,
     rail,
-    hasRail: rail.some((x) => x === 1),
+    railTiles: Int32Array.from(railList),
+    hasRail: railList.length > 0,
     roads,
     comp,
     comps,
@@ -688,6 +701,8 @@ export interface SpaceModel {
   cellJobs: Float64Array;
   /** Cells with residents, ascending. */
   popCells: Int32Array;
+  /** Zoned tiles, ascending (zonedTiles: shared, read only); every tile with a level is one. */
+  zoned: Int32Array;
   /** RoadNet.cellDistrict. */
   cellDistrict: Int16Array;
   // Per district (trips use the district of the attachment road).
@@ -816,7 +831,9 @@ export function buildModel(t: TownState, p: Params): SpaceModel {
   const zone = new Int8Array(TILES).fill(-1);
   const level = new Uint8Array(TILES);
   const homesCap = [0, 0, 0];
-  for (let i = 0; i < TILES; i++) {
+  const zoned = zonedTiles(pl.use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     const u = pl.use[i];
     if (useCat(u) !== CAT_ZONE) continue;
     const z = usePayload(u);
@@ -862,7 +879,9 @@ export function buildModel(t: TownState, p: Params): SpaceModel {
   const distRes = new Float64Array(DISTRICTS);
   const unattachedWorkers = [0, 0, 0];
   const mix = mixFor(p.labour.entryMixL2);
-  for (let i = 0; i < TILES; i++) {
+  // Only zoned tiles have a level.
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     const lv = level[i];
     if (lv === 0) continue;
     const z = zone[i];
@@ -945,6 +964,7 @@ export function buildModel(t: TownState, p: Params): SpaceModel {
     cellRetired,
     cellJobs,
     popCells,
+    zoned,
     cellDistrict,
     distWorkers,
     distJobsT,

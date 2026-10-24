@@ -79,7 +79,9 @@ function unitsOf(t: TownState, model: SpaceModel, p: Params, winter: boolean): {
     civicTiles: [],
   };
   let n = 0;
-  for (let i = 0; i < TILES; i++) {
+  const zoned = model.zoned;
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     if (model.level[i] === 0) continue;
     const z = model.zone[i];
     let power: number;
@@ -263,7 +265,8 @@ export function utilitiesOf(run: SpaceRun): UtilitiesSlot {
   let built = 0;
   let powered = 0;
   let watered = 0;
-  for (let i = 0; i < TILES; i++) {
+  for (let q = 0; q < model.zoned.length; q++) {
+    const i = model.zoned[q];
     if (model.level[i] === 0) continue;
     built++;
     powered += pw.flags[i];

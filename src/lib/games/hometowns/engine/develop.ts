@@ -68,6 +68,7 @@ import {
   USE_EMPTY,
   VARIANT_HOTEL,
   decodeCellsShared,
+  zonedTiles,
   makeLvl,
   pairGet,
   pairSet,
@@ -582,7 +583,9 @@ function countSupply(f: Facts, p: Params, s: DevelopmentSlot): void {
   const pipe = s.pipeline;
   const jobs = s.jobs;
   const pj = s.pipeJobs;
-  for (let i = 0; i < N_TILES; i++) {
+  const zoned = zonedTiles(use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     const u = use[i];
     if (catOf(u) !== CAT_Z) continue;
     const z = payloadOf(u);
@@ -634,7 +637,9 @@ function countSupply(f: Facts, p: Params, s: DevelopmentSlot): void {
 function bedsIncludingPipeline(f: Facts): number {
   const { use, lvl } = f.pl;
   let n = 0;
-  for (let i = 0; i < N_TILES; i++) {
+  const zoned = zonedTiles(use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     const u = use[i];
     if (catOf(u) !== CAT_Z || payloadOf(u) !== ZL) continue;
     const level = levelOf(lvl[i]);
@@ -672,6 +677,11 @@ export function supplyOf(t: TownState, p: Params): DevelopmentSlot {
  * land value allows the zone's first level. Free means empty, or an empty
  * zoned lot that could be repainted.
  */
+let REACH_GEN = 0;
+const REACH_FREE = new Int32Array(512);
+const REACH_ZONE = new Int32Array(N_ZONES * 8 * 512);
+const REACH_CELL = new Int32Array(N_CELLS);
+
 function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSlot): void {
   const homes = [true, false, false];
   const zone = new Array<boolean>(N_ZONES).fill(false);
@@ -689,8 +699,11 @@ function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSl
   // A free tile's zone test reads only its land value and whether it is flood plain, and the
   // flags only ever turn on: a pair already tested cannot add anything, so it is skipped.
   // A built tile's test reads its zone, level, land value and flood plain: the same holds for those.
-  const freeSeen = new Uint8Array(512);
-  const zoneSeen = new Uint8Array(N_ZONES * 8 * 512);
+  // (Stamps of this call's generation in module scratch, so nothing needs clearing.)
+  const gen = ++REACH_GEN;
+  const freeSeen = REACH_FREE;
+  const zoneSeen = REACH_ZONE;
+  const cellSeen = REACH_CELL;
   const busy = f.busy;
   const terrain = f.terrain;
   const lvCells = f.lv;
@@ -709,7 +722,14 @@ function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSl
     // built home there that can still level up. A home already at its level cap adds nothing, just
     // as a built shop at its cap does not make Shops reachable below: a town whose every ££-band
     // home is built out reads the hatched +35, not a ££ meter pinned at +100 it cannot act on.
-    const roomToGrow = !(homes[1] && homes[2]) && (free || (z === ZH && levelCap(t, ZH, lv, terrain[i], p) > level));
+    // A free tile's Homes test reads only its cell (land value and pollution): once per cell.
+    let roomToGrow = false;
+    if (!(homes[1] && homes[2])) {
+      if (free) {
+        roomToGrow = cellSeen[c] !== gen;
+        cellSeen[c] = gen;
+      } else roomToGrow = z === ZH && levelCap(t, ZH, lv, terrain[i], p) > level;
+    }
     if (roomToGrow) {
       const tm = homesTierMax(lv - 0.5 * pollCells[c], p);
       if (tm >= 1 && !homes[1]) {
@@ -724,14 +744,14 @@ function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSl
     const river = (terrain[i] & RIVER) !== 0 ? 1 : 0;
     if (free) {
       const key = (lv << 1) | river;
-      if (freeSeen[key]) continue;
-      freeSeen[key] = 1;
+      if (freeSeen[key] === gen) continue;
+      freeSeen[key] = gen;
     } else {
       // Only a zone's own tiles can test it (z !== k skips every other zone).
       if (z < 0 || z >= N_ZONES || level > 7) continue;
       const key = (((z << 3) | level) << 9) | (lv << 1) | river;
-      if (zoneSeen[key]) continue;
-      zoneSeen[key] = 1;
+      if (zoneSeen[key] === gen) continue;
+      zoneSeen[key] = gen;
     }
     for (let k = 0; k < N_ZONES; k++) {
       if (zone[k] || !live[k]) continue;
@@ -790,7 +810,10 @@ export function stepDevelopMemo(t: TownState, m: MonthContext): void {
   const powered = util ? util.powered : null;
   const watered = util ? util.watered : null;
   const busy = f.busy;
-  for (let i = 0; i < N_TILES; i++) {
+  // Only zoned tiles get a tile byte; the rest of the month part stays 0.
+  const zoned = zonedTiles(use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     const u = use[i];
     if (catOf(u) !== CAT_Z) continue;
     const z = payloadOf(u);
@@ -823,7 +846,8 @@ export function stepDevelopMemo(t: TownState, m: MonthContext): void {
   // A closing sector (§5.12) loses its worst-located tiles first: keep each sector's low-quantile L.
   const sectorL: number[][] = [];
   for (let s = 0; s < N_SECTORS; s++) sectorL.push([]);
-  for (let i = 0; i < N_TILES; i++) {
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
     const u = use[i];
     if (catOf(u) !== CAT_Z) continue;
     const z = payloadOf(u);
@@ -1006,18 +1030,30 @@ function repairs(t: TownState, ctx: TickContext, d: DevState): void {
 /** Ages every built zoned tile by a month at each month's first tick (age caps at 255, §3.2). */
 function ageTiles(t: TownState, busy: Uint8Array): void {
   const read = planesOf(t);
+  const zoned = zonedTiles(read.use);
   let any = false;
-  for (let i = 0; i < N_TILES && !any; i++) any = catOf(read.use[i]) === CAT_Z && levelOf(read.lvl[i]) > 0 && !busy[i] && read.age[i] < 255;
+  for (let q = 0; q < zoned.length && !any; q++) {
+    const i = zoned[q];
+    any = catOf(read.use[i]) === CAT_Z && levelOf(read.lvl[i]) > 0 && !busy[i] && read.age[i] < 255;
+  }
   if (!any) return;
   const { use, lvl, age } = planesForWrite(t);
-  for (let i = 0; i < N_TILES; i++) if (catOf(use[i]) === CAT_Z && levelOf(lvl[i]) > 0 && !busy[i] && age[i] < 255) age[i] += 1;
+  // Ageing changes only the age plane, so the zoned list still holds.
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
+    if (catOf(use[i]) === CAT_Z && levelOf(lvl[i]) > 0 && !busy[i] && age[i] < 255) age[i] += 1;
+  }
 }
 
 /** The "buildings" the 2% incident cap is a share of: built zoned tiles and finished civic buildings. */
 function buildingCount(t: TownState, f: Facts): number {
   const { use, lvl } = f.pl;
   let n = 0;
-  for (let i = 0; i < N_TILES; i++) if (catOf(use[i]) === CAT_Z && levelOf(lvl[i]) > 0 && !f.busy[i]) n++;
+  const zoned = zonedTiles(use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
+    if (catOf(use[i]) === CAT_Z && levelOf(lvl[i]) > 0 && !f.busy[i]) n++;
+  }
   for (const b of t.buildings) if (!f.busy[b[B_Y] * N_MAP + b[B_X]]) n++;
   return n;
 }
