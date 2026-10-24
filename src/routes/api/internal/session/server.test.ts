@@ -14,7 +14,10 @@ const state = vi.hoisted(() => ({
   allowed: new Set<string>(),
   driveOpen: true,
   shareValid: false,
+  sharePass: null as string | null,
   shareCalls: [] as [string, string][],
+  shareVisits: [] as unknown[],
+  shareCounted: [] as boolean[],
 }));
 
 vi.mock('$lib/db', () => {
@@ -51,6 +54,7 @@ vi.mock('$env/dynamic/private', () => ({
       'sr-supply-chain-monitor': 'm'.repeat(40),
       'sr-local-plan-navigator': 'l'.repeat(40),
       'sr-wildmind': 'w'.repeat(40),
+      'sr-spine': 'n'.repeat(40),
     }),
   },
 }));
@@ -68,9 +72,11 @@ vi.mock('$lib/server/view-as', () => ({
 }));
 vi.mock('$lib/projects/shares', () => ({
   shareCookieName: (key: string) => `psh_${key}`,
-  validateProjectShare: async (key: string, token: string) => {
+  validateProjectShare: async (key: string, token: string, visit: unknown, count = true) => {
     state.shareCalls.push([key, token]);
-    return state.shareValid;
+    state.shareVisits.push(visit);
+    state.shareCounted.push(count);
+    return state.shareValid ? { passwordHash: state.sharePass } : null;
   },
 }));
 vi.mock('$lib/access/catalogue', async (importOriginal) => {
@@ -102,7 +108,10 @@ beforeEach(() => {
   state.allowed = new Set(['ada@x.test', 'bo@x.test']);
   state.driveOpen = true;
   state.shareValid = false;
+  state.sharePass = null;
   state.shareCalls.length = 0;
+  state.shareVisits.length = 0;
+  state.shareCounted.length = 0;
 });
 
 describe('session authority claims', () => {
@@ -242,6 +251,78 @@ describe('session authority claims', () => {
     state.shareValid = false;
     state.queue.push([]);
     expect((await (await call('sr-wildmind', 'w'.repeat(40), { 'x-sr-session-share': 'stale' })).json()).claims.project.access).toBe('none');
+  });
+
+  it('a Spine share carries its link\'s password verifier as pass, and only a share does', async () => {
+    const verifier = 'scrypt$' + 'a'.repeat(22) + '$' + 'b'.repeat(43);
+    state.shareValid = true;
+    state.sharePass = verifier;
+    state.queue.push([]); // no visibility row: private by default
+    const body = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(body.claims.project).toEqual({ key: 'spine', access: 'share', pass: verifier });
+
+    // A link with no password: no pass key at all, exactly as before.
+    state.sharePass = null;
+    state.queue.push([]);
+    const open = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(open.claims.project).toEqual({ key: 'spine', access: 'share' });
+    expect('pass' in open.claims.project).toBe(false);
+
+    // The owner previewing is not a share, so never learns a verifier.
+    state.email = 'owner@x.test';
+    state.sharePass = verifier;
+    state.queue.push([]);
+    const owner = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(owner.claims.project).toEqual({ key: 'spine', access: 'owner' });
+  });
+
+  it('hands the gateway\'s visitor headers to the share check, hashed and labelled, never raw', async () => {
+    state.shareValid = true;
+    state.queue.push([]);
+    const id = 'AbCdEfGhIjKlMnOpQrStUv';
+    const ua = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+    const body = await (await call('sr-spine', 'n'.repeat(40), {
+      'x-sr-session-share': 'sp-token',
+      'x-sr-session-visitor': id,
+      'x-sr-session-visit': '1',
+      'x-sr-session-client': '::ffff:198.51.100.7',
+      'x-sr-session-agent': ua,
+      'x-sr-session-country': 'GB',
+    })).json();
+    expect(body.claims.project.access).toBe('share');
+    expect(state.shareVisits).toHaveLength(1);
+    const visit = state.shareVisits[0] as Record<string, unknown>;
+    expect(visit).toMatchObject({ open: true, agent: 'Safari · iPhone', country: 'GB' });
+    expect(visit.visitorHash).toMatch(/^[0-9a-f]{32}$/);
+    expect(visit.networkHash).toMatch(/^[0-9a-f]{16}$/);
+    const passed = JSON.stringify(visit);
+    for (const raw of [id, '198.51.100', 'Mozilla']) expect(passed).not.toContain(raw);
+
+    // An older gateway says nothing: every request counts, no one is told apart.
+    state.queue.push([]);
+    await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' });
+    expect(state.shareVisits[1]).toEqual({ open: null, visitorHash: null, networkHash: '', agent: null, country: null });
+    expect(state.shareCounted).toEqual([true, true]);
+  });
+
+  it('the owner viewing as a member who holds a share link is answered as that member, and not counted', async () => {
+    state.email = 'owner@x.test';
+    state.shareValid = true;
+    state.queue.push([]);
+    const body = await (await call('sr-spine', 'n'.repeat(40), {
+      cookie: 'sr_view_as=signed-for-ada; psh_spine=sp-token',
+      'x-sr-session-visitor': 'AbCdEfGhIjKlMnOpQrStUv',
+      'x-sr-session-visit': '1',
+    })).json();
+    expect(body.viewingAs).toBe('ada@x.test');
+    expect(body.claims.project.access).toBe('share');
+    expect(state.shareCounted).toEqual([false]);
+
+    // Ada herself, with the same link, is.
+    state.email = 'ada@x.test';
+    state.queue.push([]);
+    await call('sr-spine', 'n'.repeat(40), { cookie: 'psh_spine=sp-token', 'x-sr-session-visit': '1' });
+    expect(state.shareCounted).toEqual([false, true]);
   });
 
   it('only ever answers for the audience\'s own project, and an outage is a 503', async () => {
