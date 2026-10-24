@@ -259,12 +259,21 @@ export function runCounty(spec: CountySpec): CountyResult[] {
     seats.push(s);
     applyAll(c, i, s, brambleCommands(viewOf(c, seat, foundAt + i * 1000)!), foundAt + i * 1000 + 500);
   });
-  // The Founding Fortnight: twelve taps, ten seconds apart; bots that play during it act after taps 4 and 8.
+  // The Founding Fortnight: twelve taps, ten seconds apart; bots that play during it act after taps 4
+  // and 8, four actions each time. The evening is the founding day's play, so a bot with a daily
+  // allowance (the Kid's three) spends it here.
   let at = foundAt + 60_000;
+  const evening = seats.map((s) => s.bot.sessions.perDay ?? Infinity);
   for (let k = 0; k < p.clock.sprintTicks; k++) {
     at += 10_000;
     seats.forEach((s, i) => applyAll(c, i, s, [{ type: 'sprint', moveId: `tap-${k}` }], at + i * 100));
-    if (k === 3 || k === 7) seats.forEach((s, i) => s.bot.sprintPlay && session(c, i, s, at + 2000 + i * 100, spec.seed, 4));
+    if (k === 3 || k === 7)
+      seats.forEach((s, i) => {
+        const n = Math.min(4, evening[i]);
+        if (!s.bot.sprintPlay || n <= 0) return;
+        evening[i] -= n;
+        session(c, i, s, at + 2000 + i * 100, spec.seed, n);
+      });
   }
   let now = at + 10_000;
 

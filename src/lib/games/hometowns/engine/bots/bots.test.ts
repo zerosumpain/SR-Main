@@ -222,6 +222,54 @@ describe('the bot mayors', () => {
     expect(dt.taxes!.town).toBeLessThanOrEqual(800);
   });
 
+  it('plays the founding evening for the Village checklist: a School House, Wells for the new homes and greens', () => {
+    // Bramble's steps done, then the evening's two sessions after taps 4 and 8 (Lab round 2).
+    const c = newCounty(5);
+    const now = nextRegionalDayAt(c) + 3_600_000;
+    catchUp(c, now, Infinity);
+    applyCommand(c, 's0', { type: 'found', site: 0, nameParts: ['Oak', 'vale'], avatar: 'badger', flag: 0 }, now);
+    for (const cmd of brambleCommands(viewOf(c, 's0', now)!)) applyCommand(c, 's0', cmd, now + 500);
+    let at = now + 1000;
+    for (let k = 0; k < 8; k++) {
+      at += 10_000;
+      applyCommand(c, 's0', { type: 'sprint', moveId: `t${k}` }, at);
+      if (k === 3 || k === 7) {
+        expect(c.towns[0].sprintLeft).toBeGreaterThan(0);
+        const r = apply(c, 's0', BOTS.weekly.policy(viewOf(c, 's0', at + 2000)!, rngOf(k)), at + 2000);
+        expect(r.errors).toEqual([]);
+      }
+    }
+    const t = c.towns[0];
+    const kinds = t.buildings.map((b) => BUILDINGS[b[0]].id);
+    expect(kinds).toContain('schoolHouse');
+    expect(kinds).toContain('villageGreen');
+    expect(kinds.filter((k) => k === 'well').length).toBeGreaterThanOrEqual(2); // Bramble's and one for the new homes
+    expect(zoneCounts(mapOf(t)).zoned[0]).toBeGreaterThanOrEqual(36); // homes for 300
+  });
+
+  it('follows a zoning card only while the lots it zoned last time are taken (no hotels nobody builds)', () => {
+    const { c, now } = founded(['balanced']);
+    const t = c.towns[0];
+    // A town that already has a dozen empty Leisure lots is told hotels are wanted again.
+    t.tier = 2;
+    const empty = pickLots(mapOf(t), 2, 12);
+    for (const cmd of [{ type: 'build', planId: 'leisure', plan: zoneOps(empty, 'leisure') }] as Command[]) applyCommand(c, 's0', cmd, now);
+    const view = { ...viewOf(c, 's0', now + 1000)!, advisors: ['zia.hotels'] };
+    const cmds = BOTS.balanced.policy(view, rngOf(2));
+    const leisure = cmds.flatMap((x) => (x.type === 'build' ? x.plan : [])).filter((o) => o.op === 'zone' && o.zone === 'leisure');
+    expect(leisure).toEqual([]);
+  });
+
+  it('the Kid taps a wants bubble when it is not following a card: a Homes bubble zones a day of homes', () => {
+    const { c, now } = founded(['kid']);
+    const view = { ...viewOf(c, 's0', now)!, advisors: [], wants: ['homes'] };
+    // An rng that never follows a card and always taps the bubble.
+    const cmds = BOTS.kid.policy(view, () => 0.3);
+    const homes = cmds.flatMap((x) => (x.type === 'build' ? x.plan : [])).filter((o) => o.op === 'zone' && o.zone === 'homes').reduce((s, o) => s + (o as Op & { op: 'zone' }).rect[2], 0);
+    expect(homes).toBeGreaterThanOrEqual(8);
+    expect(cmds.filter((x) => x.type !== 'undo').length).toBeLessThanOrEqual(3);
+  });
+
   it('the Spammer zones far more Homes than Balanced in the same session', () => {
     const { c, now } = founded(['balanced', 'spammer']);
     const homes = (cmds: Command[]) => cmds.flatMap((x) => (x.type === 'build' ? x.plan : [])).filter((o) => o.op === 'zone' && o.zone === 'homes').reduce((s, o) => s + (o as Op & { op: 'zone' }).rect[2], 0);

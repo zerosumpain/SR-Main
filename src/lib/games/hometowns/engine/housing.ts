@@ -480,7 +480,13 @@ export function homesTarget(
   const occTarget = 1 - mp.vacancyTarget;
   const denom = occTarget * (cap + pipeline) + 5;
   const ratio = (occ + squeezed + waiting + aspirants) / denom;
-  const core = 100 * T(mp.homesGain * (ratio - 1));
+  let core = 100 * T(mp.homesGain * (ratio - 1));
+  // A tier with no homes built or building has nothing to be over-supplied with: its vacancy side reads
+  // 0, not the bare ratio's 0/5 = -100, and with no residents of its own the needs penalty has no one
+  // to speak for (newcomers already weighed the needs when they chose the town, §5.11), so only
+  // waiting demand moves it (params rules.emptyHomesFloor, the mirror of A9's cap).
+  const empty = cap + pipeline <= 0 && m.params.rules.emptyHomesFloor;
+  if (empty && core < 0) core = 0;
   // Parts of (ratio − 1): each against capacity alone, then the pipeline's discount.
   const d0 = occTarget * cap + 5;
   const parts: [string, number][] = [
@@ -493,7 +499,7 @@ export function homesTarget(
   const dev = ratio - 1;
   const terms: [string, number][] = [];
   if (Math.abs(dev) > 1e-9) for (const [k, x] of parts) if (x !== 0) terms.push([k, (core * x) / dev]);
-  const penalty = Math.min(mp.needFloor, mp.needPenalty * unmet);
+  const penalty = empty ? 0 : Math.min(mp.needFloor, mp.needPenalty * unmet);
   let value = core - penalty;
   if (penalty > 0) terms.push(['meter.homes.needs', -penalty]);
   if (!reachable && value > mp.unreachableCap) {

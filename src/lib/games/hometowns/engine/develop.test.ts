@@ -561,6 +561,21 @@ describe('level-ups, declines and the supply count', () => {
     expect(r.reachableHomes).toEqual([true, true, true]);
     expect(r.reachableZone[Z_OFFICES]).toBe(true);
   });
+
+  it('counts a built home toward A9 only while it can still level up: a built-out ££ band reads as unreachable', () => {
+    const { t } = town(34);
+    setLv(t, 80); // the ££ band, not the £££
+    // Every empty tile becomes a ££ home at the Hamlet's level cap (L2): no land left to take more.
+    const p = planesOf(t);
+    const empty: number[] = [];
+    for (let i = 0; i < p.use.length; i++) if (p.use[i] === 0) empty.push(i);
+    paint(t, empty, Z_HOMES, 2, 1, 100);
+    expect(supplyOf(t, P).reachableHomes[1]).toBe(false);
+    // One beside the Town Hall back at L1 can still grow: the ££ meter is the player's to act on again.
+    const near = empty.reduce((a, i) => (Math.abs((i % 64) - 32) + Math.abs(Math.floor(i / 64) - 40) < Math.abs((a % 64) - 32) + Math.abs(Math.floor(a / 64) - 40) ? i : a));
+    paint(t, [near], Z_HOMES, 1, 1, 100);
+    expect(supplyOf(t, P).reachableHomes[1]).toBe(true);
+  });
 });
 
 // ---- Incidents and repairs ----------------------------------------------------------------------------

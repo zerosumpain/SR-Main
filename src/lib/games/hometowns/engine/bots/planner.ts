@@ -32,6 +32,7 @@ import {
   TILES,
   USE_EMPTY,
   constructionLeft,
+  decodeCells,
   footprint,
   lvlLevel,
   openableParcels,
@@ -87,6 +88,8 @@ export interface TownMap {
   claimed: Uint8Array;
   /** The lenses the phone shows (coverage per cell, the grids), if the session computed them. */
   lens: Lens | null;
+  /** The land-value lens (32×32 cells), decoded on first use. */
+  lvCells?: Uint8Array;
 }
 
 /**
@@ -308,7 +311,16 @@ export function upgradeCandidates(m: TownMap, kind: DrawnRoad, n: number): numbe
 
 // ---- Zones --------------------------------------------------------------------------------------------
 
-/** Per-zone lot preferences: higher is better. Centre for shops and offices, an industrial quarter, farms on the edge. */
+/** Land value an office lot needs (the L3 entry of develop.lvReq, §3.3). */
+const OFFICE_LV = 70;
+
+/** Land value at tile i (the town's 32×32 plane, decoded once per map). */
+function lvAt(m: TownMap, i: number): number {
+  if (!m.lvCells) m.lvCells = decodeCells(m.t.lv);
+  return m.lvCells[cellOf(i)] ?? 0;
+}
+
+/** Per-zone lot preferences: higher is better. Centre for shops and offices (on land that can take them), an industrial quarter, farms on the edge. */
 export function lotScore(m: TownMap, zone: number, i: number, nearIndustry: Uint8Array): number {
   const x = i % MAP;
   const y = (i - x) / MAP;
@@ -318,8 +330,12 @@ export function lotScore(m: TownMap, zone: number, i: number, nearIndustry: Uint
       return -c - (nearIndustry[i] ? 40 : 0);
     case Z_SHOPS:
       return -1.5 * c + (y === HALL_Y - 1 || y === HALL_Y + 1 || x === HALL_X - 2 || x === HALL_X ? 6 : 0);
-    case Z_OFFICES:
-      return -c;
+    case Z_OFFICES: {
+      // Offices start at L3, which needs land value 70 (§3.3): a lot below it never grows, however
+      // loud the Offices bar, so the bot zones offices where the land can take them.
+      const lv = lvAt(m, i);
+      return lv >= OFFICE_LV ? -c + 0.2 * lv : -1000 + lv;
+    }
     case Z_LEISURE:
       return -1.2 * c;
     case Z_INDUSTRY:
@@ -703,11 +719,12 @@ export function utilityBalance(m: TownMap, p: Params, ahead = true): UtilityBala
 // ---- Land ------------------------------------------------------------------------------------------------
 
 /** The openable parcel with the most buildable land, nearest the hall on ties (§3.1). */
-export function bestParcel(t: TownState): number | null {
+export function bestParcel(t: TownState, open = t.parcels): number | null {
   const terr = terrainOf(t);
   let best: number | null = null;
   let bestScore = -Infinity;
-  for (const q of openableParcels(t.parcels)) {
+  // `open`: the town's parcels plus any this session has already asked for.
+  for (const q of openableParcels(open)) {
     const px = q % 4;
     const py = (q - px) / 4;
     let land = 0;

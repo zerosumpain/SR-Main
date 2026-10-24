@@ -203,6 +203,9 @@ const ESSENTIAL_GROUPS = new Set(['power', 'water', 'police', 'fire', 'health', 
 
 /** Can last month's surplus carry most of a new building's upkeep, with the town past half its next tier's population? */
 function canCarry(c: Ctx, upkeep: number): boolean {
+  // A town with two years of spending in the bank can carry anything the checklist asks for; short of
+  // that, it waits until it is half way to the next tier and the running surplus covers most of it.
+  if (c.t.civicMemo && c.t.money.reserves > 24 * monthlySpend(c.t)) return true;
   if (c.v.pop < 0.5 * NEXT_POP[c.t.tier]) return false;
   if (!c.t.civicMemo) return true;
   return monthlyRevenue(c.t) - monthlySpend(c.t) >= 0.6 * upkeep * c.p.finance.civicUpkeepScale;
@@ -301,7 +304,9 @@ function jobs(c: Ctx): void {
   const u = unemployment(c.t);
   const counts = zoneCounts(c.m);
   const cap = counts.capacity;
-  const workforce = WORKFORCE_SHARE * cap[Z_HOMES];
+  // A mayor away for a week plans for the homes after a week of level-ups (cottages to houses, 8 to 20 people).
+  const ahead = c.s.horizonMonths > 12 ? 2 : 1;
+  const workforce = WORKFORCE_SHARE * cap[Z_HOMES] * ahead;
   const slots = cap[Z_SHOPS] + cap[Z_LEISURE] + cap[Z_INDUSTRY] + cap[Z_OFFICES] + cap[Z_FARMS];
   const short = Math.max(1.05 * workforce - slots, u.rate > 0.06 ? u.count : 0);
   if (short < 10) return;
@@ -310,10 +315,13 @@ function jobs(c: Ctx): void {
   if (Math.max(ind, shp) <= -5) return;
   const z = ind > shp ? Z_INDUSTRY : Z_SHOPS;
   const perLot = z === Z_INDUSTRY ? 10 : 6;
-  const want = Math.min(30, Math.ceil(short / perLot)) - counts.emptyLots[z];
+  const want = Math.min(30 * ahead, Math.ceil(short / perLot)) - counts.emptyLots[z];
   const got = zone(c, z, want);
   // A town that has run out of land turns farmland over to work that employs more people per tile.
   if (got < want && zoneCounts(c.m).freeLots < 6) rezoneFarms(c, z, Math.min(12, want - got));
+  // A week's work is not all in one trade: the other sector takes a share while its bar is not falling.
+  const other = z === Z_INDUSTRY ? Z_SHOPS : Z_INDUSTRY;
+  if (ahead > 1 && Math.min(ind, shp) > -30) zone(c, other, Math.min(20, Math.ceil(short / (2 * (other === Z_INDUSTRY ? 10 : 6)))) - counts.emptyLots[other]);
 }
 
 /** Rezones up to `n` farm tiles (bulldozing any farm on them) as zone `z`, best lots for `z` first. */
@@ -340,6 +348,37 @@ function rezoneFarms(c: Ctx, z: number, n: number): number {
   return build(c, ops, tiles.length * c.p.build.zonePerTile, `rezone-${ZONES[z]}`) ? tiles.length : 0;
 }
 
+/** The business meter of a zone (ZONE order; -1 for Homes). */
+const ZONE_METER_OF = [-1, 3, 4, 5, 6, 7];
+
+/**
+ * Rezones up to `n` empty lots of trades nobody is building (their bar at or below zero) as zone
+ * `z`, best lots for `z` first: when a full town's bar for one trade is pinned high while lots
+ * zoned for another stand empty, the mayor repaints them. Homes lots are left alone.
+ */
+function rezoneIdle(c: Ctx, z: number, n: number): number {
+  if (n <= 0 || c.left <= 0 || c.t.tier > ZONE_DEFS[z].zoneUntil) return 0;
+  const cand: [number, number][] = [];
+  const noHalo = new Uint8Array(0);
+  for (let i = 0; i < MAP * MAP; i++) {
+    const u = c.m.use[i];
+    if (useCat(u) !== CAT_ZONE || c.m.claimed[i] || !c.m.reach[i] || lvlLevel(c.m.lvl[i]) > 0 || !c.m.free[i]) continue;
+    const from = usePayload(u);
+    if (from === z || from === Z_HOMES || c.t.meters[ZONE_METER_OF[from]] > 0) continue;
+    cand.push([lotScore(c.m, z, i, noHalo), i]);
+  }
+  if (cand.length === 0) return 0;
+  cand.sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  const tiles = cand.slice(0, n).map(([, i]) => i);
+  const ops: Op[] = [];
+  for (const i of tiles) {
+    c.m.claimed[i] = 1;
+    ops.push({ op: 'dezone', rect: [i % MAP, (i - (i % MAP)) / MAP, 1, 1] });
+  }
+  ops.push(...zoneOps(tiles, ZONES[z]));
+  return build(c, ops, tiles.length * c.p.build.zonePerTile, `rezone-${ZONES[z]}`) ? tiles.length : 0;
+}
+
 /** The Homes bar a player acts on: the highest tier tick that is not hatched as unreachable (A9). */
 function homesMeter(c: Ctx): number {
   const cap = c.p.meters.unreachableCap;
@@ -359,7 +398,7 @@ function homesMeter(c: Ctx): number {
 function zoneByMeters(c: Ctx): void {
   const counts = zoneCounts(c.m);
   const B = builders(c);
-  const meterOf = (z: number) => (z === Z_HOMES ? homesMeter(c) : c.t.meters[[-1, 3, 4, 5, 6, 7][z]]);
+  const meterOf = (z: number) => (z === Z_HOMES ? homesMeter(c) : c.t.meters[ZONE_METER_OF[z]]);
   const order = [Z_HOMES, Z_SHOPS, Z_INDUSTRY, Z_FARMS, Z_OFFICES, Z_LEISURE];
   // Strongest meter first, so a short session buys what is wanted most.
   order.sort((a, b) => meterOf(b) * c.s.zoneMix[b] - meterOf(a) * c.s.zoneMix[a] || a - b);
@@ -367,8 +406,11 @@ function zoneByMeters(c: Ctx): void {
     if (c.left <= 0) return;
     const meter = meterOf(z);
     const mix = c.s.zoneMix[z];
-    if (mix <= 0 || meter <= c.s.meterAt || ((z === Z_HOMES || z === Z_FARMS) && c.holdHomes)) continue;
-    const ask = Math.min(1.5, meter / 40) * mix;
+    // A mayor away for a week stocks homes on any bar that is not falling away: by the next session
+    // today's +5 has had a week of arrivals behind it.
+    const at = z === Z_HOMES && c.s.horizonMonths > 12 ? Math.min(c.s.meterAt, -10) : c.s.meterAt;
+    if (mix <= 0 || meter <= at || ((z === Z_HOMES || z === Z_FARMS) && c.holdHomes)) continue;
+    const ask = Math.min(1.5, Math.max(0.5, meter / 40)) * mix;
     const built = counts.zoned[z] - counts.emptyLots[z];
     // Homes for people with no work to go to only fill the town with the unhappy: hold back while
     // unemployment is high, or while the zoned job slots trail the workforce the homes will hold.
@@ -376,9 +418,12 @@ function zoneByMeters(c: Ctx): void {
     const balance = slots / Math.max(1, WORKFORCE_SHARE * counts.capacity[Z_HOMES]);
     const jobless =
       z === Z_HOMES ? Math.max(0.2, Math.min(1, 1 - 5 * (unemployment(c.t).rate - 0.08), (balance - 0.75) / 0.25)) : 1;
-    const stock = z === Z_HOMES ? Math.ceil(B * c.s.horizonMonths * 0.6 * ask * jobless) + 2 : Math.ceil((0.15 * built + 3) * ask) + 1;
-    const n = Math.min(40, stock - counts.emptyLots[z]);
-    if (n > 0) zone(c, z, n);
+    const stock = z === Z_HOMES ? Math.ceil(B * c.s.horizonMonths * 0.6 * ask * jobless) + 2 : Math.ceil((0.15 * built + 3) * ask * (c.s.horizonMonths > 12 ? 3 : 1)) + 1;
+    const n = Math.min(c.s.horizonMonths > 12 ? 80 : 40, stock - counts.emptyLots[z]);
+    if (n <= 0) continue;
+    const got = zone(c, z, n);
+    // Out of land with the bar asking loudly: repaint lots of trades that are not growing.
+    if (z !== Z_HOMES && got < n && meter > 60 && zoneCounts(c.m).freeLots < 6) rezoneIdle(c, z, Math.min(12, n - got));
   }
 }
 
@@ -478,8 +523,12 @@ function capacityOf(t: TownState, group: string): number {
 /** Population of the next tier (§7), for the readiness push before a promotion. */
 const NEXT_POP = [300, 2000, 15000, 80000, Infinity];
 
-/** A town within reach of its next tier keeps every checklist service with headroom, so one bad month cannot break the two-day hold. */
-const readiness = (c: Ctx) => (c.v.pop >= 0.6 * NEXT_POP[c.t.tier] ? 1.15 : 1);
+/**
+ * A town within reach of its next tier keeps every checklist service with headroom, so one bad month
+ * cannot break the two-day hold. A mayor who will not be back for days builds for the town it will be
+ * by then: its homes grow out of today's coverage before the next session.
+ */
+const readiness = (c: Ctx) => (c.s.horizonMonths > 12 ? 1.3 : c.v.pop >= 0.6 * NEXT_POP[c.t.tier] ? 1.15 : 1);
 
 /** One service, kept at its target coverage of homes and capacity. Returns true if it built. */
 function service(c: Ctx, what: 'police' | 'fire' | 'health' | 'park' | 'primary' | 'secondary' | 'fun' | 'culture' | 'transit', boost = 1): boolean {
@@ -491,7 +540,10 @@ function service(c: Ctx, what: 'police' | 'fire' | 'health' | 'park' | 'primary'
   // what sinks a Village's budget.
   const line = what === 'police' ? 0.5 : what === 'fire' || what === 'health' || what === 'park' ? 0.7 : 0.6;
   const target = Math.min(0.95, (line + 0.1) * c.s.services * k);
-  const need = pop * 1.2 * c.s.services * k;
+  // Capacity for the people the zoned homes will hold by the next session (a week of level-ups for a
+  // weekly mayor), not just today's.
+  const planned = c.s.horizonMonths > 12 ? Math.max(pop, 2 * zoneCounts(c.m).capacity[Z_HOMES]) : pop;
+  const need = planned * 1.2 * c.s.services * k;
   // Near a promotion, coverage is kept further past the line: homes levelling up crowd a small
   // post's capacity and thin its field, and the checklist must hold on two Regional Days.
   const margin = readiness(c) > 1 ? 6 : 2;
@@ -577,6 +629,9 @@ function attraction(c: Ctx): boolean {
   return false;
 }
 
+/** Has this session already planned a `bid` (its moves are not applied until the session ends)? */
+const planned = (c: Ctx, bid: string): boolean => c.cmds.some((x) => x.type === 'build' && x.plan.some((o) => o.op === 'place' && o.id === bid));
+
 /** The next tier's checklist (§7): each unmet item mapped to the move that meets it. */
 function checklist(c: Ctx): void {
   c.forChecklist = true;
@@ -606,7 +661,7 @@ function checklistItems(c: Ctx): void {
         break;
       }
       case 'school':
-        if (!seatsOf(c.t, ['primary'])) service(c, 'primary', 2);
+        if (!seatsOf(c.t, ['primary']) && !planned(c, 'schoolHouse')) service(c, 'primary', 2);
         break;
       case 'green70':
         service(c, 'park', 1.3);
@@ -669,11 +724,46 @@ function checklistItems(c: Ctx): void {
   }
 }
 
+/** The next tier's coverage items and the service that holds each. */
+const COVER_ITEMS: Record<string, Parameters<typeof service>[1]> = {
+  green70: 'park',
+  surgery70: 'health',
+  police50: 'police',
+  fire70: 'fire',
+  primary80: 'primary',
+  secondary75: 'secondary',
+  bus40: 'transit',
+};
+
+/**
+ * A mayor who will not be back for a week keeps the next tier's coverage items met for the town it
+ * will be by then: an item met today fails on Wednesday once the new streets fill, and the two-day
+ * hold needs them all at once. They count as checklist buildings (the savings and the budget guard
+ * give way to them).
+ */
+function prepare(c: Ctx): void {
+  c.forChecklist = true;
+  try {
+    for (const item of c.v.checklist) {
+      const what = COVER_ITEMS[item.id];
+      if (what && c.left > 0) service(c, what, 1.3);
+    }
+  } finally {
+    c.forChecklist = false;
+  }
+}
+
 // ---- Advisors ----------------------------------------------------------------------------------------------
 
 /** What each advisor card's one button would have the mayor do (§9.7), as a bot action. */
 function followAdvisor(c: Ctx, card: string): boolean {
   const before = c.cmds.length;
+  // A card's ghost plan is sized for the player's next visit: a child who plays once a day is offered
+  // a day's lots, twice what a mayor who is back in a few hours needs.
+  const plan = (n: number) => (c.v.profile === 'kid' ? 2 * n : n);
+  // Nobody zones more of a kind whose last lots still stand empty: the card asks again next session,
+  // and land zoned for hotels that never come is land the homes cannot have.
+  const more = (z: number, n: number): number => (zoneCounts(c.m).emptyLots[z] >= Math.max(8, n) ? 0 : zone(c, z, n));
   switch (card) {
     case 'bramble.power':
     case 'bramble.brownout':
@@ -681,27 +771,27 @@ function followAdvisor(c: Ctx, card: string): boolean {
       utilities(c, true);
       break;
     case 'mo.jobsWanted':
-      zone(c, c.t.meters[5] > c.t.meters[3] ? Z_INDUSTRY : Z_SHOPS, 6);
+      more(c.t.meters[5] > c.t.meters[3] ? Z_INDUSTRY : Z_SHOPS, plan(6));
       break;
     case 'mo.homesWanted':
     case 'mo.squeezed':
-      if (!c.holdHomes) zone(c, Z_HOMES, 8);
+      if (!c.holdHomes) more(Z_HOMES, plan(8));
       break;
     case 'bramble.shops':
-      zone(c, Z_SHOPS, 4);
+      more(Z_SHOPS, plan(4));
       break;
     case 'bramble.farms':
-      zone(c, Z_FARMS, 2);
+      more(Z_FARMS, plan(2));
       break;
     case 'bramble.offices':
-      zone(c, Z_OFFICES, 4);
+      more(Z_OFFICES, plan(4));
       break;
     case 'zia.hotels':
     case 'zia.leisure':
-      zone(c, Z_LEISURE, 4);
+      more(Z_LEISURE, plan(4));
       break;
     case 'penny.factoriesPay':
-      zone(c, Z_INDUSTRY, 4);
+      more(Z_INDUSTRY, plan(4));
       break;
     case 'mo.schools':
     case 'mo.primarySeats':
@@ -733,8 +823,25 @@ function followAdvisor(c: Ctx, card: string): boolean {
       break;
     case 'bramble.almostThere':
     case 'bramble.checklist':
-      // The card opens the Growth sheet, whose missing items each carry a ghost plan.
+      // The card opens the Growth sheet, whose missing items each carry a ghost plan; its population
+      // line ("2,000 people: you have 900") carries one for homes.
       checklist(c);
+      if (c.s.advisorFollow < 1 && c.cmds.length === before && c.v.pop < NEXT_POP[c.t.tier] && !c.holdHomes) more(Z_HOMES, plan(8));
+      break;
+    // The cards below open a menu or a lens rather than a ghost plan. A careful mayor reads them and
+    // plays the rest of the session; a child taps the button and does the obvious thing there.
+    case 'penny.surplus':
+      // "We have money to spare": the Build menu, where the Growth sheet's next item is the best buy.
+      if (c.s.advisorFollow >= 1) break;
+      checklist(c);
+      if (c.cmds.length === before && c.v.pop < NEXT_POP[c.t.tier] && !c.holdHomes) more(Z_HOMES, plan(8));
+      break;
+    case 'mo.homesStar':
+      // The Homes lens shows full streets: room for more homes is the fix.
+      if (c.s.advisorFollow < 1 && !c.holdHomes) more(Z_HOMES, plan(8));
+      break;
+    case 'mo.jobsStar':
+      if (c.s.advisorFollow < 1) more(c.t.meters[5] > c.t.meters[3] ? Z_INDUSTRY : Z_SHOPS, plan(6));
       break;
     case 'bramble.traffic':
     case 'bramble.commutes':
@@ -862,19 +969,40 @@ function foundingNight(c: Ctx): void {
   const n = buildingCounts(c.t);
   c.forChecklist = true;
   if (!n.schoolHouse) place(c, 'schoolHouse', { kind: 'cover', cover: 'school' }) || place(c, 'schoolHouse', { kind: 'central' });
-  if (Math.max(coverageShare(c.m, 'nature'), coverageShare(c.m, 'fun')) < 0.8) place(c, 'villageGreen', { kind: 'cover', cover: 'nature' });
   c.forChecklist = false;
-  const z = zoneCounts(c.m);
-  if (z.zoned[Z_HOMES] < 40) zone(c, Z_HOMES, 40 - z.zoned[Z_HOMES]);
-  if (z.zoned[Z_INDUSTRY] < 12) zone(c, Z_INDUSTRY, 12 - z.zoned[Z_INDUSTRY]);
+  if (zoneCounts(c.m).zoned[Z_HOMES] < 36) zone(c, Z_HOMES, 40 - zoneCounts(c.m).zoned[Z_HOMES]);
+  c.forChecklist = true;
+  // Wells for the homes just zoned: the Village checklist wants water at 90% of homes, and nobody
+  // will be here to add one when the cottages fill.
+  // (The plan's lots are not on the map until its moves apply, so the need is the hamlet's plan: 40
+  // cottages of 8, 20 workshops of 6 and a market of 8 shops of 3.)
+  const up = c.p.utilities;
+  const u = utilityBalance(c.m, c.p, false);
+  const need = Math.max(u.waterNeed, 40 * 8 * up.waterPerResident + 20 * 6 * up.waterPerIndustryJob + 8 * 3 * up.waterPerJob + 20);
+  const gap = need * 1.1 - u.waterSupply;
+  const well = gap > 0 ? choosePlant(c, 'water', gap, need) : null;
+  if (well && place(c, well, { kind: 'edge' })) c.plants++;
+  // Greens until 70% of those homes (not just the first dozen) are in reach of one.
+  for (let k = 0; k < 2 && Math.max(coverageShare(c.m, 'nature'), coverageShare(c.m, 'fun')) < 0.8; k++)
+    if (!place(c, 'villageGreen', { kind: 'cover', cover: 'nature' })) break;
+  c.forChecklist = false;
+  // Work for the people those homes will hold (about 150 hands): Village approval sinks with
+  // unemployment long before Sunday comes round.
+  if (zoneCounts(c.m).zoned[Z_INDUSTRY] < 16) zone(c, Z_INDUSTRY, 20 - zoneCounts(c.m).zoned[Z_INDUSTRY]);
 }
 
 function parcels(c: Ctx): void {
-  if (c.s.noParcels || c.t.parcelRights <= 0 || c.left <= 0) return;
-  if (zoneCounts(c.m).freeLots > 60) return;
-  const q = bestParcel(c.t);
-  if (q === null) return;
-  build(c, [{ op: 'parcel', p: q }], c.p.build.surveyFee * Math.max(1, c.t.tier), 'parcel');
+  // A weekly mayor opens what a week of building will need (every right it holds); a daily one a parcel at a time.
+  const most = c.s.horizonMonths > 12 ? c.t.parcelRights : 1;
+  let open = c.t.parcels;
+  for (let k = 0; k < most; k++) {
+    if (c.s.noParcels || c.t.parcelRights - k <= 0 || c.left <= 0) return;
+    if (k === 0 && most === 1 && zoneCounts(c.m).freeLots > 60) return;
+    const q = bestParcel(c.t, open);
+    if (q === null) return;
+    if (!build(c, [{ op: 'parcel', p: q }], c.p.build.surveyFee * Math.max(1, c.t.tier), 'parcel')) return;
+    open |= 1 << q;
+  }
 }
 
 // ---- The county moves (WP3) ---------------------------------------------------------------------------------
@@ -936,10 +1064,13 @@ function playSession(v: BotView, rng: BotRng, s: Style, actions: number): Comman
   // shops take months to build, so they go in before the session's actions run out.
   if (v.town.tier === 0 && v.checklist.some((it) => it.id === 'market' && !it.met)) {
     const n = zoneCounts(c.m).zoned[Z_SHOPS];
-    if (n < 8) zone(c, Z_SHOPS, 8 - n);
+    // Eight lots for a market of six, topped up only when a lot or two short of six (a single lot
+    // is not worth a whole action of a short session).
+    if (n < 7) zone(c, Z_SHOPS, 8 - n);
   }
-  // A mayor who will not be back for days sets the hamlet up for the Village checklist while they are here.
-  if (s.horizonMonths > 12 && v.town.tier === 0) foundingNight(c);
+  // The founding evening sets the hamlet up for the Village checklist (school, greens, water, homes and
+  // work for 300), and so does any hamlet session of a mayor who will not be back for days.
+  if (v.town.tier === 0 && (v.town.sprintLeft > 0 || s.horizonMonths > 12)) foundingNight(c);
   utilities(c);
   // New land before anything else: a survey is cheap, and a town with unused parcel rights and no free lots stalls.
   parcels(c);
@@ -949,6 +1080,7 @@ function playSession(v: BotView, rng: BotRng, s: Style, actions: number): Comman
   }
   checklist(c);
   if (c.save > c.spend && loanFor(c, c.save - c.spend)) checklist(c);
+  if (s.horizonMonths > 12) prepare(c);
   if (s.services > 0) jobs(c);
   // Advisors in rank order; the Kid follows only some of the time.
   for (const card of v.advisors) {
@@ -958,11 +1090,14 @@ function playSession(v: BotView, rng: BotRng, s: Style, actions: number): Comman
   zoneByMeters(c);
   if (s.services > 0) {
     const order: Parameters<typeof service>[1][] = ['primary', 'park', 'health', 'police', 'fire', 'fun', 'culture', 'secondary', 'transit'];
+    // Two services a session for a daily mayor; a weekly one does a week's worth while here.
+    const most = Math.max(1, Math.round(2 * s.services)) * (s.horizonMonths > 12 ? 4 : 1);
     let placed = 0;
-    for (const what of order) {
-      if (c.left <= 0 || placed >= Math.max(1, Math.round(2 * s.services))) break;
-      if (service(c, what)) placed++;
-    }
+    for (let pass = 0; pass < (s.horizonMonths > 12 ? 2 : 1); pass++)
+      for (const what of order) {
+        if (c.left <= 0 || placed >= most) break;
+        if (service(c, what)) placed++;
+      }
   }
   if (s.tourism && v.town.tier >= 1) attraction(c);
   countyMoves(c);
@@ -979,13 +1114,69 @@ function kidPolicy(v: BotView, rng: BotRng, s: Style): Command[] {
   const c = newCtx(v, rng, s, 3);
   // A child taps the card on top (the advisors are ranked, §9.7); one that does nothing falls through to the next.
   let card = 0;
+  let bubble = 0;
   while (c.left > 0) {
     const before = c.left;
     if (rng() < s.advisorFollow) while (card < v.advisors.length && !followAdvisor(c, v.advisors[card++]));
+    // Otherwise the most eye-catching thing on the map is a wants bubble ("Homes!"), and a child taps it
+    // half the time (§5.15: each bubble drops a ghost plan); the rest is poking at the Build menu.
+    if (c.left === before && rng() < 0.5) while (bubble < v.wants.length && !tapWant(c, v.wants[bubble++]));
     if (c.left === before) randomAction(c);
     if (c.left === before) c.left--; // nothing legal: the action is spent anyway
   }
   return finish(c);
+}
+
+/** A wants bubble's ghost plan (§5.15), as a child would accept it. */
+function tapWant(c: Ctx, key: string): boolean {
+  const before = c.cmds.length;
+  const day = 2; // a child's plan covers the day until the next visit
+  switch (key) {
+    case 'homes':
+    case 'talk.homes':
+      if (!c.holdHomes) zone(c, Z_HOMES, 8 * day);
+      break;
+    case 'shops':
+      zone(c, Z_SHOPS, 4 * day);
+      break;
+    case 'factories':
+      zone(c, Z_INDUSTRY, 4 * day);
+      break;
+    case 'offices':
+      zone(c, Z_OFFICES, 4);
+      break;
+    case 'hotels':
+      zone(c, Z_LEISURE, 4);
+      break;
+    case 'talk.jobs':
+      zone(c, c.t.meters[5] > c.t.meters[3] ? Z_INDUSTRY : Z_SHOPS, 6 * day);
+      break;
+    case 'power':
+    case 'water':
+      utilities(c, true);
+      break;
+    case 'talk.schools':
+      service(c, 'primary', 1.3);
+      break;
+    case 'talk.health':
+      service(c, 'health', 1.3);
+      break;
+    case 'talk.safety':
+      service(c, 'police', 1.3);
+      break;
+    case 'talk.fun':
+      service(c, 'fun', 1.3) || service(c, 'park', 1.3);
+      break;
+    case 'talk.nature':
+      service(c, 'park', 1.3);
+      break;
+    case 'talk.culture':
+      service(c, 'culture');
+      break;
+    default:
+      break;
+  }
+  return c.cmds.length > before;
 }
 
 /** Something random but legal, the way a child pokes at the Build menu (parks most of all). */
@@ -1053,7 +1244,8 @@ export const STYLES: Record<BotId, Style> = {
   cooperator: { ...base, county: 'cooperate' },
   kid: { ...base, advisorFollow: 0.6, undo: 0.3, parks: 1.6, keepMonths: 0.5 },
   // A week between sessions: zone a week's worth of homes when it plays.
-  weekly: { ...base, horizonMonths: 84 },
+  // Two months in hand: nobody is there to steer the books between Sundays.
+  weekly: { ...base, horizonMonths: 84, keepMonths: 2 },
   absent: base,
   spammer: { ...base, spamHomes: true, services: 0 },
 };
@@ -1100,7 +1292,8 @@ export const BOTS: Record<BotId, BotDef> = {
   poacher: def('poacher', 'Poacher'),
   hermit: def('hermit', 'Hermit'),
   cooperator: def('cooperator', 'Cooperator'),
-  kid: def('kid', 'Kid', 'kid', false),
+  // The Kid taps the founding evening's bubbles too (§1.5: "People want a shop!" at tap 3), within its three actions.
+  kid: def('kid', 'Kid', 'kid'),
   weekly: def('weekly', 'Weekly'),
   absent: def('absent', 'Absent', 'kid', false),
   spammer: def('spammer', 'Spammer'),

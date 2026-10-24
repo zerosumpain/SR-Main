@@ -656,7 +656,12 @@ function reachability(t: TownState, f: Facts, p: DevelopParams, s: DevelopmentSl
     if (!free && !isZone) continue;
     const c = cellAt(i);
     const lv = f.lv[c];
-    if (free || z === ZH) {
+    // A9: a tile "could take" a Homes tier when it is free land in the tier's land-value band, or a
+    // built home there that can still level up. A home already at its level cap adds nothing, just
+    // as a built shop at its cap does not make Shops reachable below: a town whose every ££-band
+    // home is built out reads the hatched +35, not a ££ meter pinned at +100 it cannot act on.
+    const roomToGrow = free || (z === ZH && levelCap(t, ZH, lv, f.terrain[i], p) > level);
+    if (roomToGrow) {
       const tm = homesTierMax(lv - 0.5 * f.poll[c], p);
       if (tm >= 1 && !homes[1]) {
         homes[1] = true;

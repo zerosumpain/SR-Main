@@ -76,6 +76,20 @@ describe('the Homes meter target (§5.8, A9, A10)', () => {
     expect(capped.value).toBe(35);
     expect(capped.terms.some(([k]) => k === 'meter.homes.unreachable')).toBe(true);
   });
+
+  it('reads an empty tier (no homes built or building) on its waiting demand alone (rules.emptyHomesFloor)', () => {
+    // Nobody waiting and nothing built: 0, not the bare ratio's 0/5 → −100, and no needs penalty
+    // for a tier with no residents to feel it.
+    const none = homesTarget(0, 0, 0, 0, 0, 0, 4, false, { params: P });
+    expect(none.value).toBe(0);
+    // A few aspirants still read as demand (capped by A9 while no land can take the tier).
+    expect(homesTarget(0, 0, 4, 6, 0, 0, 4, false, { params: P }).value).toBe(P.meters.unreachableCap);
+    // Once anything of the tier is built the bare formula and the needs penalty apply again.
+    expect(homesTarget(0, 0, 0, 0, 8, 0, 4, true, { params: P }).value).toBe(-100);
+    // The switch gives the bare §5.8 formula back.
+    const bare = { ...P, rules: { ...P.rules, emptyHomesFloor: false } } as typeof P;
+    expect(homesTarget(0, 0, 0, 0, 0, 0, 4, false, { params: bare }).value).toBe(-100);
+  });
 });
 
 /** The town fixture, with land value set everywhere and the given Workers by tier. */

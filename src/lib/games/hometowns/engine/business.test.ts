@@ -135,9 +135,9 @@ describe('the empty-sector bootstrap (§5.12, A6)', () => {
   it('a fresh hamlet with spending and no shop or workshop wants both', () => {
     const { c, i, t } = fresh(150);
     const shops0 = t.meters[METER_SHOPS];
-    // Four pay days with nothing built: the smoothed margins (τ 4) settle toward the bootstrap's.
+    // A year of pay days with nothing built: the smoothed margins (τ = firms.marginTau) settle toward the bootstrap's.
     let d = market(t, ctx(c, i, t, true));
-    for (let k = 0; k < 3; k++) d = market(t, ctx(c, i, t, true));
+    for (let k = 0; k < 11; k++) d = market(t, ctx(c, i, t, true));
     const f = d.firms!;
     expect(f.jobs[S_SHOPS]).toBe(0);
     expect(f.jobs[S_INDUSTRY]).toBe(0);
@@ -156,12 +156,13 @@ describe('the empty-sector bootstrap (§5.12, A6)', () => {
 
   it('caps the imagined sector’s margin at +30%: a hamlet’s offices do not boom (A6), and the meter it cannot act on stops at +35 (A9)', () => {
     const { c, i, t } = town('hamlet');
-    const d = runMonths(c, i, 24, scripted());
+    // Long enough for the smoothed margin (τ = firms.marginTau) to reach the cap.
+    const d = runMonths(c, i, 6 * P.firms.marginTau, scripted());
     const f = d[d.length - 1].firms!;
     expect(f.jobs[S_OFFICES]).toBe(0);
     expect(f.margin[S_OFFICES]).toBe(P.firms.bootstrapMarginCap);
     expect(t.margins[S_OFFICES]).toBeLessThanOrEqual(P.firms.bootstrapMarginCap + 1e-9);
-    // The uncapped target would be 100·T(4·(0.30 − 0.08)) ≈ 71; Offices cannot be zoned in a Hamlet.
+    // The uncapped target would be 100·T(bizGain·(0.30 − 0.08)); Offices cannot be zoned in a Hamlet.
     expect(f.target[S_OFFICES]).toBeCloseTo(100 * T(P.meters.bizGain * (P.firms.bootstrapMarginCap - P.meters.normalMargin)), 0);
     expect(t.meters[METER_OFFICES]).toBeLessThanOrEqual(P.meters.unreachableCap);
   });
