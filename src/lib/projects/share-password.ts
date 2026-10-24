@@ -7,13 +7,15 @@
 // the reference the app's copy must agree with.
 //
 //   scrypt$<salt b64url, 16 bytes>$<key b64url, 32 bytes>   N=16384 r=8 p=1
-//   sha256$<64 hex>   LEGACY: the one Spine link minted under the shared
-//                     password, backfilled by hand. Checked, never minted.
+//
+// The only format. The one Spine link minted under the old shared password is
+// re-made with its own password rather than carried over, so nothing else is
+// checked and the gateway's claim pattern takes nothing else.
 //
 // The password is trimmed before hashing and before checking, so a stray space
 // pasted from an email still opens the link.
 
-import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 
 /**
  * The projects whose app checks a link password: today only the Spine. A
@@ -56,16 +58,10 @@ export async function hashSharePassword(password: string): Promise<string> {
 
 /** Does `given` answer `verifier`? Anything unrecognised is false. Constant-time compare. */
 export async function checkSharePassword(given: string, verifier: string): Promise<boolean> {
-  const pw = given.trim();
-  const legacy = /^sha256\$([0-9a-f]{64})$/.exec(verifier);
-  if (legacy) {
-    const want = Buffer.from(legacy[1], 'hex');
-    return timingSafeEqual(createHash('sha256').update(pw).digest(), want);
-  }
   const m = /^scrypt\$([A-Za-z0-9_-]{16,64})\$([A-Za-z0-9_-]{32,128})$/.exec(verifier);
   if (!m) return false;
   const want = Buffer.from(m[2], 'base64url');
   if (want.length !== KEY_LEN) return false;
-  const got = await derive(pw, Buffer.from(m[1], 'base64url'));
+  const got = await derive(given.trim(), Buffer.from(m[1], 'base64url'));
   return timingSafeEqual(got, want);
 }

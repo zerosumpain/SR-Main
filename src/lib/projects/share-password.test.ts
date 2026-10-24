@@ -5,7 +5,7 @@ import { checkSharePassword, hashSharePassword, normaliseSharePassword } from '.
 // The same pattern the gateway's normaliseClaims holds `project.pass` to. A
 // verifier Main mints that failed it would make every claim for that link
 // malformed, and the link would open for nobody.
-const CLAIM_PASS = /^(?:scrypt\$[A-Za-z0-9_-]{16,64}\$[A-Za-z0-9_-]{32,128}|sha256\$[0-9a-f]{64})$/;
+const CLAIM_PASS = /^scrypt\$[A-Za-z0-9_-]{16,64}\$[A-Za-z0-9_-]{32,128}$/;
 
 describe('share link passwords', () => {
   it('mints scrypt$salt$key with a 16-byte salt and a 32-byte key, fresh salt each time', async () => {
@@ -27,11 +27,10 @@ describe('share link passwords', () => {
     expect(await checkSharePassword('', v)).toBe(false);
   });
 
-  it('checks the legacy sha256 verifier the one pre-change Spine link carries', async () => {
+  it('refuses a sha256 verifier even for the right password: that format is gone', async () => {
     const v = 'sha256$' + createHash('sha256').update('old shared one').digest('hex');
-    expect(v).toMatch(CLAIM_PASS);
-    expect(await checkSharePassword(' old shared one ', v)).toBe(true);
-    expect(await checkSharePassword('old shared two', v)).toBe(false);
+    expect(v).not.toMatch(CLAIM_PASS);
+    expect(await checkSharePassword('old shared one', v)).toBe(false);
   });
 
   it('anything unrecognised is false, never a throw', async () => {

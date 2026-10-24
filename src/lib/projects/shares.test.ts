@@ -62,8 +62,9 @@ describe('share link rows', () => {
   });
 
   it('a live link answers with its verifier; no live link answers null', async () => {
-    state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: 'sha256$' + 'a'.repeat(64) }]);
-    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: 'sha256$' + 'a'.repeat(64) });
+    const verifier = 'scrypt$' + 'a'.repeat(22) + '$' + 'b'.repeat(43);
+    state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: verifier }]);
+    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: verifier });
 
     state.queue.push([{ id: 's2', expiresAt: null, revokedAt: null, passwordHash: null }]);
     expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: null });
