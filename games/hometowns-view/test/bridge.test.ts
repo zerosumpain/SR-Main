@@ -21,8 +21,8 @@ describe('posting to the app', () => {
 
   it('knows it is in the app, and stamps every message with the bridge version', () => {
     expect(inApp()).toBe(true);
-    post({ type: 'ready', bridge: BRIDGE_VERSION, engineHash: 'e', paramsHash: 'p' });
-    expect(sent).toEqual([{ type: 'ready', bridge: 1, engineHash: 'e', paramsHash: 'p', v: 1 }]);
+    post({ type: 'ready', bridge: BRIDGE_VERSION, engineHash: 'e', pageHash: 'g', paramsHash: 'p' });
+    expect(sent).toEqual([{ type: 'ready', bridge: 1, engineHash: 'e', pageHash: 'g', paramsHash: 'p', v: 1 }]);
   });
 
   it('also tells a local listener (harness mode), and never throws without an app', () => {

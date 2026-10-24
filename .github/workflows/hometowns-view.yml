@@ -17,9 +17,9 @@ name: Hometowns page
 #    CI's vitest.
 #
 # The `live` job is the release gate of §10.10/§13.4: the page for this
-# branch's ENGINE_HASH must already be published at
-# /projects/hometowns/<ENGINE_HASH>/mobile.html (scripts/hometowns/deploy-page.sh)
-# before the game PR merges. It is red on purpose until then; rerun it after
+# branch's PAGE_HASH (the engine and the page code) must already be published
+# at /projects/hometowns/<PAGE_HASH>/mobile.html (scripts/hometowns/deploy-page.sh)
+# before the PR that names it merges, engine change or page-only. It is red on purpose until then; rerun it after
 # the deploy. It only reads the public site, and it is not a required check,
 # so it never blocks master: the person merging reads it.
 
@@ -28,6 +28,7 @@ on:
     paths:
       - 'games/hometowns-view/**'
       - 'src/lib/games/hometowns/engine/**'
+      - 'src/lib/games/hometowns/page-hash.generated.ts'
       - 'scripts/hometowns/**'
       - '.github/workflows/hometowns-view.yml'
   workflow_dispatch:
@@ -77,7 +78,7 @@ jobs:
           retention-days: 7
 
   live:
-    name: Page is live for this ENGINE_HASH (release gate)
+    name: Page is live for this PAGE_HASH (release gate)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

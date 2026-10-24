@@ -7,6 +7,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rm
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { computeEngineHash, generatedSource } from '../../scripts/hometowns/engine-hash.mjs';
+import { computePageHash, generatedPageSource } from '../../scripts/hometowns/page-hash.mjs';
 
 const FAKES: Record<string, string> = {
   ssh: `#!/bin/bash
@@ -35,32 +36,47 @@ else
   printf 'HTTP/1.1 404 Not Found\\r\\n\\r\\n' > "$hdr"; : > "$out"; printf 404
 fi
 `,
-  // The page build, reduced to what the script checks: dist/<ENGINE_HASH>/
-  // with the meta tag and the hash in a bundled script.
+  // The page build, reduced to what the script checks: dist/<PAGE_HASH>/
+  // with both meta tags and both hashes in a bundled script.
   npm: `#!/bin/bash
 echo "npm $*" >> "$FAKE_LOG"
-h="$(sed -n "s/^export const ENGINE_HASH = '\\([0-9a-f]*\\)';$/\\1/p" src/lib/games/hometowns/engine/engine-hash.generated.ts)"
-d="games/hometowns-view/dist/$h"
+e="$(sed -n "s/^export const ENGINE_HASH = '\\([0-9a-f]*\\)';$/\\1/p" src/lib/games/hometowns/engine/engine-hash.generated.ts)"
+p="$(sed -n "s/^export const PAGE_HASH = '\\([0-9a-f]*\\)';$/\\1/p" src/lib/games/hometowns/page-hash.generated.ts)"
+d="games/hometowns-view/dist/$p"
 mkdir -p "$d/assets"
-printf '<!doctype html><head><meta name="hometowns-engine-hash" content="%s"></head>\\n' "$h" > "$d/mobile.html"
-printf "const ENGINE_HASH = '%s';\\n" "$h" > "$d/assets/index-abc.js"
+printf '<!doctype html><head><meta name="hometowns-engine-hash" content="%s"><meta name="hometowns-page-hash" content="%s"></head>\\n' "$e" "$p" > "$d/mobile.html"
+printf "const ENGINE_HASH = '%s', PAGE_HASH = '%s';\\n" "$e" "$p" > "$d/assets/index-abc.js"
 `,
 };
 
 let dir: string;
 let repo: string;
 let vps: string;
+/** The fixture's ENGINE_HASH and PAGE_HASH; the folder is named by `hash`, the PAGE_HASH. */
+let engineHash: string;
 let hash: string;
 const engine = () => join(repo, 'src/lib/games/hometowns/engine');
+const view = () => join(repo, 'games/hometowns-view');
 const remote = (h = hash) => join(vps, 'data/jkai-projects/hometowns', h);
 const git = (...args: string[]) =>
   spawnSync('git', ['-c', 'user.name=test', '-c', 'user.email=test@example.invalid', ...args], { cwd: repo, encoding: 'utf8' });
 
-function page(h: string, marker = h) {
+/** A build in dist/<h>/ whose markers say `marker` (page) and `engineMarker`. */
+function page(h: string, marker = h, engineMarker = engineHash) {
   const d = join(repo, 'games/hometowns-view/dist', h);
   mkdirSync(join(d, 'assets'), { recursive: true });
-  writeFileSync(join(d, 'mobile.html'), `<!doctype html><head><meta name="hometowns-engine-hash" content="${marker}"></head>\n`);
-  writeFileSync(join(d, 'assets/index-abc.js'), `const ENGINE_HASH = '${h}';\n`);
+  writeFileSync(
+    join(d, 'mobile.html'),
+    `<!doctype html><head><meta name="hometowns-engine-hash" content="${engineMarker}"><meta name="hometowns-page-hash" content="${marker}"></head>\n`,
+  );
+  writeFileSync(join(d, 'assets/index-abc.js'), `const ENGINE_HASH = '${engineMarker}', PAGE_HASH = '${h}';\n`);
+}
+
+/** Regenerates page-hash.generated.ts for the tree as it stands, and returns the hash. */
+function regeneratePageHash(): string {
+  const h = computePageHash(repo);
+  writeFileSync(join(repo, 'src/lib/games/hometowns/page-hash.generated.ts'), generatedPageSource(h));
+  return h;
 }
 
 function deploy(args: string[], env: Record<string, string> = {}) {
@@ -93,13 +109,15 @@ beforeEach(() => {
   }
   writeFileSync(join(dir, 'key'), 'not a key');
   mkdirSync(join(repo, 'scripts/hometowns'), { recursive: true });
-  for (const f of ['deploy-page.sh', 'engine-hash.mjs']) cpSync(join('scripts/hometowns', f), join(repo, 'scripts/hometowns', f));
+  for (const f of ['deploy-page.sh', 'engine-hash.mjs', 'page-hash.mjs']) cpSync(join('scripts/hometowns', f), join(repo, 'scripts/hometowns', f));
   mkdirSync(engine(), { recursive: true });
   writeFileSync(join(engine(), 'rules.ts'), 'export const RULES = 1;\n');
-  hash = computeEngineHash(engine());
-  writeFileSync(join(engine(), 'engine-hash.generated.ts'), generatedSource(hash));
-  mkdirSync(join(repo, 'games/hometowns-view'), { recursive: true });
-  writeFileSync(join(repo, 'games/hometowns-view/.gitignore'), 'dist/\n');
+  engineHash = computeEngineHash(engine());
+  writeFileSync(join(engine(), 'engine-hash.generated.ts'), generatedSource(engineHash));
+  mkdirSync(join(view(), 'src'), { recursive: true });
+  writeFileSync(join(view(), '.gitignore'), 'dist/\n');
+  writeFileSync(join(view(), 'src/draw.ts'), 'export const LINE = 1;\n');
+  hash = regeneratePageHash();
   git('init', '-q');
   git('add', '-A');
   git('commit', '-qm', 'fixture');
@@ -109,12 +127,31 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe('deploy-page.sh refuses before it reaches the VPS', () => {
+  it('names the folder by PAGE_HASH, never the engine hash', () => {
+    expect(hash).toMatch(/^[0-9a-f]{16}$/);
+    expect(hash).not.toBe(engineHash);
+    const r = deploy(['--dry-run', '--no-build']);
+    expect(r.status).toBe(0);
+    expect(r.out).toContain(`PAGE_HASH ${hash}, ENGINE_HASH ${engineHash}`);
+    expect(r.out).toContain(`/hometowns/${hash}/`);
+    expect(r.out).not.toContain(`/hometowns/${engineHash}`);
+  });
+
   it('refuses a stale ENGINE_HASH', () => {
     writeFileSync(join(engine(), 'rules.ts'), 'export const RULES = 2;\n');
     git('commit', '-qam', 'engine change without a new hash');
     const r = deploy([]);
     expect(r.status).toBe(2);
     expect(r.err).toContain('stale');
+    expect(r.calls).toBe('');
+  });
+
+  it('refuses a stale PAGE_HASH (a page change without rerunning page-hash.mjs)', () => {
+    writeFileSync(join(view(), 'src/draw.ts'), 'export const LINE = 2;\n');
+    git('commit', '-qam', 'page change without a new hash');
+    const r = deploy([]);
+    expect(r.status).toBe(2);
+    expect(r.err).toContain('page-hash.generated.ts is stale');
     expect(r.calls).toBe('');
   });
 
@@ -145,19 +182,29 @@ describe('deploy-page.sh refuses before it reaches the VPS', () => {
     expect(r.calls).toBe('');
   });
 
-  it("refuses a build whose page names another hash", () => {
+  it("refuses a build whose page names another page hash", () => {
     page(hash, '0123456789abcdef');
     const r = deploy(['--dry-run', '--no-build']);
     expect(r.status).toBe(2);
-    expect(r.err).toContain('0123456789abcdef');
+    expect(r.err).toContain("page hash '0123456789abcdef'");
     expect(r.calls).toBe('');
   });
 
-  it('refuses a build folder for some other hash', () => {
-    page('0123456789abcdef');
-    const r = deploy(['--dry-run', '--dist', join(repo, 'games/hometowns-view/dist/0123456789abcdef')]);
+  it('refuses a build whose page names another engine', () => {
+    page(hash, hash, '0123456789abcdef');
+    const r = deploy(['--dry-run', '--no-build']);
     expect(r.status).toBe(2);
-    expect(r.err).toContain('not the current ENGINE_HASH');
+    expect(r.err).toContain("engine hash '0123456789abcdef'");
+    expect(r.calls).toBe('');
+  });
+
+  it('refuses a build folder for some other page hash, the engine hash included', () => {
+    for (const other of ['0123456789abcdef', engineHash]) {
+      page(other, other);
+      const r = deploy(['--dry-run', '--dist', join(repo, 'games/hometowns-view/dist', other)]);
+      expect(r.status).toBe(2);
+      expect(r.err).toContain('not the current PAGE_HASH');
+    }
   });
 });
 
@@ -180,7 +227,7 @@ describe('deploy-page.sh on the VPS', () => {
     const first = deploy([]);
     expect(first.err).toBe('');
     expect(first.status).toBe(0);
-    expect(first.out).toContain(`Live: 200 text/html, first-party CSP, marker ${hash}, 2 files byte-identical`);
+    expect(first.out).toContain(`Live: 200 text/html, first-party CSP, page ${hash} (engine ${engineHash}), 2 files byte-identical`);
     expect(first.calls).toMatch(/^npm --prefix games\/hometowns-view run build$/m);
     expect(first.calls).toContain(`/hometowns/${hash}/assets/index-abc.js`);
     expect(readFileSync(join(remote(), 'mobile.html'), 'utf8')).toContain(hash);
@@ -195,7 +242,36 @@ describe('deploy-page.sh on the VPS', () => {
     expect(again.calls.match(/^rsync /gm)).toHaveLength(1);
   });
 
-  it('refuses to overwrite a different build under the same hash', () => {
+  it('publishes a page-only change to a new folder and leaves the old page untouched', () => {
+    const first = deploy([]);
+    expect(first.status).toBe(0);
+    const oldHash = hash;
+    const oldPage = readFileSync(join(remote(oldHash), 'mobile.html'), 'utf8');
+
+    // A drawing fix: the engine (and so ENGINE_HASH) is unchanged, the page is not.
+    writeFileSync(join(view(), 'src/draw.ts'), 'export const LINE = 2;\n');
+    hash = regeneratePageHash();
+    git('commit', '-qam', 'page-only change');
+    expect(hash).not.toBe(oldHash);
+    expect(computeEngineHash(engine())).toBe(engineHash);
+
+    const second = deploy([]);
+    expect(second.err).toBe('');
+    expect(second.status).toBe(0);
+    expect(second.out).toContain(`page ${hash} (engine ${engineHash})`);
+    expect(second.out).not.toContain('already exists');
+    // The fake log is cumulative: one upload per run.
+    expect(second.calls.match(/^rsync /gm)).toHaveLength(2);
+    expect(readFileSync(join(remote(hash), 'mobile.html'), 'utf8')).toContain(hash);
+    expect(readFileSync(join(remote(oldHash), 'mobile.html'), 'utf8')).toBe(oldPage);
+
+    const again = deploy([]);
+    expect(again.status).toBe(0);
+    expect(again.out).toContain('byte-identical: nothing to copy');
+    expect(again.calls.match(/^rsync /gm)).toHaveLength(2);
+  });
+
+  it('refuses to overwrite a different build under the same PAGE_HASH', () => {
     mkdirSync(remote(), { recursive: true });
     writeFileSync(join(remote(), 'mobile.html'), 'someone else\'s build');
     const r = deploy([]);

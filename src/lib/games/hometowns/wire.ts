@@ -59,8 +59,17 @@ import {
 import { BUILDINGS, POLICY_SLOTS, RAIL_DEF, ROAD_DEFS, ZONE_DEFS } from './engine/content';
 import { NEED_ITEMS, ladder } from './engine/needs';
 import { ADVISOR_RULES } from './engine/advisors';
+import { PAGE_HASH } from './page-hash.generated';
 import type { AdvisorCard, Card, CountyWire, HometownsWire, MeWire, PublicTown, VisitView, Want } from './engine/wire';
 import type { Room } from './hometowns';
+
+/**
+ * The map page the wire names (§10.10): its folder is PAGE_HASH, which covers
+ * the engine and the page's own build inputs, so a page-only change is a new
+ * path and the phone reloads into it (A39). `client.engineHash` stays the
+ * simulation's hash, which the page's canary and predictor compare.
+ */
+export const PAGE_PATH = `/projects/hometowns/${PAGE_HASH}/mobile.html`;
 
 /** Frame budgets (§10.7): a first frame, and an ordinary delta. */
 export const FIRST_FRAME_BUDGET = 80 * 1024;
@@ -398,7 +407,7 @@ export function toWire(room: Room, meId: string, now: number, since: number | nu
     hostId: room.hostId,
     meId,
     players: room.players.map((q) => ({ id: q.id, name: q.name, status: q.status, seat: q.seat })),
-    client: { engineHash: ENGINE_HASH, page: `/projects/hometowns/${ENGINE_HASH}/mobile.html`, bridge: 1 },
+    client: { engineHash: ENGINE_HASH, page: PAGE_PATH, bridge: 1 },
     clock: clockOf(c, now),
     me: null,
   };

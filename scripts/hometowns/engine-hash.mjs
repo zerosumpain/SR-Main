@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Writes src/lib/games/hometowns/engine/engine-hash.generated.ts: ENGINE_HASH,
 // an FNV-1a 64 over every engine source and params file (spec §10.1, §10.10).
-// The page is deployed under /projects/hometowns/<ENGINE_HASH>/ and the wire
-// names the hash, so a phone always runs the server's exact engine.
+// It means "the same simulation": the wire names it beside the page, and the
+// page's canary and predictor compare it. The page's folder is PAGE_HASH,
+// which covers ENGINE_HASH and the page code (page-hash.mjs): rerun that
+// script after this one.
 //
 //   node scripts/hometowns/engine-hash.mjs           # rewrite the file
 //   node scripts/hometowns/engine-hash.mjs --check   # exit 1 if it is stale

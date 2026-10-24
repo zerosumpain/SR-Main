@@ -28,6 +28,7 @@ import type { Controller, Source } from './controller';
 import { FrameGap, mergeFrame, movesKey, type WireFrame } from './core/frames';
 import { Predictor } from './core/predict';
 import { lensesFor } from './lenses';
+import { PAGE_HASH, pageHashOf } from './version';
 
 const clone = (t: TownState): TownState => JSON.parse(JSON.stringify(t)) as TownState;
 
@@ -73,9 +74,16 @@ export class AppSession {
     return Date.now() + this.offset;
   }
 
-  /** needReload, at most once a minute and never back to a version this phone left (A39). */
-  private reload(engineHash: string): void {
-    if (cleanId(engineHash) && requestReload(ENGINE_HASH, engineHash, Date.now())) this.post({ type: 'needReload', engineHash });
+  /**
+   * needReload when the wire names another page than this one (a new engine,
+   * or the same engine with a page-only change), at most once a minute and
+   * never back to a page this phone left (A39). The app loads the wire's page.
+   */
+  private reload(client: WireFrame['client'] | undefined): void {
+    const pageHash = pageHashOf(client?.page);
+    if (!client || !pageHash || pageHash === PAGE_HASH) return;
+    const engineHash = cleanId(client.engineHash) ?? '';
+    if (requestReload(PAGE_HASH, pageHash, Date.now())) this.post({ type: 'needReload', engineHash, pageHash, page: client.page });
   }
 
   /** Asks the app for a whole frame, at most once every RESYNC_GAP_MS. */
@@ -95,7 +103,9 @@ export class AppSession {
     this.booted = true;
     this.profile = a.copyLevel === 'kid' ? 'kid' : 'adult';
     this.c.settings({ reduceMotion: a.reduceMotion === true, copyLevel: this.profile, thermal: a.thermal, lowPower: a.lowPower === true });
-    if (typeof a.engineHash === 'string' && a.engineHash !== ENGINE_HASH) this.reload(a.engineHash);
+    // A boot wire naming another page asks for it first, so a wire this page cannot take (a
+    // newer frame shape, a delta it holds no base for) still moves the phone to the right page.
+    if (a.wire && typeof a.wire === 'object') this.reload((a.wire as WireFrame).client);
     if (a.wire) this.apply(a.wire as WireFrame);
     // On open, replay what happened since this phone last looked (§9.9).
     const t = this.held?.me?.town;
@@ -108,7 +118,11 @@ export class AppSession {
    * frame it had, says why, and asks for a whole frame.
    */
   apply(frame: WireFrame): void {
-    if (!frameShapeOk(frame)) return this.post({ type: 'error', msg: 'apply needs a frame with a rev and a clock' });
+    if (!frameShapeOk(frame)) {
+      // A newer server's frame this page cannot read may still name the page that can.
+      if (frame && typeof frame === 'object') this.reload(frame.client);
+      return this.post({ type: 'error', msg: 'apply needs a frame with a rev and a clock' });
+    }
     const before = this.held;
     try {
       this.take(frame);
@@ -130,13 +144,15 @@ export class AppSession {
     }
     const prev = this.held;
     this.offset = merged.serverNow - Date.now();
+    // The wire names another page: ask for it (A39 debounce). A page-only
+    // change keeps the engine, so the rest of this frame is taken as usual.
+    this.reload(merged.client);
     const engine = merged.client?.engineHash;
     if (engine && engine !== ENGINE_HASH) {
-      // The server runs another engine: load the page that matches it (A39
-      // debounce). Meanwhile the frame is held for the next delta, but this
-      // engine's hash, canary and predictor say nothing about that engine's
-      // town: it is drawn as the server sent it, if this engine can draw it.
-      this.reload(engine);
+      // The server runs another engine. Until the matching page loads, the
+      // frame is held for the next delta, but this engine's hash, canary and
+      // predictor say nothing about that engine's town: it is drawn as the
+      // server sent it, if this engine can draw it.
       this.held = merged;
       if (this.predictor) this.predictor.enabled = false;
       this.drawAsSent();
@@ -318,6 +334,7 @@ export class AppSession {
     return {
       bridge: BRIDGE_VERSION,
       engineHash: ENGINE_HASH,
+      pageHash: PAGE_HASH,
       boot: (a) => this.boot(a),
       apply: (f) => this.apply(f),
       tool: (t) => {

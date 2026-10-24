@@ -50,7 +50,10 @@ export interface PageSettings {
 export interface HometownsApi {
   /** The bridge version this page speaks. */
   readonly bridge: number;
+  /** The simulation this page runs (the canary's and the predictor's). */
   readonly engineHash: string;
+  /** v1 addition: this page's version, the folder it is served from (§10.10). */
+  readonly pageHash: string;
   boot(a: BootArgs): void;
   /** Each SSE frame, whole or delta (the page merges it, §10.7). */
   apply(frame: WireFrame): void;
@@ -110,7 +113,8 @@ export interface InspectCardMsg {
 }
 
 export type PageMessage =
-  | { type: 'ready'; bridge: number; engineHash: string; paramsHash: string }
+  /** v1 addition: `pageHash`, this page's version. */
+  | { type: 'ready'; bridge: number; engineHash: string; pageHash: string; paramsHash: string }
   | { type: 'plan'; planId: string; ops: Op[]; cost: number; forecast: ForecastCard | null }
   | { type: 'commit'; planId: string; ops: Op[] }
   | { type: 'inspect'; tile: number; card: InspectCardMsg }
@@ -119,7 +123,12 @@ export type PageMessage =
   | { type: 'speak'; text: string }
   | { type: 'haptic'; kind: 'tap' | 'ok' | 'bad' }
   | { type: 'needResync'; have: number | null }
-  | { type: 'needReload'; engineHash: string }
+  /**
+   * The wire names another page (§10.10, A39): `page` is its path exactly as
+   * the wire named it, `pageHash` its folder, `engineHash` the wire's engine
+   * (v1 additions: `page`, `pageHash`). The app loads the wire's page.
+   */
+  | { type: 'needReload'; engineHash: string; pageHash: string; page: string }
   | { type: 'stats'; fps: number; minFps: number; simMs: number; thermal: Thermal; canary: { tick: number; ok: boolean; hash?: string } | null }
   | { type: 'error'; msg: string };
 

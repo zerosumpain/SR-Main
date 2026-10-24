@@ -14,6 +14,7 @@
 // botHash(seed, site, days) and engineHash for Playwright.
 
 import { ENGINE_HASH, paramsFor, paramsHash } from './engine';
+import { PAGE_HASH } from './version';
 import { AppSession } from './app';
 import { expose, inApp, post } from './bridge/bridge';
 import { BRIDGE_VERSION } from './bridge/protocol';
@@ -34,6 +35,7 @@ interface HarnessHandle {
   /** Draws `n` frames, panning a pixel each time, and returns each frame's ms (the frame-time check). */
   frameTimes(n: number, repaint: boolean): number[];
   engineHash: string;
+  pageHash: string;
   ui: HarnessUi;
 }
 
@@ -92,6 +94,7 @@ async function harness(root: HTMLElement, q: URLSearchParams): Promise<void> {
       return out;
     },
     engineHash: ENGINE_HASH,
+    pageHash: PAGE_HASH,
     ui,
   };
 }
@@ -116,7 +119,7 @@ async function app(root: HTMLElement): Promise<void> {
   await c.start();
   session = new AppSession(c, post);
   expose(session.api());
-  post({ type: 'ready', bridge: BRIDGE_VERSION, engineHash: ENGINE_HASH, paramsHash: paramsHash(paramsFor('v1')) });
+  post({ type: 'ready', bridge: BRIDGE_VERSION, engineHash: ENGINE_HASH, pageHash: PAGE_HASH, paramsHash: paramsHash(paramsFor('v1')) });
 }
 
 function placeholder(root: HTMLElement): void {

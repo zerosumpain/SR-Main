@@ -11,6 +11,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "useDefineForClassFields": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src", "test", "e2e", "vite.config.ts", "playwright.config.ts"]

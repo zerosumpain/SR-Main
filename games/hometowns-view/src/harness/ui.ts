@@ -48,6 +48,7 @@ import { MONTHS, words, type CopyLevel } from '../copy';
 import { groupDigits, pounds, range, roughly, signed, signedPounds } from '../format';
 import { causeLine, cohortTable, faceRows, ledgerRows, moodWords, townMood, wantLabel, whyOf, type Derived } from '../layers';
 import { LENS_DEFS, LENS_IDS, lensesFor, type CellWhy, type LensId } from '../lenses';
+import { PAGE_HASH } from '../version';
 import { TRAYS, trayItems, type TrayName } from '../plan/trays';
 import type { Tool } from '../plan/plan';
 import { derivedOf } from './derived';
@@ -906,7 +907,7 @@ export class HarnessUi {
         l.forget();
         location.reload();
       }, 'quiet'),
-      h('p', 'muted', `Engine ${ENGINE_HASH} · seed ${l.seed}`),
+      h('p', 'muted', `Engine ${ENGINE_HASH} · page ${PAGE_HASH} · seed ${l.seed}`),
     );
   }
 

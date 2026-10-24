@@ -22,7 +22,7 @@ export default defineConfig({
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
     ...(process.env.HOMETOWNS_E2E_CHROMIUM === '1' ? [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }] : []),
   ],
-  // The built page itself (dist/<ENGINE_HASH>/mobile.html, what the app loads), served on loopback for
+  // The built page itself (dist/<PAGE_HASH>/mobile.html, what the app loads), served on loopback for
   // this run only; the local preview's :15480 is WP9's dev server.
   webServer: {
     command: `npx vite build && npx vite preview --host 127.0.0.1 --port ${PORT} --strictPort`,
