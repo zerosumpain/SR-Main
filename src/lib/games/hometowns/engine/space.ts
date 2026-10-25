@@ -1040,9 +1040,13 @@ export function cellDistance(c: number, px: number, py: number): number {
  */
 export function cellBox(px: number, py: number, radiusTiles: number): [number, number, number, number] {
   if (radiusTiles === Infinity) return [0, CELLS_PER_SIDE - 1, 0, CELLS_PER_SIDE - 1];
-  const lo = (v: number) => Math.max(0, Math.ceil((v - radiusTiles - 1) / 2));
-  const hi = (v: number) => Math.min(CELLS_PER_SIDE - 1, Math.floor((v + radiusTiles - 1) / 2));
-  return [lo(px), hi(px), lo(py), hi(py)];
+  // Written out rather than as two small closures: servicesOf calls this for every building, every month.
+  return [
+    Math.max(0, Math.ceil((px - radiusTiles - 1) / 2)),
+    Math.min(CELLS_PER_SIDE - 1, Math.floor((px + radiusTiles - 1) / 2)),
+    Math.max(0, Math.ceil((py - radiusTiles - 1) / 2)),
+    Math.min(CELLS_PER_SIDE - 1, Math.floor((py + radiusTiles - 1) / 2)),
+  ];
 }
 
 /**

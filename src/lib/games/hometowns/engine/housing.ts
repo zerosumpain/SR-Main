@@ -196,6 +196,18 @@ export function cohortPersons(people: readonly number[]): number[] {
 }
 
 /**
+ * One allocation move: cohort k takes what it can of tier h's free homes.
+ * A module function, not a closure, so the month's hot callers (squeezedTotal
+ * runs a few hundred times a month) allocate nothing per call.
+ */
+function takeHomes(cohorts: readonly number[], housed: number[], avail: number[], k: number, h: number): void {
+  const n = Math.min(cohorts[k] - housed[k], avail[h]);
+  if (n <= 0) return;
+  housed[k] += n;
+  avail[h] -= n;
+}
+
+/**
  * The deterministic allocation (§5.8): every cohort fills its own tier's
  * homes first (Families, then Retirees, then Workers); then Families and
  * Retirees may take one tier down; Students take £ homes, then ££; anyone
@@ -205,16 +217,10 @@ export function cohortPersons(people: readonly number[]): number[] {
 export function allocate(cohorts: readonly number[], cap: readonly number[]): Allocation {
   const avail = cap.map((c) => Math.max(0, Math.floor(c)));
   const housed = new Array<number>(COHORT_COUNT).fill(0);
-  const take = (k: number, h: number) => {
-    const n = Math.min(cohorts[k] - housed[k], avail[h]);
-    if (n <= 0) return;
-    housed[k] += n;
-    avail[h] -= n;
-  };
-  for (const kind of [1, 2, 0]) for (let h = 0; h < 3; h++) take(h * 3 + kind, h);
-  for (const kind of [1, 2]) for (let h = 1; h < 3; h++) take(h * 3 + kind, h - 1);
-  take(COHORT_S, 0);
-  take(COHORT_S, 1);
+  for (const kind of [1, 2, 0]) for (let h = 0; h < 3; h++) takeHomes(cohorts, housed, avail, h * 3 + kind, h);
+  for (const kind of [1, 2]) for (let h = 1; h < 3; h++) takeHomes(cohorts, housed, avail, h * 3 + kind, h - 1);
+  takeHomes(cohorts, housed, avail, COHORT_S, 0);
+  takeHomes(cohorts, housed, avail, COHORT_S, 1);
   const squeezed = cohorts.map((n, k) => n - housed[k]);
   const squeezedTier = [0, 0, 0];
   for (let k = 0; k < COHORT_COUNT; k++) squeezedTier[k === COHORT_S ? 0 : Math.floor(k / 3)] += squeezed[k];
@@ -236,22 +242,16 @@ function squeezedTotal(cohorts: readonly number[], cap: readonly number[]): numb
   const avail = SQ_AVAIL;
   avail.length = cap.length;
   for (let h = 0; h < cap.length; h++) avail[h] = Math.max(0, Math.floor(cap[h]));
-  const take = (k: number, h: number) => {
-    const n = Math.min(cohorts[k] - housed[k], avail[h]);
-    if (n <= 0) return;
-    housed[k] += n;
-    avail[h] -= n;
-  };
   for (let a = 0; a < 3; a++) {
     const kind = TAKE_OWN[a];
-    for (let h = 0; h < 3; h++) take(h * 3 + kind, h);
+    for (let h = 0; h < 3; h++) takeHomes(cohorts, housed, avail, h * 3 + kind, h);
   }
   for (let a = 0; a < 2; a++) {
     const kind = TAKE_DOWN[a];
-    for (let h = 1; h < 3; h++) take(h * 3 + kind, h - 1);
+    for (let h = 1; h < 3; h++) takeHomes(cohorts, housed, avail, h * 3 + kind, h - 1);
   }
-  take(COHORT_S, 0);
-  take(COHORT_S, 1);
+  takeHomes(cohorts, housed, avail, COHORT_S, 0);
+  takeHomes(cohorts, housed, avail, COHORT_S, 1);
   let n = 0;
   for (let k = 0; k < cohorts.length; k++) n += cohorts[k] - housed[k];
   return n;
