@@ -70,9 +70,7 @@
     "validate:change": "./scripts/validate-change.sh",
     "deploy:status": "./scripts/deploy-status.sh",
     "build:wa-worker": "node packages/jkai-wa-worker/build.mjs",
-    "test:retired-integrations": "node --test scripts/retire-integrations.test.mjs",
-    "hometowns:lab": "tsx scripts/hometowns/lab.ts",
-    "hometowns:bench": "tsx scripts/hometowns/bench.ts"
+    "test:retired-integrations": "node --test scripts/retire-integrations.test.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

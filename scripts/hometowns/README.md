@@ -13,14 +13,14 @@ to `reports/<stamp>-<profile>/`, with `latest.html` and `latest.json` beside
 them. Reports are git-ignored.
 
 ```bash
-npm run hometowns:lab -- --quick                 # the tuning loop: 12 seeds × 20 days (about 1–2 minutes)
-npm run hometowns:lab -- --full                  # the gate run: 200 seeds × 60 days × 6-bot counties
-npm run hometowns:lab -- --smoke                 # §12.1's 12 seeds × 20 days × 4 towns
-npm run hometowns:lab -- --full --check          # exit 1 on a gate failure or a baseline regression
-npm run hometowns:lab -- --quick --baseline write    # set this profile's baseline (baselines/)
-npm run hometowns:lab -- --quick --ab change.json    # paired A/B of a params change on the same seeds
-npm run hometowns:lab -- --sweep targets         # ±20% on §11.3's first targets (or --sweep all)
-npm run hometowns:lab -- --offrule               # off-rule identity runs
+npx tsx scripts/hometowns/lab.ts --quick                 # the tuning loop: 12 seeds × 20 days (about 1–2 minutes)
+npx tsx scripts/hometowns/lab.ts --full                  # the gate run: 200 seeds × 60 days × 6-bot counties
+npx tsx scripts/hometowns/lab.ts --smoke                 # §12.1's 12 seeds × 20 days × 4 towns
+npx tsx scripts/hometowns/lab.ts --full --check          # exit 1 on a gate failure or a baseline regression
+npx tsx scripts/hometowns/lab.ts --quick --baseline write    # set this profile's baseline (baselines/)
+npx tsx scripts/hometowns/lab.ts --quick --ab change.json    # paired A/B of a params change on the same seeds
+npx tsx scripts/hometowns/lab.ts --sweep targets         # ±20% on §11.3's first targets (or --sweep all)
+npx tsx scripts/hometowns/lab.ts --offrule               # off-rule identity runs
 ```
 
 Options: `--seeds N`, `--days N`, `--workers N` (0 runs in this thread),
@@ -51,8 +51,8 @@ Its test is `src/lib/games/hometowns/lab/serve-reports.test.ts`.
 ## CPU budgets (spec §10.15)
 
 ```bash
-npm run hometowns:bench                          # tick, month step, Regional Day and 96-unit chunks, as a table
-npm run hometowns:bench -- --check               # exit 1 if a p95 is over 2× its budget
+npx tsx scripts/hometowns/bench.ts                          # tick, month step, Regional Day and 96-unit chunks, as a table
+npx tsx scripts/hometowns/bench.ts --check               # exit 1 if a p95 is over 2× its budget
 node scripts/hometowns/bench-space.mjs           # WP2a's share of the month step (M2–M4) alone
 ```
 
