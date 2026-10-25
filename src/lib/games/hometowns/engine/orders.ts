@@ -11,11 +11,16 @@
 //   - renewContracts: WP3 renews a contract at the Regional Day (renewsContracts).
 // fixDamaged is applied by WP2e's tick step (develop.ts repairs); Bramble
 // reports the month's repair bill here.
+//
+// Decision 11: no order changes a tile the mayor zoned or built today (the
+// mayor's undo entries for the day, MAYOR_TODAY), so a child's own move and
+// its undo always survive the Deputy; the Deputy's builds go on the town's
+// Deputy undo list (ops.ts DEPUTY_UNDO_MAX), never the mayor's.
 
 import { BUILDINGS, ORDER_DEFAULTS, TIER_DEFS, ZONE_DEFS, buildingIndex, roadDef } from './content';
 import { lineIndex, population, postWhole } from './core';
 import { civicMemo, deputyNote, levelPayment, monthsOfSpending, monthlySpending, type MonthBooks } from './finance';
-import { applyBuild, placeCost, roadTileCost } from './ops';
+import { applyBuild, mayorTilesToday, placeCost, roadTileCost } from './ops';
 import { homeTiles } from './housing';
 import { attachOf, roadDistrict, workReach } from './labour';
 import { appendTileEvent } from './records';
@@ -55,6 +60,14 @@ const ARG_BOUNDS: Record<string, readonly [number, number][]> = {
   growthHelp: [[0, 48], [0, 12], [0, 20]],
   repayLoan: [[0.5, 24]],
 };
+
+/**
+ * Decision 11: the tiles the mayor zoned or built today (mayorTilesToday),
+ * set while runOrders runs; every Deputy edit skips them. Null when the
+ * mayor changed nothing today (an absent mayor's usual month).
+ */
+let MAYOR_TODAY: Uint8Array | null = null;
+const mayors = (i: number): boolean => MAYOR_TODAY !== null && MAYOR_TODAY[i] === 1;
 
 const FUN = FUNDING_KEYS.indexOf('fun');
 const CULTURE = FUNDING_KEYS.indexOf('culture');
@@ -126,7 +139,7 @@ function zoneRoadside(t: TownState, z: number, n: number, first: { far: Uint8Arr
   for (let pass = first ? 0 : 1; pass < 2; pass++)
     for (const i of BY_DISTANCE) {
       if (picks.length >= n) break;
-      if (read[i] !== USE_EMPTY || constructionLeft(t, i) > 0) continue;
+      if (read[i] !== USE_EMPTY || constructionLeft(t, i) > 0 || mayors(i)) continue;
       if (first) {
         const d = roadDistrict(first.attach, i);
         if ((pass === 0) !== (d >= 0 && first.far[d] === 1)) continue; // the far districts' lots in the first pass only
@@ -251,7 +264,7 @@ function civicSite(t: TownState, m: MonthContext, kind: number, cover: (typeof C
         }
         const j = tileIndex(x, y);
         const v = terrain[j];
-        if (p.use[j] !== USE_EMPTY || !access[j] || constructionLeft(t, j) > 0 || !buildable(v) || terrainKind(v) === T_FOREST || !parcelOpen(t, x, y)) ok = false;
+        if (p.use[j] !== USE_EMPTY || mayors(j) || !access[j] || constructionLeft(t, j) > 0 || !buildable(v) || terrainKind(v) === T_FOREST || !parcelOpen(t, x, y)) ok = false;
         else if (!edge && nextToRoad(p.use, j)) edge = true;
       }
     if (!ok) continue;
@@ -272,7 +285,7 @@ function civicSite(t: TownState, m: MonthContext, kind: number, cover: (typeof C
  * item a Regional Day, one building at a time, and a building only when its
  * cost leaves reserves above the order's safety floor (args[2] months of
  * spending). Everything goes through the same build plan as a mayor's own move
- * (placement, tier, Helper Mode, the undo entry), and each action is a Deputy
+ * (placement, tier, Helper Mode, an entry on the Deputy's undo list), and each action is a Deputy
  * card for the Welcome-back sheet. Returns the Shops tiles it zoned.
  */
 function awayCivic(t: TownState, m: MonthContext, memo: CivicMemo, floor: number, tilesLeft: number): { tiles: number; starved: boolean } {
@@ -315,7 +328,7 @@ function awayCivic(t: TownState, m: MonthContext, memo: CivicMemo, floor: number
     const at = civicSite(t, m, kind, item === 'school' ? 'school' : 'nature');
     if (!at) continue;
     try {
-      applyBuild(t, `deputy.${m.dayIndex}.${id}`, [{ op: 'place', id, x: at[0], y: at[1], rot: 0 }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid' });
+      applyBuild(t, `deputy.${m.dayIndex}.${id}`, [{ op: 'place', id, x: at[0], y: at[1], rot: 0 }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid', deputy: true });
     } catch (e) {
       if (e instanceof EngineError) continue;
       throw e;
@@ -347,7 +360,7 @@ export const AWAY_ROAD_TILES = 6;
  * then the lane clearing fewer Forest tiles, then the shorter, then the start
  * nearest the Town Hall (directions east, west, south, north). Its cost must
  * leave reserves above the order's safety floor. It goes through the same
- * build plan as a mayor's road (undo entry, tile log), with a Deputy card.
+ * build plan as a mayor's road (the Deputy's undo list, tile log), with a Deputy card.
  * Returns whether a lane was laid.
  */
 function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number): boolean {
@@ -360,7 +373,7 @@ function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number)
   const lane = roadDef('lane').build;
   // Where the lane may run: empty, open, buildable land (Forest included: the road clears it, as a mayor's does).
   const open = (i: number): boolean => {
-    if (use[i] !== USE_EMPTY || constructionLeft(t, i) > 0 || !buildable(terrain[i])) return false;
+    if (use[i] !== USE_EMPTY || mayors(i) || constructionLeft(t, i) > 0 || !buildable(terrain[i])) return false;
     const x = i % MAP;
     return parcelOpen(t, x, (i - x) / MAP);
   };
@@ -404,7 +417,7 @@ function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number)
   }
   if (!best) return false;
   try {
-    applyBuild(t, `deputy.${m.dayIndex}.road`, [{ op: 'road', kind: 'lane', path: [best.x0, best.y0, best.x1, best.y1] }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid' });
+    applyBuild(t, `deputy.${m.dayIndex}.road`, [{ op: 'road', kind: 'lane', path: [best.x0, best.y0, best.x1, best.y1] }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid', deputy: true });
   } catch (e) {
     if (e instanceof EngineError) return false;
     throw e;
@@ -502,7 +515,7 @@ function rezoneEmptyHomes(t: TownState, z: number, n: number, first: { far: Uint
   for (let pass = first ? 0 : 1; pass < 2; pass++)
     for (const i of BY_DISTANCE) {
       if (picks.length >= most) break;
-      if (read.use[i] !== homes || read.lvl[i] !== 0 || attach[i] < 0 || constructionLeft(t, i) > 0) continue;
+      if (read.use[i] !== homes || read.lvl[i] !== 0 || attach[i] < 0 || mayors(i) || constructionLeft(t, i) > 0) continue;
       if (first) {
         const d = roadDistrict(first.attach, i);
         if ((pass === 0) !== (d >= 0 && first.far[d] === 1)) continue;
@@ -604,7 +617,7 @@ function growthHelp(t: TownState, m: MonthContext, memo: CivicMemo, tiles: numbe
     const at = civicSite(t, m, kind, cover);
     if (!at) continue;
     try {
-      applyBuild(t, `deputy.${m.dayIndex}.help.${id}`, [{ op: 'place', id, x: at[0], y: at[1], rot: 0 }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid' });
+      applyBuild(t, `deputy.${m.dayIndex}.help.${id}`, [{ op: 'place', id, x: at[0], y: at[1], rot: 0 }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid', deputy: true });
     } catch (e) {
       if (e instanceof EngineError) continue;
       throw e;
@@ -658,6 +671,15 @@ function zoneWanted(t: TownState, left: number, meterAt: number): { kinds: numbe
 /** Runs the standing orders in their list order (M13). "Hold" switches every other order off. */
 export function runOrders(t: TownState, m: MonthContext, books: MonthBooks): void {
   if (orderOn(t, 'hold')) return;
+  MAYOR_TODAY = mayorTilesToday(t, m.dayIndex);
+  try {
+    runEach(t, m, books);
+  } finally {
+    MAYOR_TODAY = null;
+  }
+}
+
+function runEach(t: TownState, m: MonthContext, books: MonthBooks): void {
   const memo = civicMemo(t);
   const spend = Math.max(1, books.spending);
   for (const o of t.orders) {

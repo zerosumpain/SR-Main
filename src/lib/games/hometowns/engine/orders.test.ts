@@ -14,6 +14,7 @@ import { lineIndex, postWhole } from './core';
 import { civicMemo, upkeepOf } from './finance';
 import { stateHash } from './index';
 import { AWAY_GREENS, AWAY_ROAD_TILES, GROWTH_KEEP_HOMES, GROWTH_STAFFED, MARKET_LOTS, renewsContracts } from './orders';
+import { DEPUTY_UNDO_MAX, applyBuild, applyUndo, mayorTilesToday } from './ops';
 import { paramsFor } from './params';
 import { B_KIND, CAT_ROAD, CAT_ZONE, MAP, planesForWrite, planesOf, tileIndex, useCat, usePayload, zoneUse } from './tiles';
 import { BUILDINGS } from './content';
@@ -180,7 +181,7 @@ describe('While I am away, build the Village checklist (decision 6)', () => {
     const card = notes(t, 'deputy.awayCivic.build');
     expect(card).toHaveLength(1);
     expect(card[0].data).toMatchObject({ building: 'schoolHouse', item: 'school', cost: 12_000 });
-    expect(t.undo.at(-1)!.planId).toBe(`deputy.${c.dayIndex}.schoolHouse`); // the same build plan as a mayor's move
+    expect(t.deputyUndo!.at(-1)!.planId).toBe(`deputy.${c.dayIndex}.schoolHouse`); // the same build plan as a mayor’s move, on the Deputy’s own undo list (decision 11)
     c.dayIndex += 1;
     runMonths(c, i, 12, civicSteps(hold()));
     expect(ids(t)).toEqual(['schoolHouse', 'villageGreen']);
@@ -295,7 +296,7 @@ describe('While I am away, lay a short lane when the roadside is full (decision 
     const card = t.inbox.filter((x) => x.kind === 'deputy.awayRoad');
     expect(card).toHaveLength(1);
     expect(card[0].data).toMatchObject({ tiles: AWAY_ROAD_TILES, cost: AWAY_ROAD_TILES * 1500 });
-    expect(t.undo.some((e) => e.planId === `deputy.${c.dayIndex}.road`)).toBe(true);
+    expect(t.deputyUndo!.some((e) => e.planId === `deputy.${c.dayIndex}.road`)).toBe(true);
     expect(before - t.money.reserves).toBeGreaterThanOrEqual(AWAY_ROAD_TILES * 1500);
     // The day's twelve Homes lots went on the new lane's sides; the tiles beyond both dead ends stay free.
     const lots = homesAt(t);
@@ -399,7 +400,7 @@ describe('Keep the town growing: jobs and services for the next tier (G3)', () =
     const card = notes(t, 'deputy.growthHelp.build');
     expect(card).toHaveLength(1);
     expect(card[0].data).toMatchObject({ building: 'surgery', item: 'surgery70', cost: 30_000 });
-    expect(t.undo.at(-1)!.planId).toBe(`deputy.${c.dayIndex}.help.surgery`); // the same build plan as a mayor's move
+    expect(t.deputyUndo!.at(-1)!.planId).toBe(`deputy.${c.dayIndex}.help.surgery`); // the same build plan as a mayor's move
     c.dayIndex += 1;
     runMonths(c, i, 12, civicSteps(economy(0)));
     expect(notes(t, 'deputy.growthHelp.build')).toHaveLength(2); // the next Regional Day, the next one
@@ -496,6 +497,98 @@ describe('Keep the town growing: jobs and services for the next tier (G3)', () =
       expect(ids(t), setup).toEqual([]);
       expect(lots(t, Z_INDUSTRY, false), setup).toBe(0);
     }
+  });
+});
+
+describe('The Deputy leaves the mayor’s day alone (decision 11)', () => {
+  type Town = ReturnType<typeof kitTown>['t'];
+  const economy = (tt: Town) => {
+    tt.meters.fill(0);
+    tt.meters[METER_INDUSTRY] = 20;
+    return { labour: { workforce: [1200, 0, 0], unemployed: [240, 0, 0] } };
+  };
+  /** A Village street lined on its north side with 20 empty Homes lots; its dead ends blocked (no lane). */
+  const street = () => {
+    const k = kitTown({ tier: 1 });
+    road(k.t, 10, 40, 29, 40, 'street');
+    place(k.t, 'villageGreen', 9, 40);
+    place(k.t, 'villageGreen', 30, 40);
+    const w = planesForWrite(k.t);
+    for (let x = 10; x < 30; x++) w.use[tileIndex(x, 39)] = zoneUse(Z_HOMES);
+    k.t.orders = only('growthHelp');
+    k.t.away.lastHelloAt = 9e15;
+    postWhole(k.t, 'other', 1e6);
+    return k;
+  };
+  const kid = (c: { dayIndex: number }) => ({ params: P, dayIndex: c.dayIndex, profile: 'kid' as const });
+  const lots = (t: Town, z: number) => {
+    const p = planesOf(t);
+    let n = 0;
+    for (let k = 0; k < MAP * MAP; k++) if (p.use[k] === zoneUse(z)) n++;
+    return n;
+  };
+
+  it('a child zones a street’s south side, then growth help repaints lots: the child’s lots are untouched and the child’s undo works', () => {
+    const { c, i, t } = street();
+    applyBuild(t, 'kid-zone', [{ op: 'zone', zone: 'homes', rect: [10, 41, 20, 1] }], kid(c));
+    runMonths(c, i, 1, civicSteps(economy));
+    const rezoned = t.inbox.filter((x) => x.kind === 'deputy.growthHelp.rezone');
+    expect(rezoned).toHaveLength(1); // the order ran, and repainted the lots that were not the child’s
+    for (let x = 10; x < 30; x++) expect(planesOf(t).use[tileIndex(x, 41)], `${x}`).toBe(zoneUse(Z_HOMES));
+    expect(mayorTilesToday(t, c.dayIndex)![tileIndex(10, 41)]).toBe(1);
+    expect(applyUndo(t, 'kid-zone', kid(c)).ok).toBe(true);
+    for (let x = 10; x < 30; x++) expect(planesOf(t).use[tileIndex(x, 41)], `${x}`).toBe(0);
+  });
+
+  it('the same street on another day is the Deputy’s to repaint', () => {
+    const { c, i, t } = street();
+    applyBuild(t, 'kid-zone', [{ op: 'zone', zone: 'homes', rect: [10, 41, 20, 1] }], kid(c));
+    t.undo = []; // the Regional Day closed: yesterday’s plans are no longer the mayor’s today
+    runMonths(c, i, 1, civicSteps(economy));
+    expect(lots(t, Z_INDUSTRY)).toBe(24);
+  });
+
+  it('puts its builds on its own list: a full mayor’s list keeps every entry, and the Deputy’s build can be undone the same day', () => {
+    const k = kitTown({ tier: 1 });
+    road(k.t, 4, 30, 60, 30, 'street');
+    const w = planesForWrite(k.t);
+    for (let x = 10; x < 30; x++) {
+      w.use[tileIndex(x, 29)] = zoneUse(Z_HOMES);
+      w.lvl[tileIndex(x, 29)] = 1;
+    }
+    k.t.orders = only('growthHelp');
+    postWhole(k.t, 'other', 1e6);
+    for (let n = 0; n < P.build.undoMax; n++) applyBuild(k.t, `m${n}`, [{ op: 'zone', zone: 'homes', rect: [4 + n, 31, 1, 1] }], kid(k.c));
+    const mine = k.t.undo.map((e) => e.planId);
+    expect(mine).toHaveLength(P.build.undoMax);
+    const reserves = k.t.money.reserves;
+    runMonths(k.c, k.i, 1, civicSteps((tt: Town) => (tt.meters.fill(0), {})));
+    expect(k.t.undo.map((e) => e.planId)).toEqual(mine);
+    const deputy = k.t.deputyUndo!;
+    expect(deputy.map((e) => e.planId)).toEqual([`deputy.${k.c.dayIndex}.help.surgery`]);
+    expect(k.t.buildings.map((b) => BUILDINGS[b[B_KIND]].id)).toEqual(['surgery']);
+    const spent = reserves - k.t.money.reserves;
+    const r = applyUndo(k.t, deputy[0].planId, kid(k.c));
+    expect(r.cost).toBe(-30_000);
+    expect(k.t.buildings).toEqual([]);
+    expect(k.t.deputyUndo).toEqual([]);
+    expect(spent).toBeGreaterThan(0);
+    for (const id of mine) expect(applyUndo(k.t, id, kid(k.c)).ok).toBe(true); // every one of the mayor’s still works
+  });
+
+  it('keeps at most DEPUTY_UNDO_MAX Deputy builds, and still guards a mayor’s plan that fell off a full list', () => {
+    const k = kitTown({ tier: 1 });
+    const env = { ...kid(k.c), deputy: true };
+    road(k.t, 4, 30, 60, 30, 'street');
+    postWhole(k.t, 'other', 1e6);
+    for (let n = 0; n < DEPUTY_UNDO_MAX + 2; n++) applyBuild(k.t, `d${n}`, [{ op: 'road', kind: 'lane', path: [4 + 2 * n, 31, 4 + 2 * n, 31] }], env);
+    expect(k.t.deputyUndo!.map((e) => e.planId)).toEqual(Array.from({ length: DEPUTY_UNDO_MAX }, (_, n) => `d${n + 2}`));
+    expect(k.t.undo).toEqual([]);
+    for (let n = 0; n <= P.build.undoMax; n++) applyBuild(k.t, `m${n}`, [{ op: 'zone', zone: 'homes', rect: [4 + n, 29, 1, 1] }], kid(k.c));
+    expect(k.t.undo.some((e) => e.planId === 'm0')).toBe(false); // fell off the mayor’s list…
+    expect(mayorTilesToday(k.t, k.c.dayIndex)![tileIndex(4, 29)]).toBe(1); // …but is still the mayor’s today
+    refused(() => applyBuild(k.t, 'dx', [{ op: 'dezone', rect: [4, 29, 1, 1] }], env), 409, /mayor built there today/);
+    expect(mayorTilesToday(k.t, k.c.dayIndex + 1)).toBeNull();
   });
 });
 

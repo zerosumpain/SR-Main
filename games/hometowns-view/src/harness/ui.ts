@@ -874,8 +874,19 @@ export class HarnessUi {
 
   private sheetToday(body: HTMLElement, t: TownState): void {
     body.append(h('h2', '', 'Today’s builds'));
-    const today = t.undo.filter((u) => u.day === this.local.county.dayIndex);
+    const day = this.local.county.dayIndex;
+    const today = t.undo.filter((u) => u.day === day);
     if (!today.length) body.append(h('p', 'muted', 'Nothing built today. Plans you build can be undone until the end of the day.'));
+    // Decision 11: Bramble's builds sit on their own list; the mayor can still undo one today.
+    const deputy = (t.deputyUndo ?? []).filter((u) => u.day === day);
+    this.todayRows(body, today);
+    if (deputy.length) {
+      body.append(h('h3', '', 'Bramble’s builds today'));
+      this.todayRows(body, deputy);
+    }
+  }
+
+  private todayRows(body: HTMLElement, today: TownState['undo']): void {
     for (const u of [...today].reverse()) {
       const row = h('div', 'dial');
       row.append(

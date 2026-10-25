@@ -23,6 +23,8 @@ export function coreCloseDay(c: CountyState, r: RegionalContext): void {
     rollDayBooks(t);
     // Plans can only be undone on the day they were built (§9.3): today's entries expire now.
     if (t.undo.length) t.undo = t.undo.filter((e) => e.day > r.dayIndex);
+    if (t.deputyUndo?.length) t.deputyUndo = t.deputyUndo.filter((e) => e.day > r.dayIndex);
+    if (t.mayorTouched && t.mayorTouched.day <= r.dayIndex) delete t.mayorTouched;
     t.realised = emptyRealised(r.dayIndex + 1, c.allocations.length, c.contracts.length);
   }
 }

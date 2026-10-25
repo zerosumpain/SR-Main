@@ -96,6 +96,8 @@ export function eraseMayor(c: CountyState, who: { seat: SeatId; ownerId?: string
     t.initiatives = 0;
     t.pending = [];
     t.undo = [];
+    delete t.deputyUndo;
+    delete t.mayorTouched;
     t.avatar = FORMER_AVATAR;
     // The town's name lives in exactly one place: the county refers to towns
     // by index everywhere else (Gazette, letters, stories, offers), and the

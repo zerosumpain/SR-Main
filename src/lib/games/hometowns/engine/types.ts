@@ -1005,7 +1005,21 @@ export interface TownState {
   why: string;
   /** base64 ring of tile events (records.ts). */
   tileLog: string;
+  /** The mayor's plans today (§9.3): only the mayor's moves, never the Deputy's (decision 11). */
   undo: UndoEntry[];
+  /**
+   * Decision 11: the Deputy's builds today, on their own list (at most
+   * DEPUTY_UNDO_MAX), so they never push the mayor's plans out of `undo`; a
+   * mayor may still undo one the same day for a full refund. Absent until the
+   * Deputy first builds (read as empty).
+   */
+  deputyUndo?: UndoEntry[];
+  /**
+   * Decision 11: tiles of the mayor's plans today that fell out of `undo`
+   * (past build.undoMax), so the Deputy still leaves them alone; sorted.
+   * Absent unless that happened today.
+   */
+  mayorTouched?: { day: number; tiles: number[] };
   inbox: InboxItem[];
   stamps: Stamp[];
   trophies: string[];

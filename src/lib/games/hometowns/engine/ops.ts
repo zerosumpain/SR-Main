@@ -63,6 +63,35 @@ export interface OpsEnv {
   /** Today's Regional Day index (undo and same-day refunds). */
   dayIndex: number;
   profile: 'kid' | 'adult';
+  /**
+   * A Deputy's plan (decision 11): refused if it would change a tile the
+   * mayor zoned or built today, and kept on the town's Deputy undo list.
+   */
+  deputy?: boolean;
+}
+
+/** Most of the Deputy's builds kept for a same-day undo (decision 11): it makes at most three a Regional Day. */
+export const DEPUTY_UNDO_MAX = 6;
+
+/**
+ * Decision 11: the tiles the mayor's plans changed on Regional Day `dayIndex`
+ * (1 per tile), from the mayor's undo entries for that day and the tiles of
+ * any that fell out of the list; null when there are none. No Deputy order
+ * edits these tiles.
+ */
+export function mayorTilesToday(t: TownState, dayIndex: number): Uint8Array | null {
+  let out: Uint8Array | null = null;
+  for (const e of t.undo) {
+    if (e.day !== dayIndex || e.tiles.length === 0) continue;
+    out ??= new Uint8Array(TILES);
+    for (let i = 0; i + 5 < e.tiles.length; i += 6) out[e.tiles[i]] = 1;
+  }
+  const kept = t.mayorTouched;
+  if (kept && kept.day === dayIndex && kept.tiles.length) {
+    out ??= new Uint8Array(TILES);
+    for (const tile of kept.tiles) out[tile] = 1;
+  }
+  return out;
 }
 
 /** A tile's `use` with building references replaced by one marker, for undo checks. */
@@ -404,8 +433,9 @@ export function applyBuild(t: TownState, planId: string, plan: Op[], env: OpsEnv
   };
   const s: PlanState = {
     t, env, cost: 0, survey: 0, refund: 0, before: new Map(), constructionBefore: new Map(), added: [], removed: [],
-    today: t.undo.filter((e) => e.day === env.dayIndex),
+    today: [...t.undo, ...(t.deputyUndo ?? [])].filter((e) => e.day === env.dayIndex),
   };
+  const guard = env.deputy ? mayorTilesToday(t, env.dayIndex) : null;
   try {
     for (const op of plan) {
       switch (op?.op) {
@@ -419,6 +449,8 @@ export function applyBuild(t: TownState, planId: string, plan: Op[], env: OpsEnv
         default: throw new EngineError(400, 'That plan has a step this game does not know.');
       }
     }
+    // Decision 11: a Deputy plan never changes the mayor's land of today (the orders skip it; this is the backstop).
+    if (guard) for (const tile of s.before.keys()) if (guard[tile]) throw new EngineError(409, 'The mayor built there today, so Bramble leaves it alone.');
     const total = s.cost + s.survey;
     if (total > Math.max(0, t.money.reserves) && total > 0)
       throw new EngineError(409, `That plan costs ${formatPounds(total)} and you have ${formatPounds(Math.max(0, t.money.reserves))}.`);
@@ -448,19 +480,48 @@ export function applyBuild(t: TownState, planId: string, plan: Op[], env: OpsEnv
   }
   const construction: number[] = [];
   for (const tile of [...s.constructionBefore.keys()].sort((a, b) => a - b)) construction.push(tile, s.constructionBefore.get(tile)!);
-  t.undo.push({
+  const entry: UndoEntry = {
     planId, day: env.dayIndex, atTick: t.tick, cost: s.cost + s.survey - s.refund, tiles, added: s.added, removed: s.removed,
     construction, terrainEdits: t.terrainEdits.slice(saved.terrainEdits.length), parcelsBefore: saved.parcels, rightsBefore: saved.parcelRights,
-  });
-  while (t.undo.length > env.params.build.undoMax) t.undo.shift();
+  };
+  if (env.deputy) {
+    // Decision 11: the Deputy's own list, so its builds never push the mayor's plans out.
+    const list = (t.deputyUndo ??= []);
+    list.push(entry);
+    while (list.length > DEPUTY_UNDO_MAX) list.shift();
+  } else {
+    t.undo.push(entry);
+    while (t.undo.length > env.params.build.undoMax) keepMayorTiles(t, t.undo.shift()!, env.dayIndex);
+  }
   return { ok: true, atTick: t.tick, cost: s.cost + s.survey - s.refund };
 }
 
-/** Undo: a full refund before the Regional Day while the plan's tiles are unchanged (§9.3). */
+/**
+ * Decision 11: a mayor's plan of today that falls out of the undo list keeps
+ * its tiles out of the Deputy's reach until the Regional Day.
+ */
+function keepMayorTiles(t: TownState, e: UndoEntry, dayIndex: number): void {
+  if (e.day !== dayIndex || e.tiles.length === 0) return;
+  const kept = t.mayorTouched && t.mayorTouched.day === dayIndex ? t.mayorTouched.tiles : [];
+  const set = new Set(kept);
+  for (let i = 0; i + 5 < e.tiles.length; i += 6) set.add(e.tiles[i]);
+  t.mayorTouched = { day: dayIndex, tiles: [...set].sort((a, b) => a - b) };
+}
+
+/**
+ * Undo: a full refund before the Regional Day while the plan's tiles are
+ * unchanged (§9.3). The mayor's plans first, then the Deputy's (decision 11:
+ * the mayor may undo a Deputy build of today the same way).
+ */
 export function applyUndo(t: TownState, planId: string, env: OpsEnv): CommandResult {
-  const at = t.undo.findIndex((e) => e.planId === planId);
+  let list = t.undo;
+  let at = list.findIndex((e) => e.planId === planId);
+  if (at < 0 && t.deputyUndo) {
+    list = t.deputyUndo;
+    at = list.findIndex((e) => e.planId === planId);
+  }
   if (at < 0) throw new EngineError(404, 'That plan is no longer in today’s builds.');
-  const e = t.undo[at];
+  const e = list[at];
   if (e.day !== env.dayIndex) throw new EngineError(409, 'Plans can only be undone on the day they were built.');
   const p = planesOf(t);
   for (let i = 0; i + 5 < e.tiles.length; i += 6) {
@@ -490,7 +551,7 @@ export function applyUndo(t: TownState, planId: string, env: OpsEnv): CommandRes
       }
   }
   postWhole(t, 'refunds', e.cost);
-  t.undo.splice(at, 1);
+  list.splice(at, 1);
   return { ok: true, atTick: t.tick, cost: -e.cost };
 }
 

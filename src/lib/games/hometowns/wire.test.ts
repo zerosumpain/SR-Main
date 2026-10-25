@@ -125,7 +125,7 @@ function buildSix(): { c: CountyState; now: number } {
 }
 
 const PUBLIC_KEYS = new Set(['seat', 'name', 'avatar', 'flag', 'tier', 'pop', 'faces', 'stars', 'taxes', 'holiday', 'archived', 'inFortnight', 'skyline', 'mayor', 'linked']);
-const PRIVATE = ['"reserves"', '"bonds"', '"loan"', '"orders"', '"books"', '"funding"', '"policies"', '"inbox"', '"undo"'];
+const PRIVATE = ['"reserves"', '"bonds"', '"loan"', '"orders"', '"books"', '"funding"', '"policies"', '"inbox"', '"undo"', '"deputyUndo"', '"mayorTouched"'];
 
 beforeEach(() => {
   process.env.HOMETOWNS_DEV_CLOCK = '1';
