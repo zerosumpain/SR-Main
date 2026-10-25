@@ -855,6 +855,8 @@ export interface CivicMemo {
   civicDay?: number;
   /** The dayIndex the away order last looked for a short lane to open new roadside land (decision 8: at most one a Regional Day); absent before the first. */
   roadDay?: number;
+  /** The dayIndex the growth-help order last looked at the next tier's jobs and services (G3: one look a Regional Day); absent before the first. */
+  helpDay?: number;
   /** Policy cards Helper Mode paused (§5.13 step 4), restored when it ends. */
   paused: ActivePolicy[];
   /** The next tier's checklist at the last month end (§7): its tier, met-item bits, item count. */

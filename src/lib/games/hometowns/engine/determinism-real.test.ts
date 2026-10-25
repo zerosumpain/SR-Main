@@ -26,7 +26,7 @@ const DAY = 86_400_000;
 const PLAYERS = ['balanced', 'industrial', 'tourist'] as const;
 const DAYS = 2;
 
-const GOLDEN_HASH = '7604c2e152ee5f8c';
+const GOLDEN_HASH = '04b37d429eadfe61';
 
 /** Three bot towns founded on the real engine, Bramble's steps taken and the fortnight tapped through. */
 function founded(seed = 3): { c: CountyState; now: number } {

@@ -16,8 +16,8 @@
   }
  ],
  "client": {
-  "engineHash": "fb0ccb72ca7d1ac5",
-  "page": "/projects/hometowns/4265d9e4e38f5ac1/mobile.html",
+  "engineHash": "6b188af9e6ba0165",
+  "page": "/projects/hometowns/a2c38f0ad6f57e0b/mobile.html",
   "bridge": 1
  },
  "clock": {
@@ -39,7 +39,7 @@
   "seat": "s1",
   "profile": "adult",
   "isParent": true,
-  "townHash": "e85b8ebe6e06c126",
+  "townHash": "6bec7ad9aa092243",
   "derived": {
    "stars": [
     14.8,
@@ -1066,6 +1066,15 @@
       12,
       60,
       3
+     ]
+    },
+    {
+     "kind": "growthHelp",
+     "on": false,
+     "args": [
+      24,
+      3,
+      5
      ]
     },
     {

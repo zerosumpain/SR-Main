@@ -26,7 +26,8 @@ import { neutral } from './derived';
 import { largestRemainder } from './num';
 import { memoFor, tierPersons } from './people';
 import { homeTiles, jobDistricts, tileFacts } from './housing';
-import { B_KIND, B_STAFF, B_X, B_Y, DISTRICTS, tileIndex } from './tiles';
+import { DISTRICT_OF, roadNetOf } from './space';
+import { B_KIND, B_STAFF, B_X, B_Y, CAT_ZONE, DISTRICTS, planesOf, tileIndex, useCat, usePayload, zonedTiles } from './tiles';
 
 const N_DISTRICTS = DISTRICTS;
 import {
@@ -37,6 +38,7 @@ import {
   STAGE_W,
   person,
   type LabourSlot,
+  Z_HOMES,
   type MonthContext,
   type TownState,
 } from './types';
@@ -78,18 +80,48 @@ function spread(open: Float64Array, h: number, n: number, cap?: Float64Array): n
 }
 
 /**
- * Share of each tier's workforce living in a district with no job district
- * within maxCommute minutes (§5.9 matching step 2).
+ * Where a tile's trips start and end: the district of its attachment road
+ * (the nearest road within develop.roadReach, as M4 Transport routes them,
+ * §5.9), or −1 for a tile with no road in reach. `attach` is the road net's.
  */
-function unreachableShare(t: TownState, m: MonthContext): number[] {
+export function roadDistrict(attach: Int32Array, i: number): number {
+  const a = attach[i];
+  return a >= 0 ? DISTRICT_OF[a] : -1;
+}
+
+/** The town's attachment roads per tile (the memoised road net's, as M4 uses). */
+export function attachOf(t: TownState, m: MonthContext): Int32Array {
+  return roadNetOf(t, m.params.develop.roadReach).attach;
+}
+
+/**
+ * The districts (by attachment road, as M4 Transport routes the trips) with
+ * a job district within maxCommute minutes (1), this month; null before the
+ * month's travel times, or when the town has no job district at all (§5.9
+ * matching step 2). A job tile counts for its own district and its road's.
+ * The growth-help order reads it too (G3, §5.18).
+ */
+export function workReach(t: TownState, m: MonthContext): Uint8Array | null {
   const travel = m.derived.travel;
-  const homes = homeTiles(t, m);
-  const jobs = jobDistricts(t, m);
+  const own = jobDistricts(t, m);
   const nd = N_DISTRICTS;
+  const jobs = JOB_DISTRICTS;
+  jobs.set(own);
+  // A job lot across a district line from its road is reached through the road's district (G3).
+  const attach = attachOf(t, m);
+  const busy = tileFacts(t, m).busy;
+  const p = planesOf(t);
+  const zoned = zonedTiles(p.use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
+    const u = p.use[i];
+    if (useCat(u) !== CAT_ZONE || usePayload(u) === Z_HOMES || (p.lvl[i] & 7) === 0 || busy[i]) continue;
+    const d = roadDistrict(attach, i);
+    if (d >= 0) jobs[d] = 1;
+  }
   let anyJobs = false;
   for (let d = 0; d < nd; d++) if (jobs[d]) anyJobs = true;
-  const out = [0, 0, 0];
-  if (!travel || !anyJobs || homes.count === 0) return out;
+  if (!travel || !anyJobs) return null;
   const reach = new Uint8Array(nd);
   const minutes = travel.minutes;
   const max = m.params.labour.maxCommute;
@@ -99,13 +131,32 @@ function unreachableShare(t: TownState, m: MonthContext): number[] {
         reach[a] = 1;
         break;
       }
+  return reach;
+}
+
+/** workReach's scratch: job districts. */
+const JOB_DISTRICTS = new Uint8Array(N_DISTRICTS);
+
+/**
+ * Share of each tier's workforce living in a district with no job district
+ * within maxCommute minutes (§5.9 matching step 2).
+ */
+function unreachableShare(t: TownState, m: MonthContext): number[] {
+  const homes = homeTiles(t, m);
+  const reach = workReach(t, m);
+  const out = [0, 0, 0];
+  if (!reach || homes.count === 0) return out;
+  const attach = attachOf(t, m);
   const all = [0, 0, 0];
   const far = [0, 0, 0];
   for (let i = 0; i < homes.count; i++) {
     const h = homes.tier[i];
     all[h] += homes.persons[i];
+    // A home's trips leave from its road's district (as M4 routes them), not from the district it sits in (G3);
+    // a home with no road in reach keeps its own district, as before.
     const tile = homes.tile[i];
-    if (!reach[((tile >> 9) << 3) | ((tile & 63) >> 3)]) far[h] += homes.persons[i]; // districtOf, 64-wide map
+    const d = roadDistrict(attach, tile);
+    if (!reach[d >= 0 ? d : ((tile >> 9) << 3) | ((tile & 63) >> 3)]) far[h] += homes.persons[i]; // districtOf, 64-wide map
   }
   for (let h = 0; h < 3; h++) out[h] = all[h] > 0 ? far[h] / all[h] : 0;
   return out;

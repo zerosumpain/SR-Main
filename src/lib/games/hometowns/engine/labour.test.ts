@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { fixture } from '../../../../../scripts/hometowns/fixture';
 import { monthContext } from '../../../../../scripts/hometowns/people-kit';
+import { kitTown, monthOf, people, road, zone } from '../../../../../scripts/hometowns/space-kit';
 import { buildingIndex } from './content';
 import { neutralFlows, population } from './core';
 import { neutral } from './derived';
@@ -145,6 +146,32 @@ describe('commuters and reach (§5.9 steps 2–4)', () => {
     travel.minutes.fill(100);
     const l = labour(t, c, i, supply({ shops: [1000, 0, 0] }), { travel });
     expect(l.unemployed).toEqual([170, 0, 0]);
+  });
+
+  it('reaches work through the district of a home’s road, and a job lot’s, as M4 routes the trips (G3)', () => {
+    // A street along y 8 (district row 1); travel runs only within district 9 (x 8–15, y 8–15). First a home
+    // at (10, 7), in district 1 with its road in district 9, by a job lot in district 9; then a home in
+    // district 9 by a job lot at (12, 7), in district 1 with its road in district 9.
+    const cases: [home: [number, number], job: [number, number]][] = [
+      [[10, 7], [12, 9]],
+      [[10, 9], [12, 7]],
+    ];
+    for (const [home, job] of cases) {
+      const k = kitTown({ tier: 1 });
+      road(k.t, 4, 8, 20, 8, 'street');
+      zone(k.t, home[0], home[1], 'homes');
+      zone(k.t, job[0], job[1], 'shops');
+      people(k.t, 0, 100);
+      const m = monthOf(k);
+      const travel = neutral.travel();
+      travel.minutes.fill(Infinity);
+      travel.minutes[9 * 64 + 9] = 5;
+      m.derived.travel = travel;
+      m.derived.development = supply({ shops: [1000, 0, 0] });
+      stepLabour(k.t, m);
+      expect(m.derived.labour!.unemployed[0], `home ${home}, job ${job}`).toBe(0);
+      expect(m.derived.labour!.workforce[0]).toBeGreaterThan(0);
+    }
   });
 
   it('keeps a stock of the long-term unemployed that never exceeds unemployment', () => {

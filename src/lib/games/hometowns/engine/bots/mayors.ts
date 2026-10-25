@@ -773,7 +773,8 @@ function followAdvisor(c: Ctx, card: string): boolean {
       utilities(c, true);
       break;
     case 'mo.jobsWanted':
-      more(c.t.meters[5] > c.t.meters[3] ? Z_INDUSTRY : Z_SHOPS, plan(6));
+      // A child taps the tallest of the work bars (Farms too, until Town); a mayor weighs factories against shops.
+      more(c.v.profile === 'kid' ? kidJobZone(c) : c.t.meters[5] > c.t.meters[3] ? Z_INDUSTRY : Z_SHOPS, plan(6));
       break;
     case 'mo.homesWanted':
     case 'mo.squeezed':
@@ -1119,9 +1120,18 @@ function finish(c: Ctx): Command[] {
   return c.cmds;
 }
 
+/** Free lots under which a child's streets look full (the Kid opens new land then). */
+const KID_FULL_LOTS = 20;
+
 /** The Kid (§11.2): three actions a day, an advisor card 60% of the time, otherwise something random but legal. */
 function kidPolicy(v: BotView, rng: BotRng, s: Style): Command[] {
   const c = newCtx(v, rng, s, 3);
+  // New land glows on the map once the town may open it (§3.3's parcel rights). A child whose streets are
+  // full taps it half the time; one with room to spare leaves it be.
+  if (!s.noParcels && c.t.parcelRights > 0 && zoneCounts(c.m).freeLots < KID_FULL_LOTS && rng() < 0.5) {
+    const q = bestParcel(c.t, c.t.parcels);
+    if (q !== null) build(c, [{ op: 'parcel', p: q }], c.p.build.surveyFee * Math.max(1, c.t.tier), 'parcel');
+  }
   // A child taps the card on top (the advisors are ranked, §9.7); one that does nothing falls through to the next.
   let card = 0;
   let bubble = 0;
@@ -1135,6 +1145,13 @@ function kidPolicy(v: BotView, rng: BotRng, s: Style): Command[] {
     if (c.left === before) c.left--; // nothing legal: the action is spent anyway
   }
   return finish(c);
+}
+
+/** The work zone whose meter stands tallest (Industry, Shops, then Farms while they may still be zoned). */
+function kidJobZone(c: Ctx): number {
+  let z = c.t.meters[5] > c.t.meters[3] ? Z_INDUSTRY : Z_SHOPS;
+  if (c.t.tier <= ZONE_DEFS[Z_FARMS].zoneUntil && c.t.meters[7] > Math.max(c.t.meters[5], c.t.meters[3])) z = Z_FARMS;
+  return z;
 }
 
 /** A wants bubble's ghost plan (§5.15), as a child would accept it. */
@@ -1159,7 +1176,7 @@ function tapWant(c: Ctx, key: string): boolean {
       zone(c, Z_LEISURE, 4);
       break;
     case 'talk.jobs':
-      zone(c, c.t.meters[5] > c.t.meters[3] ? Z_INDUSTRY : Z_SHOPS, 6 * day);
+      zone(c, kidJobZone(c), 6 * day);
       break;
     case 'power':
     case 'water':

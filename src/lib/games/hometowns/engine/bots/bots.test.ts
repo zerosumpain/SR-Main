@@ -270,6 +270,29 @@ describe('the bot mayors', () => {
     expect(cmds.filter((x) => x.type !== 'undo').length).toBeLessThanOrEqual(3);
   });
 
+  it('the Kid opens new land when its streets are full and it may (G3), and leaves it be otherwise', () => {
+    for (const [rights, fill] of [[1, true], [0, true], [1, false]] as const) {
+      const { c, now } = founded(['kid']);
+      const t = c.towns[0];
+      if (fill) applyCommand(c, 's0', { type: 'build', planId: 'fill', plan: zoneOps(pickLots(mapOf(t), 0, 400), 'homes') }, now);
+      t.parcelRights = rights;
+      const cmds = BOTS.kid.policy({ ...viewOf(c, 's0', now + 1000)!, advisors: [], wants: [] }, () => 0.3);
+      const parcels = cmds.flatMap((x) => (x.type === 'build' ? x.plan : [])).filter((o) => o.op === 'parcel');
+      expect(parcels.length, `rights ${rights}, full ${fill}`).toBe(rights && fill ? 1 : 0);
+    }
+  });
+
+  it('the Kid answers a jobs card at the tallest work bar, Farms included (G3)', () => {
+    const { c, now } = founded(['kid']);
+    const t = c.towns[0];
+    t.meters.fill(0);
+    t.meters[7] = 60; // Farms
+    t.meters[5] = 20; // Industry
+    const cmds = BOTS.kid.policy({ ...viewOf(c, 's0', now)!, advisors: ['mo.jobsWanted'], wants: [] }, () => 0.3);
+    const zones = cmds.flatMap((x) => (x.type === 'build' ? x.plan : [])).filter((o) => o.op === 'zone').map((o) => (o as Op & { op: 'zone' }).zone);
+    expect(zones[0]).toBe('farms');
+  });
+
   it('the Spammer zones far more Homes than Balanced in the same session', () => {
     const { c, now } = founded(['balanced', 'spammer']);
     const homes = (cmds: Command[]) => cmds.flatMap((x) => (x.type === 'build' ? x.plan : [])).filter((o) => o.op === 'zone' && o.zone === 'homes').reduce((s, o) => s + (o as Op & { op: 'zone' }).rect[2], 0);

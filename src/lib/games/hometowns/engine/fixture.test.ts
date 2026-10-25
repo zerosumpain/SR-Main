@@ -50,9 +50,9 @@ describe('golden fixtures', () => {
   it('pins the fixture hashes (update deliberately when the contract changes)', () => {
     expect(FIXTURE_KINDS.map((k) => stateHash(fixture(k).county.towns[fixture(k).town]))).toMatchInlineSnapshot(`
       [
-        "123d6a81777b11a1",
-        "093b015dedb93652",
-        "334d95dc49d7aa0c",
+        "8bbb2d40de95af14",
+        "964cc3be5949da71",
+        "6bdbc7f002aaea4f",
       ]
     `);
   });

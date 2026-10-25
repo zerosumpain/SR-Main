@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { civicSteps, type CivicScript } from '../../../../../scripts/hometowns/civic-kit';
 import { fixture } from '../../../../../scripts/hometowns/fixture';
-import { kitTown, road } from '../../../../../scripts/hometowns/space-kit';
+import { kitTown, place, road } from '../../../../../scripts/hometowns/space-kit';
 import { runMonths } from '../../../../../scripts/hometowns/people-kit';
 import { applyCommand } from './commands';
 import { ORDER_DEFAULTS } from './content';
@@ -13,11 +13,11 @@ import { monthlySpending } from './finance';
 import { lineIndex, postWhole } from './core';
 import { civicMemo, upkeepOf } from './finance';
 import { stateHash } from './index';
-import { AWAY_GREENS, AWAY_ROAD_TILES, MARKET_LOTS, renewsContracts } from './orders';
+import { AWAY_GREENS, AWAY_ROAD_TILES, GROWTH_KEEP_HOMES, GROWTH_STAFFED, MARKET_LOTS, renewsContracts } from './orders';
 import { paramsFor } from './params';
 import { B_KIND, CAT_ROAD, CAT_ZONE, MAP, planesForWrite, planesOf, tileIndex, useCat, usePayload, zoneUse } from './tiles';
 import { BUILDINGS } from './content';
-import { EngineError, FUNDING_KEYS, METER_SHOPS, Z_HOMES, Z_SHOPS, type StandingOrder } from './types';
+import { EngineError, FUNDING_KEYS, METER_INDUSTRY, METER_SHOPS, Z_HOMES, Z_INDUSTRY, Z_SHOPS, type StandingOrder } from './types';
 
 const P = paramsFor('v1');
 
@@ -343,6 +343,122 @@ describe('While I am away, lay a short lane when the roadside is full (decision 
   });
 });
 
+describe('Keep the town growing: jobs and services for the next tier (G3)', () => {
+  type Town = ReturnType<typeof kitTown>['t'];
+  /** A Village with a street at y 30 and twenty built Homes lots along its north side; the mayor is here. */
+  const village = () => {
+    const k = kitTown({ tier: 1 });
+    road(k.t, 4, 30, 60, 30, 'street');
+    const w = planesForWrite(k.t);
+    for (let x = 10; x < 30; x++) {
+      w.use[tileIndex(x, 29)] = zoneUse(Z_HOMES);
+      w.lvl[tileIndex(x, 29)] = 1;
+    }
+    k.t.orders = only('growthHelp');
+    k.t.away.lastHelloAt = 9e15;
+    postWhole(k.t, 'other', 1e6);
+    return k;
+  };
+  /** Meters all at 0 but `industry`; services uncovered (the neutral coverage); `jobless` of `workforce` £ workers out of work. */
+  const economy = (industry: number, jobless = 0, workforce = 300) => (tt: Town) => {
+    tt.meters.fill(0);
+    tt.meters[METER_INDUSTRY] = industry;
+    return { labour: { workforce: [workforce, 0, 0], unemployed: [jobless, 0, 0] } };
+  };
+  const ids = (t: Town) => t.buildings.map((b) => BUILDINGS[b[B_KIND]].id);
+  const notes = (t: Town, kind: string) => t.inbox.filter((x) => x.kind === kind);
+  const lots = (t: Town, z: number, empty = true) => {
+    const p = planesOf(t);
+    let n = 0;
+    for (let k = 0; k < MAP * MAP; k++) if (p.use[k] === zoneUse(z) && (!empty || p.lvl[k] === 0)) n++;
+    return n;
+  };
+
+  it('builds the missing service for a lapsed coverage item, one a Regional Day in checklist order, with a Deputy card', () => {
+    const { c, i, t } = village();
+    runMonths(c, i, 12, civicSteps(economy(0)));
+    expect(ids(t)).toEqual(['surgery']); // surgery70 comes first; one building a day
+    const card = notes(t, 'deputy.growthHelp.build');
+    expect(card).toHaveLength(1);
+    expect(card[0].data).toMatchObject({ building: 'surgery', item: 'surgery70', cost: 30_000 });
+    expect(t.undo.at(-1)!.planId).toBe(`deputy.${c.dayIndex}.help.surgery`); // the same build plan as a mayor's move
+    c.dayIndex += 1;
+    runMonths(c, i, 12, civicSteps(economy(0)));
+    expect(notes(t, 'deputy.growthHelp.build')).toHaveLength(2); // the next Regional Day, the next one
+  });
+
+  it('adds no more of a service while one is being built, or while its buildings are short of staff', () => {
+    for (const o of [{ building: true }, { staff: GROWTH_STAFFED - 100 }]) {
+      const { c, i, t } = village();
+      place(t, 'surgery', 20, 32, o);
+      runMonths(c, i, 1, civicSteps(economy(0)));
+      expect(ids(t), JSON.stringify(o)).toEqual(['surgery', 'constablePost']); // police50 instead
+    }
+  });
+
+  it('zones work lots by the road for the jobless when the jobs item is about to lapse', () => {
+    const { c, i, t } = village();
+    runMonths(c, i, 1, civicSteps(economy(20, 30))); // 10% out of work: within the 5-point margin of the item's 10%
+    expect(lots(t, Z_INDUSTRY)).toBe(5); // 30 jobless ÷ 6 jobs a lot
+    expect(notes(t, 'deputy.growthHelp.jobs')[0].data).toMatchObject({ tiles: 5, zone: 'industry' });
+  });
+
+  it('counts the workers of the Homes lots still waiting, and the jobs of the work lots already waiting', () => {
+    const { c, i, t } = village();
+    const w = planesForWrite(t);
+    for (let x = 10; x < 22; x++) w.lvl[tileIndex(x, 29)] = 0; // twelve Homes lots nobody has built on yet
+    runMonths(c, i, 1, civicSteps(economy(20, 30)));
+    // 30 jobless + 12 lots × 8 residents × (300 workers ÷ the town's people), at most 24 lots a day.
+    const pop = t.people.reduce((a, b) => a + b, 0);
+    const wanted = 30 + (pop > 0 ? (300 / pop) * 12 * 8 : 0);
+    expect(lots(t, Z_INDUSTRY)).toBe(Math.min(24, Math.ceil(wanted / 6)));
+  });
+
+  it('zones no work when no trade wants workers, or when unemployment is well under the line', () => {
+    for (const [industry, jobless] of [[-10, 60], [20, 6]] as const) {
+      const { c, i, t } = village();
+      runMonths(c, i, 1, civicSteps(economy(industry, jobless)));
+      expect(lots(t, Z_INDUSTRY, false), `${industry}/${jobless}`).toBe(0);
+    }
+  });
+
+  it('repaints surplus empty Homes lots for work when the roads are full, keeping some for the builders', () => {
+    // Both sides of a short street lined with empty Homes lots, its dead ends blocked: no free roadside land, no lane.
+    const k = kitTown({ tier: 1 });
+    road(k.t, 10, 40, 29, 40, 'street');
+    place(k.t, 'villageGreen', 9, 40);
+    place(k.t, 'villageGreen', 30, 40);
+    const w = planesForWrite(k.t);
+    for (let x = 10; x < 30; x++)
+      for (const y of [39, 41]) {
+        w.use[tileIndex(x, y)] = zoneUse(Z_HOMES);
+        w.lvl[tileIndex(x, y)] = 0;
+      }
+    k.t.orders = only('growthHelp');
+    k.t.away.lastHelloAt = 9e15;
+    postWhole(k.t, 'other', 1e6);
+    runMonths(k.c, k.i, 1, civicSteps(economy(20, 240, 1200)));
+    const rezoned = notes(k.t, 'deputy.growthHelp.rezone');
+    expect(rezoned).toHaveLength(1);
+    expect(lots(k.t, Z_HOMES)).toBe(GROWTH_KEEP_HOMES);
+    expect(lots(k.t, Z_INDUSTRY)).toBe(40 - GROWTH_KEEP_HOMES);
+    expect(rezoned[0].data).toMatchObject({ tiles: 40 - GROWTH_KEEP_HOMES, zone: 'industry' });
+  });
+
+  it('does nothing in a Hamlet, under Hold, with the order off, or below the safety floor', () => {
+    for (const setup of ['hamlet', 'hold', 'off', 'poor'] as const) {
+      const { c, i, t } = village();
+      if (setup === 'hamlet') t.tier = 0;
+      if (setup === 'hold') t.orders = only('growthHelp', 'hold');
+      if (setup === 'off') t.orders = only();
+      if (setup === 'poor') postWhole(t, 'other', -t.money.reserves);
+      runMonths(c, i, 12, civicSteps(economy(20, 60)));
+      expect(ids(t), setup).toEqual([]);
+      expect(lots(t, Z_INDUSTRY, false), setup).toBe(0);
+    }
+  });
+});
+
 describe('Pay back the Town Loan early', () => {
   it('repays what keeps three months of spending in hand, with the 1% fee', () => {
     const { c, i, t } = town();
@@ -427,6 +543,7 @@ describe('the orders move', () => {
       ['fixDamaged', true, true],
       ['renewContracts', true, false],
       ['awayZoning', true, false],
+      ['growthHelp', true, false],
       ['repayLoan', false, false],
       ['hold', false, false],
     ]);

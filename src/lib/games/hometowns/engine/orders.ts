@@ -16,10 +16,12 @@ import { BUILDINGS, ORDER_DEFAULTS, TIER_DEFS, ZONE_DEFS, buildingIndex, roadDef
 import { lineIndex, population, postWhole } from './core';
 import { civicMemo, deputyNote, levelPayment, monthsOfSpending, monthlySpending, type MonthBooks } from './finance';
 import { applyBuild, placeCost, roadTileCost } from './ops';
+import { homeTiles } from './housing';
+import { attachOf, roadDistrict, workReach } from './labour';
 import { appendTileEvent } from './records';
-import { CHECKLISTS } from './tiers';
+import { CHECKLISTS, GREAT_METROPOLIS, checkFacts, type CheckFacts } from './tiers';
 import { T_FOREST, TOWN_HALL_AT, buildable, terrainKind, terrainOf } from './terrain';
-import { B_KIND, B_X, B_Y, CAT_ROAD, CAT_ZONE, MAP, TILES, USE_EMPTY, cellOf, constructionLeft, footprint, inMap, parcelOpen, planesForWrite, planesOf, roadAccess, tileIndex, useCat, usePayload, zoneUse, zonedTiles } from './tiles';
+import { B_KIND, B_STAFF, B_X, B_Y, CAT_ROAD, CAT_ZONE, MAP, TILES, USE_EMPTY, cellOf, constructionLeft, footprint, inMap, parcelOpen, planesForWrite, planesOf, roadAccess, tileIndex, useCat, usePayload, zoneUse, zonedTiles } from './tiles';
 import {
   COVERAGES,
   EngineError,
@@ -50,6 +52,7 @@ export const MAX_ORDERS = 8;
 const ARG_BOUNDS: Record<string, readonly [number, number][]> = {
   budgetHealthy: [[0.5, 12], [0, 500]],
   awayZoning: [[0, 24], [0, 100], [0, 12]],
+  growthHelp: [[0, 48], [0, 12], [0, 20]],
   repayLoan: [[0.5, 24]],
 };
 
@@ -111,23 +114,29 @@ function continuesDeadEnd(use: Uint16Array, i: number): boolean {
 
 /**
  * Zones up to `n` empty roadside tiles with zone `z` (nearest the Town Hall
- * first), leaving the tile beyond each road's dead end free (decision 8);
+ * first; with `first`, the tiles whose attachment road is in a district it
+ * marks before all others), leaving the tile beyond each road's dead end free (decision 8);
  * returns tiles zoned.
  */
-function zoneRoadside(t: TownState, z: number, n: number): number {
+function zoneRoadside(t: TownState, z: number, n: number, first: { far: Uint8Array; attach: Int32Array } | null = null): number {
   if (n <= 0) return 0;
   const terrain = terrainOf(t);
   const read = planesOf(t).use;
   const picks: number[] = [];
-  for (const i of BY_DISTANCE) {
-    if (picks.length >= n) break;
-    if (read[i] !== USE_EMPTY || constructionLeft(t, i) > 0) continue;
-    const v = terrain[i];
-    if (!buildable(v) || terrainKind(v) === T_FOREST) continue;
-    const x = i % MAP;
-    if (!parcelOpen(t, x, (i - x) / MAP) || !nextToRoad(read, i) || continuesDeadEnd(read, i)) continue;
-    picks.push(i);
-  }
+  for (let pass = first ? 0 : 1; pass < 2; pass++)
+    for (const i of BY_DISTANCE) {
+      if (picks.length >= n) break;
+      if (read[i] !== USE_EMPTY || constructionLeft(t, i) > 0) continue;
+      if (first) {
+        const d = roadDistrict(first.attach, i);
+        if ((pass === 0) !== (d >= 0 && first.far[d] === 1)) continue; // the far districts' lots in the first pass only
+      }
+      const v = terrain[i];
+      if (!buildable(v) || terrainKind(v) === T_FOREST) continue;
+      const x = i % MAP;
+      if (!parcelOpen(t, x, (i - x) / MAP) || !nextToRoad(read, i) || continuesDeadEnd(read, i)) continue;
+      picks.push(i);
+    }
   if (picks.length === 0) return 0;
   const w = planesForWrite(t);
   for (const i of picks) {
@@ -408,6 +417,205 @@ function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number)
   return true;
 }
 
+// ---- Growth help (G3, §5.18) ----------------------------------------------------------------------------
+
+/**
+ * The next tier's coverage items the growth-help order can hold with one
+ * small building, and that building: the Town checklist's services, which a
+ * growing Village keeps outgrowing (new streets fall outside the old
+ * buildings' reach, and new children outnumber the seats).
+ */
+export const GROWTH_BUILDS: Readonly<Record<string, readonly [id: string, cover: (typeof COVERAGES)[number]]>> = {
+  surgery70: ['surgery', 'health'],
+  police50: ['constablePost', 'police'],
+  fire70: ['fireVolunteers', 'fire'],
+  primary80: ['villageSchool', 'school'],
+};
+
+/** The zones that give work and their meters (Industry, Shops, Farms: the order a full tie goes). */
+const JOB_ZONES: readonly [zone: number, meter: number][] = [
+  [Z_INDUSTRY, METER_INDUSTRY],
+  [Z_SHOPS, METER_SHOPS],
+  [Z_FARMS, METER_FARMS],
+];
+
+/** The month's checklist facts made `margin` (a share, 0–1) worse: an item that fails on them is about to lapse. */
+function stressed(f: CheckFacts, margin: number): CheckFacts {
+  return {
+    ...f,
+    covered: f.covered.map((x) => x - margin),
+    primarySeats: f.primarySeats - margin,
+    unemployment: f.unemployment + margin,
+  };
+}
+
+/** Staff fill (per mille) under which the growth-help order adds no more of a service: a new one would only share the staff. */
+export const GROWTH_STAFFED = 800;
+
+/** The mean staff fill (per mille) of the town's finished `group` buildings (1000 when it has none). */
+function staffFill(t: TownState, group: string): number {
+  let n = 0;
+  let sum = 0;
+  for (const b of t.buildings) {
+    if (BUILDINGS[b[B_KIND]]?.group !== group || constructionLeft(t, tileIndex(b[B_X], b[B_Y])) > 0) continue;
+    n++;
+    sum += b[B_STAFF];
+  }
+  return n > 0 ? sum / n : 1000;
+}
+
+/**
+ * The districts holding homes with no work within the longest commute
+ * (§5.9: their workers count as unemployed however many jobs stand open
+ * elsewhere); null when every home can reach work, or before there is any.
+ */
+function farDistricts(t: TownState, m: MonthContext): { far: Uint8Array; attach: Int32Array } | null {
+  const reach = workReach(t, m);
+  if (!reach) return null;
+  const homes = homeTiles(t, m);
+  const attach = attachOf(t, m);
+  const far = new Uint8Array(reach.length);
+  let any = false;
+  for (let k = 0; k < homes.count; k++) {
+    const d = roadDistrict(attach, homes.tile[k]);
+    if (d < 0) continue; // no road at home: work lots cannot help it
+    if (reach[d]) continue;
+    far[d] = 1;
+    any = true;
+  }
+  return any ? { far, attach } : null;
+}
+
+/** Empty Homes lots the growth-help order always leaves for the builders (a day of a child's zoning). */
+export const GROWTH_KEEP_HOMES = 16;
+
+/**
+ * Rezones up to `n` empty Homes lots (level 0, nothing under way) as zone
+ * `z`, the far districts' first, then nearest the Town Hall, leaving
+ * GROWTH_KEEP_HOMES of them; returns tiles rezoned.
+ */
+function rezoneEmptyHomes(t: TownState, z: number, n: number, first: { far: Uint8Array; attach: Int32Array } | null): number {
+  const spare = emptyLots(t, Z_HOMES) - GROWTH_KEEP_HOMES;
+  const most = Math.min(n, spare);
+  if (most <= 0) return 0;
+  const read = planesOf(t);
+  const homes = zoneUse(Z_HOMES);
+  const picks: number[] = [];
+  for (let pass = first ? 0 : 1; pass < 2; pass++)
+    for (const i of BY_DISTANCE) {
+      if (picks.length >= most) break;
+      if (read.use[i] !== homes || read.lvl[i] !== 0 || constructionLeft(t, i) > 0) continue;
+      if (first) {
+        const d = roadDistrict(first.attach, i);
+        if ((pass === 0) !== (d >= 0 && first.far[d] === 1)) continue;
+      }
+      picks.push(i);
+    }
+  if (picks.length === 0) return 0;
+  const w = planesForWrite(t);
+  for (const i of picks) {
+    w.use[i] = zoneUse(z);
+    w.age[i] = 0;
+    appendTileEvent(t, t.tick, i, 'zoned', z);
+  }
+  return picks.length;
+}
+
+/** Zone `z` lots still waiting for their first building (the builders' queue). */
+function emptyLots(t: TownState, z: number): number {
+  const p = planesOf(t);
+  const zoned = zonedTiles(p.use);
+  const lot = zoneUse(z);
+  let n = 0;
+  for (let q = 0; q < zoned.length; q++) if (p.use[zoned[q]] === lot && p.lvl[zoned[q]] === 0) n++;
+  return n;
+}
+
+/**
+ * G3 (§5.18, the growth-help order): a child's town that has reached Village
+ * keeps outgrowing the Town checklist's jobs and services, and a child does
+ * not read the Growth sheet. Once a Regional Day (its first month), Bramble
+ * looks at the next tier's checklist on this month's facts, counting an item
+ * that holds by less than `marginPts` points as about to lapse:
+ *   - jobs90: work for today's unemployed plus the workers of the Homes lots
+ *     still waiting for builders, less the jobs of the work lots already
+ *     waiting. The lots go to the trade (Industry, Shops or Farms) with the
+ *     highest meter above 0, so they start under decision 7, at most `tiles`
+ *     a day, by the roads, first where the homes reach no work within the
+ *     longest commute (§5.9). When the roads are full, one short Lane first
+ *     (decision 8's, shared with the away order: one a day); when that is
+ *     not enough, the empty Homes lots beyond GROWTH_KEEP_HOMES are
+ *     repainted for work.
+ *   - one coverage item of GROWTH_BUILDS (checklist order): its building, at
+ *     the site with the most homes it does not yet reach (as decision 6's
+ *     away builds), only when no building of that service is still under
+ *     construction, the ones it has are at least GROWTH_STAFFED staffed
+ *     (another would only share their staff), and its cost leaves reserves
+ *     above the safety floor (`months` of spending); a dearer one that does
+ *     not fit waits.
+ * Everything is a Deputy card; buildings go through the same build plan as
+ * a mayor's move. At most one building a day.
+ */
+function growthHelp(t: TownState, m: MonthContext, memo: CivicMemo, tiles: number, floor: number, marginPts: number): void {
+  if (t.tier < 1 || memo.helpDay === m.dayIndex) return;
+  memo.helpDay = m.dayIndex; // one look a Regional Day (the facts and the site search walk the map: G12)
+  if (t.money.reserves <= floor) return;
+  const tier = Math.min(GREAT_METROPOLIS, t.tier + 1);
+  const items = CHECKLISTS[tier];
+  const f = checkFacts(t, m);
+  const risky = stressed(f, marginPts / 100);
+  let built = false;
+  for (const it of items) {
+    if (it.ok(risky)) continue;
+    if (it.id === 'jobs90') {
+      // Work wanted: today's unemployed, plus the workers of the Homes lots still waiting for builders,
+      // less the jobs of the work lots already waiting (the town a day from now, not this month's).
+      const lab = m.derived.labour;
+      let unemployed = 0;
+      let workforce = 0;
+      for (let h = 0; h < 3; h++) {
+        unemployed += lab?.unemployed[h] ?? 0;
+        workforce += lab?.workforce[h] ?? 0;
+      }
+      const pop = population(t);
+      let wanted = unemployed + (pop > 0 ? (workforce / pop) * emptyLots(t, Z_HOMES) * ZONE_DEFS[Z_HOMES].capacity[0] : 0);
+      for (const [z] of JOB_ZONES) wanted -= emptyLots(t, z) * ZONE_DEFS[z].capacity[0];
+      if (wanted <= 0) continue; // the lots are down; the builders will fill them
+      const trades = JOB_ZONES.filter(([z, k]) => zoneAllowed(t, z) && t.meters[k] > 0).sort((a, b) => t.meters[b[1]] - t.meters[a[1]]);
+      if (trades.length === 0) continue; // no trade wants workers: lots would sit empty (decision 7)
+      const z = trades[0][0];
+      const want = Math.min(Math.floor(tiles), Math.ceil(wanted / ZONE_DEFS[z].capacity[0]));
+      const far = farDistricts(t, m);
+      let n = zoneRoadside(t, z, want, far);
+      if (n < want && awayRoad(t, m, memo, floor)) n += zoneRoadside(t, z, want - n, far);
+      if (n > 0) deputyNote(t, m, 'growthHelp.jobs', { tiles: n, zone: ZONE_DEFS[z].id });
+      // Still short, and the roads lined with Homes lots no builder has started: repaint the surplus for work.
+      const r = n < want ? rezoneEmptyHomes(t, z, want - n, far) : 0;
+      if (r > 0) deputyNote(t, m, 'growthHelp.rezone', { tiles: r, zone: ZONE_DEFS[z].id });
+      continue;
+    }
+    const pick = GROWTH_BUILDS[it.id];
+    if (!pick || built) continue;
+    const [id, cover] = pick;
+    const kind = buildingIndex(id);
+    const group = BUILDINGS[kind].group;
+    // One at a time, and none while the ones we have are short of staff (the town lacks the workers, not the buildings).
+    if (t.tier < BUILDINGS[kind].tier || groupCount(t, group).building > 0 || staffFill(t, group) < GROWTH_STAFFED) continue;
+    const cost = placeCost(t, kind, m.params);
+    if (t.money.reserves - cost <= floor) continue; // only from the money above the safety floor
+    const at = civicSite(t, m, kind, cover);
+    if (!at) continue;
+    try {
+      applyBuild(t, `deputy.${m.dayIndex}.help.${id}`, [{ op: 'place', id, x: at[0], y: at[1], rot: 0 }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid' });
+    } catch (e) {
+      if (e instanceof EngineError) continue;
+      throw e;
+    }
+    deputyNote(t, m, 'growthHelp.build', { building: id, item: it.id, cost });
+    built = true;
+  }
+}
+
 /** Repays up to `amount` of the Town Loan with the 1% early-repayment fee; returns the principal repaid. */
 export function repayLoan(t: TownState, amount: number, p: Params): number {
   const loan = t.money.loan;
@@ -502,6 +710,11 @@ export function runOrders(t: TownState, m: MonthContext, books: MonthBooks): voi
         }
         memo.zonedToday += z.homes + z.shops + z.jobs;
         if (z.homes + z.shops + z.jobs > 0) deputyNote(t, m, 'awayZoning', { homes: z.homes, shops: z.shops, jobs: z.jobs });
+        break;
+      }
+      case 'growthHelp': {
+        const [tiles, months, marginPts] = o.args;
+        growthHelp(t, m, memo, tiles, months * spend, marginPts);
         break;
       }
       case 'repayLoan': {
