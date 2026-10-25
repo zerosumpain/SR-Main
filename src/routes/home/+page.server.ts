@@ -5,7 +5,7 @@ import { DEVICES_TEMPLATE, houseOnly, summariseDevices, type DevicesPayload } fr
 import { errMsg } from '$lib/home/presence/types';
 import { loadHousehold } from '$lib/home/presence/household';
 import { loadHoldContext } from '$lib/home/presence/location-hold.server';
-import { mayOpenPerson, peopleViewerOf, scopeHousehold } from '$lib/home/presence/viewer';
+import { mayOpenPerson, peopleViewerOf, scopeHousehold, type PeopleViewer } from '$lib/home/presence/viewer';
 import { areaAccess } from '$lib/server/area-scope';
 
 // The house, now: one slice of each sub-page, every read on its own so one
@@ -48,10 +48,13 @@ async function people(event: Parameters<PageServerLoad>[0]) {
 /**
  * The rest of today for the people this viewer may see (`loadForecast` scopes
  * to them), plus what changed this fortnight, from the nightly digest. Null
- * for a viewer with no people card. Streamed: the house paints first.
+ * for a viewer with no people card. Streamed: the house paints first — so the
+ * viewer is resolved in the load, BEFORE it returns: a streamed promise that
+ * asks Auth.js for the session runs after the response has started, the
+ * session read fails, and `isOwnerRequest` quietly reads that as "not the
+ * owner" (the day ahead came back empty for the owner on 2026-10-25).
  */
-async function ahead(event: Parameters<PageServerLoad>[0]) {
-  const viewer = await peopleViewerOf(event);
+async function ahead(viewer: PeopleViewer | null) {
   if (!viewer) return null;
   const [{ loadForecast }, { loadDigest }] = await Promise.all([
     import('$lib/home/presence/forecast.server'),
@@ -66,6 +69,7 @@ async function ahead(event: Parameters<PageServerLoad>[0]) {
 
 export const load: PageServerLoad = async (event) => {
   const access = await areaAccess(event, 'home');
+  const viewer = await peopleViewerOf(event).catch(() => null);
   // The voice log is everyone's speech, and the Echo readings the household's
   // routine: `home:all` and up, as /home/voice and /home/echoes.
   const hearsVoice = access.level !== 'self';
@@ -77,7 +81,7 @@ export const load: PageServerLoad = async (event) => {
   ]);
   return {
     // Not awaited: the day ahead streams in under the people card.
-    ahead: ahead(event).catch((err) => {
+    ahead: ahead(viewer).catch((err) => {
       console.error('[home] day ahead failed:', errMsg(err));
       return null;
     }),

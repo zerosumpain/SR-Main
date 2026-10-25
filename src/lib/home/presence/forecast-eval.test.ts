@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { checkpointsOf, datesBetween, liveFromTrips, scoreForecast } from './forecast-eval';
 import type { InsightPlace, Trip } from './insights';
 
@@ -45,7 +45,10 @@ describe('where everyone is, read off the trips', () => {
 });
 
 describe('the scorecard', () => {
-  const card = scoreForecast({ trips: schoolRuns, places, people, homeIds: new Set(['home']), from: '2026-10-05', to: '2026-10-09' });
+  let card: Awaited<ReturnType<typeof scoreForecast>>;
+  beforeAll(async () => {
+    card = await scoreForecast({ trips: schoolRuns, places, people, homeIds: new Set(['home']), from: '2026-10-05', to: '2026-10-09' });
+  });
 
   it('sees a dependable school run coming, and is right about it', () => {
     expect(card.days).toBe(5);
@@ -66,14 +69,14 @@ describe('the scorecard', () => {
     expect(card.eta.rightPlace).toBeGreaterThan(0);
   });
 
-  it('counts a missed school run as an overdue that never went', () => {
+  it('counts a missed school run as an overdue that never went', async () => {
     const skipped = schoolRuns.filter((t) => !t.path[0].ts.toISOString().startsWith('2026-10-07'));
-    const c = scoreForecast({ trips: skipped, places, people, homeIds: new Set(['home']), from: '2026-10-07', to: '2026-10-07' });
+    const c = await scoreForecast({ trips: skipped, places, people, homeIds: new Set(['home']), from: '2026-10-07', to: '2026-10-07' });
     expect(c.overdue).toMatchObject({ fired: 1, late: 0, skipped: 1, recent: [{ date: '2026-10-07', subject: 'alex', to: 'School', outcome: 'skipped' }] });
   });
 
-  it('has nothing to say with no history', () => {
-    const c = scoreForecast({ trips: [], places, people, homeIds: new Set(['home']), from: '2026-10-05', to: '2026-10-05' });
+  it('has nothing to say with no history', async () => {
+    const c = await scoreForecast({ trips: [], places, people, homeIds: new Set(['home']), from: '2026-10-05', to: '2026-10-05' });
     expect(c.next).toMatchObject({ predictions: 0, precision: null, recall: null });
     expect(c.duration.mae).toBeNull();
   });
