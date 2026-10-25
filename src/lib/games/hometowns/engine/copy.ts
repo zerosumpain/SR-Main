@@ -415,7 +415,7 @@ export const SCRIPT_KEYS: readonly string[] = [
   'forecast.cost', 'forecast.money', 'forecast.people', 'forecast.happier', 'forecast.lessHappy', 'forecast.sameHappy', 'forecast.ready', 'forecast.estimate',
   'forecast.homesBuilding', 'forecast.movers', 'forecast.refused', 'forecast.working', 'forecast.buildIt', 'forecast.afford', 'forecast.affordLater',
   // Undo (§9.3)
-  'undo.title', 'undo.button', 'undo.refund', 'undo.done', 'undo.blocked', 'undo.tooLate', 'undo.empty', 'undo.deputyTitle', 'undo.deputyZoned', 'undo.deputyRezoned',
+  'undo.title', 'undo.button', 'undo.refund', 'undo.done', 'undo.blocked', 'undo.tooLate', 'undo.empty', 'undo.deputyTitle', 'undo.deputyZoned', 'undo.deputyRezoned', 'undo.doneFree',
   // Plan and build (§9.3)
   'plan.noRoad', 'plan.bulldozeConfirm', 'plan.bulldozePrivate', 'plan.bulldozeRefund', 'lock.unlocksAt', 'lock.unlocksAtTier',
   // Bramble's housekeeping (§9.7, §9.14)

@@ -11,7 +11,9 @@
 // town yet), hamlet.json, town.json, metropolis.json (whole frames),
 // metropolis-delta.json (the frame after a budget move, cut against
 // metropolis.json), visiting.json (the hamlet's mayor visiting a neighbour),
-// and copy-hash.json: the FNV-1a 64 of engine/copy/en-GB.json's bytes, which
+// deputy.json (the hamlet with its mayor three days away and the away zoning
+// and growth help orders on, so Bramble's builds and zoning are on today's
+// `deputyUndo`: decision 11), and copy-hash.json: the FNV-1a 64 of engine/copy/en-GB.json's bytes, which
 // the app's tests compare with the copy file it bundles, so a bundled copy
 // that has fallen behind the site's fails a test instead of showing a child
 // a raw key.
@@ -27,8 +29,12 @@ import { toWire } from '../../src/lib/games/hometowns/wire';
 const DAY = 86_400_000;
 const HOST = { id: 'p_fixture_host', name: 'Mayor' };
 
-/** A running room around a fixture county after a day of play, its town seated s1 and its mayor a parent. */
-function playedRoom(kind: FixtureKind): { room: Room; now: number } {
+/**
+ * A running room around a fixture county after a day of play, its town seated s1 and its mayor a parent.
+ * `away`: the mayor last said hello three days before, with the away zoning and growth help orders
+ * switched on (as an `orders` move would), so the day's catch-up is Bramble's.
+ */
+function playedRoom(kind: FixtureKind, away = false): { room: Room; now: number } {
   const f = fixture(kind);
   const c: CountyState = f.county;
   const t = c.towns[f.town];
@@ -38,6 +44,10 @@ function playedRoom(kind: FixtureKind): { room: Room; now: number } {
   c.settings.youngestOrder = ['s1'];
   c.settings.perSeat = { s1: { profile: 'adult', pushes: true, pranks: true, answerOnly: false, assist: 'none' } };
   c.parents = ['s1'];
+  if (away) {
+    t.away.lastHelloAt = f.now - 3 * DAY;
+    for (const o of t.orders) if (o.kind === 'awayZoning' || o.kind === 'growthHelp') o.on = true;
+  }
   const now = f.now + DAY;
   c.lastHelloAt = now;
   catchUp(c, now, 1e9);
@@ -83,6 +93,8 @@ export function wireFixtures(): Record<string, unknown> {
       out.visiting = toWire(room, HOST.id, now + 1000);
     }
   }
+  const { room: away, now: awayNow } = playedRoom('hamlet', true);
+  out.deputy = toWire(away, HOST.id, awayNow);
   const copy = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../src/lib/games/hometowns/engine/copy/en-GB.json'), 'utf8');
   out['copy-hash'] = { file: 'src/lib/games/hometowns/engine/copy/en-GB.json', fnv64: fnv64(copy) };
   return out;

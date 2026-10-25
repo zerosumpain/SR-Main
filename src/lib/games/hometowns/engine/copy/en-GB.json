@@ -796,6 +796,7 @@
     "undo.deputyTitle": { "kid": "Bramble's builds and painting today", "adult": "The Deputy's builds and zoning today" },
     "undo.deputyZoned": { "kid": "Bramble painted {tiles:count:plot:plots}. Undo it for free.", "adult": "Zoned {tiles:count:tile:tiles} (free to undo)." },
     "undo.deputyRezoned": { "kid": "Bramble turned {tiles:count:empty home plot:empty home plots} into work plots. Undo it for free.", "adult": "Rezoned {tiles:count:empty Homes lot:empty Homes lots} for work (free to undo)." },
+    "undo.doneFree": { "kid": "Undone! Those plots are back how they were.", "adult": "Undone. Those lots are back as they were." },
     "plan.noRoad": { "kid": "Red tiles are too far from a road.", "adult": "Red tiles have no road within 2." },
     "plan.bulldozeConfirm": { "kid": "Clear this away?", "adult": "Bulldoze this?" },
     "plan.bulldozePrivate": { "kid": "The land stays painted, but the building goes.", "adult": "Private buildings become empty zoned land, with no refund." },
