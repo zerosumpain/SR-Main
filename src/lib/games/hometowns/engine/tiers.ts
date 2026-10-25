@@ -132,11 +132,17 @@ export function checkFacts(t: TownState, m: MonthContext): CheckFacts {
     if (u.watered[i]) watered += w;
   }
   const at = m.params.civic.coveredAt;
+  // The cells holding homes, ascending: the only ones the coverage shares add.
+  const homeCells: number[] = [];
+  for (let cell = 0; cell < CELLS; cell++) if (cellHomes[cell] > 0) homeCells.push(cell);
   const covered = COVERAGES.map((_, k) => {
     const field = c.cov[k];
     if (!field || homes <= 0) return 0;
     let n = 0;
-    for (let cell = 0; cell < CELLS; cell++) if (cellHomes[cell] > 0 && field[cell] >= at) n += cellHomes[cell];
+    for (let j = 0; j < homeCells.length; j++) {
+      const cell = homeCells[j];
+      if (field[cell] >= at) n += cellHomes[cell];
+    }
     return n / homes;
   });
   const built: Record<string, number> = {};
