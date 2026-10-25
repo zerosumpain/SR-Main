@@ -323,6 +323,12 @@ describe('the day ahead', () => {
     expect(dayAhead(routines, [moving], [], new Date('2026-09-28T07:28:00Z'))).toEqual([]);
   });
 
+  it('does not move a missed morning run into the evening', () => {
+    const [day] = dayAhead(routines, [atHome('alex', '2026-09-28T20:25:00Z')], [], new Date('2026-09-28T20:30:00Z'));
+    expect(day.segments).toHaveLength(1);
+    expect(day.segments[0]).toMatchObject({ kind: 'stay', open: true });
+  });
+
   it('skips the school run on a holiday', () => {
     const cal = { holidays: [{ from: '2026-09-28', to: '2026-09-28' }], schoolIds: new Set(['school']) };
     const [day] = dayAhead(routines, [atHome('alex', '2026-09-28T05:55:00Z')], [], new Date('2026-09-28T06:00:00Z'), [], cal);

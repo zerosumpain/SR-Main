@@ -335,17 +335,23 @@ export function bridgeSleeps(rows: InsightFix[], places: InsightPlace[], now: Da
       const until = b ? +b.ts : +now;
       if (a.readingAgeS != null || (b && b.readingAgeS != null) || !usableFix(a, +now) || (b && !usableFix(b, +now))) continue;
       if (until - +a.ts <= CONTINUOUS_GAP_MINS * MINUTE || (a.speedKmh ?? 0) > 3) continue;
+      // Past the cap a flat battery is likelier than a still phone: a gap.
+      if (until - +a.ts > SLEEP_BRIDGE_MAX_S * 1000) continue;
       const place = sleepPlace(list, i, places, +now);
       if (!place) continue;
       let leftAt = until;
       if (b) {
+        // Woke INSIDE another place (a visit wake on arriving): it went
+        // somewhere unseen; back-dating a departure would invent a trip.
+        const woke = located(b as Fix, places).placeId;
+        if (woke && woke !== place.id) continue;
         const edge = Math.max(0, metresBetween(place.lat, place.lon, b.lat!, b.lon!) - place.radiusM);
         const speed = (b.speedKmh ?? 0) > 1 ? b.speedKmh! / 3.6 : WAKE_SPEED_MPS;
         leftAt = +b.ts - (edge / speed) * 1000;
         // Woke too far out to have only just left: where it was meanwhile is unknown.
         if (+b.ts - leftAt > (CONTINUOUS_GAP_MINS - 1) * MINUTE) continue;
       }
-      const end = Math.min(leftAt - 1000, +a.ts + SLEEP_BRIDGE_MAX_S * 1000);
+      const end = leftAt - 1000;
       // At the fix's own spot if that is the place, else the place's centre (a
       // fix flickering into an overlapping circle must not move the stay).
       const at = located(a as Fix, places).placeId === place.id ? { lat: a.lat, lon: a.lon } : { lat: place.lat, lon: place.lon };

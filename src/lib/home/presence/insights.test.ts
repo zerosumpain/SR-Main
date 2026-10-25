@@ -211,7 +211,8 @@ describe('a sleeping app phone (GPS off while still)', () => {
   const days = ['2026-09-21', '2026-09-22', '2026-09-23'];
 
   it('stays at the place it fell asleep until the move that woke it, and the school run is a trip again', () => {
-    const data = analysePresence(days.flatMap(schoolDay), places, [person], now, 28);
+    // The same evening: the last arrival home is asleep for three hours, not three days.
+    const data = analysePresence(days.flatMap(schoolDay), places, [person], new Date('2026-09-23T18:00Z'), 28);
     const run = data.routes.find(r => r.fromId === 'home' && r.toId === 'school');
     expect(run?.samples).toBe(3);
     expect(run?.median).toBeGreaterThan(18);
@@ -221,13 +222,20 @@ describe('a sleeping app phone (GPS off while still)', () => {
 
   it('bridges at most SLEEP_BRIDGE_MAX_S, and never a Life360 reading', () => {
     const asleep = app('2026-09-20T05:40:00Z', 51.5);
+    // 21 h silent: a flat battery, not a stay — nothing bridged at all.
     const woke = app('2026-09-21T03:00:00Z', 51.5);
-    const beats = bridgeSleeps([asleep, woke], places, woke.ts).filter(f => f !== asleep && f !== woke);
-    expect(beats.length).toBeGreaterThan(400);
-    expect(Math.max(...beats.map(f => +f.ts))).toBeLessThanOrEqual(+asleep.ts + SLEEP_BRIDGE_MAX_S * 1000);
+    expect(bridgeSleeps([asleep, woke], places, woke.ts)).toHaveLength(2);
+    const night = app('2026-09-20T20:00:00Z', 51.5);
+    expect(+night.ts - +asleep.ts).toBeLessThan(SLEEP_BRIDGE_MAX_S * 1000);
+    expect(bridgeSleeps([asleep, night], places, night.ts).length).toBeGreaterThan(400);
     const life360 = [fix('2026-09-21T05:40:00Z', 51.5, { readingAgeS: 0 }), fix('2026-09-21T07:22:00Z', 51.502, { readingAgeS: 0 })];
     expect(bridgeSleeps(life360, places, now)).toHaveLength(2);
     expect(bridgeSleeps([app('2026-09-21T05:40:00Z', 51.5)], places, new Date('2026-09-21T05:45:00Z'))).toHaveLength(1);
+  });
+
+  it('does not bridge a phone that woke inside another place', () => {
+    const at = new Date('2026-09-21T07:22:00Z');
+    expect(bridgeSleeps([app('2026-09-21T05:40:00Z', 51.5), app('2026-09-21T07:22:00Z', 51.59, { speedKmh: 2 })], places, at)).toHaveLength(2);
   });
 
   it('does not bridge a phone that fell asleep away from any place, or woke too far off to have just left', () => {

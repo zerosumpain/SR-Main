@@ -141,6 +141,14 @@ describe('where they set off from, when only their routines know', () => {
     expect(items[0].issue!.text).toContain('before the usual 15:40');
   });
 
+  it('says nothing about leaving home earlier than usual', () => {
+    const club = routine({ id: 'club', fromId: 'home', toId: 'pool', from: 'Home', to: 'Leisure Centre', departure: '18:00', departureMin: 1080 });
+    const swim = { ...dentist, id: 'e2', title: "Sam's swim", start: '2026-09-28T16:00:00Z', end: '2026-09-28T17:00:00Z' };
+    const { items } = planAgenda(base({ events: [swim], routines: [...routines, club] }));
+    expect(items[0].origin).toMatchObject({ id: 'home', why: 'routine' });
+    expect(items[0].issue).toBeNull();
+  });
+
   it('falls back to home on a holiday', () => {
     const cal = { holidays: [{ from: '2026-09-28', to: '2026-09-28' }], schoolIds: new Set(['school']) };
     const { items } = planAgenda(base({ events: [dentist], routes: [schoolRoute, toPool], routines, cal }));

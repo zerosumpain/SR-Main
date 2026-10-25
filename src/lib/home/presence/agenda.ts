@@ -197,8 +197,9 @@ export function routinePlaceAt(
     .filter((r) => r.departureMin + r.minutes.median <= clock.minute)
     .sort((a, b) => b.departureMin - a.departureMin)[0];
   if (!arrived) return null;
+  // Their next usual departure from there after arriving, whenever it is.
   const leaves = today
-    .filter((r) => r.fromId === arrived.toId && r.departureMin > clock.minute - 0)
+    .filter((r) => r.fromId === arrived.toId && r.departureMin > arrived.departureMin)
     .sort((a, b) => a.departureMin - b.departureMin)[0] ?? null;
   return { placeId: arrived.toId, place: arrived.to, arrived, leaves };
 }
@@ -274,7 +275,8 @@ export function planAgenda(input: AgendaInput): { items: AgendaItem[]; requests:
     }
     // Leaving a routine place earlier than they usually do is worth saying:
     // the school will not let them go just because the diary says so.
-    if (!issue && origin?.why === 'routine' && usual?.leaves && leaveBy) {
+    // Not from a home: leaving the house earlier than usual is no hardship.
+    if (!issue && origin?.why === 'routine' && usual?.leaves && leaveBy && byId.get(origin.id ?? '')?.kind !== 'home') {
       const leaveMin = localClock(+new Date(leaveBy)).minute;
       if (leaveMin < usual.leaves.departureMin) {
         issue = { kind: 'early', text: `Has to leave ${usual.place} by ${hhmm(leaveMin)}, before the usual ${usual.leaves.departure}.` };

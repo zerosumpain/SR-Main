@@ -673,7 +673,9 @@ export function dayAhead(
         .filter((r) => !taken.has(r.id) && !ranToday(r, clock.date) && !correctedToday(r, corrections, clock.date))
         .filter((r) => correctedShare(r, corrections) >= NEXT_MIN_SHARE)
         // Still to come: leaves after we get there (a late start up to the end of its window).
-        .filter((r) => clockDelta(r.window[1], minute) >= 0 && r.departureMin + r.minutes.median < 1440)
+        // Plain minutes, not the short way round: the day ends at midnight, and
+        // at 21:30 a missed 08:00 run is not "still to come".
+        .filter((r) => r.window[1] >= minute && r.departureMin + r.minutes.median < 1440)
         .sort((a, b) => a.departureMin - b.departureMin)[0];
       const fromName = place || next?.from || routines.find((r) => r.fromId === placeId)?.from || '';
       if (!next) {
