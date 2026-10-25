@@ -15,12 +15,12 @@
 
 import type { Params } from './params';
 import { monthF64, monthU8 } from './pool';
-import { T_FOREST, T_HILL, T_SAND, T_WATER, TF_COAST, TF_RIVER, terrainElevation, terrainKind } from './terrain';
-import { CELLS, CELLS_PER_SIDE, MAP } from './tiles';
+import { T_FOREST, T_HILL, T_SAND, T_WATER, TF_COAST, TF_RIVER, terrainElevation, terrainBase, terrainKind, terrainMemoised } from './terrain';
+import { CELLS, CELLS_PER_SIDE, MAP, TILES } from './tiles';
 import { STARS, type TownState } from './types';
 
 /** Scenic class per cell: 0 none, then the landValue.scenic order (beach, waterside, hill-top, forest edge). */
-const SCENIC = new WeakMap<Uint8Array, { key: string; scenic: Float64Array }>();
+const SCENIC = new WeakMap<Uint8Array, { key: string; values: readonly number[]; scenic: Float64Array }>();
 
 /**
  * Scenic(x), constant from terrain: the largest of beach (sand on the coast
@@ -29,50 +29,130 @@ const SCENIC = new WeakMap<Uint8Array, { key: string; scenic: Float64Array }>();
  * land in the cell beside trees). Memoised per terrain plane.
  */
 export function scenicOf(terrain: Uint8Array, values: readonly number[]): Float64Array {
-  const key = values.join(',');
   const hit = SCENIC.get(terrain);
+  // The params' array is the same object month after month: its key is built only when it is not.
+  if (hit && hit.values === values) return hit.scenic;
+  const key = values.join(',');
   if (hit && hit.key === key) return hit.scenic;
   const [beach, waterside, hill, forest] = values;
+  const bits = scenicBits();
+  // A plane made from a memoised one by more edits (a road through a wood, about one
+  // town-month in ten): only the cells whose window holds a changed tile can change.
+  const parent = terrainBase(terrain);
+  const from = parent ? SCENIC.get(parent) : undefined;
+  if (parent && from && from.key === key) {
+    const out = from.scenic.slice();
+    for (let i = 0; i < TILES; i++) {
+      if (terrain[i] === parent[i]) continue;
+      // Tile (x, y) lies in the window [2c − 1, 2c + 2] of cells c from ⌈(x − 2)/2⌉ to ⌊(x + 1)/2⌋ on each axis.
+      const x = i % MAP;
+      const y = (i - x) / MAP;
+      const cx0 = Math.max(0, Math.ceil((x - 2) / 2));
+      const cx1 = Math.min(CELLS_PER_SIDE - 1, Math.floor((x + 1) / 2));
+      const cy0 = Math.max(0, Math.ceil((y - 2) / 2));
+      const cy1 = Math.min(CELLS_PER_SIDE - 1, Math.floor((y + 1) / 2));
+      for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) out[cy * CELLS_PER_SIDE + cx] = scenicCell(terrain, bits, cx, cy, beach, waterside, hill, forest);
+    }
+    SCENIC.set(terrain, { key, values, scenic: out });
+    terrainMemoised(terrain, 1);
+    return out;
+  }
   const out = new Float64Array(CELLS);
+  // Each terrain byte's tests as bits (scenicBits), then each cell's ORs over its 2×2 tiles (land, open, top)
+  // and over the 4×4 window around them (sand, water, trees, river), row ORs first: the
+  // same tests as reading every window tile by tile, and the same maxima. The terrain
+  // changes in about one town-month in ten, and the tile-by-tile version was a quarter
+  // of a millisecond of it.
+  const flags = SCENIC_FLAGS;
+  for (let i = 0; i < TILES; i++) flags[i] = bits[terrain[i]];
+  const inner = SCENIC_INNER;
+  const outer = SCENIC_OUTER;
+  for (let y = 0; y < MAP; y++) {
+    const row = y * MAP;
+    for (let cx = 0; cx < CELLS_PER_SIDE; cx++) {
+      const x = 2 * cx;
+      const a = flags[row + x] | flags[row + x + 1];
+      let b = a;
+      if (x > 0) b |= flags[row + x - 1];
+      if (x + 2 < MAP) b |= flags[row + x + 2];
+      inner[y * CELLS_PER_SIDE + cx] = a;
+      outer[y * CELLS_PER_SIDE + cx] = b;
+    }
+  }
   for (let c = 0; c < CELLS; c++) {
     const cx = c % CELLS_PER_SIDE;
     const cy = (c - cx) / CELLS_PER_SIDE;
-    let land = false;
-    let open = false;
-    let top = false;
-    for (let y = 2 * cy; y < 2 * cy + 2; y++)
-      for (let x = 2 * cx; x < 2 * cx + 2; x++) {
-        const v = terrain[y * MAP + x];
-        const k = terrainKind(v);
-        if (k !== T_WATER) land = true;
-        if (k !== T_WATER && k !== T_FOREST) open = true;
-        if (k === T_HILL || (k !== T_WATER && terrainElevation(v) === 3)) top = true;
-      }
-    if (!land) continue;
-    let sand = false;
-    let water = false;
-    let trees = false;
-    let river = false;
-    for (let y = 2 * cy - 1; y <= 2 * cy + 2; y++)
-      for (let x = 2 * cx - 1; x <= 2 * cx + 2; x++) {
-        if (x < 0 || y < 0 || x >= MAP || y >= MAP) continue;
-        const v = terrain[y * MAP + x];
-        const k = terrainKind(v);
-        if (k === T_SAND && v & TF_COAST) sand = true;
-        if (k === T_WATER) water = true;
-        if (k === T_FOREST) trees = true;
-        if (k !== T_WATER && v & TF_RIVER) river = true;
-      }
-    let s = 0;
-    if (sand) s = Math.max(s, beach);
-    if (water || river) s = Math.max(s, waterside);
-    if (top) s = Math.max(s, hill);
-    if (trees && open) s = Math.max(s, forest);
-    out[c] = s;
+    const y = 2 * cy;
+    const fi = inner[y * CELLS_PER_SIDE + cx] | inner[(y + 1) * CELLS_PER_SIDE + cx];
+    if (!(fi & S_LAND)) continue;
+    let fo = outer[y * CELLS_PER_SIDE + cx] | outer[(y + 1) * CELLS_PER_SIDE + cx];
+    if (y > 0) fo |= outer[(y - 1) * CELLS_PER_SIDE + cx];
+    if (y + 2 < MAP) fo |= outer[(y + 2) * CELLS_PER_SIDE + cx];
+    out[c] = scenicValue(fi, fo, beach, waterside, hill, forest);
   }
-  SCENIC.set(terrain, { key, scenic: out });
+  SCENIC.set(terrain, { key, values, scenic: out });
+  terrainMemoised(terrain, 1);
   return out;
 }
+
+/** Scenic(x) from a cell's inner (2×2) and window (4×4) bits. */
+function scenicValue(fi: number, fo: number, beach: number, waterside: number, hill: number, forest: number): number {
+  if (!(fi & S_LAND)) return 0;
+  let s = 0;
+  if (fo & S_SAND) s = Math.max(s, beach);
+  if (fo & (S_WATER | S_RIVER)) s = Math.max(s, waterside);
+  if (fi & S_TOP) s = Math.max(s, hill);
+  if (fo & S_TREES && fi & S_OPEN) s = Math.max(s, forest);
+  return s;
+}
+
+/** One cell's Scenic(x), its window read tile by tile. */
+function scenicCell(terrain: Uint8Array, bits: Uint8Array, cx: number, cy: number, beach: number, waterside: number, hill: number, forest: number): number {
+  let fi = 0;
+  let fo = 0;
+  for (let y = 2 * cy - 1; y <= 2 * cy + 2; y++) {
+    if (y < 0 || y >= MAP) continue;
+    for (let x = 2 * cx - 1; x <= 2 * cx + 2; x++) {
+      if (x < 0 || x >= MAP) continue;
+      const f = bits[terrain[y * MAP + x]];
+      fo |= f;
+      if (x >= 2 * cx && x < 2 * cx + 2 && y >= 2 * cy && y < 2 * cy + 2) fi |= f;
+    }
+  }
+  return scenicValue(fi, fo, beach, waterside, hill, forest);
+}
+
+// scenicOf's tile bits and its scratch: per tile, then per tile row and cell column.
+const S_LAND = 1;
+const S_OPEN = 2;
+const S_TOP = 4;
+const S_SAND = 8;
+const S_WATER = 16;
+const S_TREES = 32;
+const S_RIVER = 64;
+const SCENIC_FLAGS = new Uint8Array(TILES);
+/** A terrain byte's scenic bits (the tests of the tile-by-tile version, for every byte once; built on first use, not at load). */
+let SCENIC_BITS: Uint8Array | null = null;
+function scenicBits(): Uint8Array {
+  if (SCENIC_BITS) return SCENIC_BITS;
+  const out = new Uint8Array(256);
+  for (let v = 0; v < 256; v++) {
+    const k = terrainKind(v);
+    let f = 0;
+    if (k !== T_WATER) f |= S_LAND;
+    if (k !== T_WATER && k !== T_FOREST) f |= S_OPEN;
+    if (k === T_HILL || (k !== T_WATER && terrainElevation(v) === 3)) f |= S_TOP;
+    if (k === T_SAND && v & TF_COAST) f |= S_SAND;
+    if (k === T_WATER) f |= S_WATER;
+    if (k === T_FOREST) f |= S_TREES;
+    if (k !== T_WATER && v & TF_RIVER) f |= S_RIVER;
+    out[v] = f;
+  }
+  SCENIC_BITS = out;
+  return out;
+}
+const SCENIC_INNER = new Uint8Array(MAP * CELLS_PER_SIDE);
+const SCENIC_OUTER = new Uint8Array(MAP * CELLS_PER_SIDE);
 
 /** Population-weighted homes tax in percent (bp / 100), or the plain mean with nobody home. */
 export function homesTaxPercent(t: TownState, tierPop: readonly number[]): number {

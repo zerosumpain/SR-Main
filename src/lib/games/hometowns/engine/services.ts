@@ -18,9 +18,9 @@
 // Cap/(N/250 + N_R/150) compares.
 
 import { utilitiesOf } from './utilities';
-import { cellBoxInto, falloff, modelOf, scratch, type BuildingInfo, type SpaceRun } from './space';
-import { CELLS, CELLS_PER_SIDE, TILES, cellOf } from './tiles';
-import { T_FOREST, T_WATER, terrainKind } from './terrain';
+import { CELL_OF, cellBoxInto, falloff, modelOf, scratch, type BuildingInfo, type SpaceRun } from './space';
+import { CELLS, CELLS_PER_SIDE, MAP, TILES, cellOf } from './tiles';
+import { T_FOREST, T_WATER, terrainBase, terrainKind, terrainMemoised } from './terrain';
 import { flowsFor } from './core';
 import { monthF64 } from './pool';
 import { COVERAGES, FUNDING_KEYS, type CoverageKind, type CoverageSlot } from './types';
@@ -48,6 +48,9 @@ const PARK_GROUP = 'park';
  * The nature terms (trees, water, parks within 3 cells, linear falloff).
  */
 export function diamondBlur(w: Float64Array, reach: number, out: Float64Array = new Float64Array(CELLS)): Float64Array {
+  // The falloff 1 − d/(reach + 1) per distance, computed once (the same numbers as in the loop).
+  const wt = BLUR_WEIGHTS.length > reach ? BLUR_WEIGHTS : new Float64Array(reach + 1);
+  for (let d = 0; d <= reach; d++) wt[d] = 1 - d / (reach + 1);
   for (let c = 0; c < CELLS; c++) {
     const v = w[c];
     if (v === 0) continue;
@@ -57,24 +60,101 @@ export function diamondBlur(w: Float64Array, reach: number, out: Float64Array = 
       const yy = cy + dy;
       if (yy < 0 || yy >= CELLS_PER_SIDE) continue;
       const ay = dy < 0 ? -dy : dy;
-      for (let dx = -(reach - ay); dx <= reach - ay; dx++) {
-        const xx = cx + dx;
-        if (xx < 0 || xx >= CELLS_PER_SIDE) continue;
-        const d = ay + (dx < 0 ? -dx : dx);
-        out[yy * CELLS_PER_SIDE + xx] += v * (1 - d / (reach + 1));
-      }
+      const span = reach - ay;
+      const x0 = cx - span < 0 ? 0 : cx - span;
+      const x1 = cx + span >= CELLS_PER_SIDE ? CELLS_PER_SIDE - 1 : cx + span;
+      const row = yy * CELLS_PER_SIDE;
+      for (let xx = x0; xx <= x1; xx++) out[row + xx] += v * wt[ay + (xx < cx ? cx - xx : xx - cx)];
     }
   }
   return out;
 }
+const BLUR_WEIGHTS = new Float64Array(16);
 
-const TERRAIN_NATURE = new WeakMap<Uint8Array, { key: string; nature: Float64Array; trees: Float64Array }>();
+const TERRAIN_NATURE = new WeakMap<Uint8Array, { key: string; tree: number; water: number; reach: number; nature: Float64Array; trees: Float64Array; w: Float64Array }>();
 
 /** Nature from terrain alone (trees and water within reach) and tree tiles per cell, memoised per terrain plane. */
 export function terrainNature(terrain: Uint8Array, tree: number, water: number, reach: number): { nature: Float64Array; trees: Float64Array } {
-  const key = `${tree}:${water}:${reach}`;
   const hit = TERRAIN_NATURE.get(terrain);
+  // The same three numbers are the same key; the string is built only when they are not.
+  if (hit && hit.tree === tree && hit.water === water && hit.reach === reach) return hit;
+  const key = `${tree}:${water}:${reach}`;
   if (hit && hit.key === key) return hit;
+  // A plane made from a memoised one by more edits: redo the weights of the cells holding a
+  // changed tile, then the blur at the cells within reach of those, each summed over its
+  // sources in ascending order as diamondBlur adds them (so the same numbers).
+  const parent = terrainBase(terrain);
+  const from = parent ? TERRAIN_NATURE.get(parent) : undefined;
+  if (parent && from && from.key === key) {
+    const w = from.w.slice();
+    const trees = from.trees.slice();
+    const nature = from.nature.slice();
+    const changed = NATURE_CHANGED;
+    changed.fill(0);
+    let any = false;
+    for (let i = 0; i < TILES; i++)
+      if (terrain[i] !== parent[i]) {
+        changed[CELL_OF[i]] = 1;
+        any = true;
+      }
+    if (any) {
+      for (let c = 0; c < CELLS; c++) {
+        if (!changed[c]) continue;
+        const cx = c % CELLS_PER_SIDE;
+        const cy = (c - cx) / CELLS_PER_SIDE;
+        let wc = 0;
+        let tc = 0;
+        for (let y = 2 * cy; y < 2 * cy + 2; y++)
+          for (let x = 2 * cx; x < 2 * cx + 2; x++) {
+            const k = terrainKind(terrain[y * MAP + x]);
+            if (k === T_FOREST) {
+              wc += tree;
+              tc += 1;
+            } else if (k === T_WATER) wc += water;
+          }
+        w[c] = wc;
+        trees[c] = tc;
+      }
+      const wt = BLUR_WEIGHTS.length > reach ? BLUR_WEIGHTS : new Float64Array(reach + 1);
+      for (let d = 0; d <= reach; d++) wt[d] = 1 - d / (reach + 1);
+      const target = NATURE_TARGET;
+      target.fill(0);
+      for (let c = 0; c < CELLS; c++) {
+        if (!changed[c]) continue;
+        const cx = c % CELLS_PER_SIDE;
+        const cy = (c - cx) / CELLS_PER_SIDE;
+        for (let dy = -reach; dy <= reach; dy++) {
+          const yy = cy + dy;
+          if (yy < 0 || yy >= CELLS_PER_SIDE) continue;
+          const span = reach - (dy < 0 ? -dy : dy);
+          for (let xx = Math.max(0, cx - span); xx <= Math.min(CELLS_PER_SIDE - 1, cx + span); xx++) target[yy * CELLS_PER_SIDE + xx] = 1;
+        }
+      }
+      for (let t = 0; t < CELLS; t++) {
+        if (!target[t]) continue;
+        const tx = t % CELLS_PER_SIDE;
+        const ty = (t - tx) / CELLS_PER_SIDE;
+        let acc = 0;
+        for (let dy = -reach; dy <= reach; dy++) {
+          const sy = ty + dy;
+          if (sy < 0 || sy >= CELLS_PER_SIDE) continue;
+          const ay = dy < 0 ? -dy : dy;
+          const span = reach - ay;
+          const x0 = tx - span < 0 ? 0 : tx - span;
+          const x1 = tx + span >= CELLS_PER_SIDE ? CELLS_PER_SIDE - 1 : tx + span;
+          for (let sx = x0; sx <= x1; sx++) {
+            const v = w[sy * CELLS_PER_SIDE + sx];
+            if (v !== 0) acc += v * wt[ay + (sx < tx ? tx - sx : sx - tx)];
+          }
+        }
+        nature[t] = acc;
+      }
+    }
+    const out = { key, tree, water, reach, nature, trees, w };
+    TERRAIN_NATURE.set(terrain, out);
+    terrainMemoised(terrain, 2);
+    return out;
+  }
   const w = new Float64Array(CELLS);
   const trees = new Float64Array(CELLS);
   for (let i = 0; i < TILES; i++) {
@@ -84,10 +164,13 @@ export function terrainNature(terrain: Uint8Array, tree: number, water: number, 
       trees[cellOf(i)] += 1;
     } else if (k === T_WATER) w[cellOf(i)] += water;
   }
-  const out = { key, nature: diamondBlur(w, reach), trees };
+  const out = { key, tree, water, reach, nature: diamondBlur(w, reach), trees, w };
   TERRAIN_NATURE.set(terrain, out);
+  terrainMemoised(terrain, 2);
   return out;
 }
+const NATURE_CHANGED = new Uint8Array(CELLS);
+const NATURE_TARGET = new Uint8Array(CELLS);
 
 /** Scratch: a building's cell box (cellBoxInto), and demandWithin's [cap, demand]. */
 const BOX = new Int32Array(4);

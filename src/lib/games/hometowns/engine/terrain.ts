@@ -153,6 +153,27 @@ function basePlane(seed: number, kind: SiteKind): Uint8Array {
   return plane;
 }
 
+/**
+ * The plane a terrain plane was made from by applying more edits (null for a
+ * fresh one, or once both plane memos have been made for it): planes are
+ * never changed, so the memos keyed on planes (scenic, nature) can start from
+ * the base's and redo only the cells around the tiles that differ. Every
+ * plane made since points straight at the last plane both memos were made
+ * for (never along a chain), so older planes are not kept alive.
+ */
+export function terrainBase(plane: Uint8Array): Uint8Array | null {
+  return TERRAIN_BASE.get(plane) ?? null;
+}
+
+/** A plane memo (1 scenic, 2 nature) was made for this plane; with both, its own planes start from it. */
+export function terrainMemoised(plane: Uint8Array, which: 1 | 2): void {
+  const m = (TERRAIN_MEMOS.get(plane) ?? 0) | which;
+  TERRAIN_MEMOS.set(plane, m);
+  if (m === 3) TERRAIN_BASE.delete(plane);
+}
+const TERRAIN_BASE = new WeakMap<Uint8Array, Uint8Array>();
+const TERRAIN_MEMOS = new WeakMap<Uint8Array, number>();
+
 /** The town's terrain plane (generated, edits applied), memoised per town on its inputs. Read-only. */
 export function terrainOf(t: TownState): Uint8Array {
   const edits = t.terrainEdits;
@@ -172,6 +193,7 @@ export function terrainOf(t: TownState): Uint8Array {
         const fresh = edits.slice(a.length);
         applyTerrainEdits(plane, fresh);
         for (const v of fresh) a.push(v);
+        TERRAIN_BASE.set(plane, TERRAIN_BASE.get(hit.plane) ?? hit.plane);
         hit.plane = plane;
       }
       return hit.plane;
