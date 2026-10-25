@@ -374,9 +374,16 @@ export interface StabilityStats {
   flipsMax: number;
   pinnedP99: number;
   pinnedMax: number;
+  /** Median town's (p90 − p10)/2 ÷ mean of the £ Homes ratio after month 24 (decision 9). */
   pressureAmp: number;
   cyclicShortShare: number;
   spectralP95: number;
+}
+
+/** Half the 10th–90th percentile spread ÷ the mean (0 for a series whose mean is about 0). */
+export function spreadOverMean(xs: number[]): number {
+  const m = mean(xs);
+  return m > 1e-3 ? (quantile(xs, 0.9) - quantile(xs, 0.1)) / 2 / m : 0;
 }
 
 export function stability(d: LabData): StabilityStats {
@@ -403,13 +410,12 @@ export function stability(d: LabData): StabilityStats {
       meterFlips[k].push(f);
       meterPinned[k].push(pin);
     }
+    // Amplitude on the £ Homes ratio (decision 9): (applicants + squeezed) ÷ population mostly tracks a
+    // town that grows 10–20× and steps up tiers, not a cycle. The short-cycle check keeps that series.
+    const hr = (mo.homesRatio ?? []).slice(24).filter((x) => x >= 0);
+    if (hr.length >= 48) amp.push(spreadOverMean(hr));
     const pr = mo.pressure.slice(24);
-    if (pr.length >= 48) {
-      const m = mean(pr);
-      const a = m > 1e-3 ? (quantile(pr, 0.9) - quantile(pr, 0.1)) / 2 / m : 0;
-      amp.push(a);
-      if (a >= 0.1) shortCycles.push(dominantCycle(pr).period <= 24);
-    }
+    if (pr.length >= 48 && spreadOverMean(pr) >= 0.1) shortCycles.push(dominantCycle(pr).period <= 24);
     const g: number[] = [];
     for (let i = 25; i < mo.pop.length; i++) g.push((mo.pop[i] - mo.pop[i - 1]) / Math.max(1, mo.pop[i - 1]));
     if (g.length >= 48) peaks.push(dominantCycle(g).peakRatio);
@@ -433,8 +439,8 @@ function g10(d: LabData, base: BaselineRef | null): GateResult {
   const checks: Check[] = [
     { name: 'Meter sign changes in any 30 days (p99 over town × meter)', value: round(s.flipsP99, 1), target: '≤ 6', ok: s.flipsP99 <= 6, note: `max ${s.flipsMax}; over the line: ${worst('flipsP99', 6)}. A sign needs |meter| > 5 (hysteresis); meters of zones the tier cannot build are skipped` },
     { name: 'Longest run pinned at ±100 (p99, months)', value: round(s.pinnedP99, 1), target: '≤ 30', ok: s.pinnedP99 <= 30, note: `max ${s.pinnedMax}; over the line: ${worst('pinnedP99', 30)}` },
-    { name: 'Housing-pressure cycle amplitude ÷ mean (median town)', value: round(s.pressureAmp), target: '< 0.25', ok: s.pressureAmp < 0.25, note: 'pressure = (applicants + squeezed) ÷ population, after month 24' },
-    { name: 'Share of cycling towns with a period ≤ 24 months', value: round(s.cyclicShortShare), target: '≤ 0.10', ok: s.cyclicShortShare <= 0.1 },
+    { name: 'Housing-pressure cycle amplitude ÷ mean (median town)', value: round(s.pressureAmp), target: '< 0.25', ok: s.pressureAmp < 0.25, note: 'on the £ Homes ratio (§5.8, as the Homes meter reads it), (p90 − p10)/2 ÷ mean after month 24 (decision 9)' },
+    { name: 'Share of cycling towns with a period ≤ 24 months', value: round(s.cyclicShortShare), target: '≤ 0.10', ok: s.cyclicShortShare <= 0.1, note: 'cycling: (applicants + squeezed) ÷ population swings ≥ 0.1 of its mean' },
   ];
   const thr = base?.spectralThreshold ?? null;
   checks.push({

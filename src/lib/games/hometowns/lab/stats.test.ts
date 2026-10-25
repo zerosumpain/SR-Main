@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { bootstrap, correlation, detrend, dominantCycle, gini, longestRun, maxInWindow, median, quantile, ratioCI, seeded, shareCI, signChanges } from '../../../../../scripts/hometowns/lab/stats';
-import { composite, drawdown } from '../../../../../scripts/hometowns/lab/gates';
+import { composite, drawdown, spreadOverMean, stability } from '../../../../../scripts/hometowns/lab/gates';
 import { top3Share } from '../../../../../scripts/hometowns/lab/observe';
 import { lineupFor, LINEUPS } from '../../../../../scripts/hometowns/lab/experiments';
 import { scaleValue, sweepablePaths, parseVariant } from '../../../../../scripts/hometowns/lab/variant';
@@ -69,6 +69,35 @@ describe('Lab statistics', () => {
     expect(composite(t)).toBeCloseTo(200 * 0.8 * 0.5, 9);
     expect(drawdown([100, 120, 90, 130])).toBeCloseTo(0.25, 12);
     expect(drawdown([1, 2, 3])).toBe(0);
+  });
+});
+
+describe('G10 housing-pressure amplitude (decision 9)', () => {
+  // One town, 120 months: the £ Homes ratio swings ±5% around 1.0 on a 60-month cycle, while
+  // (applicants + squeezed) ÷ population falls 10× as the town grows.
+  const months = 120;
+  const homesRatio = Array.from({ length: months }, (_, i) => 1 + 0.05 * (i % 60 < 30 ? 1 : -1));
+  const pressure = Array.from({ length: months }, (_, i) => 0.2 / (1 + (9 * i) / months));
+  const town = { bot: 'balanced', monthly: { months, meters: Array.from({ length: months }, () => [0, 0, 0, 0, 0, 0, 0, 0]), pop: Array.from({ length: months }, (_, i) => 100 + 10 * i), pressure, homesRatio, whyPop: [], whyRev: [], tier: [] } };
+  const data = (t: unknown) => ({ mixed: [{ towns: [t] }], g2b: [], pacing: [], founding: [], days: 20, pacingDays: 0 }) as never;
+
+  it('half the p10–p90 spread over the mean', () => {
+    expect(spreadOverMean([0.95, 0.95, 1.05, 1.05])).toBeCloseTo(0.05, 12);
+    expect(spreadOverMean([0, 0, 0])).toBe(0);
+  });
+
+  it('is measured on the £ Homes ratio, not on (applicants + squeezed) ÷ population', () => {
+    expect(spreadOverMean(pressure.slice(24))).toBeGreaterThan(0.25);
+    const s = stability(data(town));
+    expect(s.pressureAmp).toBeCloseTo(spreadOverMean(homesRatio.slice(24)), 12);
+    expect(s.pressureAmp).toBeLessThan(0.25);
+  });
+
+  it('skips months with no housing slot (−1) and towns without the series', () => {
+    const gaps = { ...town, monthly: { ...town.monthly, homesRatio: homesRatio.map((x, i) => (i % 10 === 0 ? -1 : x)) } };
+    expect(stability(data(gaps)).pressureAmp).toBeCloseTo(spreadOverMean(homesRatio.slice(24).filter((_, i) => (i + 24) % 10 !== 0)), 12);
+    const none = { ...town, monthly: { ...town.monthly, homesRatio: undefined } };
+    expect(stability(data(none)).pressureAmp).toBe(0);
   });
 });
 

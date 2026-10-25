@@ -68,6 +68,11 @@ describe('Lab smoke', () => {
     const [b] = runCounty({ ...spec, observe: false });
     expect(a.hash).toBe(b.hash);
     expect(a.towns[0].monthly.months).toBeGreaterThan(10);
+    // G10's amplitude series: the £ Homes ratio M12 housing used, one per observed month (decision 9).
+    const hr = a.towns[0].monthly.homesRatio!;
+    expect(hr).toHaveLength(a.towns[0].monthly.months);
+    for (const x of hr) expect(x).toBeGreaterThanOrEqual(0);
+    expect(hr.some((x) => x > 0)).toBe(true);
     expect(a.timings!.month.length).toBeGreaterThan(10);
     const [c] = runCounty({ ...spec, observe: false });
     expect(c.hash).toBe(b.hash);

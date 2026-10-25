@@ -2,14 +2,17 @@
 // builds a step table whose rows call the real steps unchanged and, around
 // them, take notes: every Why term each month step adds (so G9 can compare
 // the top three with ALL terms, not just the stored residual), the meters
-// and population at each month end (G10), and how long ticks, month steps
-// and Regional Days take (G12). It never writes to the town, so a county
+// and population at each month end (G10), the £ Homes ratio as M12 housing
+// leaves it (G10's amplitude check, decision 9), and how long ticks, month
+// steps and Regional Days take (G12). It never writes to the town, so a county
 // run with observers has the same hash as one without; observe.test.ts
 // holds it to that.
 
 import { STEPS, withSteps } from '../../../src/lib/games/hometowns/engine/steps';
 import { TERMS } from '../../../src/lib/games/hometowns/engine/why';
 import { population } from '../../../src/lib/games/hometowns/engine/core';
+import { allocate, cohortPersons, homesSlack, homesTarget } from '../../../src/lib/games/hometowns/engine/housing';
+import { COHORT_S } from '../../../src/lib/games/hometowns/engine/types';
 import { REVENUE_LINES } from '../../../src/lib/games/hometowns/engine/finance';
 import { LEDGER_LINES } from '../../../src/lib/games/hometowns/engine/types';
 import type { MonthContext, MonthStep, RegionalStep, StepTable, TickContext, TickStep, TownState, WhyWriter } from '../../../src/lib/games/hometowns/engine/types';
@@ -20,8 +23,15 @@ export interface TownMonthly {
   meters: number[][];
   /** Population at each month end. */
   pop: number[];
-  /** Housing pressure at each month end: (applicants + squeezed) ÷ population. */
+  /** Housing pressure at each month end: (applicants + squeezed) ÷ population (G10's short-cycle check). */
   pressure: number[];
+  /**
+   * The £ Homes ratio (§5.8's ratio_H[£]) each month, exactly as M12 housing
+   * computed it for the Homes meter: (occupied + squeezed + waiting) ÷
+   * max(0.95·(capacity + pipeline) + 5, build-step slack). G10's amplitude
+   * check reads it (decision 9). −1 for a month with no housing slot.
+   */
+  homesRatio?: number[];
   /** Per month with any term: the top-3 share of Σ|terms| for population and revenue (−1: no terms that month). */
   whyPop: number[];
   whyRev: number[];
@@ -61,11 +71,31 @@ const FIRST_TICK = STEPS.tick[0].id;
 const LAST_TICK = STEPS.tick[STEPS.tick.length - 1].id;
 const FIRST_REGIONAL = STEPS.regional[0].id;
 const LAST_REGIONAL = STEPS.regional[STEPS.regional.length - 1].id;
+const HOUSING = 'M12 housing';
+
+/**
+ * The £ Homes ratio M12 housing just used (§5.8), recomputed from what the
+ * step leaves behind: its last allocation is of the people as they stand
+ * (nothing moves them between that allocation and the step's end), and
+ * homesTarget is the engine's own pure formula. Reads only.
+ */
+export function homesRatioL(t: TownState, m: MonthContext): number {
+  const hs = m.derived.housing;
+  if (!hs) return -1;
+  const alloc = allocate(cohortPersons(t.people), hs.cap);
+  let pop = 0;
+  for (const n of t.people) pop += n;
+  const waiting = t.applicants[0] + t.applicants[1] + t.applicants[2] + t.applicants[COHORT_S];
+  const r = homesTarget(alloc.occ[0], alloc.squeezedTier[0], waiting, 0, hs.cap[0], hs.pipeline[0], 0, true, m, homesSlack(pop, m.params)).ratio;
+  return Math.round(r * 10000) / 10000;
+}
 
 interface Pending {
   pop: Map<string, number>;
   rev: Map<string, number>;
   t0: number;
+  /** The £ Homes ratio after M12 housing (−1 until it runs). */
+  homesRatio: number;
 }
 
 export class Observer {
@@ -113,10 +143,16 @@ export class Observer {
     const lastTick = find(base.tick, LAST_TICK) as TickStep;
     const firstDay = find(base.regional, FIRST_REGIONAL) as RegionalStep;
     const lastDay = find(base.regional, LAST_REGIONAL) as RegionalStep;
+    const housing = find(base.month, HOUSING) as MonthStep;
     const over: Record<string, unknown> = {
       [FIRST_MONTH]: (t: TownState, m: MonthContext) => {
         this.beginMonth(m);
         firstMonth(t, m);
+      },
+      [HOUSING]: (t: TownState, m: MonthContext) => {
+        housing(t, m);
+        const p = this.pending.get(m.townIndex);
+        if (p && this.notes) p.homesRatio = homesRatioL(t, m);
       },
       [LAST_MONTH]: (t: TownState, m: MonthContext) => {
         lastMonth(t, m);
@@ -146,7 +182,7 @@ export class Observer {
   }
 
   private beginMonth(m: MonthContext): void {
-    const p: Pending = { pop: new Map(), rev: new Map(), t0: this.timing ? performance.now() : 0 };
+    const p: Pending = { pop: new Map(), rev: new Map(), t0: this.timing ? performance.now() : 0, homesRatio: -1 };
     this.pending.set(m.townIndex, p);
     if (!this.notes) return;
     const inner: WhyWriter = m.why;
@@ -171,7 +207,7 @@ export class Observer {
     if (this.timing && p) push(this.samples.month, performance.now() - p.t0);
     if (!this.notes) return;
     let o = this.towns[m.townIndex];
-    if (!o) o = this.towns[m.townIndex] = { months: 0, meters: [], pop: [], pressure: [], whyPop: [], whyRev: [], tier: [], revPer: [], upkeepPer: [] };
+    if (!o) o = this.towns[m.townIndex] = { months: 0, meters: [], pop: [], pressure: [], homesRatio: [], whyPop: [], whyRev: [], tier: [], revPer: [], upkeepPer: [] };
     const pop = population(t);
     let waiting = t.squeezed;
     for (const a of t.applicants) waiting += a;
@@ -179,6 +215,7 @@ export class Observer {
     o.meters.push(t.meters.map((x) => Math.round(x * 10) / 10));
     o.pop.push(pop);
     o.pressure.push(Math.round((waiting / Math.max(1, pop)) * 10000) / 10000);
+    (o.homesRatio ??= []).push(p ? p.homesRatio : -1);
     o.whyPop.push(p ? round3(top3Share(p.pop)) : -1);
     o.whyRev.push(p ? round3(top3Share(p.rev)) : -1);
     o.tier!.push(t.tier);
