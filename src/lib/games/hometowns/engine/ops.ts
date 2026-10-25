@@ -70,8 +70,45 @@ export interface OpsEnv {
   deputy?: boolean;
 }
 
-/** Most of the Deputy's builds kept for a same-day undo (decision 11): it makes at most seven a Regional Day (growth help's four services and three lanes). */
-export const DEPUTY_UNDO_MAX = 8;
+/**
+ * Most of the Deputy's builds and zonings kept for a same-day undo (decision 11).
+ * A Regional Day brings at most seven builds (growth help's four services and
+ * three lanes, or the away order's one civic item and a lane) and a handful of
+ * zoning entries, one per order action (orders.ts deputyZoned): the away
+ * order's lots, the market's, and growth help's work lots and repainted Homes
+ * lots, a pair for each trade it zones that day.
+ */
+export const DEPUTY_UNDO_MAX = 16;
+
+/**
+ * Decision 11: records a Deputy zoning edit for a same-day undo. `before` holds
+ * [tile, use, lvl, age] for each tile just repainted (its plane values before);
+ * they join the Deputy undo entry `planId` of today, made on first use (free:
+ * cost 0, nothing added or removed), so one order action is one entry however
+ * many of the day's months it runs in. A tile already in the entry keeps its
+ * first "before" and takes the new "after". Tiles stay in tile order.
+ */
+export function deputyZoned(t: TownState, planId: string, dayIndex: number, before: readonly number[]): void {
+  if (before.length === 0) return;
+  const list = (t.deputyUndo ??= []);
+  let e = list.find((x) => x.planId === planId && x.day === dayIndex);
+  if (!e) {
+    e = { planId, day: dayIndex, atTick: t.tick, cost: 0, tiles: [], added: [], removed: [], construction: [], terrainEdits: [], parcelsBefore: t.parcels, rightsBefore: t.parcelRights };
+    list.push(e);
+    while (list.length > DEPUTY_UNDO_MAX) list.shift();
+  }
+  const p = planesOf(t);
+  const rows = new Map<number, number[]>();
+  for (let i = 0; i + 5 < e.tiles.length; i += 6) rows.set(e.tiles[i], e.tiles.slice(i, i + 6));
+  for (let k = 0; k + 3 < before.length; k += 4) {
+    const tile = before[k];
+    const row = rows.get(tile) ?? [tile, normUse(before[k + 1]), before[k + 2], before[k + 3], 0, 0];
+    row[4] = normUse(p.use[tile]);
+    row[5] = p.lvl[tile];
+    rows.set(tile, row);
+  }
+  e.tiles = [...rows.keys()].sort((a, b) => a - b).flatMap((tile) => rows.get(tile)!);
+}
 
 /**
  * Decision 11: the tiles the mayor's plans changed on Regional Day `dayIndex`
@@ -540,8 +577,11 @@ export function applyUndo(t: TownState, planId: string, env: OpsEnv): CommandRes
   }
   reindexBuildings(t);
   for (let i = 0; i + 1 < e.construction.length; i += 2) pairSet(t.construction, e.construction[i], e.construction[i + 1]);
-  t.parcels = e.parcelsBefore;
-  t.parcelRights = e.rightsBefore;
+  // The Deputy never opens land, so its entries leave the parcels alone (a parcel the mayor opened since stays open).
+  if (list === t.undo) {
+    t.parcels = e.parcelsBefore;
+    t.parcelRights = e.rightsBefore;
+  }
   // Replant the forest this plan cleared: drop its edit pairs (the latest matching ones).
   for (let i = e.terrainEdits.length - 2; i >= 0; i -= 2) {
     for (let j = t.terrainEdits.length - 2; j >= 0; j -= 2)
@@ -552,7 +592,7 @@ export function applyUndo(t: TownState, planId: string, env: OpsEnv): CommandRes
   }
   postWhole(t, 'refunds', e.cost);
   list.splice(at, 1);
-  return { ok: true, atTick: t.tick, cost: -e.cost };
+  return { ok: true, atTick: t.tick, cost: -e.cost || 0 }; // a free plan refunds 0, not -0
 }
 
 // ---- The budget dials (§5.13, §7) ----------------------------------------------------------------

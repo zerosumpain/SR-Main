@@ -877,23 +877,31 @@ export class HarnessUi {
     const day = this.local.county.dayIndex;
     const today = t.undo.filter((u) => u.day === day);
     if (!today.length) body.append(h('p', 'muted', 'Nothing built today. Plans you build can be undone until the end of the day.'));
-    // Decision 11: Bramble's builds sit on their own list; the mayor can still undo one today.
+    // Decision 11: Bramble's builds and zoning sit on their own list; the mayor can still undo one today.
     const deputy = (t.deputyUndo ?? []).filter((u) => u.day === day);
     this.todayRows(body, today);
     if (deputy.length) {
-      body.append(h('h3', '', 'Bramble’s builds today'));
+      body.append(h('h3', '', words('undo.deputyTitle', this.level)));
       this.todayRows(body, deputy);
     }
+  }
+
+  /** A row's label: a build's cost and buildings, or a Deputy zoning entry's lots (free: planId deputy.<day>.zone, .market, .help.zone.<zone>, .help.rezone.<zone>). */
+  private undoLabel(u: TownState['undo'][number]): string {
+    const tiles = u.tiles.length / 6;
+    if (/^deputy\.\d+\.(zone|market)$|^deputy\.\d+\.help\.zone\./.test(u.planId)) return words('undo.deputyZoned', this.level, { tiles });
+    if (/^deputy\.\d+\.help\.rezone\./.test(u.planId)) return words('undo.deputyRezoned', this.level, { tiles });
+    return `${pounds(u.cost)} · ${u.added.length ? u.added.map((b) => BUILDINGS[b[B_KIND]]?.name ?? 'building').join(', ') : `${tiles} tiles`}`;
   }
 
   private todayRows(body: HTMLElement, today: TownState['undo']): void {
     for (const u of [...today].reverse()) {
       const row = h('div', 'dial');
       row.append(
-        h('span', 'dial-label', `${pounds(u.cost)} · ${u.added.length ? u.added.map((b) => BUILDINGS[b[B_KIND]]?.name ?? 'building').join(', ') : `${u.tiles.length / 6} tiles`}`),
+        h('span', 'dial-label', this.undoLabel(u)),
         button('Undo', () => {
           const r = this.act({ type: 'undo', moveId: this.local.newMoveId('undo'), planId: u.planId });
-          if (r.ok) this.toast(`Undone: ${pounds(-(r.result?.cost ?? 0))} back.`);
+          if (r.ok) this.toast(u.cost ? `Undone: ${pounds(-(r.result?.cost ?? 0))} back.` : 'Undone.'); // zoning is free
         }),
       );
       body.append(row);

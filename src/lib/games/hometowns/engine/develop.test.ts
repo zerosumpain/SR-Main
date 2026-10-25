@@ -44,8 +44,10 @@ import { STEPS } from './steps';
 import { makeContext, tickTown } from './tick';
 import {
   B_DAMAGED,
+  B_KIND,
   CELLS,
   MARK_DAMAGED,
+  USE_EMPTY,
   VARIANT_HOTEL,
   buildingUse,
   cellOf,
@@ -64,7 +66,7 @@ import {
   zoneUse,
 } from './tiles';
 import { buildingIndex } from './content';
-import { placeCost, reindexBuildings } from './ops';
+import { applyBuild, applyUndo, placeCost, reindexBuildings } from './ops';
 import { S_SHOPS } from './trade';
 import { stateHash } from './index';
 import {
@@ -735,6 +737,31 @@ describe('incidents (§5.2 step 3)', () => {
       // With the order off the Deputy waits: the building stays closed until it is switched back on.
       expect(t.buildings[1][B_DAMAGED]).toBe(fixOn ? 0 : 1);
     }
+  });
+
+  it('never brings back a damaged building the mayor bulldozed today, and leaves the mayor’s undo of it working (decision 11)', () => {
+    const x = town(43);
+    const { c, t } = x;
+    const kind = buildingIndex('schoolHouse');
+    t.buildings.push(newBuilding(kind, 20, 20, 0, 0, 1));
+    reindexBuildings(t);
+    commitPlanes(t);
+    stepDevelopMemo(t, monthContext(c, 0, {}));
+    for (const o of t.orders) if (o.kind === 'fixDamaged') o.on = true;
+    t.buildings[1][B_DAMAGED] = 2;
+    const env = { params: P, dayIndex: c.dayIndex, profile: 'kid' as const };
+    applyBuild(t, 'kid-bulldoze', [{ op: 'bulldoze', rect: [20, 20, 1, 1] }], env);
+    const repairs = t.books.lines[lineIndex('repairs')];
+    const since = t.tick;
+    for (let n = 0; n < D.incidentTicks; n++) devTick(x, { params: tuned({ incidentCap: 0 }) });
+    // The repair walks the building list: a bulldozed building is not on it, so nothing is repaired, billed or rebuilt.
+    expect(t.buildings.some((b) => b[B_KIND] === kind)).toBe(false);
+    expect(planesOf(t).use[tileIndex(20, 20)]).toBe(USE_EMPTY);
+    expect(events(t, 'repaired', since)).toEqual([]);
+    expect(t.books.lines[lineIndex('repairs')]).toBe(repairs);
+    // A repair changes no tile, so the mayor's own undo still applies: the School House comes back as it was, closed.
+    expect(applyUndo(t, 'kid-bulldoze', env).ok).toBe(true);
+    expect(t.buildings.find((b) => b[B_KIND] === kind)![B_DAMAGED]).toBe(2);
   });
 });
 

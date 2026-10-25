@@ -1012,10 +1012,11 @@ export interface TownState {
   /** The mayor's plans today (§9.3): only the mayor's moves, never the Deputy's (decision 11). */
   undo: UndoEntry[];
   /**
-   * Decision 11: the Deputy's builds today, on their own list (at most
-   * DEPUTY_UNDO_MAX), so they never push the mayor's plans out of `undo`; a
-   * mayor may still undo one the same day for a full refund. Absent until the
-   * Deputy first builds (read as empty).
+   * Decision 11: the Deputy's builds and zoning today, on their own list (at
+   * most DEPUTY_UNDO_MAX), so they never push the mayor's plans out of `undo`;
+   * a mayor may still undo one the same day for a full refund (zoning entries,
+   * planIds deputy.<day>.zone, .market, .help.zone.<zone>, .help.rezone.<zone>,
+   * cost 0 and refund nothing). Absent until the Deputy first acts (read as empty).
    */
   deputyUndo?: UndoEntry[];
   /**
