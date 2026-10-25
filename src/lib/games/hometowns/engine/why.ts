@@ -119,6 +119,32 @@ export interface WhyRecord {
   entries: WhyEntry[];
 }
 
+/** The quantity a term lands on, or −1 when it cannot explain it (as add resolves it). */
+function resolveQuantity(ti: number, amount: number, quantity: string | null | undefined): number {
+  const def = TERMS[ti];
+  const q = quantity ?? defaultQuantity(def, amount);
+  if (q === null || !termFits(def, q) || Q_INDEX[q] === undefined) return -1;
+  return Q_INDEX[q];
+}
+
+// resolveQuantity memoised: per term, by the given quantity, or (none given) by the amount's
+// sign, the only thing the default reads.
+const DEFAULT_QI = new Int16Array(TERMS.length * 2).fill(-2);
+const GIVEN_QI: (Map<string, number> | undefined)[] = [];
+function quantityOf(ti: number, amount: number, quantity: string | null | undefined): number {
+  if (quantity === undefined || quantity === null) {
+    const slot = ti * 2 + (amount >= 0 ? 0 : 1);
+    let qi = DEFAULT_QI[slot];
+    if (qi === -2) DEFAULT_QI[slot] = qi = resolveQuantity(ti, amount, quantity);
+    return qi;
+  }
+  let m = GIVEN_QI[ti];
+  if (!m) GIVEN_QI[ti] = m = new Map();
+  let qi = m.get(quantity);
+  if (qi === undefined) m.set(quantity, (qi = resolveQuantity(ti, amount, quantity)));
+  return qi;
+}
+
 export class MonthWhy implements WhyWriter {
   /** Per quantity index: term sums by term index. */
   private readonly sums = new Map<number, Map<number, number>>();
@@ -133,13 +159,12 @@ export class MonthWhy implements WhyWriter {
       this.problems.push(`unknown Why term ${key}`);
       return;
     }
-    const def = TERMS[ti];
-    const q = quantity ?? defaultQuantity(def, amount);
-    if (q === null || !termFits(def, q) || Q_INDEX[q] === undefined) {
+    const qi = quantityOf(ti, amount, quantity);
+    if (qi < 0) {
+      const q = quantity ?? defaultQuantity(TERMS[ti], amount);
       this.problems.push(`term ${key} cannot explain ${String(q)}`);
       return;
     }
-    const qi = Q_INDEX[q];
     let m = this.sums.get(qi);
     if (!m) this.sums.set(qi, (m = new Map()));
     m.set(ti, (m.get(ti) ?? 0) + amount);

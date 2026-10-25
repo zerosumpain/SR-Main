@@ -32,7 +32,7 @@ import {
   MARK_DAMAGED,
   TILES,
   cellOf,
-  decodeCells,
+  decodeCellsShared,
   districtOf,
   lvlLevel,
   lvlStyle,
@@ -315,7 +315,7 @@ export function stepHouseholds(t: TownState, m: MonthContext): void {
   scratchOf(m).squeezed = [...alloc.squeezed];
 
   // Land value and Keep Homes Affordable share over each tier's homes.
-  const lv = decodeCells(t.lv);
+  const lv = decodeCellsShared(t.lv); // shared: read only
   const homes = homeTiles(t, m);
   const lvSum = [0, 0, 0];
   const capSum = [0, 0, 0];
@@ -388,7 +388,7 @@ interface TierChange {
 function changeTiers(t: TownState, m: MonthContext, occRate: readonly number[]): TierChange {
   const hp = m.params.housing;
   const homes = homeTiles(t, m);
-  const lv = decodeCells(t.lv);
+  const lv = decodeCellsShared(t.lv); // shared: read only
   const poll = m.derived.fields?.pollution;
   const memo = memoFor(t);
   const out: TierChange = { capDelta: [0, 0, 0], displaced: [0, 0, 0], retiered: 0, filtered: 0 };
