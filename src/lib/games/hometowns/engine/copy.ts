@@ -94,7 +94,7 @@ export const WANT_KEYS: readonly string[] = [
 export const TALK_KEYS: readonly string[] = [...STARS, 'traffic'];
 
 /** The Deputy's notes (orders.ts deputyNote kinds), as inbox kinds `deputy.<kind>`. */
-export const DEPUTY_NOTES = ['budgetHealthy.funding', 'budgetHealthy.tax', 'awayZoning', 'repayLoan', 'fixDamaged', 'buyUtilities'] as const;
+export const DEPUTY_NOTES = ['budgetHealthy.funding', 'budgetHealthy.tax', 'awayZoning', 'repayLoan', 'fixDamaged', 'buyUtilities', 'awayCivic.market', 'awayCivic.build'] as const;
 
 /**
  * Bulletin and welcome-back cards: key → the data fields its writer sends.

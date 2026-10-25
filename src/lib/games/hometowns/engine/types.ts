@@ -851,6 +851,8 @@ export interface CivicMemo {
   /** The Deputy's away zoning (§5.18): the dayIndex it last zoned on, and tiles zoned that day. */
   zonedDay: number;
   zonedToday: number;
+  /** The dayIndex the away order last looked at the Village checklist's civic items (decision 6: one look, at most one item, a Regional Day); absent before the first. */
+  civicDay?: number;
   /** Policy cards Helper Mode paused (§5.13 step 4), restored when it ends. */
   paused: ActivePolicy[];
   /** The next tier's checklist at the last month end (§7): its tier, met-item bits, item count. */

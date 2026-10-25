@@ -665,7 +665,7 @@
     "order.buyUtilities": { "kid": "If we run short of power or water, I'll buy some from Kingsport.", "adult": "Buy missing power and water from Kingsport." },
     "order.fixDamaged": { "kid": "If something gets broken, I'll pay for repairs.", "adult": "Fix damaged buildings." },
     "order.renewContracts": { "kid": "If a deal you made ends, I'll make it again. But only if it was good for us.", "adult": "Renew contracts I made, unless they lost money." },
-    "order.awayZoning": { "kid": "While you're away, I'll paint a few homes or shops by the roads. Only if people want them!", "adult": "While away: zone up to {a0} Homes or Shops tiles a day next to roads when that meter is above {a1} and reserves exceed {a2} months of spending." },
+    "order.awayZoning": { "kid": "While you're away, I'll paint homes or shops people want by the roads. With spare savings, I'll add a school, green or market too.", "adult": "While away: zone up to {a0} Homes or Shops tiles a day next to roads when that meter is above {a1} and reserves exceed {a2} months of spending. In a Hamlet, also one Village checklist item a day (market lots, School House, Village Green), paid only from reserves above that floor." },
     "order.repayLoan": { "kid": "If we have lots of savings, I'll pay the loan back early.", "adult": "Repay the Town Loan early when reserves exceed {a0} months of spending." },
     "order.hold": { "kid": "Don't change anything. I'll just watch.", "adult": "Hold: change nothing." },
     "bramble.ordersIntro": { "kid": "I look after the town when you're busy. Here's what I'll do.", "adult": "Standing orders run every pay day. Everything the Deputy does appears in your welcome back." },
@@ -678,6 +678,8 @@
     "deputy.repayLoan": { "kid": "We had lots of savings, so I paid some of the loan back.", "adult": "Repaid {paid:money} of the Town Loan early." },
     "deputy.fixDamaged": { "kid": "I paid for some repairs.", "adult": "Repairs paid: {cost:money}." },
     "deputy.buyUtilities": { "kid": "We ran short of power or water, so I bought some from Kingsport.", "adult": "Bought {power:n} power and {water:n} water from Kingsport for {cost:money}." },
+    "deputy.awayCivic.market": { "kid": "A village needs a market, so I painted {shops:count:shop by the road:shops by the road}.", "adult": "Zoned {shops:count:Shops tile:Shops tiles} by the roads for the Village market while you were away." },
+    "deputy.awayCivic.build": { "kid": "To help us become a village, I built a {building:ref:buildingName}. We had spare savings for it.", "adult": "Built a {building:ref:buildingName} for {cost:money} from reserves above the safety floor, for the Village checklist ({item:ref:check})." },
 
     "welcomeBack.away": { "kid": "Welcome back! While you were away, {ticks:time} went by in your town.", "adult": "Welcome back. Time in town since your last visit: {ticks:time}." },
     "welcomeBack.people": { "kid": "{pop:count:person lives:people live} in your town now.", "adult": "Population now {pop:n}." },

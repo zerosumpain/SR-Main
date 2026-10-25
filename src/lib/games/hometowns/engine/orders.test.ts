@@ -9,12 +9,14 @@ import { kitTown, road } from '../../../../../scripts/hometowns/space-kit';
 import { runMonths } from '../../../../../scripts/hometowns/people-kit';
 import { applyCommand } from './commands';
 import { ORDER_DEFAULTS } from './content';
+import { monthlySpending } from './finance';
 import { lineIndex, postWhole } from './core';
 import { civicMemo, upkeepOf } from './finance';
 import { stateHash } from './index';
-import { renewsContracts } from './orders';
+import { AWAY_GREENS, MARKET_LOTS, renewsContracts } from './orders';
 import { paramsFor } from './params';
-import { CAT_ROAD, CAT_ZONE, MAP, planesOf, useCat, usePayload } from './tiles';
+import { B_KIND, CAT_ROAD, CAT_ZONE, MAP, planesForWrite, planesOf, tileIndex, useCat, usePayload, zoneUse } from './tiles';
+import { BUILDINGS } from './content';
 import { EngineError, FUNDING_KEYS, METER_SHOPS, Z_HOMES, Z_SHOPS, type StandingOrder } from './types';
 
 const P = paramsFor('v1');
@@ -142,6 +144,111 @@ describe('While I am away, zone next to roads', () => {
       const before = planesOf(t).use.slice();
       runMonths(c, i, 2, civicSteps((tt) => ((tt.meters[0] = 80), {})));
       expect(Array.from(planesOf(t).use)).toEqual(Array.from(before));
+    }
+  });
+});
+
+describe('While I am away, build the Village checklist (decision 6)', () => {
+  type Town = ReturnType<typeof kitTown>['t'];
+  /** A Hamlet with one street at y = 30 and twelve Homes lots along it, its mayor long gone. */
+  const hamlet = () => {
+    const k = kitTown({ tier: 0 });
+    road(k.t, 4, 30, 60, 30, 'street');
+    const w = planesForWrite(k.t);
+    for (let x = 10; x < 22; x++) {
+      w.use[tileIndex(x, 29)] = zoneUse(Z_HOMES);
+      w.lvl[tileIndex(x, 29)] = 1;
+    }
+    k.t.orders = only('awayZoning');
+    k.t.away.lastHelloAt = 0;
+    return k;
+  };
+  /** Holds the meters where nothing else is zoned: Homes and jobs under 60, Shops unwanted unless `shops`. */
+  const hold = (shops = -20) => (tt: Town) => {
+    tt.meters.fill(0);
+    tt.meters[METER_SHOPS] = shops;
+    return {};
+  };
+  const ids = (t: Town) => t.buildings.map((b) => BUILDINGS[b[B_KIND]].id).filter((id) => id !== 'townHall');
+  const notes = (t: Town, kind: string) => t.inbox.filter((x) => x.kind === kind);
+
+  it('builds one item a Regional Day, a School House first, then a Village Green, paid from reserves, with a Deputy card for each', () => {
+    const { c, i, t } = hamlet();
+    postWhole(t, 'other', 1e6);
+    runMonths(c, i, 12, civicSteps(hold()));
+    expect(ids(t)).toEqual(['schoolHouse']); // twelve months, one Regional Day: one item
+    const card = notes(t, 'deputy.awayCivic.build');
+    expect(card).toHaveLength(1);
+    expect(card[0].data).toMatchObject({ building: 'schoolHouse', item: 'school', cost: 12_000 });
+    expect(t.undo.at(-1)!.planId).toBe(`deputy.${c.dayIndex}.schoolHouse`); // the same build plan as a mayor's move
+    c.dayIndex += 1;
+    runMonths(c, i, 12, civicSteps(hold()));
+    expect(ids(t)).toEqual(['schoolHouse', 'villageGreen']);
+    expect(notes(t, 'deputy.awayCivic.build').map((x) => x.data.building)).toEqual(['schoolHouse', 'villageGreen']);
+  });
+
+  it('puts a building within road reach but off the road edge, near the homes it serves', () => {
+    const { c, i, t } = hamlet();
+    postWhole(t, 'other', 1e6);
+    runMonths(c, i, 1, civicSteps(hold()));
+    const b = t.buildings.find((x) => BUILDINGS[x[B_KIND]].id === 'schoolHouse')!;
+    expect(b[2]).toBeGreaterThanOrEqual(28); // y: within two tiles of the street…
+    expect(b[2]).toBeLessThanOrEqual(32);
+    expect(b[2] === 29 || b[2] === 31).toBe(false); // …but not on its edge, which stays for homes and shops
+    expect(b[1]).toBeGreaterThanOrEqual(10 - 4);
+    expect(b[1]).toBeLessThanOrEqual(21 + 4);
+  });
+
+  it('only spends the money above the safety floor: a cheap green may go ahead of a dear school', () => {
+    const { c, i, t } = hamlet();
+    t.away.lastHelloAt = 9e15; // present for a month, so the books know the spending
+    postWhole(t, 'other', 1e6);
+    runMonths(c, i, 1, civicSteps(hold()));
+    const floor = 3 * monthlySpending(t);
+    postWhole(t, 'other', -t.money.reserves + floor + 7_000); // a Green (£2,000) fits above the floor; a School House (£12,000) does not
+    t.away.lastHelloAt = 0;
+    runMonths(c, i, 1, civicSteps(hold()));
+    expect(ids(t)).toEqual(['villageGreen']);
+    expect(t.money.reserves).toBeGreaterThan(floor);
+  });
+
+  it('builds one thing at a time and stops at one school and three greens', () => {
+    const { c, i, t } = hamlet();
+    postWhole(t, 'other', 1e7);
+    for (let d = 0; d < 8; d++) {
+      runMonths(c, i, 12, civicSteps(hold()));
+      c.dayIndex += 1;
+    }
+    const got = ids(t);
+    expect(got.filter((x) => x === 'schoolHouse')).toHaveLength(1);
+    expect(got.filter((x) => x === 'villageGreen').length).toBeLessThanOrEqual(AWAY_GREENS);
+  });
+
+  it('zones the market’s Shops lots by the road once shops are wanted, inside the day’s zoning allowance', () => {
+    const { c, i, t } = hamlet();
+    postWhole(t, 'other', 1e6);
+    runMonths(c, i, 1, civicSteps(hold(30)));
+    const p = planesOf(t);
+    let lots = 0;
+    for (let k = 0; k < MAP * MAP; k++) if (p.use[k] === zoneUse(Z_SHOPS)) lots++;
+    // The Shops meter (30) is under the zoning order's 60, so every lot is the market's.
+    expect(lots).toBe(MARKET_LOTS);
+    expect(notes(t, 'deputy.awayCivic.market')[0].data.shops).toBe(MARKET_LOTS);
+    expect(ids(t)).toEqual([]); // the market was today's item
+  });
+
+  it('does nothing for a mayor who is here, under Hold, with the order off, or past Hamlet', () => {
+    for (const setup of ['present', 'hold', 'off', 'village'] as const) {
+      const { c, i, t } = hamlet();
+      postWhole(t, 'other', 1e6);
+      if (setup === 'present') t.away.lastHelloAt = 9e15;
+      if (setup === 'hold') t.orders = only('awayZoning', 'hold');
+      if (setup === 'off') t.orders = only();
+      if (setup === 'village') t.tier = 1;
+      runMonths(c, i, 12, civicSteps(hold(30)));
+      expect(ids(t), setup).toEqual([]);
+      expect(notes(t, 'deputy.awayCivic.build'), setup).toHaveLength(0);
+      expect(notes(t, 'deputy.awayCivic.market'), setup).toHaveLength(0);
     }
   });
 });
