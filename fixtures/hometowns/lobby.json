@@ -45,6 +45,7 @@
   "seat": "s1",
   "profile": "adult",
   "isParent": true,
+  "canPause": false,
   "townHash": "",
   "derived": {
    "stars": [],
