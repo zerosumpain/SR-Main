@@ -210,6 +210,30 @@ describe('While I am away, build the Village checklist (decision 6)', () => {
     expect(notes(t, 'deputy.awayCivic.build').map((x) => x.data.building)).toEqual(['schoolHouse', 'villageGreen']);
   });
 
+  it('brings lapsed water back first: a Well on the grid of the homes without water, then the next item (G8)', () => {
+    const { c, i, t } = hamlet();
+    postWhole(t, 'other', 1e6);
+    const dry = (tt: Town) => {
+      hold()(tt);
+      return { utilities: { watered: new Uint8Array(MAP * MAP), wateredShare: 0 } };
+    };
+    t.away.lastHelloAt = 9e15; // here for a month, so the checklist has been judged once
+    runMonths(c, i, 1, civicSteps(dry));
+    t.away.lastHelloAt = 0;
+    runMonths(c, i, 11, civicSteps(dry));
+    expect(ids(t)).toEqual(['well']);
+    const card = notes(t, 'deputy.awayCivic.build');
+    expect(card[0].data).toMatchObject({ building: 'well', item: 'water90', cost: 1_500 });
+    expect(t.deputyUndo!.at(-1)!.planId).toBe(`deputy.${c.dayIndex}.well`);
+    const w = t.buildings.find((x) => BUILDINGS[x[B_KIND]].id === 'well')!;
+    expect(w[2]).toBeGreaterThanOrEqual(28); // on the street's grid, within road reach…
+    expect(w[2]).toBeLessThanOrEqual(32);
+    expect(w[2] === 29 || w[2] === 31).toBe(false); // …and off the road edge
+    c.dayIndex += 1;
+    runMonths(c, i, 12, civicSteps(hold())); // watered again: the School House is next
+    expect(ids(t)).toEqual(['well', 'schoolHouse']);
+  });
+
   it('puts a building within road reach but off the road edge, near the homes it serves', () => {
     const { c, i, t } = hamlet();
     postWhole(t, 'other', 1e6);

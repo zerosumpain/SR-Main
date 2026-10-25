@@ -23,6 +23,7 @@ import { civicMemo, deputyNote, levelPayment, monthsOfSpending, monthlySpending,
 import { applyBuild, mayorTilesToday, placeCost, roadTileCost } from './ops';
 import { homeTiles } from './housing';
 import { attachOf, roadDistrict, workReach } from './labour';
+import { roadNetOf } from './space';
 import { appendTileEvent } from './records';
 import { CHECKLISTS, GREAT_METROPOLIS, checkFacts, type CheckFacts } from './tiers';
 import { T_FOREST, TOWN_HALL_AT, buildable, terrainKind, terrainOf } from './terrain';
@@ -178,8 +179,8 @@ export const MARKET_LOTS = 8;
 /** Most Village Greens the Deputy places for the green70 item (one at a time). */
 export const AWAY_GREENS = 3;
 
-/** The Village checklist items the Deputy may build while the mayor is away, in the order it tries them. */
-export const AWAY_CIVIC_ITEMS = ['market', 'school', 'green70'] as const;
+/** The Village checklist items the Deputy may build while the mayor is away, in the order it tries them (checklist order). */
+export const AWAY_CIVIC_ITEMS = ['water90', 'market', 'school', 'green70'] as const;
 
 /** Scratch scores for civicSite's anchors (always left all zero). */
 const SITE_SCORE = new Int32Array(TILES);
@@ -279,6 +280,51 @@ function civicSite(t: TownState, m: MonthContext, kind: number, cover: (typeof C
 }
 
 /**
+ * G8: where a Well would bring water back to the most homes. Water grids are
+ * road components (utilities.ts), so the Well goes on the component whose
+ * built homes have the most residents' capacity without water this month,
+ * on the first spot (nearest the Town Hall) that is empty open land, not
+ * Forest, within the road reach a lot needs and attached to that component;
+ * a spot off the road's edge wins, so the roadside lots stay for homes and
+ * shops. Null when every home has water, or no spot fits.
+ */
+function waterSite(t: TownState, m: MonthContext): [number, number] | null {
+  const u = m.derived.utilities;
+  if (!u) return null;
+  const net = roadNetOf(t, m.params.develop.roadReach);
+  const p = planesOf(t);
+  const caps = ZONE_DEFS[Z_HOMES].capacity;
+  const dry = new Float64Array(net.comps);
+  const zoned = zonedTiles(p.use);
+  for (let q = 0; q < zoned.length; q++) {
+    const i = zoned[q];
+    const use = p.use[i];
+    if (useCat(use) !== CAT_ZONE || usePayload(use) !== Z_HOMES || u.watered[i]) continue;
+    const level = p.lvl[i] & 7;
+    const a = net.attach[i];
+    if (level === 0 || a < 0 || constructionLeft(t, i) > 0) continue;
+    dry[net.comp[a]] += caps[level - 1] ?? 0;
+  }
+  let target = -1;
+  for (let c = 0; c < net.comps; c++) if (dry[c] > 0 && (target < 0 || dry[c] > dry[target])) target = c;
+  if (target < 0) return null;
+  const terrain = terrainOf(t);
+  const access = roadAccess(t, m.params.develop.roadReach);
+  let edge: [number, number] | null = null;
+  for (const j of BY_DISTANCE) {
+    const a = net.attach[j];
+    if (a < 0 || net.comp[a] !== target || p.use[j] !== USE_EMPTY || mayors(j) || !access[j] || constructionLeft(t, j) > 0) continue;
+    const v = terrain[j];
+    const x = j % MAP;
+    const y = (j - x) / MAP;
+    if (!buildable(v) || terrainKind(v) === T_FOREST || !parcelOpen(t, x, y)) continue;
+    if (!nextToRoad(p.use, j)) return [x, y];
+    if (!edge) edge = [x, y];
+  }
+  return edge;
+}
+
+/**
  * Decision 6 (John, 2026-10-24): while the mayor is away, the away order also
  * works the Village checklist's civic items: the market (Shops lots by the
  * roads, free like all zoning), a School House and Village Greens. At most one
@@ -296,10 +342,28 @@ function awayCivic(t: TownState, m: MonthContext, memo: CivicMemo, floor: number
   memo.civicDay = m.dayIndex;
   const schools = groupCount(t, 'primary');
   const parks = groupCount(t, 'park');
-  const underWay = schools.building + parks.building > 0; // one building at a time: wait for this one to open
+  const wells = groupCount(t, 'water');
+  const underWay = schools.building + parks.building + wells.building > 0; // one building at a time: wait for this one to open
   let starved = false;
   for (const item of AWAY_CIVIC_ITEMS) {
     if (villageItemMet(memo, item)) continue;
+    if (item === 'water90') {
+      // G8: homes the growing hamlet added past its Well's reach or supply; a Well on their grid restores the item.
+      if (underWay || memo.check.items === 0) continue;
+      const kind = buildingIndex('well');
+      const cost = placeCost(t, kind, m.params);
+      if (t.money.reserves - cost <= floor) continue;
+      const at = waterSite(t, m);
+      if (!at) continue;
+      try {
+        applyBuild(t, `deputy.${m.dayIndex}.well`, [{ op: 'place', id: 'well', x: at[0], y: at[1], rot: 0 }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid', deputy: true });
+      } catch (e) {
+        if (e instanceof EngineError) continue;
+        throw e;
+      }
+      deputyNote(t, m, 'awayCivic.build', { building: 'well', item, cost });
+      return { tiles: 0, starved };
+    }
     if (item === 'market') {
       // Shops lots sit empty until the people can keep the shops going (a negative Shops meter), and
       // they would take the roadside lots new homes need: the market waits for the Shops meter, or for
