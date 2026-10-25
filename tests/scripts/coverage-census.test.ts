@@ -79,7 +79,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // Durable game rooms (games/room-store.integration, 2026-10-22) check the
 // compare-and-set write, the lobby and deadline lookups and the retention
 // delete against game_rooms; rows carry an id prefix and are removed each case.
-const INTEGRATION_FILES = 46;
+// Share-link visitors (projects/share-visits.integration, 2026-10-24) check the
+// upsert, the row cap and the ranked stats query against project_share_visit;
+// rows hang off throwaway links under one project key, removed each case.
+const INTEGRATION_FILES = 47;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

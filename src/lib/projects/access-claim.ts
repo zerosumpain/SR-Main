@@ -8,6 +8,16 @@
 // authority, Main answers with the same rules `requireProjectPublic` applies
 // here, and the gateway signs that answer into the app's assertion. The usage
 // bump happens where the share is validated, in Main.
+//
+// A share link can ask for a password (24 Oct 2026, the Spine only). Main does
+// not ask it: the claim carries the link's verifier as `pass`, and the app puts
+// the question and checks the answer ($lib/projects/share-password).
+//
+// The gateway also says who is asking (24 Oct 2026): a visitor id, network,
+// browser and whether the request opened a page, all reduced to hashes and
+// labels before they reach here ($lib/projects/share-visitor). Only a share is
+// counted; the owner (viewing as someone or not) and a public project's readers
+// never are.
 
 import { isOwnerEmail } from '$lib/server/access';
 import { db } from '$lib/db';
@@ -15,6 +25,7 @@ import { projectVisibility } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { isProjectPublic } from './visibility';
 import { shareCookieName, validateProjectShare } from './shares';
+import type { ShareVisit } from './share-visitor';
 
 /**
  * Which project each audience serves. Fixed here, not taken from the request:
@@ -32,6 +43,13 @@ export const PROJECT_AUDIENCES: Readonly<Record<string, string>> = Object.freeze
 });
 
 export type ProjectAccess = 'public' | 'owner' | 'share' | 'none';
+
+/** `pass` only on a share whose link asks for a password: that link's verifier. */
+export interface ProjectClaim {
+  key: string;
+  access: ProjectAccess;
+  pass?: string;
+}
 
 export function projectKeyForAudience(audience: string): string | null {
   return Object.hasOwn(PROJECT_AUDIENCES, audience) ? PROJECT_AUDIENCES[audience] : null;
@@ -56,13 +74,14 @@ function cookieValue(header: string, name: string): string {
  * previewing a private project; a live share link (`?t=` first, then the
  * project cookie, never falling back from a bad URL token); otherwise none.
  * `email` is the EFFECTIVE person — the view-as target while view-as holds, so
- * the owner viewing as a member sees what that member sees.
+ * the owner viewing as a member sees what that member sees. `count` false (the
+ * owner behind view-as) answers the same and counts no use or visitor.
  */
 export async function projectAccessFor(
   key: string,
   email: string | null,
-  share: { fromUrl: string | null; cookie: string },
-): Promise<{ key: string; access: ProjectAccess }> {
+  share: { fromUrl: string | null; cookie: string; visit?: ShareVisit | null; count?: boolean },
+): Promise<ProjectClaim> {
   const [vis] = await db
     .select({ projectKey: projectVisibility.projectKey, isPublic: projectVisibility.isPublic })
     .from(projectVisibility)
@@ -71,6 +90,7 @@ export async function projectAccessFor(
   if (isProjectPublic(map, key)) return { key, access: 'public' };
   if (email && isOwnerEmail(email)) return { key, access: 'owner' };
   const token = share.fromUrl || cookieValue(share.cookie, shareCookieName(key));
-  if (token && token.length <= 512 && (await validateProjectShare(key, token))) return { key, access: 'share' };
+  const live = token && token.length <= 512 ? await validateProjectShare(key, token, share.visit ?? null, share.count !== false) : null;
+  if (live) return live.passwordHash ? { key, access: 'share', pass: live.passwordHash } : { key, access: 'share' };
   return { key, access: 'none' };
 }

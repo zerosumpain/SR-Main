@@ -131,6 +131,10 @@ export const PROJECT_CARDS: ProjectCard[] = [
     // Recipients get the project's own domain; data-spine.com shows its holding
     // page to anyone without a live link.
     shareBase: 'https://data-spine.com/',
+    // The Spine asks for a link's password itself; the owner chooses per link.
+    // Mirrors SHARE_PASSWORD_KEYS ($lib/projects/share-password), which the
+    // share API reads; owner-cards.test.ts holds the two to each other.
+    sharePassword: true,
     label: 'Open The Spine',
     kind: 'Field study',
     tag: 'Interactive · Identity and accredited sharing',

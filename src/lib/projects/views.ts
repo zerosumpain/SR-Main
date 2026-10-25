@@ -57,6 +57,13 @@ export interface ProjectCard {
    * The token is the same either way; the app's gateway takes it to Main on both hosts.
    */
   shareBase?: string;
+  /**
+   * The project's app can ask a share link's recipient for a password, so the
+   * Share panel offers one. Only the Spine checks a password; on any other
+   * project a password would be a promise nothing keeps, and the share API
+   * refuses it. Must match SHARE_PASSWORD_KEYS in $lib/projects/share-password.
+   */
+  sharePassword?: true;
 }
 
 /** What kind of thing a card is, read off its eyebrow. */
