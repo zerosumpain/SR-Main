@@ -41,6 +41,7 @@ import {
   LOG_KEEP,
   TIER_NAMES,
   applyCommand,
+  backfillOrders,
   catchUp,
   catchUpTown,
   createCounty,
@@ -480,6 +481,8 @@ export function revive(state: Record<string, unknown>, fromSchema: number, now =
   room.queued ??= null;
   room.behind ??= false;
   room.daySeen ??= room.county?.dayIndex ?? 0;
+  // Decision 12: a child's town made before an order existed gets it (the child default) on load.
+  if (room.county) backfillOrders(room.county);
   const rev = Number.isInteger(room.rev) ? room.rev : 0;
   const age = Number.isFinite(room.createdAt) ? Math.floor(now - room.createdAt) : 0;
   room.rev = Math.max(rev + 1, age);

@@ -38,6 +38,7 @@ export { regionOf, countyMoney, countyMedian, pairLinks } from './region-state';
 export { offerOpen, runningContracts } from './offers';
 export { advertCost, STICKERS, type Sticker } from './social';
 export { countyWeekDue } from './county-week';
+export { backfillOrders, MAX_ORDERS } from './orders';
 export { canonical, fnv64, hashOf } from './hash';
 export { ENGINE_HASH } from './engine-hash.generated';
 export * from './types';

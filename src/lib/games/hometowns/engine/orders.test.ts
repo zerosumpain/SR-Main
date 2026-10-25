@@ -13,7 +13,7 @@ import { monthlySpending } from './finance';
 import { lineIndex, postWhole } from './core';
 import { civicMemo, upkeepOf } from './finance';
 import { stateHash } from './index';
-import { AWAY_GREENS, AWAY_ROAD_TILES, GROWTH_KEEP_HOMES, GROWTH_STAFFED, MARKET_LOTS, renewsContracts } from './orders';
+import { AWAY_GREENS, AWAY_ROAD_TILES, GROWTH_KEEP_HOMES, GROWTH_STAFFED, MARKET_LOTS, MAX_ORDERS, backfillOrders, renewsContracts } from './orders';
 import { DEPUTY_UNDO_MAX, applyBuild, applyUndo, mayorTilesToday } from './ops';
 import { paramsFor } from './params';
 import { B_KIND, CAT_ROAD, CAT_ZONE, MAP, planesForWrite, planesOf, tileIndex, useCat, usePayload, zoneUse } from './tiles';
@@ -656,7 +656,8 @@ describe('the orders move', () => {
     bad([{ kind: 'hold', on: true, args: [] }, { kind: 'hold', on: false, args: [] }], /once/);
     bad([{ kind: 'budgetHealthy', on: true, args: [3] }], /settings/);
     bad([{ kind: 'budgetHealthy', on: true, args: [3, 9000] }], /range/);
-    bad(new Array(9).fill({ kind: 'hold', on: true, args: [] }), /up to 8/);
+    bad(new Array(13).fill({ kind: 'hold', on: true, args: [] }), /up to 12/);
+    bad(new Array(9).fill({ kind: 'hold', on: true, args: [] }), /once/); // 9 is within the cap now (decision 12)
   });
 
   it('lets a child switch orders on and off, but not change how they work', () => {
@@ -667,6 +668,29 @@ describe('the orders move', () => {
     const retuned = t.orders.map((o) => (o.kind === 'budgetHealthy' ? { ...o, args: [4, 200] } : o));
     refused(() => applyCommand(c, { seat: t.seat, profile: 'kid' }, { type: 'orders', moveId: 'k2', orders: retuned }, now), 403, /grown-up/);
     refused(() => applyCommand(c, { seat: t.seat, profile: 'kid' }, { type: 'orders', moveId: 'k3', orders: [...t.orders].reverse() }, now), 403);
+  });
+
+  it('holds up to 12 orders (decision 12)', () => {
+    expect(MAX_ORDERS).toBe(12);
+  });
+
+  it('gives a child’s town the default orders it lacks, in place, once; never an adult’s (decision 12)', () => {
+    const { c, t } = town();
+    c.settings.perSeat[t.seat] = { ...c.settings.perSeat[t.seat], profile: 'kid' };
+    const full = t.orders.map((o) => ({ ...o, args: [...o.args] }));
+    const missing = t.orders.filter((o) => o.kind !== 'growthHelp' && o.kind !== 'hold');
+    t.orders = missing.map((o) => ({ ...o, on: !o.on, args: [...o.args] })); // the child’s switches are kept
+    expect(backfillOrders(c)).toBe(2);
+    expect(t.orders.map((o) => o.kind)).toEqual(full.map((o) => o.kind));
+    expect(t.orders.find((o) => o.kind === 'growthHelp')).toEqual({ kind: 'growthHelp', on: true, args: [24, 3, 5] });
+    expect(t.orders.find((o) => o.kind === 'hold')!.on).toBe(false);
+    expect(t.orders.find((o) => o.kind === 'budgetHealthy')!.on).toBe(!full[0].on);
+    const h = stateHash(t);
+    expect(backfillOrders(c)).toBe(0);
+    expect(stateHash(t)).toBe(h);
+    c.settings.perSeat[t.seat] = { ...c.settings.perSeat[t.seat], profile: 'adult' };
+    t.orders = t.orders.filter((o) => o.kind !== 'growthHelp');
+    expect(backfillOrders(c)).toBe(0); // an adult may have dropped it on purpose
   });
 
   it('starts every town with the §5.18 defaults for its seat', () => {

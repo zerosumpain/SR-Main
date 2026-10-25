@@ -22,7 +22,7 @@ import {
   waitingOn,
   type Room,
 } from './hometowns';
-import { catchUp, countyHash, gridTickAt, nextRegionalDayAt, paramsFor, population } from './engine/index';
+import { catchUp, countyHash, gridTickAt, nextRegionalDayAt, paramsFor, population, type CountyState } from './engine/index';
 import { londonParts, openPushWindow, emptyPush, prunePushWindow } from './push';
 
 const MIN = 60_000;
@@ -397,5 +397,19 @@ describe('durable shape', () => {
     expect(back.push).toEqual(emptyPush());
     expect(back.viewing).toEqual({});
     expect(CHUNK_UNITS).toBeGreaterThan(0);
+  });
+
+  it('gives a child’s town made before growth help that order on load (decision 12)', () => {
+    const room = newRoom();
+    start(room, host.id, T0);
+    foundAndSprint(room, T0 + 1000);
+    const stored = JSON.parse(JSON.stringify(room)) as { county: CountyState };
+    const t = stored.county.towns[0];
+    stored.county.settings.perSeat[t.seat].profile = 'kid';
+    t.orders = t.orders.filter((o) => o.kind !== 'growthHelp');
+    const back = revive(stored as unknown as Record<string, unknown>, 1);
+    const orders = back.county!.towns[0].orders;
+    expect(orders.map((o) => o.kind)).toEqual(['budgetHealthy', 'buyUtilities', 'fixDamaged', 'renewContracts', 'awayZoning', 'growthHelp', 'repayLoan', 'hold']);
+    expect(orders.find((o) => o.kind === 'growthHelp')).toEqual({ kind: 'growthHelp', on: true, args: [24, 3, 5] });
   });
 });

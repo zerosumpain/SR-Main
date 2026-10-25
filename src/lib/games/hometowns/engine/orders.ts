@@ -2,7 +2,7 @@
 // the books and Helper Mode, so they are as deterministic as the rest of the
 // month: same state, same orders, same actions. A child's seat sees them as
 // "if … then …" cards and can switch them on and off; an adult can also edit
-// the thresholds and reorder them (at most 8). Every action Bramble takes is
+// the thresholds and reorder them (at most 12: decision 12). Every action Bramble takes is
 // written to the inbox as a Deputy card (finance.ts deputyNote), so the
 // Welcome-back sheet can say what happened while the mayor was away.
 //
@@ -50,8 +50,8 @@ import {
 } from './types';
 import type { Params } from './params';
 
-/** Most orders a town may keep (§5.18). */
-export const MAX_ORDERS = 8;
+/** Most orders a town may keep (§5.18; decision 12: was 8). */
+export const MAX_ORDERS = 12;
 
 /** Bounds of each order's adult-editable thresholds (same order as ORDER_DEFAULTS' args). */
 const ARG_BOUNDS: Record<string, readonly [number, number][]> = {
@@ -767,7 +767,7 @@ function runEach(t: TownState, m: MonthContext, books: MonthBooks): void {
 
 /**
  * Replaces the town's standing orders. Adults may reorder, drop and edit
- * thresholds (bounded, at most 8 orders, each kind once); a child's seat may
+ * thresholds (bounded, at most MAX_ORDERS orders, each kind once); a child's seat may
  * only switch the existing orders on and off.
  */
 export function ordersMove(c: CountyState, townIndex: number, cmd: Command, actor: Actor): CommandResult {
@@ -798,4 +798,35 @@ export function ordersMove(c: CountyState, townIndex: number, cmd: Command, acto
   }
   t.orders = next;
   return { ok: true, atTick: t.tick, cost: 0 };
+}
+
+// ---- Orders added since a town was made (decision 12) ---------------------------------------------------
+
+/**
+ * Decision 12: a child's town made before an order existed (the preview's
+ * local rooms predate growthHelp) gets each default order it lacks, with the
+ * child default and default thresholds, at its place in ORDER_DEFAULTS'
+ * order; run when a room is revived. Pure and idempotent. Only children's
+ * towns: a child's seat can switch orders but never drop one, so a missing
+ * kind there can only be one that did not exist yet, while an adult may
+ * have dropped one on purpose (and the new orders are off for adults
+ * anyway). Never past MAX_ORDERS. Returns the orders added.
+ */
+export function backfillOrders(c: CountyState): number {
+  let added = 0;
+  for (const t of c.towns) {
+    if (t.archived || (c.settings.perSeat[t.seat]?.profile ?? 'adult') !== 'kid') continue;
+    for (let k = 0; k < ORDER_DEFAULTS.length && t.orders.length < MAX_ORDERS; k++) {
+      const def = ORDER_DEFAULTS[k];
+      if (t.orders.some((o) => o.kind === def.kind)) continue;
+      // Before the first order that comes after it in the defaults, else at the end.
+      const later = new Set(ORDER_DEFAULTS.slice(k + 1).map((d) => d.kind));
+      const at = t.orders.findIndex((o) => later.has(o.kind));
+      const order: StandingOrder = { kind: def.kind, on: def.kid, args: [...def.args] };
+      if (at < 0) t.orders.push(order);
+      else t.orders.splice(at, 0, order);
+      added++;
+    }
+  }
+  return added;
 }
