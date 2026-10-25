@@ -109,6 +109,10 @@ function sameTree(a: unknown, b: unknown): boolean {
   if (typeof a === 'number' && typeof b === 'number') return Object.is(a, b);
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
   if (Array.isArray(a) !== Array.isArray(b)) return false;
+  // Only plain objects and arrays survive JSON: a Map, typed array or class instance in a
+  // code-built variant would come back as a plain object with the same keys.
+  const pa = Object.getPrototypeOf(a);
+  if (pa !== Object.prototype && pa !== Array.prototype) return false;
   const ka = Object.keys(a as object);
   const kb = Object.keys(b as object);
   if (ka.length !== kb.length) return false;

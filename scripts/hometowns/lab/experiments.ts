@@ -123,7 +123,10 @@ export function timingJobs(cfg: PlanConfig, variant: Variant | null = null): Job
 export function timingWarmup(cfg: PlanConfig, variant: Variant | null = null): Job | null {
   const first = timedCounties(cfg, variant)[0];
   if (!first || first.kind !== 'county') return null;
-  return { ...first, spec: { ...first.spec, experiment: 'timing-warmup', timings: false } };
+  // A seed outside the Lab's range, so no memo the warm-up fills (footprints, decoded planes)
+  // can hold the timed counties' own inputs: the warm-up heats the code, not their data.
+  const seed = cfg.seed0 + Math.max(cfg.seeds, cfg.timingSeeds);
+  return { ...first, spec: { ...first.spec, experiment: 'timing-warmup', seed, bots: lineupFor(seed, cfg.seats), timings: false } };
 }
 
 function timedCounties(cfg: PlanConfig, variant: Variant | null): Job[] {
