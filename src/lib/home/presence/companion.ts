@@ -17,7 +17,7 @@
 import { getSetting, setSetting } from '$lib/server/models/settings';
 import { isPlausibleCoord, latestTsBySource, recordFix } from './observe';
 import type { HouseholdMember } from './members';
-import { errMsg, type IncomingFix } from './types';
+import { errMsg, type IncomingFix, type MovementMode } from './types';
 
 export const COMPANION_DEFAULT_URL = 'http://127.0.0.1:5295';
 export const COMPANION_CURSOR_KEY = 'home.presence.companionCursor';
@@ -71,6 +71,14 @@ export interface HouseholdFix {
   moving: boolean;
   /** Whole percent, from a phone new enough to send it; null otherwise. */
   battery?: number | null;
+  /**
+   * How Core Motion said the phone was moving at the fix — the app's
+   * MotionKind (`stationary`, `walking`, `running`, `cycling`, `automotive`,
+   * `unknown`) — or null. Absent from a pilot or a phone that predates it.
+   */
+  motion?: string | null;
+  /** The owner's e-bike was connected to the phone at the fix. */
+  bike?: boolean;
 }
 
 export interface HouseholdPage {
@@ -145,9 +153,18 @@ export async function fetchHousehold(
   return asPage(await res.json());
 }
 
+/** The phone's own motion classes, as the trail's coarser modes. */
+const MOTION_MODES: Record<string, MovementMode> = {
+  stationary: 'still', walking: 'walking', running: 'active', cycling: 'active', automotive: 'vehicle',
+};
+
 /** A pilot fix as the trail writer takes it. A negative or missing speed is
- *  unknown, and the writer then derives one from the previous fix. PURE. */
+ *  unknown, and the writer then derives one from the previous fix. How the
+ *  phone said it was moving becomes the mode — the e-bike mark first, since
+ *  Core Motion takes a fast e-bike for a car — and without either the writer
+ *  infers one from speed as before. PURE. */
 export function toIncomingFix(f: HouseholdFix): IncomingFix {
+  const mode: MovementMode | undefined = f.bike === true ? 'active' : f.motion ? MOTION_MODES[f.motion] : undefined;
   const speed = typeof f.speed === 'number' && Number.isFinite(f.speed) && f.speed >= 0 ? f.speed : null;
   return {
     ...(f.received ? { companionReceivedAt: f.received } : {}),
@@ -158,6 +175,7 @@ export function toIncomingFix(f: HouseholdFix): IncomingFix {
     speedKmh: speed == null ? null : Math.round(speed * 3.6 * 10) / 10,
     batteryPct:
       typeof f.battery === 'number' && Number.isInteger(f.battery) && f.battery >= 0 && f.battery <= 100 ? f.battery : null,
+    ...(mode ? { mode } : {}),
   };
 }
 

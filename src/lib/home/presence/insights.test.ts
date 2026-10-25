@@ -236,3 +236,16 @@ describe('a sleeping app phone (GPS off while still)', () => {
     expect(bridgeSleeps([app('2026-09-21T05:40:00Z', 51.5), app('2026-09-21T07:22:00Z', 51.55, { speedKmh: 5 })], places, at)).toHaveLength(2);
   });
 });
+
+describe('a mode the phone knew', () => {
+  it('makes a fast bike ride a ride, and slow traffic a drive', () => {
+    const ride = journey('2026-09-21').map(f => f.mode === 'vehicle' ? { ...f, mode: 'active' } : f);
+    const [trip] = extractTrips(ride, places, new Date('2026-09-22T00:00Z')).trips;
+    expect(trip.mode).toBe('active');
+    const crawl = journey('2026-09-21').map(f => f.mode === 'vehicle' ? { ...f, speedKmh: 9 } : f);
+    expect(extractTrips(crawl, places, new Date('2026-09-22T00:00Z')).trips[0].mode).toBe('vehicle');
+    // With no mode at all, speed still decides.
+    const unknown = journey('2026-09-21').map(f => f.mode === 'vehicle' ? { ...f, mode: null } : f);
+    expect(extractTrips(unknown, places, new Date('2026-09-22T00:00Z')).trips[0].mode).toBe('vehicle');
+  });
+});

@@ -202,7 +202,7 @@ export function extractTrips(rows: InsightFix[], places: InsightPlace[], now: Da
         const moving = path.filter(p => +p.ts <= end);
         if (end - start >= 2 * MINUTE && end - start <= 4 * 60 * MINUTE && !adjacent(origin, f.placeId!, places)
           && metresBetween(path[0].lat, path[0].lon, pending[0].lat, pending[0].lon) >= MIN_JOURNEY_METRES) {
-          const fast = moving.filter(p => (p.speedKmh ?? 0) > 18 || p.mode === 'vehicle' || p.mode === 'rail').length;
+          const fast = moving.filter(fastFix).length;
           trips.push({ subject: f.subject, from: origin, to: f.placeId!, start, end, minutes: (end - start) / MINUTE,
             mode: fast > moving.length / 3 ? 'vehicle' : 'active', path: moving });
         }
@@ -369,6 +369,14 @@ export function cleanDurations(minutes: number[]): { clean: number[]; broken: bo
 }
 
 function routeKey(t: Trip) { return `${t.subject}:${t.from}:${t.to}:${t.mode}`; }
+/** A fix in a vehicle: by its mode when the trail has a moving one, else by
+ *  speed. A mode the phone knew wins — a 25 km/h bike ride is not a drive,
+ *  and a car crawling in traffic is not a walk. */
+function fastFix(p: InsightFix): boolean {
+  if (p.mode === 'vehicle' || p.mode === 'rail') return true;
+  if (p.mode === 'active' || p.mode === 'walking') return false;
+  return (p.speedKmh ?? 0) > 18;
+}
 /** Match a fix to a historical polyline, returning progress and cross-track distance. */
 function progressOn(f: Fix, path: Fix[]): { fraction: number; distance: number } {
   const scale = Math.cos(f.lat * Math.PI / 180), lengths: number[] = [];
@@ -391,7 +399,7 @@ export function predictArrival(active: Fix[], trips: Trip[], places: InsightPlac
   const last = active.at(-1), previous = active.at(-2), first = active[0];
   if (!last || !previous || !first || +now - +last.ts > 3 * MINUTE || +now < +last.ts || !continuous(previous, last)
     || metresBetween(previous.lat, previous.lon, last.lat, last.lon) < 40) return null;
-  const mode = (last.speedKmh ?? 0) > 18 || last.mode === 'vehicle' || last.mode === 'rail' ? 'vehicle' : 'active';
+  const mode = fastFix(last) ? 'vehicle' : 'active';
   const grouped = new Map<string, Trip[]>();
   for (const t of trips) {
     const delta = Math.abs(minuteOfDay(t.start) - minuteOfDay(+first.ts));
