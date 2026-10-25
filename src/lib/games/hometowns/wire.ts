@@ -62,6 +62,7 @@ import { ADVISOR_RULES } from './engine/advisors';
 import { PAGE_HASH } from './page-hash.generated';
 import type { AdvisorCard, Card, CountyWire, HometownsWire, MeWire, PublicTown, VisitView, Want } from './engine/wire';
 import type { Room } from './hometowns';
+import { canPause } from './solo';
 
 /**
  * The map page the wire names (§10.10): its folder is PAGE_HASH, which covers
@@ -104,6 +105,12 @@ function mapFor<V>(store: WeakMap<object, Map<string, V>>, room: object): Map<st
   let m = store.get(room);
   if (!m) store.set(room, (m = new Map()));
   return m;
+}
+
+/** An erased player (hometowns.ts `erasePlayer`): what this process remembers sending them, and their seat's probe. */
+export function forgetViewer(room: object, playerId: string, seat: string | null): void {
+  VERSIONS.get(room)?.delete(playerId);
+  if (seat) PROBES.get(room)?.delete(seat);
 }
 
 const hashJson = (v: unknown): string => fnv64(JSON.stringify(v ?? null));
@@ -351,7 +358,17 @@ function cardHashes(towns: PublicTown[]): Record<string, string>[] {
  * §10.7: the frame for `meId` at `now`. With `since`, cut against that rev
  * if this viewer's frame at that rev is remembered; else whole.
  */
-export function toWire(room: Room, meId: string, now: number, since: number | null = null, o: WireOptions = {}): HometownsWire {
+/**
+ * The server's `me`: the engine's MeWire (engine/wire.ts, hashed with the
+ * engine, so not changed for an adapter rule) plus what only the server
+ * knows. `canPause`: this viewer is the sole mayor of the running county, on
+ * a parent's seat (decision 13, solo.ts); the phone shows Pause only then.
+ * Always present, like `isParent`. The map page ignores keys it does not read.
+ */
+export type ServerMeWire = MeWire & { canPause: boolean };
+export type ServerWire = Omit<HometownsWire, 'me'> & { me: ServerMeWire | null };
+
+export function toWire(room: Room, meId: string, now: number, since: number | null = null, o: WireOptions = {}): ServerWire {
   const c = room.county;
   const p = paramsFor(c.paramsVersion);
   const meP = room.players.find((q) => q.id === meId) ?? null;
@@ -430,6 +447,8 @@ export function toWire(room: Room, meId: string, now: number, since: number | nu
       // A seat with no settings (a damaged row) shows a child's wording: the safe side.
       profile: c.settings.perSeat[seat]?.profile ?? 'kid',
       isParent: c.parents.includes(seat),
+      // Decision 13: the sole mayor of a running county, on a parent's seat (solo.ts).
+      canPause: canPause(room, meId),
       townHash: t ? stateHash(t) : '',
     };
     for (const k of ME_PARTS) if (!held || held.parts[`me.${k}`] !== hashes[`me.${k}`]) me[k] = meParts[k];
@@ -443,7 +462,7 @@ export function toWire(room: Room, meId: string, now: number, since: number | nu
         if (Object.keys(changed).length) me.townDelta = { tick: t.tick, tileEvents: '', changed };
       }
     }
-    frame.me = me as unknown as MeWire;
+    frame.me = me as unknown as ServerMeWire;
   }
 
   const kept = ring.filter((v) => v.rev !== room.rev);
@@ -455,7 +474,7 @@ export function toWire(room: Room, meId: string, now: number, since: number | nu
     const bytes = JSON.stringify(frame).length;
     if (bytes > FIRST_FRAME_BUDGET) console.warn(`[hometowns] large frame ${JSON.stringify({ room: room.id, rev: room.rev, bytes })}`);
   }
-  return frame;
+  return frame as ServerWire;
 }
 
 /**

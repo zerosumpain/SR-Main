@@ -257,8 +257,11 @@ describe('a game without joinRunning (every game registered today)', () => {
   it('no registered game opts in to late invites or seating', () => {
     for (const [id, rules] of Object.entries(GAMES)) {
       if (id === TOWNS || id === STRICT) continue;
-      expect([id, rules.joinRunning, rules.seat, rules.durable?.erasePlayer]).toEqual([id, undefined, undefined, undefined]);
+      // Hometowns keeps a county through an erasure (erase-player.test.ts), but seats nobody late.
+      const erases = id === 'hometowns' ? undefined : rules.durable?.erasePlayer;
+      expect([id, rules.joinRunning, rules.seat, erases]).toEqual([id, undefined, undefined, undefined]);
     }
+    expect(typeof GAMES.hometowns.durable?.erasePlayer).toBe('function');
   });
 
   it('still refuses an invite once started, and lists no invite into its running room', async () => {

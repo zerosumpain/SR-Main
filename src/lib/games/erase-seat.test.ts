@@ -138,11 +138,11 @@ function row(room: RoomBase, over: Partial<StoredRoom> = {}): StoredRoom {
 // ── today's games ───────────────────────────────────────────────────────────
 
 describe('games that do not opt in', () => {
-  it('none of the registered games keeps a room through an erasure', () => {
-    expect(keepingGames(GAMES)).toEqual([]);
+  it('only Hometowns keeps a room through an erasure (a county outlives one mayor)', () => {
+    expect(keepingGames(GAMES)).toEqual(['hometowns']);
   });
 
-  it.each(Object.keys(GAMES))('%s: the room is left for the delete, as before', (id) => {
+  it.each(Object.keys(GAMES).filter((id) => id !== 'hometowns'))('%s: the room is left for the delete, as before', (id) => {
     const room = { ...countyRoom(), game: id as GameId };
     expect(keepSeat(row(room, { game: id }), [B], NOW, (GAMES as Record<string, GameRules>)[id])).toBeNull();
   });
@@ -153,7 +153,8 @@ describe('games that do not opt in', () => {
 
   it('with no game opting in, the transaction reads nothing', async () => {
     const tx = { select: vi.fn(), update: vi.fn() };
-    expect(await keepErasedSeats(tx as never, [B], NOW, GAMES as Record<string, GameRules>)).toEqual([]);
+    const others = Object.fromEntries(Object.entries(GAMES).filter(([, rules]) => !rules.durable?.erasePlayer)) as Record<string, GameRules>;
+    expect(await keepErasedSeats(tx as never, [B], NOW, others)).toEqual([]);
     expect(tx.select).not.toHaveBeenCalled();
     expect(tx.update).not.toHaveBeenCalled();
   });

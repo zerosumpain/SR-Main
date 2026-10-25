@@ -280,7 +280,7 @@ describe('settings, pause and nap', () => {
     expect(({} as Record<string, unknown>).pushes).toBeUndefined();
   });
 
-  it('a paused county writes a weekly heartbeat, and the pause ends by itself after 21 days', () => {
+  it('a paused solo county writes a weekly heartbeat, and stays paused past 21 days (decision 13: no cap)', () => {
     const room = newRoom({ county: { seed: 7 } });
     start(room, host.id, T0);
     const now = foundAndSprint(room, T0 + 1000);
@@ -292,7 +292,7 @@ describe('settings, pause and nap', () => {
     expect(advance(room, beat)).toBe(true);
     expect(room.heartbeatAt).toBe(beat);
     advance(room, now + 22 * DAY);
-    expect(room.county.pause).toBeNull();
+    expect(room.county.pause).not.toBeNull();
   });
 
   it('a county nobody greets naps at lastHello + 72 h, beats weekly, and stops beating after 90 days', () => {
