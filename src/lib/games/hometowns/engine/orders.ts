@@ -177,7 +177,7 @@ function zoneAllowed(t: TownState, z: number): boolean {
 export const MARKET_LOTS = 8;
 
 /** Most Village Greens the Deputy places for the green70 item (one at a time). */
-export const AWAY_GREENS = 3;
+export const AWAY_GREENS = 6;
 
 /** The Village checklist items the Deputy may build while the mayor is away, in the order it tries them (checklist order). */
 export const AWAY_CIVIC_ITEMS = ['water90', 'market', 'school', 'green70'] as const;
@@ -326,8 +326,9 @@ function waterSite(t: TownState, m: MonthContext): [number, number] | null {
 
 /**
  * Decision 6 (John, 2026-10-24): while the mayor is away, the away order also
- * works the Village checklist's civic items: the market (Shops lots by the
- * roads, free like all zoning), a School House and Village Greens. At most one
+ * works the Village checklist's civic items: water (a Well on the grid of the
+ * homes without it, G8), the market (Shops lots by the roads, free like all
+ * zoning), a School House and Village Greens (up to AWAY_GREENS). At most one
  * item a Regional Day, one building at a time, and a building only when its
  * cost leaves reserves above the order's safety floor (args[2] months of
  * spending). Everything goes through the same build plan as a mayor's own move

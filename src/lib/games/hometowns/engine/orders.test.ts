@@ -259,7 +259,7 @@ describe('While I am away, build the Village checklist (decision 6)', () => {
     expect(t.money.reserves).toBeGreaterThan(floor);
   });
 
-  it('builds one thing at a time and stops at one school and three greens', () => {
+  it('builds one thing at a time and stops at one school and six greens (G8: three no longer covered a grown hamlet)', () => {
     const { c, i, t } = hamlet();
     postWhole(t, 'other', 1e7);
     for (let d = 0; d < 8; d++) {
@@ -268,7 +268,8 @@ describe('While I am away, build the Village checklist (decision 6)', () => {
     }
     const got = ids(t);
     expect(got.filter((x) => x === 'schoolHouse')).toHaveLength(1);
-    expect(got.filter((x) => x === 'villageGreen').length).toBeLessThanOrEqual(AWAY_GREENS);
+    expect(got.filter((x) => x === 'villageGreen')).toHaveLength(6); // eight days: the school, then a green a day while the item is unmet
+    expect(AWAY_GREENS).toBe(6);
   });
 
   it('zones the market’s Shops lots by the road once shops are wanted, inside the day’s zoning allowance', () => {
