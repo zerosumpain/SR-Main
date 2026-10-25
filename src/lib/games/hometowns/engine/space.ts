@@ -81,12 +81,14 @@ function mixTable(l2: readonly number[]): Float64Array {
     }
   return out;
 }
-const MIX_CACHE: { key: string; table: Float64Array }[] = [];
+const MIX_CACHE: { key: string; src: readonly number[]; table: Float64Array }[] = [];
 function mixFor(l2: readonly number[]): Float64Array {
+  // The params' (frozen) array is the same object every month: found by identity before its key is built.
+  for (const e of MIX_CACHE) if (e.src === l2) return e.table;
   const key = l2.join(',');
   for (const e of MIX_CACHE) if (e.key === key) return e.table;
   const table = mixTable(l2);
-  MIX_CACHE.push({ key, table });
+  MIX_CACHE.push({ key, src: l2, table });
   if (MIX_CACHE.length > 8) MIX_CACHE.shift();
   return table;
 }
@@ -199,7 +201,7 @@ export function roadNetOf(t: TownState, reach: number): RoadNet {
       return hit;
     }
   }
-  const net = buildRoadNet(roadKey(use), reach);
+  const net = buildRoadNet(roadKey(use), reach, hit ?? null);
   NETS.set(t, net);
   NET_PLANES.set(net, use.slice());
   return net;
@@ -218,7 +220,7 @@ function step(i: number, d: number): number {
 }
 
 /** Builds the road net from a road key (exported for tests: Dijkstra versus brute force). */
-export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
+export function buildRoadNet(key: Uint8Array, reach: number, prev: RoadNet | null = null): RoadNet {
   // Neighbours are written out (N, W, E, S as step() numbers them) rather than called through
   // step() and a closure: the net is rebuilt in every month a road changed, and those months
   // were the slowest the Lab timed (G12). Same lists, same order, same numbers.
@@ -284,11 +286,16 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
   // Attachment: the nearest road tile within `reach` (a lot "touches" the road it is served from).
   // Each road tile offers itself to the tiles around it; the order (Chebyshev, then Manhattan,
   // then tile index) is total, so this is the same argmin as a scan of every tile's window.
-  const attach = new Int32Array(TILES).fill(-1);
-  const attachDist = new Int8Array(TILES).fill(127);
-  const attachMan = monthU8(TILES).fill(99);
+  // When the previous net had the same reach and every one of its roads is still a road (the
+  // roads were only added to, or relaid as another kind), its attachment is the argmin over
+  // the old roads, so only the new road tiles need to make their offers.
+  let grown = prev !== null && prev.reach === reach;
+  if (grown && prev) for (let k = 0; k < prev.roads.length; k++) if (kind[prev.roads[k]] < 0) grown = false;
+  const attach = grown && prev ? prev.attach.slice() : new Int32Array(TILES).fill(-1);
+  const attachDist = grown && prev ? prev.attachDist.slice() : new Int8Array(TILES).fill(127);
   for (let k = 0; k < R; k++) {
     const j = roads[k];
+    if (grown && prev && prev.kind[j] >= 0) continue; // an old road: its offers are in the copy
     const jx = j & (MAP - 1);
     const jy = j >> 6;
     const y0 = jy - reach < 0 ? 0 : jy - reach;
@@ -304,18 +311,20 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
         const cheb = c > cy ? c : cy;
         const bc = attachDist[i];
         if (cheb > bc) continue;
-        const man = c + cy;
         if (cheb < bc) {
           attach[i] = j;
           attachDist[i] = cheb;
-          attachMan[i] = man;
           continue;
         }
-        const bm = attachMan[i];
-        if (man < bm || (man === bm && j < attach[i])) {
+        // A tie on Chebyshev distance: the current road's Manhattan distance, from its tile.
+        const a = attach[i];
+        const ax = a & (MAP - 1);
+        const ay = a >> 6;
+        const bm = (ax < xx ? xx - ax : ax - xx) + (ay < yy ? yy - ay : ay - yy);
+        const man = c + cy;
+        if (man < bm || (man === bm && j < a)) {
           attach[i] = j;
           attachDist[i] = cheb;
-          attachMan[i] = man;
         }
       }
     }

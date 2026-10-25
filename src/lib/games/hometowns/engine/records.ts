@@ -4,7 +4,7 @@
 // many times a tick, so like the planes it is decoded once per town object
 // and written back by commitRecords (the driver calls it with commitPlanes).
 
-import { bytesToInt32, decodeRle64, encodeRle64, int32ToBytes } from './codec';
+import { bytesToInt32, decodeRle64, encodeRle64 } from './codec';
 import type { TownState } from './types';
 
 // ---- History: 14 series × (12 monthly + 42 daily) Int32 ---------------------------------
@@ -34,10 +34,25 @@ const SERIES = HISTORY_SERIES.length;
 const HEAD = 4;
 const SIZE = HEAD + SERIES * (HISTORY_MONTHS + HISTORY_DAYS);
 
+/**
+ * The decoded ring per town, with the string it was decoded from or last
+ * written to: a month's push no longer decodes the ring it wrote the month
+ * before. A string replaced from outside (a revert, a revive) never matches,
+ * so it is decoded again.
+ */
+const HISTORY_CACHE = new WeakMap<TownState, { src: string; ring: Int32Array }>();
+
+/** The town's ring, decoded (shared: callers other than push only read it). */
 function loadHistory(t: TownState): Int32Array {
-  if (!t.history) return new Int32Array(SIZE);
-  return bytesToInt32(decodeRle64(t.history, SIZE * 4));
+  const hit = HISTORY_CACHE.get(t);
+  if (hit && hit.src === t.history) return hit.ring;
+  const ring = t.history ? bytesToInt32(decodeRle64(t.history, SIZE * 4)) : new Int32Array(SIZE);
+  HISTORY_CACHE.set(t, { src: t.history, ring });
+  return ring;
 }
+
+/** int32ToBytes into a reused buffer (every byte is written; encodeRle64 keeps no reference). */
+const HISTORY_BYTES = new Uint8Array(SIZE * 4);
 
 function scaled(v: number, scale: number): number {
   const r = Math.round(v * scale);
@@ -53,7 +68,16 @@ function push(t: TownState, values: Partial<Record<HistorySeries, number>>, dail
   for (let s = 0; s < SERIES; s++) a[base + s * len + slot] = scaled(values[HISTORY_SERIES[s].id] ?? 0, HISTORY_SERIES[s].scale);
   a[hi] = (slot + 1) % len;
   a[hi + 1] = Math.min(len, a[hi + 1] + 1);
-  t.history = encodeRle64(int32ToBytes(a));
+  const bytes = HISTORY_BYTES;
+  for (let i = 0; i < SIZE; i++) {
+    const v = a[i];
+    bytes[i * 4] = v & 255;
+    bytes[i * 4 + 1] = (v >>> 8) & 255;
+    bytes[i * 4 + 2] = (v >>> 16) & 255;
+    bytes[i * 4 + 3] = (v >>> 24) & 255;
+  }
+  t.history = encodeRle64(bytes);
+  HISTORY_CACHE.set(t, { src: t.history, ring: a });
 }
 
 /** Month end sample (WP2d's M14 calls it; the stub records pop and reserves). */
