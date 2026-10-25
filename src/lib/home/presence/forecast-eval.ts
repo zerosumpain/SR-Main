@@ -12,8 +12,8 @@
 // is a simplification — a wander that never became a trip is invisible — and
 // it is the same for every version of the forecast being compared.
 
-import { learnedTravel, localClock, nextMoves, routinesOf, watchItems, type ForecastCorrection } from './forecast';
-import { percentile, predictArrival, routesOf, type InsightPerson, type InsightPlace, type LiveState, type Trip } from './insights';
+import { learnedTravel, localClock, nextMoves, NO_SCHOOL_CALENDAR, routinesOf, watchItems, type ForecastCorrection, type SchoolCalendar } from './forecast';
+import { percentile, predictArrival, routesOf, type InsightFix, type InsightPerson, type InsightPlace, type LiveState, type Trip } from './insights';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -39,6 +39,16 @@ export interface PersonScore {
   eligible: number;
   foreseen: number;
 }
+
+export interface OverdueOutcome {
+  date: string;
+  subject: string;
+  to: string;
+  outcome: 'late' | 'skipped';
+}
+
+/** Overdue outcomes kept on the scorecard, newest last. */
+const OVERDUE_KEPT = 20;
 
 export interface Scorecard {
   generatedAt: string;
@@ -81,7 +91,7 @@ export interface Scorecard {
     window: number | null;
   };
   /** "Hasn't left": whether they then went late, or not at all. */
-  overdue: { fired: number; late: number; skipped: number };
+  overdue: { fired: number; late: number; skipped: number; recent: OverdueOutcome[] };
 }
 
 export interface EvalInput {
@@ -95,6 +105,15 @@ export interface EvalInput {
   /** How much history the forecast learns from at each checkpoint; the page uses 28. */
   learnDays?: number;
   corrections?: readonly ForecastCorrection[];
+  /** Term breaks, as the live forecast has them. */
+  cal?: SchoolCalendar;
+  /**
+   * The trail (normalised, a sleeping app phone's stays bridged). Given, where
+   * someone is comes from their last fix, as it does live; without it, from
+   * the end of their last trip — which keeps them "at home" all day when a
+   * school run went undetected.
+   */
+  fixes?: InsightFix[];
 }
 
 const ratio = (n: number, d: number) => (d ? Math.round((n / d) * 1000) / 1000 : null);
@@ -119,11 +138,32 @@ export function datesBetween(from: string, to: string): string[] {
   return out;
 }
 
-/** Where everyone is at `now`, read off the trips. PURE. */
-export function liveFromTrips(trips: Trip[], people: InsightPerson[], now: number): LiveState[] {
+/** A fix this recent says where someone is. */
+const FIX_FRESH_MS = 30 * MINUTE;
+
+/** The last fix at or before `now` in a time-sorted list. */
+function fixAt(list: InsightFix[] | undefined, now: number): InsightFix | null {
+  if (!list?.length) return null;
+  let lo = 0, hi = list.length - 1, found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (+list[mid].ts <= now) { found = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return found < 0 ? null : list[found];
+}
+
+/**
+ * Where everyone is at `now`: on a trip, else at the place of a fresh fix,
+ * else at the end of their last trip. PURE.
+ */
+export function liveFromTrips(trips: Trip[], people: InsightPerson[], now: number, fixes?: Map<string, InsightFix[]>): LiveState[] {
   return people.map((p) => {
     const mine = trips.filter((t) => t.subject === p.subject && t.start <= now);
     const on = mine.find((t) => t.end > now);
+    const fix = fixAt(fixes?.get(p.subject), now);
+    if (!on && fix && now - +fix.ts <= FIX_FRESH_MS) {
+      return { subject: p.subject, placeId: fix.placeId ?? null, since: fix.placeId ? fix.ts.toISOString() : null, lastSeen: fix.ts.toISOString(), moving: null };
+    }
     if (on) return { subject: p.subject, placeId: null, since: null, lastSeen: new Date(now).toISOString(), moving: { fromId: on.from, departedAt: new Date(on.start).toISOString() } };
     const last = mine.reduce<Trip | null>((a, t) => (!a || t.end > a.end ? t : a), null);
     if (!last || now - last.end > PLACE_STALE_MS) return { subject: p.subject, placeId: null, since: null, lastSeen: null, moving: null };
@@ -136,8 +176,16 @@ export function scoreForecast(input: EvalInput, generatedAt = new Date()): Score
   const { places, people, homeIds } = input;
   const learnDays = input.learnDays ?? 28;
   const corrections = input.corrections ?? [];
+  const cal = input.cal ?? NO_SCHOOL_CALENDAR;
   const trips = [...input.trips].sort((a, b) => a.start - b.start);
   const names = new Map(people.map((p) => [p.subject, p.displayName]));
+  const fixes = input.fixes ? new Map<string, InsightFix[]>() : undefined;
+  for (const f of input.fixes ?? []) {
+    if (f.lat == null || f.lon == null) continue;
+    const list = fixes!.get(f.subject) ?? [];
+    list.push(f); fixes!.set(f.subject, list);
+  }
+  for (const list of fixes?.values() ?? []) list.sort((a, b) => +a.ts - +b.ts);
   const dates = datesBetween(input.from, input.to);
 
   const known = (now: number) => trips.filter((t) => t.end <= now && t.start >= now - learnDays * DAY);
@@ -151,27 +199,28 @@ export function scoreForecast(input: EvalInput, generatedAt = new Date()): Score
   let etaChecks = 0, etaOffered = 0, etaRight = 0, etaWrong = 0, etaInWindow = 0;
   const etaErrors: number[] = [];
   let overdueFired = 0, overdueLate = 0, overdueSkipped = 0;
+  const overdueRecent: OverdueOutcome[] = [];
 
   for (const date of dates) {
     // ── Next moves: the last word before it was due ───────────────────────
     const said = new Map<string, { subject: string; fromId: string; toId: string; leaveAt: number; at: number }>();
-    const overdue = new Map<string, { subject: string; fromId: string; toId: string; at: number }>();
+    const overdue = new Map<string, { subject: string; fromId: string; toId: string; to: string; at: number }>();
     for (const at of checkpointsOf(date)) {
       const history = known(at);
       const routes = routesOf(history, places, people);
-      const routines = routinesOf(routes, new Date(at), learnDays);
-      const live = liveFromTrips(trips, people, at);
-      for (const m of nextMoves(routines, live, [], new Date(at), corrections)) {
+      const routines = routinesOf(routes, new Date(at), learnDays, cal);
+      const live = liveFromTrips(trips, people, at, fixes);
+      for (const m of nextMoves(routines, live, [], new Date(at), corrections, cal)) {
         if (m.kind !== 'routine' || !m.routineId) continue;
         const r = routines.find((x) => x.id === m.routineId)!;
         const leaveAt = Date.parse(m.leaveAt);
         if (leaveAt - at < NEXT_LEAD_MINS * MINUTE) continue;
         said.set(`${m.subject}|${m.routineId}`, { subject: m.subject, fromId: r.fromId, toId: r.toId, leaveAt, at });
       }
-      for (const w of watchItems({ routines, routes, live, arrivals: [], names, homeIds, now: new Date(at), corrections })) {
+      for (const w of watchItems({ routines, routes, live, arrivals: [], names, homeIds, now: new Date(at), corrections, cal })) {
         if (w.kind !== 'overdue' || overdue.has(w.key)) continue;
         const r = routines.find((x) => w.key === `overdue:${x.id}:${date}`);
-        if (r) overdue.set(w.key, { subject: r.subject, fromId: r.fromId, toId: r.toId, at });
+        if (r) overdue.set(w.key, { subject: r.subject, fromId: r.fromId, toId: r.toId, to: r.to, at });
       }
     }
     const hitTrips = new Set<Trip>();
@@ -187,9 +236,13 @@ export function scoreForecast(input: EvalInput, generatedAt = new Date()): Score
     }
     for (const o of overdue.values()) {
       overdueFired++;
-      const later = trips.find((t) => t.subject === o.subject && t.from === o.fromId && t.to === o.toId && t.start >= o.at && localClock(t.start).date === date);
+      // Went: a trip there later that day, or — when the trip itself went
+      // undetected — seen at the place later that day.
+      const later = trips.some((t) => t.subject === o.subject && t.from === o.fromId && t.to === o.toId && t.start >= o.at && localClock(t.start).date === date)
+        || (fixes?.get(o.subject) ?? []).some((f) => f.placeId === o.toId && +f.ts >= o.at && localClock(+f.ts).date === date);
       if (later) overdueLate++;
       else overdueSkipped++;
+      overdueRecent.push({ date, subject: o.subject, to: o.to, outcome: later ? 'late' : 'skipped' });
     }
 
     // ── Each trip of the day: was it foreseen, how long did we say ────────
@@ -244,6 +297,6 @@ export function scoreForecast(input: EvalInput, generatedAt = new Date()): Score
     next: { predictions, hits, precision: ratio(hits, predictions), eligible, foreseen, recall: ratio(foreseen, eligible), byPerson: [...byPerson.values()] },
     duration: { trips: durTrips, estimated: durEstimated, mae: mean(durErrors), medianError: median(durErrors), band: ratio(inBand, durEstimated), p80: ratio(underP80, durEstimated) },
     eta: { checks: etaChecks, offered: etaOffered, rightPlace: etaRight, wrongPlace: etaWrong, mae: mean(etaErrors), window: ratio(etaInWindow, etaRight) },
-    overdue: { fired: overdueFired, late: overdueLate, skipped: overdueSkipped },
+    overdue: { fired: overdueFired, late: overdueLate, skipped: overdueSkipped, recent: overdueRecent.slice(-OVERDUE_KEPT) },
   };
 }

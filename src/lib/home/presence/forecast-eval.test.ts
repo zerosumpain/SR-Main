@@ -69,7 +69,7 @@ describe('the scorecard', () => {
   it('counts a missed school run as an overdue that never went', () => {
     const skipped = schoolRuns.filter((t) => !t.path[0].ts.toISOString().startsWith('2026-10-07'));
     const c = scoreForecast({ trips: skipped, places, people, homeIds: new Set(['home']), from: '2026-10-07', to: '2026-10-07' });
-    expect(c.overdue).toEqual({ fired: 1, late: 0, skipped: 1 });
+    expect(c.overdue).toMatchObject({ fired: 1, late: 0, skipped: 1, recent: [{ date: '2026-10-07', subject: 'alex', to: 'School', outcome: 'skipped' }] });
   });
 
   it('has nothing to say with no history', () => {

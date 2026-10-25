@@ -10,9 +10,9 @@ import { db } from '$lib/db';
 import { daydreamPlaces } from '$lib/db/schema';
 import { getSetting, setSetting } from '$lib/server/models/settings';
 import { localClock } from './forecast';
-import { forecastCorrections, homePlaceIds } from './forecast.server';
+import { forecastCorrections, homePlaceIds, loadSchoolCalendar } from './forecast.server';
 import { scoreForecast, type Scorecard } from './forecast-eval';
-import { normaliseReadings, tripsFrom } from './insights';
+import { bridgeSleeps, normaliseReadings, tripsFrom } from './insights';
 import { insightMembers, trailRows } from './insights.server';
 
 export const SCORECARD_KEY = 'home.forecast.scorecard';
@@ -45,17 +45,19 @@ export async function runScorecard(now = new Date()): Promise<Scorecard | null> 
   const people = (await insightMembers({ kind: 'owner' })).map((m) => ({ subject: m.subject, displayName: m.displayName }));
   if (!people.length) return null;
   const days = SCORE_DAYS + LEARN_DAYS + 1;
-  const [rows, places, homeIds, corrections] = await Promise.all([
+  const [rows, places, homeIds, corrections, cal] = await Promise.all([
     trailRows(`scorecard:${+now}`, people.map((p) => p.subject), days, now),
     db.select().from(daydreamPlaces).where(eq(daydreamPlaces.status, 'active')),
     homePlaceIds(),
     forecastCorrections(days, now),
+    loadSchoolCalendar(),
   ]);
   const fixes = normaliseReadings(rows);
   const trips = people.flatMap((p) => tripsFrom(fixes.filter((f) => f.subject === p.subject), places, now).trips);
   const to = localClock(+now - 86_400_000).date;
   const from = localClock(+now - SCORE_DAYS * 86_400_000).date;
-  const card = scoreForecast({ trips, places, people, homeIds, from, to, learnDays: LEARN_DAYS, corrections }, now);
+  const located = bridgeSleeps(fixes, places, now);
+  const card = scoreForecast({ trips, places, people, homeIds, from, to, learnDays: LEARN_DAYS, corrections, cal, fixes: located }, now);
   const stored = await loadScorecard();
   const night: ScorecardNight = {
     date: localClock(now).date, precision: card.next.precision, recall: card.next.recall, band: card.duration.band,

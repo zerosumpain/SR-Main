@@ -81,17 +81,98 @@ export interface Routine {
   minutes: { median: number; low: number; high: number; p80: number };
   /** Local dates it ran, for "has it happened today". */
   dates: string[];
+  /**
+   * The weekdays it keeps to (0 = Monday), when it keeps to some and not the
+   * rest of its day type — "Tue and Wed", not "weekdays". `days`/`of` then
+   * count those weekdays only. Absent: every day of its type.
+   */
+  weekdays?: number[];
 }
 
 /** Days of each type in a window ending at `now`. */
-function dayTypeCounts(now: number, days: number): Record<DayType, number> {
+function dayTypeCounts(now: number, days: number, skip: (date: string) => boolean = () => false): Record<DayType, number> {
   const out: Record<DayType, number> = { weekday: 0, weekend: 0 };
-  for (let i = 0; i < days; i++) out[dayTypeOf(localClock(now - i * 86_400_000).weekday)]++;
+  for (let i = 0; i < days; i++) {
+    const c = localClock(now - i * 86_400_000);
+    if (!skip(c.date)) out[dayTypeOf(c.weekday)]++;
+  }
   return out;
 }
 
+/** Each weekday's count in a window ending at `now` (index 0 = Monday). */
+function weekdayCounts(now: number, days: number, skip: (date: string) => boolean = () => false): number[] {
+  const out = Array<number>(7).fill(0);
+  for (let i = 0; i < days; i++) {
+    const c = localClock(now - i * 86_400_000);
+    if (!skip(c.date)) out[c.weekday]++;
+  }
+  return out;
+}
+
+// ── School calendar ─────────────────────────────────────────────────────────
+
+/** A stretch with no school: a half-term, a holiday, an INSET day. Local dates, inclusive. */
+export interface Holiday {
+  from: string;
+  to: string;
+  label?: string;
+}
+
+/**
+ * The owner's hand-entered term breaks and the places they apply to. On a
+ * holiday a routine to or from a school is not expected — not offered, not
+ * "overdue", and the day is not counted against it.
+ */
+export interface SchoolCalendar {
+  holidays: readonly Holiday[];
+  schoolIds: ReadonlySet<string>;
+}
+
+export const NO_SCHOOL_CALENDAR: SchoolCalendar = { holidays: [], schoolIds: new Set() };
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Holidays as stored, keeping only well-formed ranges, in date order. PURE. */
+export function cleanHolidays(value: unknown): Holiday[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((h): h is Holiday => !!h && typeof h === 'object' && ISO_DATE.test((h as Holiday).from) && ISO_DATE.test((h as Holiday).to) && (h as Holiday).from <= (h as Holiday).to)
+    .map((h) => ({ from: h.from, to: h.to, ...(typeof h.label === 'string' && h.label.trim() ? { label: h.label.trim().slice(0, 60) } : {}) }))
+    .sort((a, b) => a.from.localeCompare(b.from));
+}
+
+/** The holiday a local date falls in, if any. PURE. */
+export const holidayOn = (cal: SchoolCalendar, date: string): Holiday | null =>
+  cal.holidays.find((h) => date >= h.from && date <= h.to) ?? null;
+
+const isSchoolRoutine = (r: { fromId: string; toId: string }, cal: SchoolCalendar) => cal.schoolIds.has(r.fromId) || cal.schoolIds.has(r.toId);
+
+/** Whether a routine is off for the day because school is. PURE. */
+export const offForHoliday = (r: { fromId: string; toId: string }, cal: SchoolCalendar, date: string) =>
+  isSchoolRoutine(r, cal) && holidayOn(cal, date) != null;
+
+/** A weekday is one a routine keeps to when it ran on at least this share of them… */
+export const WEEKDAY_KEEP_SHARE = 0.5;
+/** …and the routine is narrowed to its kept weekdays only if no more than this share of runs fall outside them. */
+export const WEEKDAY_STRAY_SHARE = 0.1;
+
+/**
+ * The weekdays a routine keeps to, or null when it keeps to all of its day
+ * type (or the evidence is too thin to say). PURE.
+ */
+export function keptWeekdays(dates: string[], dayType: DayType, now: number, since: number, skip?: (date: string) => boolean): number[] | null {
+  const ran = Array<number>(7).fill(0);
+  for (const d of dates) ran[localClock(Date.parse(`${d}T12:00:00Z`)).weekday]++;
+  const possible = weekdayCounts(now, since, skip);
+  const ofType = [0, 1, 2, 3, 4, 5, 6].filter((w) => dayTypeOf(w) === dayType);
+  const kept = ofType.filter((w) => ran[w] >= 2 && ran[w] >= possible[w] * WEEKDAY_KEEP_SHARE);
+  if (!kept.length || kept.length === ofType.length) return null;
+  const stray = ofType.filter((w) => !kept.includes(w)).reduce((n, w) => n + ran[w], 0);
+  return stray <= dates.length * WEEKDAY_STRAY_SHARE ? kept : null;
+}
+
 /** Routines out of the learned routes. PURE. */
-export function routinesOf(routes: RouteInsight[], now: Date, days: number): Routine[] {
+export function routinesOf(routes: RouteInsight[], now: Date, days: number, cal: SchoolCalendar = NO_SCHOOL_CALENDAR): Routine[] {
   const out: Routine[] = [];
   for (const r of routes) {
     for (const dayType of ['weekday', 'weekend'] as const) {
@@ -112,6 +193,11 @@ export function routinesOf(routes: RouteInsight[], now: Date, days: number): Rou
       // holiday days before it.
       const first = Math.min(...slot.map((t) => +new Date(t.start)));
       const since = Math.min(days, Math.ceil((+now - first) / 86_400_000));
+      // A school's holidays are not days it could have run.
+      const skip = isSchoolRoutine(r, cal) ? (d: string) => holidayOn(cal, d) != null : undefined;
+      const weekdays = keptWeekdays(dates, dayType, +now, since, skip);
+      const keptDates = weekdays ? dates.filter((d) => weekdays.includes(localClock(Date.parse(`${d}T12:00:00Z`)).weekday)) : dates;
+      const possible = weekdays ? weekdays.reduce((n, w) => n + weekdayCounts(+now, since, skip)[w], 0) : dayTypeCounts(+now, since, skip)[dayType];
       out.push({
         id: `${r.id}:${dayType}`,
         routeId: r.id,
@@ -129,15 +215,11 @@ export function routinesOf(routes: RouteInsight[], now: Date, days: number): Rou
           Math.round(centre + percentile(offsets, 0.1) + 1440) % 1440,
           Math.round(centre + percentile(offsets, 0.9) + 1440) % 1440,
         ],
-        days: dates.length,
-        of: Math.max(dates.length, dayTypeCounts(+now, since)[dayType]),
-        minutes: {
-          median: round(percentile(minutes, 0.5)),
-          low: round(percentile(minutes, 0.1)),
-          high: round(percentile(minutes, 0.9)),
-          p80: round(percentile(minutes, 0.8)),
-        },
+        days: keptDates.length,
+        of: Math.max(keptDates.length, possible),
+        minutes: predictionBand(minutes),
         dates,
+        ...(weekdays ? { weekdays } : {}),
       });
     }
   }
@@ -145,6 +227,23 @@ export function routinesOf(routes: RouteInsight[], now: Date, days: number): Rou
 }
 
 const round = (n: number) => Math.round(n * 10) / 10;
+
+/**
+ * Where the NEXT trip will fall, from the ones seen: a prediction interval,
+ * not a description of the past. With n trips sorted, the next lands between
+ * the j-th smallest and j-th largest with probability (n + 1 − 2j)/(n + 1),
+ * whatever the shape — so the band is the widest j that still promises 80%
+ * (min to max below nine trips), and p80 is the k-th smallest with
+ * k = ⌈0.8(n + 1)⌉. Plain p10–p90 of five trips held the next one only 53%
+ * of the time on the family's real trips (backtest, 2026-10-25). PURE.
+ */
+export function predictionBand(values: number[]): { median: number; low: number; high: number; p80: number } {
+  const v = [...values].sort((a, b) => a - b), n = v.length;
+  if (!n) return { median: 0, low: 0, high: 0, p80: 0 };
+  const j = Math.max(1, Math.floor(0.1 * (n + 1)));
+  const k = Math.min(n, Math.ceil(0.8 * (n + 1)));
+  return { median: round(percentile(v, 0.5)), low: round(v[j - 1]), high: round(v[n - j]), p80: round(v[k - 1]) };
+}
 
 /** "9 of 20 weekdays" — how often the routine ran on days it could have. */
 export const routineShare = (r: Routine) => (r.of ? r.days / r.of : 0);
@@ -175,6 +274,10 @@ export interface TravelEstimate {
  * The learned journey time from one place to another, for this person first
  * and then for anyone in the household. Null when nobody has made the trip
  * three times — the caller routes it, or says it cannot tell. PURE.
+ *
+ * Not split by time of day: tried 2026-10-25, it moved the backtest's mean
+ * error by under half a minute and narrowed the sample enough to worsen the
+ * band. Family journeys here do not vary enough by hour to pay for it.
  */
 export function learnedTravel(routes: RouteInsight[], fromId: string, toId: string, subject: string | null): TravelEstimate | null {
   const pair = routes.filter((r) => r.fromId === fromId && r.toId === toId);
@@ -185,10 +288,7 @@ export function learnedTravel(routes: RouteInsight[], fromId: string, toId: stri
     const main = [...list].sort((a, b) => b.samples - a.samples)[0];
     return {
       source,
-      median: round(percentile(clean, 0.5)),
-      low: round(percentile(clean, 0.1)),
-      high: round(percentile(clean, 0.9)),
-      p80: round(percentile(clean, 0.8)),
+      ...predictionBand(clean),
       samples: clean.length,
       basis: source === 'household' ? [...new Set(list.map((r) => r.person))].join(', ') : main.person,
       mode: main.mode,
@@ -223,6 +323,11 @@ export interface NextMove {
 
 function ranToday(r: Routine, today: string): boolean {
   return r.dates.includes(today);
+}
+
+/** Today is a day this routine runs on: its day type, and one of its weekdays if it keeps to some. */
+function runsOn(r: Routine, clock: { weekday: number }): boolean {
+  return r.dayType === dayTypeOf(clock.weekday) && (!r.weekdays || r.weekdays.includes(clock.weekday));
 }
 
 // ── Corrections ─────────────────────────────────────────────────────────────
@@ -281,6 +386,7 @@ export function nextMoves(
   arrivals: ArrivalInsight[],
   now: Date,
   corrections: readonly ForecastCorrection[] = [],
+  cal: SchoolCalendar = NO_SCHOOL_CALENDAR,
 ): NextMove[] {
   const clock = localClock(now), dayType = dayTypeOf(clock.weekday);
   const out: NextMove[] = [];
@@ -300,7 +406,7 @@ export function nextMoves(
     }
     if (!state.placeId || state.moving) continue;
     const candidates = routines
-      .filter((r) => r.subject === state.subject && r.fromId === state.placeId && r.dayType === dayType)
+      .filter((r) => r.subject === state.subject && r.fromId === state.placeId && runsOn(r, clock) && !offForHoliday(r, cal, clock.date))
       // Called wrong today: not offered again today, and the day counts
       // against it from then on (`correctedShare`).
       .filter((r) => correctedShare(r, corrections) >= NEXT_MIN_SHARE && !ranToday(r, clock.date))
@@ -369,10 +475,12 @@ export function watchItems(input: {
   homeIds: Set<string>;
   now: Date;
   corrections?: readonly ForecastCorrection[];
+  cal?: SchoolCalendar;
 }): WatchItem[] {
   const { routines, routes, live, arrivals, names, homeIds, now } = input;
   const corrections = input.corrections ?? [];
-  const clock = localClock(now), dayType = dayTypeOf(clock.weekday);
+  const cal = input.cal ?? NO_SCHOOL_CALENDAR;
+  const clock = localClock(now);
   const name = (s: string) => names.get(s) ?? s;
   const out: WatchItem[] = [];
   for (const state of live) {
@@ -380,7 +488,7 @@ export function watchItems(input: {
     // Overdue: a dependable routine from here has passed its window unrun.
     if (fresh && state.placeId && !state.moving) {
       for (const r of routines) {
-        if (r.subject !== state.subject || r.fromId !== state.placeId || r.dayType !== dayType) continue;
+        if (r.subject !== state.subject || r.fromId !== state.placeId || !runsOn(r, clock) || offForHoliday(r, cal, clock.date)) continue;
         if (correctedShare(r, corrections) < OVERDUE_MIN_SHARE || ranToday(r, clock.date)) continue;
         // "Not today", said already: their not leaving is the expected thing.
         if (correctedToday(r, corrections, clock.date)) continue;
@@ -471,15 +579,16 @@ export function buildForecast(
   now: Date,
   mainHome: string | null = null,
   corrections: readonly ForecastCorrection[] = [],
+  cal: SchoolCalendar = NO_SCHOOL_CALENDAR,
 ): FamilyForecast {
-  const routines = routinesOf(insights.routes, now, insights.days);
+  const routines = routinesOf(insights.routes, now, insights.days, cal);
   const names = new Map(insights.people.map((p) => [p.subject, p.displayName]));
   return {
     generatedAt: now.toISOString(),
     days: insights.days,
     routines,
-    next: nextMoves(routines, insights.live, insights.arrivals, now, corrections),
-    watch: watchItems({ routines, routes: insights.routes, live: insights.live, arrivals: insights.arrivals, names, homeIds, now, corrections }),
+    next: nextMoves(routines, insights.live, insights.arrivals, now, corrections, cal),
+    watch: watchItems({ routines, routes: insights.routes, live: insights.live, arrivals: insights.arrivals, names, homeIds, now, corrections, cal }),
     arrivals: insights.arrivals,
     departures: departureGrid(insights.routes, mainHome ? new Set([mainHome]) : homeIds),
   };
