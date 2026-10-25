@@ -509,7 +509,7 @@ function g12(d: LabData): GateResult {
       note: metro.length ? `largest metropolis ${perTown} bytes × 6 + county ${overhead}` : `no metropolis yet: largest town (tier ${biggest.tier[biggest.tier.length - 1]}, pop ${biggest.pop[biggest.pop.length - 1]}) ${perTown} bytes × 6 + county ${overhead}`,
     });
   }
-  return { id: 'G12', title: 'Budgets', verdict: verdictOf(checks), m0: true, checks, note: 'Timed on the Lab machine, one county at a time after the pool has drained, without the observer; budgets are §10.15 p95s.' };
+  return { id: 'G12', title: 'Budgets', verdict: verdictOf(checks), m0: true, checks, note: 'Timed on the Lab machine, one county at a time after the pool has drained and an untimed warm-up county, without the observer; budgets are §10.15 p95s.' };
 }
 
 export function evaluateGates(d: LabData, base: BaselineRef | null): GateResult[] {

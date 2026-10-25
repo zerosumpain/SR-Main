@@ -7,7 +7,7 @@
 import { ENGINE_HASH } from '../../../src/lib/games/hometowns/engine/engine-hash.generated';
 import { hashOf } from '../../../src/lib/games/hometowns/engine/hash';
 import { paramsFile, resolveParams } from '../../../src/lib/games/hometowns/engine/params';
-import { buildJobs, PROFILES, timingJobs, type PlanConfig, type Profile } from './experiments';
+import { buildJobs, PROFILES, timingJobs, timingWarmup, type PlanConfig, type Profile } from './experiments';
 import { evaluateGates, composite, type LabData } from './gates';
 import type { FoundingResult, Job, JobResult } from './jobs';
 import { runJobs } from './pool';
@@ -97,8 +97,11 @@ export async function runLab(o: LabOptions): Promise<{ scorecard: Scorecard; dat
     },
   });
   // G12's timings: one county at a time on a quiet machine (the pool has drained).
+  // An untimed warm-up county goes first in the same worker (timingWarmup says why); its result is dropped.
   const timed = timingJobs(cfg, variant);
-  const timedResults = timed.length ? await runJobs(timed, { workers: Math.min(1, o.workers ?? 1) }) : [];
+  const warmup = timed.length ? timingWarmup(cfg, variant) : null;
+  const timedRun = timed.length ? await runJobs(warmup ? [warmup, ...timed] : timed, { workers: Math.min(1, o.workers ?? 1) }) : [];
+  const timedResults = warmup ? timedRun.slice(1) : timedRun;
   const data = splitResults([...jobs, ...timed], [...results, ...timedResults], cfg);
   const baseline = o.baseline === undefined ? loadBaseline(cfg.profile) : o.baseline;
   const gates = evaluateGates(data, { spectralThreshold: baseline?.spectralThreshold ?? null });

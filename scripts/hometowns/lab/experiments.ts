@@ -107,6 +107,26 @@ export function buildJobs(cfg: PlanConfig, variant: Variant | null = null): Job[
  * contention, not "Node on the VPS".
  */
 export function timingJobs(cfg: PlanConfig, variant: Variant | null = null): Job[] {
+  return timedCounties(cfg, variant);
+}
+
+/**
+ * An untimed county run first in the timing worker. §10.15's budgets are
+ * p95s of Node on the VPS, a long-running process whose engine code is hot;
+ * a fresh worker's first county instead pays for V8 warming up (the month
+ * steps run once a month per town, so they take hundreds of town-months to
+ * reach optimised code; measured, a fresh worker's first county had ~330
+ * deoptimisations, the next ~90 and a third ~15), which put about 1 ms on
+ * the month step's p95. bench.ts warms up the same way before it times. Its result is
+ * dropped.
+ */
+export function timingWarmup(cfg: PlanConfig, variant: Variant | null = null): Job | null {
+  const first = timedCounties(cfg, variant)[0];
+  if (!first || first.kind !== 'county') return null;
+  return { ...first, spec: { ...first.spec, experiment: 'timing-warmup', timings: false } };
+}
+
+function timedCounties(cfg: PlanConfig, variant: Variant | null): Job[] {
   const jobs: Job[] = [];
   for (let k = 0; k < Math.min(cfg.timingSeeds, cfg.seeds); k++) {
     const seed = cfg.seed0 + k;
