@@ -79,6 +79,7 @@ import {
 import {
   COHORT_S,
   COVERAGES,
+  MARGIN_PRIME,
   SECTOR_COUNT,
   STAGE_C,
   STAGE_P,
@@ -1341,6 +1342,9 @@ export function stepDevelop(t: TownState, ctx: TickContext): void {
     // the gate is off: carts arrive only into vacancies (A12), so a founding hamlet must build ahead.
     const homesGate = P.rules.homesStartsToGap && !cartsRunning(t, P);
     let room: number[] | null = null;
+    // With rules.bizStartsToMargin a business start waits while its sector's supply-line margin m̄′ (§5.12,
+    // the pipeline's cost included) is below normal: builders do not open shops into a loss-making high street.
+    const bizGate = P.rules.bizStartsToMargin;
     let n = 0;
     let held = 0;
     for (let k = 0; k < candidates.length && n < allow; k++) {
@@ -1356,6 +1360,9 @@ export function stepDevelop(t: TownState, ctx: TickContext): void {
           }
           room[h] -= (ZCAP[ZH][c.level - 1] ?? 0) - (c.from > 0 ? (ZCAP[ZH][c.from - 1] ?? 0) : 0);
         }
+      } else if (bizGate && t.margins[MARGIN_PRIME + ZSECTOR[zone]] < P.meters.normalMargin) {
+        held++;
+        continue;
       }
       n++;
       w.lvl[c.tile] = c.lvl;

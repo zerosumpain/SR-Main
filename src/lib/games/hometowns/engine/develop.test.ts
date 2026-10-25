@@ -65,11 +65,13 @@ import {
 } from './tiles';
 import { buildingIndex } from './content';
 import { placeCost, reindexBuildings } from './ops';
+import { S_SHOPS } from './trade';
 import { stateHash } from './index';
 import {
   METER_FARMS,
   METER_LEISURE,
   METER_OFFICES,
+  MARGIN_PRIME,
   METER_SHOPS,
   STAGE_C,
   STAGE_P,
@@ -98,7 +100,7 @@ function tuned(over: Partial<Record<keyof Params['develop'], unknown>>): Params 
 /** p with the Lab round 3 demand gates off (they have their own tests below): the bare §5.2 rules. */
 function bare(p: Params): Params {
   const q = JSON.parse(JSON.stringify(p)) as { rules: Record<string, unknown> };
-  Object.assign(q.rules, { homesStartsToGap: false });
+  Object.assign(q.rules, { homesStartsToGap: false, bizStartsToMargin: false });
   return q as unknown as Params;
 }
 /** Growth and level-up become certain for any z above zMid: the scan's rules are then what the test sees. */
@@ -421,6 +423,25 @@ describe('builders start only into demand (§5.2, Lab round 3)', () => {
 
   it('leaves the gate off while the founders\' carts run (they arrive only into vacancies)', () => {
     expect(homesMonth(ruled({ homesStartsToGap: true }), 0, true)).toBeGreaterThan(0);
+  });
+
+  it('holds a business start while its sector earns less than the normal margin on m̄′', () => {
+    const shopsMonth = (margin: number, gate: boolean): number => {
+      const x = town(23);
+      const { t } = x;
+      road(t, 20);
+      paint(t, row(21, 16, 47), Z_SHOPS);
+      setLv(t, 60);
+      t.meters[METER_SHOPS] = 100;
+      t.margins[MARGIN_PRIME + S_SHOPS] = margin;
+      const since = t.tick;
+      for (let k = 0; k < 4; k++) devTick(x, { params: ruled({ bizStartsToMargin: gate }) });
+      return events(t, 'started', since).length;
+    };
+    expect(P.rules.bizStartsToMargin).toBe(true);
+    expect(shopsMonth(0, true)).toBe(0);
+    expect(shopsMonth(P.meters.normalMargin, true)).toBe(12);
+    expect(shopsMonth(0, false)).toBe(12);
   });
 });
 

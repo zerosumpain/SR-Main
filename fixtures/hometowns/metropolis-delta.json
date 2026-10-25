@@ -16,8 +16,8 @@
   }
  ],
  "client": {
-  "engineHash": "812e0a1fdb84343c",
-  "page": "/projects/hometowns/56912350e210a064/mobile.html",
+  "engineHash": "8ed580e01de10dab",
+  "page": "/projects/hometowns/ec129c477cfd2934/mobile.html",
   "bridge": 1
  },
  "clock": {
@@ -39,26 +39,26 @@
   "seat": "s1",
   "profile": "adult",
   "isParent": true,
-  "townHash": "6cf51050e50f0b90",
+  "townHash": "ec1c5198afe27868",
   "derived": {
    "stars": [
-    33.3,
-    44.5,
+    33.6,
+    44.4,
     66.7,
     7.7,
     47.3,
-    56.5,
+    56.4,
     95.6,
     79.2,
     94.6,
     70.1,
     38.4,
-    46.6,
-    29.4,
+    47.9,
+    29.2,
     24.9,
-    36,
-    52.1,
-    38.4,
+    36.1,
+    52,
+    38,
     71.1,
     67,
     57.1
@@ -66,29 +66,29 @@
    "meters": [
     -5.2,
     -30.1,
-    -37.9,
-    -35,
-    -39.2,
+    -37.5,
+    -35.5,
+    -38.8,
     3.7,
     -75.4,
-    -26.5
+    -26.6
    ],
    "wants": [
     {
      "key": "talk.jobs",
-     "severity": 148409,
+     "severity": 148419,
      "tile": -1,
      "hatched": false
     },
     {
      "key": "talk.schools",
-     "severity": 67590,
+     "severity": 67565,
      "tile": -1,
      "hatched": false
     },
     {
      "key": "talk.homes",
-     "severity": 62038,
+     "severity": 61971,
      "tile": -1,
      "hatched": false
     }
@@ -323,7 +323,7 @@
    ],
    "pipeline": {
     "homes": 312,
-    "movers": 407
+    "movers": 416
    },
    "townTalk": [
     [
