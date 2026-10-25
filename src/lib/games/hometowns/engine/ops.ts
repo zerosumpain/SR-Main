@@ -70,8 +70,8 @@ export interface OpsEnv {
   deputy?: boolean;
 }
 
-/** Most of the Deputy's builds kept for a same-day undo (decision 11): it makes at most three a Regional Day. */
-export const DEPUTY_UNDO_MAX = 6;
+/** Most of the Deputy's builds kept for a same-day undo (decision 11): it makes at most seven a Regional Day (growth help's four services and three lanes). */
+export const DEPUTY_UNDO_MAX = 8;
 
 /**
  * Decision 11: the tiles the mayor's plans changed on Regional Day `dayIndex`

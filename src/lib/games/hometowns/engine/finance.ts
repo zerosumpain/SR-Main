@@ -478,12 +478,12 @@ function helperMode(t: TownState, m: MonthContext, books: MonthBooks): void {
 
 /**
  * Records something Bramble did (§5.18: every action appears in the
- * Welcome-back cards). One inbox card per kind per day, its numbers summed,
- * so a month-by-month habit does not flood the inbox; only the Deputy's own
- * cards are trimmed.
+ * Welcome-back cards). One inbox card per kind (and `key`, for things worth
+ * a card each) per day, its numbers summed, so a month-by-month habit does
+ * not flood the inbox; only the Deputy's own cards are trimmed.
  */
-export function deputyNote(t: TownState, m: Pick<MonthContext, 'dayIndex' | 'params'>, kind: string, data: Record<string, number | string>): void {
-  const id = `deputy.${kind}.${m.dayIndex}`;
+export function deputyNote(t: TownState, m: Pick<MonthContext, 'dayIndex' | 'params'>, kind: string, data: Record<string, number | string>, key?: string): void {
+  const id = `deputy.${kind}.${m.dayIndex}${key ? `.${key}` : ''}`;
   const hit = t.inbox.find((x) => x.id === id);
   if (hit) {
     for (const k of Object.keys(data).sort()) {

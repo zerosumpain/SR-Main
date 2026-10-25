@@ -412,7 +412,9 @@ export const AWAY_ROAD_TILES = 6;
 /**
  * Decision 8 (John, 2026-10-25): when the away order wants to zone (or lay
  * the market) but finds no free roadside land, Bramble lays one short Lane a
- * Regional Day to open new frontage. It runs straight out from an existing
+ * Regional Day to open new frontage (`perDay` looks: the growth-help order's
+ * work lots may take up to GROWTH_LANES, the looks of both orders counted
+ * together). It runs straight out from an existing
  * road tile (extending a road's dead end, which the Deputy's zoning leaves
  * free for this, or branching off a road's side), 1 to AWAY_ROAD_TILES tiles,
  * over empty, open, buildable land: water and rock are never buildable, and
@@ -428,9 +430,13 @@ export const AWAY_ROAD_TILES = 6;
  * build plan as a mayor's road (the Deputy's undo list, tile log), with a Deputy card.
  * Returns whether a lane was laid.
  */
-function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number): boolean {
-  if (memo.roadDay === m.dayIndex) return false;
-  memo.roadDay = m.dayIndex; // one look a Regional Day, laid or not
+function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number, perDay = 1): boolean {
+  if (memo.roadDay !== m.dayIndex) {
+    memo.roadDay = m.dayIndex;
+    memo.roadsToday = 0;
+  }
+  if ((memo.roadsToday ?? 0) >= perDay) return false;
+  memo.roadsToday = (memo.roadsToday ?? 0) + 1; // `perDay` looks a Regional Day, laid or not
   const spare = t.money.reserves - floor;
   if (spare <= 0) return false;
   const terrain = terrainOf(t);
@@ -487,7 +493,7 @@ function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number)
     if (e instanceof EngineError) return false;
     throw e;
   }
-  deputyNote(t, m, 'awayRoad', { tiles: best.n, cost: best.cost });
+  deputyNote(t, m, 'awayRoad', { tiles: best.n, cost: best.cost }, memo.roadsToday! > 1 ? String(memo.roadsToday) : undefined); // a card a lane
   return true;
 }
 
@@ -525,6 +531,12 @@ function stressed(f: CheckFacts, margin: number): CheckFacts {
 
 /** Staff fill (per mille) under which the growth-help order adds no more of a service: a new one would only share the staff. */
 export const GROWTH_STAFFED = 800;
+
+/** Lane looks a Regional Day the growth-help order may make for its work lots (the away order: one; G3). */
+export const GROWTH_LANES = 3;
+
+/** The jobs item's line (CHECKLISTS: unemployment ≤ 10%). */
+const JOBS_LINE = 0.1;
 
 /** The mean staff fill (per mille) of the town's finished `group` buildings (1000 when it has none). */
 function staffFill(t: TownState, group: string): number {
@@ -607,71 +619,61 @@ function emptyLots(t: TownState, z: number): number {
   return n;
 }
 
+/** Workers without a job and the workforce, from this month's labour slot (the jobs90 fact's parts). */
+function unemploymentOf(m: MonthContext): { unemployed: number; workforce: number; rate: number } {
+  const lab = m.derived.labour;
+  let unemployed = 0;
+  let workforce = 0;
+  for (let h = 0; h < 3; h++) {
+    unemployed += lab?.unemployed[h] ?? 0;
+    workforce += lab?.workforce[h] ?? 0;
+  }
+  return { unemployed, workforce, rate: workforce > 0 ? unemployed / workforce : 0 };
+}
+
 /**
  * G3 (§5.18, the growth-help order): a child's town that has reached Village
  * keeps outgrowing the Town checklist's jobs and services, and a child does
  * not read the Growth sheet. Once a Regional Day (its first month), Bramble
  * looks at the next tier's checklist on this month's facts, counting an item
  * that holds by less than `marginPts` points as about to lapse:
- *   - jobs90: work for today's unemployed plus the workers of the Homes lots
- *     still waiting for builders, less the jobs of the work lots already
- *     waiting. The lots go to the trade (Industry, Shops or Farms) with the
- *     highest meter above 0, so they start under decision 7, at most `tiles`
- *     a day, by the roads, first where the homes reach no work within the
- *     longest commute (§5.9). When the roads are full, one short Lane first
- *     (decision 8's, shared with the away order: one a day); when that is
- *     not enough, the empty Homes lots beyond GROWTH_KEEP_HOMES are
- *     repainted for work.
- *   - one coverage item of GROWTH_BUILDS (checklist order): its building, at
+ *   - jobs90: growthJobs. The day's later months look again at this item
+ *     alone (from the labour slot, no map walk), so a burst of new homes
+ *     gets its work lots the same day, within the one daily allowance.
+ *   - each coverage item of GROWTH_BUILDS (checklist order): its building, at
  *     the site with the most homes it does not yet reach (as decision 6's
  *     away builds), only when no building of that service is still under
  *     construction, the ones it has are at least GROWTH_STAFFED staffed
  *     (another would only share their staff), and its cost leaves reserves
  *     above the safety floor (`months` of spending); a dearer one that does
- *     not fit waits.
+ *     not fit waits. So at most one building per item a day: a Village that
+ *     outgrows its surgery's, constable's and fire volunteers' reach at once
+ *     gets all three that day, not one a day while the others lapse.
  * Everything is a Deputy card; buildings go through the same build plan as
- * a mayor's move. At most one building a day.
+ * a mayor's move.
  */
 function growthHelp(t: TownState, m: MonthContext, memo: CivicMemo, tiles: number, floor: number, marginPts: number): void {
-  if (t.tier < 1 || memo.helpDay === m.dayIndex) return;
-  memo.helpDay = m.dayIndex; // one look a Regional Day (the facts and the site search walk the map: G12)
+  if (t.tier < 1) return;
+  const items = CHECKLISTS[Math.min(GREAT_METROPOLIS, t.tier + 1)];
+  if (memo.helpDay === m.dayIndex) {
+    // The day's later months: the jobs item only.
+    if (t.money.reserves > floor && items.some((it) => it.id === 'jobs90') && unemploymentOf(m).rate + marginPts / 100 > JOBS_LINE)
+      growthJobs(t, m, memo, Math.floor(tiles), floor);
+    return;
+  }
+  memo.helpDay = m.dayIndex; // one full look a Regional Day (the facts and the site search walk the map: G12)
+  memo.helpTiles = 0;
   if (t.money.reserves <= floor) return;
-  const tier = Math.min(GREAT_METROPOLIS, t.tier + 1);
-  const items = CHECKLISTS[tier];
   const f = checkFacts(t, m);
   const risky = stressed(f, marginPts / 100);
-  let built = false;
   for (const it of items) {
     if (it.ok(risky)) continue;
     if (it.id === 'jobs90') {
-      // Work wanted: today's unemployed, plus the workers of the Homes lots still waiting for builders,
-      // less the jobs of the work lots already waiting (the town a day from now, not this month's).
-      const lab = m.derived.labour;
-      let unemployed = 0;
-      let workforce = 0;
-      for (let h = 0; h < 3; h++) {
-        unemployed += lab?.unemployed[h] ?? 0;
-        workforce += lab?.workforce[h] ?? 0;
-      }
-      const pop = population(t);
-      let wanted = unemployed + (pop > 0 ? (workforce / pop) * emptyLots(t, Z_HOMES) * ZONE_DEFS[Z_HOMES].capacity[0] : 0);
-      for (const [z] of JOB_ZONES) wanted -= emptyLots(t, z) * ZONE_DEFS[z].capacity[0];
-      if (wanted <= 0) continue; // the lots are down; the builders will fill them
-      const trades = JOB_ZONES.filter(([z, k]) => zoneAllowed(t, z) && t.meters[k] > 0).sort((a, b) => t.meters[b[1]] - t.meters[a[1]]);
-      if (trades.length === 0) continue; // no trade wants workers: lots would sit empty (decision 7)
-      const z = trades[0][0];
-      const want = Math.min(Math.floor(tiles), Math.ceil(wanted / ZONE_DEFS[z].capacity[0]));
-      const far = farDistricts(t, m);
-      let n = zoneRoadside(t, z, want, far);
-      if (n < want && awayRoad(t, m, memo, floor)) n += zoneRoadside(t, z, want - n, far);
-      if (n > 0) deputyNote(t, m, 'growthHelp.jobs', { tiles: n, zone: ZONE_DEFS[z].id });
-      // Still short, and the roads lined with Homes lots no builder has started: repaint the surplus for work.
-      const r = n < want ? rezoneEmptyHomes(t, z, want - n, far, attachOf(t, m)) : 0;
-      if (r > 0) deputyNote(t, m, 'growthHelp.rezone', { tiles: r, zone: ZONE_DEFS[z].id });
+      growthJobs(t, m, memo, Math.floor(tiles), floor);
       continue;
     }
     const pick = GROWTH_BUILDS[it.id];
-    if (!pick || built) continue;
+    if (!pick) continue;
     const [id, cover] = pick;
     const kind = buildingIndex(id);
     const group = BUILDINGS[kind].group;
@@ -687,9 +689,43 @@ function growthHelp(t: TownState, m: MonthContext, memo: CivicMemo, tiles: numbe
       if (e instanceof EngineError) continue;
       throw e;
     }
-    deputyNote(t, m, 'growthHelp.build', { building: id, item: it.id, cost });
-    built = true;
+    deputyNote(t, m, 'growthHelp.build', { building: id, item: it.id, cost }, id); // a card each
   }
+}
+
+/**
+ * The growth-help order's jobs90 work: work for today's unemployed, plus the
+ * workers of the Homes lots still waiting for builders, less the jobs of the
+ * work lots already waiting. The lots go to the trade with the highest meter
+ * above 0 (so they start under decision 7), Industry or Shops before Farms:
+ * a Farms lot holds 3 jobs and never grows, so on Flatland, where the Farms
+ * meter stands tallest, Bramble lined the roads with farms and the Village
+ * stalled short of Town (G3). At most `tiles` lots a day in all (the day's
+ * months share them), by the roads, first where the homes reach no work
+ * within the longest commute (§5.9). When the roads are full, a short Lane
+ * first (decision 8's, up to GROWTH_LANES a day); when that is not enough,
+ * the empty Homes lots beyond GROWTH_KEEP_HOMES are repainted for work.
+ */
+function growthJobs(t: TownState, m: MonthContext, memo: CivicMemo, tiles: number, floor: number): void {
+  const left = tiles - (memo.helpTiles ?? 0);
+  if (left <= 0) return;
+  const { unemployed, workforce } = unemploymentOf(m);
+  const pop = population(t);
+  let wanted = unemployed + (pop > 0 ? (workforce / pop) * emptyLots(t, Z_HOMES) * ZONE_DEFS[Z_HOMES].capacity[0] : 0);
+  for (const [z] of JOB_ZONES) wanted -= emptyLots(t, z) * ZONE_DEFS[z].capacity[0];
+  if (wanted <= 0) return; // the lots are down; the builders will fill them
+  const trades = JOB_ZONES.filter(([z, k]) => zoneAllowed(t, z) && t.meters[k] > 0).sort((a, b) => t.meters[b[1]] - t.meters[a[1]]);
+  if (trades.length === 0) return; // no trade wants workers: lots would sit empty (decision 7)
+  const z = (trades.find(([q]) => q !== Z_FARMS) ?? trades[0])[0];
+  const want = Math.min(left, Math.ceil(wanted / ZONE_DEFS[z].capacity[0]));
+  const far = farDistricts(t, m);
+  let n = zoneRoadside(t, z, want, far);
+  if (n < want && awayRoad(t, m, memo, floor, GROWTH_LANES)) n += zoneRoadside(t, z, want - n, far);
+  if (n > 0) deputyNote(t, m, 'growthHelp.jobs', { tiles: n, zone: ZONE_DEFS[z].id }, ZONE_DEFS[z].id); // one card a trade a day
+  // Still short, and the roads lined with Homes lots no builder has started: repaint the surplus for work.
+  const r = n < want ? rezoneEmptyHomes(t, z, want - n, far, attachOf(t, m)) : 0;
+  if (r > 0) deputyNote(t, m, 'growthHelp.rezone', { tiles: r, zone: ZONE_DEFS[z].id }, ZONE_DEFS[z].id);
+  memo.helpTiles = (memo.helpTiles ?? 0) + n + r;
 }
 
 /** Repays up to `amount` of the Town Loan with the 1% early-repayment fee; returns the principal repaid. */

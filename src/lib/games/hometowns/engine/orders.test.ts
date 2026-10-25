@@ -13,12 +13,12 @@ import { monthlySpending } from './finance';
 import { lineIndex, postWhole } from './core';
 import { civicMemo, upkeepOf } from './finance';
 import { stateHash } from './index';
-import { AWAY_GREENS, AWAY_ROAD_TILES, GROWTH_KEEP_HOMES, GROWTH_STAFFED, MARKET_LOTS, MAX_ORDERS, backfillOrders, renewsContracts } from './orders';
+import { AWAY_GREENS, AWAY_ROAD_TILES, GROWTH_KEEP_HOMES, GROWTH_LANES, GROWTH_STAFFED, MARKET_LOTS, MAX_ORDERS, backfillOrders, renewsContracts } from './orders';
 import { DEPUTY_UNDO_MAX, applyBuild, applyUndo, mayorTilesToday } from './ops';
 import { paramsFor } from './params';
 import { B_KIND, CAT_ROAD, CAT_ZONE, MAP, planesForWrite, planesOf, tileIndex, useCat, usePayload, zoneUse } from './tiles';
 import { BUILDINGS } from './content';
-import { EngineError, FUNDING_KEYS, METER_INDUSTRY, METER_SHOPS, Z_HOMES, Z_INDUSTRY, Z_SHOPS, type StandingOrder } from './types';
+import { EngineError, FUNDING_KEYS, METER_FARMS, METER_INDUSTRY, METER_SHOPS, Z_FARMS, Z_HOMES, Z_INDUSTRY, Z_SHOPS, type StandingOrder } from './types';
 
 const P = paramsFor('v1');
 
@@ -440,17 +440,19 @@ describe('Keep the town growing: jobs and services for the next tier (G3)', () =
     return n;
   };
 
-  it('builds the missing service for a lapsed coverage item, one a Regional Day in checklist order, with a Deputy card', () => {
+  it('builds the missing service for each lapsed coverage item, one each a Regional Day in checklist order, with a Deputy card', () => {
     const { c, i, t } = village();
     runMonths(c, i, 12, civicSteps(economy(0)));
-    expect(ids(t)).toEqual(['surgery']); // surgery70 comes first; one building a day
+    // G3: every lapsed item gets its building the same day (one per item), not one item a day.
+    expect(ids(t)).toEqual(['surgery', 'constablePost', 'fireVolunteers', 'villageSchool']);
     const card = notes(t, 'deputy.growthHelp.build');
-    expect(card).toHaveLength(1);
+    expect(card).toHaveLength(4);
     expect(card[0].data).toMatchObject({ building: 'surgery', item: 'surgery70', cost: 30_000 });
-    expect(t.deputyUndo!.at(-1)!.planId).toBe(`deputy.${c.dayIndex}.help.surgery`); // the same build plan as a mayor's move
+    expect(t.deputyUndo!.map((e) => e.planId)).toEqual(['surgery', 'constablePost', 'fireVolunteers', 'villageSchool'].map((id) => `deputy.${c.dayIndex}.help.${id}`)); // the same build plan as a mayor's move
     c.dayIndex += 1;
     runMonths(c, i, 12, civicSteps(economy(0)));
-    expect(notes(t, 'deputy.growthHelp.build')).toHaveLength(2); // the next Regional Day, the next one
+    expect(notes(t, 'deputy.growthHelp.build').length).toBeGreaterThan(4); // the next Regional Day, the next ones
+    expect(notes(t, 'deputy.growthHelp.build').length).toBeLessThanOrEqual(8);
   });
 
   it('adds no more of a service while one is being built, or while its buildings are short of staff', () => {
@@ -458,7 +460,7 @@ describe('Keep the town growing: jobs and services for the next tier (G3)', () =
       const { c, i, t } = village();
       place(t, 'surgery', 20, 32, o);
       runMonths(c, i, 1, civicSteps(economy(0)));
-      expect(ids(t), JSON.stringify(o)).toEqual(['surgery', 'constablePost']); // police50 instead
+      expect(ids(t), JSON.stringify(o)).toEqual(['surgery', 'constablePost', 'fireVolunteers', 'villageSchool']); // no second surgery
     }
   });
 
@@ -531,6 +533,70 @@ describe('Keep the town growing: jobs and services for the next tier (G3)', () =
     expect(lots(k.t, Z_INDUSTRY)).toBe(24); // the day's most
     expect(lots(k.t, Z_HOMES)).toBe(50 - 24);
     for (let x = 33; x < 38; x++) for (const y of [46, 47]) expect(planesOf(k.t).use[tileIndex(x, y)], `${x},${y}`).toBe(zoneUse(Z_HOMES));
+  });
+
+  it('zones Industry or Shops before Farms, even when the Farms meter stands tallest (G3)', () => {
+    const { c, i, t } = village();
+    runMonths(c, i, 1, civicSteps((tt: Town) => {
+      tt.meters.fill(0);
+      tt.meters[METER_FARMS] = 45;
+      tt.meters[METER_SHOPS] = 10;
+      tt.meters[METER_INDUSTRY] = 5;
+      return { labour: { workforce: [300, 0, 0], unemployed: [30, 0, 0] } };
+    }));
+    expect(lots(t, Z_FARMS, false)).toBe(0);
+    expect(lots(t, Z_SHOPS)).toBe(10); // the taller of Shops and Industry: 30 jobless ÷ 3 jobs a lot
+    // Farms only when no other trade wants workers.
+    const v = village();
+    runMonths(v.c, v.i, 1, civicSteps((tt: Town) => {
+      tt.meters.fill(0);
+      tt.meters[METER_FARMS] = 45;
+      return { labour: { workforce: [300, 0, 0], unemployed: [30, 0, 0] } };
+    }));
+    expect(lots(v.t, Z_FARMS)).toBe(10);
+  });
+
+  it('looks at the jobs item again in the day’s later months, inside one day’s allowance of lots', () => {
+    const { c, i, t } = village();
+    let jobless = 30;
+    const rising = civicSteps((tt: Town) => {
+      tt.meters.fill(0);
+      tt.meters[METER_INDUSTRY] = 20;
+      return { labour: { workforce: [300, 0, 0], unemployed: [jobless, 0, 0] } };
+    });
+    runMonths(c, i, 1, rising);
+    expect(lots(t, Z_INDUSTRY)).toBe(5); // the day's first look: 30 jobless ÷ 6
+    jobless = 150; // a burst of new homes later in the day
+    runMonths(c, i, 11, rising);
+    expect(lots(t, Z_INDUSTRY)).toBe(24); // the later months topped it up to the day's 24, no further
+    const card = notes(t, 'deputy.growthHelp.jobs');
+    expect(card).toHaveLength(1); // one card for the day's industry lots
+    expect(card[0].data).toMatchObject({ tiles: 24, zone: 'industry' });
+    c.dayIndex += 1; // the next Regional Day brings a new allowance
+    runMonths(c, i, 1, rising);
+    expect(lots(t, Z_INDUSTRY, false)).toBeGreaterThan(24);
+  });
+
+  it('lays up to three short lanes a Regional Day for its work lots when the roads are full', () => {
+    // One street, both sides lined with built Homes lots: no free roadside land.
+    const k = kitTown({ tier: 1 });
+    road(k.t, 20, 30, 25, 30, 'lane');
+    const w = planesForWrite(k.t);
+    for (let x = 20; x <= 25; x++)
+      for (const y of [29, 31]) {
+        w.use[tileIndex(x, y)] = zoneUse(Z_HOMES);
+        w.lvl[tileIndex(x, y)] = 1;
+      }
+    k.t.orders = only('growthHelp');
+    k.t.away.lastHelloAt = 9e15;
+    postWhole(k.t, 'other', 1e6);
+    runMonths(k.c, k.i, 12, civicSteps(economy(20, 300, 1000)));
+    const lanes = notes(k.t, 'deputy.awayRoad');
+    expect(lanes.length).toBeGreaterThan(1); // a card a lane
+    expect(lanes.length).toBeLessThanOrEqual(GROWTH_LANES);
+    expect(k.t.deputyUndo!.filter((e) => e.planId === `deputy.${k.c.dayIndex}.road`)).toHaveLength(lanes.length);
+    expect(lots(k.t, Z_INDUSTRY, false)).toBeGreaterThan(0);
+    expect(lots(k.t, Z_INDUSTRY, false)).toBeLessThanOrEqual(24);
   });
 
   it('does nothing in a Hamlet, under Hold, with the order off, or below the safety floor', () => {
@@ -612,13 +678,14 @@ describe('The Deputy leaves the mayor’s day alone (decision 11)', () => {
     runMonths(k.c, k.i, 1, civicSteps((tt: Town) => (tt.meters.fill(0), {})));
     expect(k.t.undo.map((e) => e.planId)).toEqual(mine);
     const deputy = k.t.deputyUndo!;
-    expect(deputy.map((e) => e.planId)).toEqual([`deputy.${k.c.dayIndex}.help.surgery`]);
-    expect(k.t.buildings.map((b) => BUILDINGS[b[B_KIND]].id)).toEqual(['surgery']);
+    const built = ['surgery', 'constablePost', 'fireVolunteers', 'villageSchool'];
+    expect(deputy.map((e) => e.planId)).toEqual(built.map((id) => `deputy.${k.c.dayIndex}.help.${id}`));
+    expect(k.t.buildings.map((b) => BUILDINGS[b[B_KIND]].id)).toEqual(built);
     const spent = reserves - k.t.money.reserves;
     const r = applyUndo(k.t, deputy[0].planId, kid(k.c));
     expect(r.cost).toBe(-30_000);
-    expect(k.t.buildings).toEqual([]);
-    expect(k.t.deputyUndo).toEqual([]);
+    expect(k.t.buildings.map((b) => BUILDINGS[b[B_KIND]].id)).toEqual(built.slice(1));
+    expect(k.t.deputyUndo!.map((e) => e.planId)).toEqual(built.slice(1).map((id) => `deputy.${k.c.dayIndex}.help.${id}`));
     expect(spent).toBeGreaterThan(0);
     for (const id of mine) expect(applyUndo(k.t, id, kid(k.c)).ok).toBe(true); // every one of the mayor’s still works
   });
