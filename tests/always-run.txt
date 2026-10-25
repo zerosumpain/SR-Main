@@ -18,6 +18,7 @@ src/lib/drive/owner-lane.test.ts
 src/lib/estate/estate.test.ts
 src/lib/games/hometowns/engine/banned.test.ts
 src/lib/games/hometowns/engine/copy.test.ts
+src/lib/games/hometowns/page-hash.test.ts
 src/lib/jkai/build-spend-attribution.test.ts
 src/lib/jkai/builder-guidance.test.ts
 src/lib/jkai/explainer-kit.test.ts
