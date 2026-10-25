@@ -180,8 +180,17 @@ export function liveFromTrips(trips: Trip[], people: InsightPerson[], now: numbe
   });
 }
 
-/** Score the forecast over a stretch of real trips. PURE. */
-export function scoreForecast(input: EvalInput, generatedAt = new Date()): Scorecard {
+/** Hand the event loop back. */
+const breathe = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/**
+ * Score the forecast over a stretch of real trips. PURE but for time: it
+ * yields to the event loop after every checkpoint and trip, because four
+ * weeks replayed is ~12 s of CPU — run in one go inside the site's process it
+ * blocked the loop, the workflow-engine watchdog read the stall as a hang and
+ * restarted production (2026-10-25 20:32).
+ */
+export async function scoreForecast(input: EvalInput, generatedAt = new Date()): Promise<Scorecard> {
   const { places, people, homeIds } = input;
   const learnDays = input.learnDays ?? 28;
   const corrections = input.corrections ?? [];
@@ -217,6 +226,7 @@ export function scoreForecast(input: EvalInput, generatedAt = new Date()): Score
     const said = new Map<string, { subject: string; fromId: string; toId: string; leaveAt: number; at: number }>();
     const overdue = new Map<string, { subject: string; fromId: string; toId: string; to: string; at: number }>();
     for (const at of checkpointsOf(date)) {
+      await breathe();
       const history = known(at);
       const routes = routesOf(history, places, people);
       const routines = routinesOf(routes, new Date(at), learnDays, cal);
@@ -259,6 +269,7 @@ export function scoreForecast(input: EvalInput, generatedAt = new Date()): Score
     // ── Each trip of the day: was it foreseen, how long did we say ────────
     for (const trip of trips) {
       if (localClock(trip.start).date !== date) continue;
+      await breathe();
       const before = trips.filter((t) => t.subject === trip.subject && t.end <= trip.start).at(-1);
       if (before && before.to === trip.from && trip.start - before.end >= NEXT_LEAD_MINS * MINUTE) {
         eligible++;

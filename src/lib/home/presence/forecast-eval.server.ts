@@ -12,7 +12,7 @@ import { getSetting, setSetting } from '$lib/server/models/settings';
 import { localClock } from './forecast';
 import { forecastCorrections, homePlaceIds, loadSchoolCalendar } from './forecast.server';
 import { scoreForecast, type Scorecard } from './forecast-eval';
-import { bridgeSleeps, normaliseReadings, tripsFrom } from './insights';
+import { bridgeSleeps, normaliseReadings, tripsFrom, type Trip } from './insights';
 import { insightMembers, trailRows } from './insights.server';
 
 export const SCORECARD_KEY = 'home.forecast.scorecard';
@@ -53,11 +53,17 @@ export async function runScorecard(now = new Date()): Promise<Scorecard | null> 
     loadSchoolCalendar(),
   ]);
   const fixes = normaliseReadings(rows);
-  const trips = people.flatMap((p) => tripsFrom(fixes.filter((f) => f.subject === p.subject), places, now).trips);
+  // One person at a time, handing the loop back between: the whole household
+  // in one go is a second or more of CPU inside the site's process.
+  const trips: Trip[] = [];
+  for (const p of people) {
+    trips.push(...tripsFrom(fixes.filter((f) => f.subject === p.subject), places, now).trips);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  }
   const to = localClock(+now - 86_400_000).date;
   const from = localClock(+now - SCORE_DAYS * 86_400_000).date;
   const located = bridgeSleeps(fixes, places, now);
-  const card = scoreForecast({ trips, places, people, homeIds, from, to, learnDays: LEARN_DAYS, corrections, cal, fixes: located }, now);
+  const card = await scoreForecast({ trips, places, people, homeIds, from, to, learnDays: LEARN_DAYS, corrections, cal, fixes: located }, now);
   const stored = await loadScorecard();
   const night: ScorecardNight = {
     date: localClock(now).date, precision: card.next.precision, recall: card.next.recall, band: card.duration.band,
