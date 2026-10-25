@@ -16,6 +16,7 @@
 // bust (§5.20). Homes tax is deliberately not in the meter: it acts once,
 // through migration, so the Why stays honest.
 
+import { monthF64, monthI32, monthU8 } from './pool';
 import { BUILDINGS, ZONE_DEFS } from './content';
 import { flow, moveStock } from './core';
 import { clamp, M, T } from './fx';
@@ -75,14 +76,14 @@ const AFFORDABLE = MARK_AFFORDABLE;
 
 /** 1 for every tile with construction ticks left (pipeline, not yet open). */
 export function constructionMask(t: TownState): Uint8Array {
-  const out = new Uint8Array(N_TILES);
+  const out = monthU8(N_TILES);
   for (let i = 0; i + 1 < t.construction.length; i += 2) if (t.construction[i + 1] > 0) out[t.construction[i]] = 1;
   return out;
 }
 
 /** The MARK_* bits of every tile. */
 export function marksMask(t: TownState): Uint8Array {
-  const out = new Uint8Array(N_TILES);
+  const out = monthU8(N_TILES);
   for (let i = 0; i + 1 < t.marks.length; i += 2) out[t.marks[i]] = t.marks[i + 1] & 255;
   return out;
 }
@@ -116,13 +117,13 @@ function scanTiles(t: TownState): TileFacts {
   const cap = zoned.length;
   const homes: HomeTiles = {
     count: 0,
-    tile: new Int32Array(cap),
-    tier: new Uint8Array(cap),
-    level: new Uint8Array(cap),
-    persons: new Float64Array(cap),
-    affordable: new Uint8Array(cap),
+    tile: monthI32(cap),
+    tier: monthU8(cap),
+    level: monthU8(cap),
+    persons: monthF64(cap),
+    affordable: monthU8(cap),
   };
-  const jobs = new Uint8Array(N_DISTRICTS);
+  const jobs = monthU8(N_DISTRICTS);
   for (let q = 0; q < zoned.length; q++) {
     const i = zoned[q];
     const u = use[i];

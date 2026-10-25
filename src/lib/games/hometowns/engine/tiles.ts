@@ -11,7 +11,8 @@
 // planesRev exact in between. The copy is keyed on the stored string itself,
 // so a revived or reverted town can never be served a stale decode.
 
-import { decodeU8, encodeU8, fromBase64, rleDecode, rleEncode, toBase64 } from './codec';
+import { decodeRle64, decodeU8, encodeRle64, encodeU8 } from './codec';
+import { monthF64, monthU8 } from './pool';
 import type { BuildingRecord, TownState } from './types';
 
 export const MAP = 64;
@@ -122,20 +123,23 @@ export function emptyPlanes(): Planes {
   return { use: new Uint16Array(TILES), lvl: new Uint8Array(TILES), age: new Uint8Array(TILES) };
 }
 
+const PLANE_BYTES = new Uint8Array(TILES * 4);
+
 /** Planar bytes: use low bytes, use high bytes, lvl, age; then RLE and base64. */
 export function encodePlanes(p: Planes): string {
-  const bytes = new Uint8Array(TILES * 4);
+  // Every byte is written below, so one buffer serves every call (encodeRle64 keeps no reference).
+  const bytes = PLANE_BYTES;
   for (let i = 0; i < TILES; i++) {
     bytes[i] = p.use[i] & 255;
     bytes[TILES + i] = p.use[i] >>> 8;
     bytes[2 * TILES + i] = p.lvl[i];
     bytes[3 * TILES + i] = p.age[i];
   }
-  return toBase64(rleEncode(bytes));
+  return encodeRle64(bytes);
 }
 
 export function decodePlanes(s: string): Planes {
-  const bytes = rleDecode(fromBase64(s), TILES * 4);
+  const bytes = decodeRle64(s, TILES * 4);
   const p = emptyPlanes();
   for (let i = 0; i < TILES; i++) {
     p.use[i] = bytes[i] | (bytes[TILES + i] << 8);
@@ -293,8 +297,8 @@ export function pairGet(list: number[], tile: number): number {
  * for a tile wins). One pass instead of a scan of the list per tile.
  */
 export function pairPlane(list: readonly number[]): Float64Array {
-  const out = new Float64Array(TILES);
-  const seen = new Uint8Array(TILES);
+  const out = monthF64(TILES);
+  const seen = monthU8(TILES);
   for (let k = 0; k + 1 < list.length; k += 2) {
     const tile = list[k];
     if (!(tile >= 0 && tile < TILES) || tile !== Math.floor(tile) || seen[tile]) continue;
@@ -333,33 +337,57 @@ export function decodeCells(s: string): Uint8Array {
   return decodeU8(s, CELLS);
 }
 
+// ---- Exact copies of a use plane, compared a word at a time ------------------------------------------
+//
+// Several memos (the zoned list, the road net, the road mask, the free land) key on an exact
+// copy of the use plane, which ops change in place. Checking the copy was one u16 comparison
+// per tile, a dozen times a month; comparing the same bytes as 2,048 Int32s is the same test
+// (bit for bit) at half the loads.
+
+const VIEW32 = new WeakMap<Uint16Array, Int32Array>();
+
+/** The plane as Int32 words, or null when it is not a whole, aligned TILES-long plane. */
+function words(a: Uint16Array): Int32Array | null {
+  let v = VIEW32.get(a);
+  if (v !== undefined) return v;
+  if (a.length !== TILES || a.byteOffset % 4 !== 0) return null;
+  v = new Int32Array(a.buffer, a.byteOffset, TILES / 2);
+  VIEW32.set(a, v);
+  return v;
+}
+
+/** Is `copy` element for element the same as `use` (both TILES long)? */
+export function sameUse(copy: Uint16Array, use: Uint16Array): boolean {
+  const a = words(copy);
+  const b = words(use);
+  if (a !== null && b !== null) {
+    for (let k = 0; k < TILES / 2; k++) if (a[k] !== b[k]) return false;
+    return true;
+  }
+  for (let i = 0; i < TILES; i++) if (copy[i] !== use[i]) return false;
+  return true;
+}
+
 const ZONED = new WeakMap<Uint16Array, { key: Uint16Array; list: Int32Array }>();
 
 /**
  * The zoned tiles of a use plane, ascending: most of the map is empty, and a
  * dozen month and tick loops look only at zoned tiles. Memoised per decoded
  * plane on an exact copy of it (the plane is changed in place, so the copy
- * is the key, and checking it costs one comparison per tile). Shared: read
- * only.
+ * is the key; sameUse checks it). Shared: read only.
  */
 export function zonedTiles(use: Uint16Array): Int32Array {
   const hit = ZONED.get(use);
-  if (hit) {
-    const key = hit.key;
-    let same = true;
-    for (let i = 0; i < TILES; i++)
-      if (key[i] !== use[i]) {
-        same = false;
-        break;
-      }
-    if (same) return hit.list;
-  }
+  if (hit && sameUse(hit.key, use)) return hit.list;
   let n = 0;
   for (let i = 0; i < TILES; i++) if (use[i] >>> 12 === CAT_ZONE) n++;
   const list = new Int32Array(n);
   n = 0;
   for (let i = 0; i < TILES; i++) if (use[i] >>> 12 === CAT_ZONE) list[n++] = i;
-  ZONED.set(use, { key: use.slice(), list });
+  if (hit && hit.key.length === TILES) {
+    hit.key.set(use);
+    hit.list = list;
+  } else ZONED.set(use, { key: use.slice(), list });
   return list;
 }
 

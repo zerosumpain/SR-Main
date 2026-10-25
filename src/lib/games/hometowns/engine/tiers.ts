@@ -10,6 +10,7 @@
 // last month's verdict from the civic memo, because the blackboard has been
 // thrown away by then (§10.2).
 
+import { monthF64 } from './pool';
 import { BUILDINGS, TIER_DEFS, ZONE_DEFS } from './content';
 import { population } from './core';
 import { neutral } from './derived';
@@ -137,7 +138,7 @@ export function checkFacts(t: TownState, m: MonthContext): CheckFacts {
   const tv = d.travel ?? neutral.travel();
   const p = planesOf(t);
   const caps = ZONE_DEFS[Z_HOMES].capacity;
-  const cellHomes = new Float64Array(CELLS);
+  const cellHomes = monthF64(CELLS);
   let homes = 0;
   let watered = 0;
   let shopTiles = 0;

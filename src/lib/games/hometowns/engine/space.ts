@@ -19,6 +19,7 @@
 
 import { BUILDINGS, CIVIC_MIX, ENTRY_MIX_L1, ROAD_DEFS, ZONE_DEFS, tileMix, type BuildingDef } from './content';
 import { expFx } from './fx';
+import { monthF64, monthI16, monthI32, monthI8, monthU8 } from './pool';
 import type { Params } from './params';
 import { SIGNPOST_EAST, SIGNPOST_KINGSPORT, SIGNPOST_WEST, TF_COAST, T_SAND, terrainKind, terrainOf } from './terrain';
 import {
@@ -48,6 +49,7 @@ import {
   lvlTier,
   parcelOpen,
   planesOf,
+  sameUse,
   tileIndex,
   tileX,
   tileY,
@@ -187,11 +189,24 @@ function sameRoads(key: Uint8Array, use: Uint16Array): boolean {
 export function roadNetOf(t: TownState, reach: number): RoadNet {
   const use = planesOf(t).use;
   const hit = NETS.get(t);
-  if (hit && hit.reach === reach && sameRoads(hit.key, use)) return hit;
+  if (hit && hit.reach === reach) {
+    // The whole plane unchanged since the last check answers it at once (sameUse); else the roads alone.
+    const plane = NET_PLANES.get(hit);
+    if (plane !== undefined && sameUse(plane, use)) return hit;
+    if (sameRoads(hit.key, use)) {
+      if (plane !== undefined && plane.length === use.length) plane.set(use);
+      else NET_PLANES.set(hit, use.slice());
+      return hit;
+    }
+  }
   const net = buildRoadNet(roadKey(use), reach);
   NETS.set(t, net);
+  NET_PLANES.set(net, use.slice());
   return net;
 }
+
+/** The use plane each net was last checked against (a copy). */
+const NET_PLANES = new WeakMap<RoadNet, Uint16Array>();
 
 /** Orthogonal neighbour of tile i in direction d (0 N, 1 W, 2 E, 3 S), or −1 off the map. */
 function step(i: number, d: number): number {
@@ -204,27 +219,40 @@ function step(i: number, d: number): number {
 
 /** Builds the road net from a road key (exported for tests: Dijkstra versus brute force). */
 export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
+  // Neighbours are written out (N, W, E, S as step() numbers them) rather than called through
+  // step() and a closure: the net is rebuilt in every month a road changed, and those months
+  // were the slowest the Lab timed (G12). Same lists, same order, same numbers.
   const kind = new Int8Array(TILES).fill(-1);
   const rail = new Uint8Array(TILES);
-  const roadList: number[] = [];
-  const railList: number[] = [];
+  let nRoads = 0;
+  let nRail = 0;
   for (let i = 0; i < TILES; i++) {
-    if (key[i] >= 1 && key[i] <= 4) {
-      kind[i] = key[i] - 1;
-      roadList.push(i);
-    } else if (key[i] === 8) {
+    const k = key[i];
+    if (k >= 1 && k <= 4) nRoads++;
+    else if (k === 8) nRail++;
+  }
+  const roads = new Int32Array(nRoads);
+  const railTiles = new Int32Array(nRail);
+  nRoads = 0;
+  nRail = 0;
+  for (let i = 0; i < TILES; i++) {
+    const k = key[i];
+    if (k >= 1 && k <= 4) {
+      kind[i] = k - 1;
+      roads[nRoads++] = i;
+    } else if (k === 8) {
       rail[i] = 1;
-      railList.push(i);
+      railTiles[nRail++] = i;
     }
   }
-  const roads = Int32Array.from(roadList);
-  const isRoad = (i: number) => i >= 0 && kind[i] >= 0;
+  const R = nRoads;
 
   // Components, by breadth-first search from each unlabelled road tile in order.
   const comp = new Int32Array(TILES).fill(-1);
   let comps = 0;
-  const queue = new Int32Array(TILES);
-  for (const r of roads) {
+  const queue = monthI32(TILES);
+  for (let r0 = 0; r0 < R; r0++) {
+    const r = roads[r0];
     if (comp[r] >= 0) continue;
     let head = 0;
     let tail = 0;
@@ -232,12 +260,22 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
     comp[r] = comps;
     while (head < tail) {
       const i = queue[head++];
-      for (let d = 0; d < 4; d++) {
-        const j = step(i, d);
-        if (isRoad(j) && comp[j] < 0) {
-          comp[j] = comps;
-          queue[tail++] = j;
-        }
+      const x = i & (MAP - 1);
+      if (i >= MAP && kind[i - MAP] >= 0 && comp[i - MAP] < 0) {
+        comp[i - MAP] = comps;
+        queue[tail++] = i - MAP;
+      }
+      if (x > 0 && kind[i - 1] >= 0 && comp[i - 1] < 0) {
+        comp[i - 1] = comps;
+        queue[tail++] = i - 1;
+      }
+      if (x < MAP - 1 && kind[i + 1] >= 0 && comp[i + 1] < 0) {
+        comp[i + 1] = comps;
+        queue[tail++] = i + 1;
+      }
+      if (i < TILES - MAP && kind[i + MAP] >= 0 && comp[i + MAP] < 0) {
+        comp[i + MAP] = comps;
+        queue[tail++] = i + MAP;
       }
     }
     comps++;
@@ -248,25 +286,33 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
   // then tile index) is total, so this is the same argmin as a scan of every tile's window.
   const attach = new Int32Array(TILES).fill(-1);
   const attachDist = new Int8Array(TILES).fill(127);
-  const attachMan = new Uint8Array(TILES).fill(99);
-  for (let k = 0; k < roads.length; k++) {
+  const attachMan = monthU8(TILES).fill(99);
+  for (let k = 0; k < R; k++) {
     const j = roads[k];
-    const jx = tileX(j);
-    const jy = tileY(j);
+    const jx = j & (MAP - 1);
+    const jy = j >> 6;
     const y0 = jy - reach < 0 ? 0 : jy - reach;
     const y1 = jy + reach > MAP - 1 ? MAP - 1 : jy + reach;
     const x0 = jx - reach < 0 ? 0 : jx - reach;
     const x1 = jx + reach > MAP - 1 ? MAP - 1 : jx + reach;
     for (let yy = y0; yy <= y1; yy++) {
       const cy = yy < jy ? jy - yy : yy - jy;
+      const row = yy * MAP;
       for (let xx = x0; xx <= x1; xx++) {
-        const i = yy * MAP + xx;
+        const i = row + xx;
         const c = xx < jx ? jx - xx : xx - jx;
         const cheb = c > cy ? c : cy;
-        const man = c + cy;
         const bc = attachDist[i];
+        if (cheb > bc) continue;
+        const man = c + cy;
+        if (cheb < bc) {
+          attach[i] = j;
+          attachDist[i] = cheb;
+          attachMan[i] = man;
+          continue;
+        }
         const bm = attachMan[i];
-        if (cheb < bc || (cheb === bc && (man < bm || (man === bm && j < attach[i])))) {
+        if (man < bm || (man === bm && j < attach[i])) {
           attach[i] = j;
           attachDist[i] = cheb;
           attachMan[i] = man;
@@ -275,24 +321,44 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
     }
   }
 
-  // Degrees and ports.
-  const deg = new Uint8Array(TILES);
-  for (const r of roads) for (let d = 0; d < 4; d++) if (isRoad(step(r, d))) deg[r]++;
+  // Degrees and ports (a neighbour off the map is not a road; one in the map and not a road is frontage).
+  const deg = monthU8(TILES);
   const port = new Int32Array(DISTRICTS).fill(-1);
-  const portScore = new Int32Array(DISTRICTS);
-  const portFront = new Int32Array(DISTRICTS);
-  for (const r of roads) {
-    const d = districtOf(r);
+  const portScore = monthI32(DISTRICTS);
+  const portFront = monthI32(DISTRICTS);
+  for (let k = 0; k < R; k++) {
+    const r = roads[k];
+    const x = r & (MAP - 1);
+    let dg = 0;
+    let front = 0;
+    if (r >= MAP) {
+      if (kind[r - MAP] >= 0) dg++;
+      else front++;
+    }
+    if (x > 0) {
+      if (kind[r - 1] >= 0) dg++;
+      else front++;
+    }
+    if (x < MAP - 1) {
+      if (kind[r + 1] >= 0) dg++;
+      else front++;
+    }
+    if (r < TILES - MAP) {
+      if (kind[r + MAP] >= 0) dg++;
+      else front++;
+    }
+    deg[r] = dg;
+    FRONT[k] = front;
+  }
+  for (let k = 0; k < R; k++) {
+    const r = roads[k];
+    const d = DISTRICT_OF[r];
     const x0 = (d % DISTRICTS_PER_SIDE) * 8;
     const y0 = ((d - (d % DISTRICTS_PER_SIDE)) / DISTRICTS_PER_SIDE) * 8;
-    const ax = 2 * tileX(r) - (2 * x0 + 7);
-    const ay = 2 * tileY(r) - (2 * y0 + 7);
+    const ax = 2 * (r & (MAP - 1)) - (2 * x0 + 7);
+    const ay = 2 * (r >> 6) - (2 * y0 + 7);
     const score = (ax < 0 ? -ax : ax) + (ay < 0 ? -ay : ay);
-    let front = 0;
-    for (let k = 0; k < 4; k++) {
-      const j = step(r, k);
-      if (j >= 0 && !isRoad(j)) front++;
-    }
+    const front = FRONT[k];
     // A junction beats a plain stretch (it is already a graph node, and where routes meet);
     // then nearer the centre, then more frontage. Roads are visited in ascending tile
     // order, so a full tie keeps the lower tile.
@@ -306,70 +372,81 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
   }
 
   // Nodes: every tile that is not a plain stretch of road, plus ports and signposts.
-  const isNode = new Uint8Array(TILES);
-  for (const r of roads) if (deg[r] !== 2) isNode[r] = 1;
+  const isNode = monthU8(TILES);
+  for (let k = 0; k < R; k++) if (deg[roads[k]] !== 2) isNode[roads[k]] = 1;
   for (let d = 0; d < DISTRICTS; d++) if (port[d] >= 0) isNode[port[d]] = 1;
-  for (const s of SIGNPOSTS) if (isRoad(s)) isNode[s] = 1;
+  for (const sg of SIGNPOSTS) if (sg >= 0 && kind[sg] >= 0) isNode[sg] = 1;
   // A ring road with no junction still needs one node.
-  const compHasNode = new Uint8Array(comps);
-  for (const r of roads) if (isNode[r]) compHasNode[comp[r]] = 1;
-  for (const r of roads)
+  const compHasNode = monthU8(comps);
+  for (let k = 0; k < R; k++) if (isNode[roads[k]]) compHasNode[comp[roads[k]]] = 1;
+  for (let k = 0; k < R; k++) {
+    const r = roads[k];
     if (!compHasNode[comp[r]]) {
       isNode[r] = 1;
       compHasNode[comp[r]] = 1;
     }
+  }
   const nodeOf = new Int32Array(TILES).fill(-1);
-  const nodeList: number[] = [];
-  for (const r of roads)
+  let V = 0;
+  for (let k = 0; k < R; k++) if (isNode[roads[k]]) V++;
+  const nodeTile = new Int32Array(V);
+  V = 0;
+  for (let k = 0; k < R; k++) {
+    const r = roads[k];
     if (isNode[r]) {
-      nodeOf[r] = nodeList.length;
-      nodeList.push(r);
+      nodeOf[r] = V;
+      nodeTile[V++] = r;
     }
+  }
 
   // Edges: walk from each node along plain stretches to the next node; keep each chain once.
-  const eA: number[] = [];
-  const eB: number[] = [];
-  const eStart: number[] = [0];
-  const eTiles: number[] = [];
-  const chain: number[] = [];
-  for (let n = 0; n < nodeList.length; n++) {
-    const u = nodeList[n];
+  // (At most one edge per road tile and direction, and each interior tile lies on one edge.)
+  const eA = monthI32(2 * R + 1);
+  const eB = monthI32(2 * R + 1);
+  const eStart = monthI32(2 * R + 2);
+  const eTiles = monthI32(2 * R + 1); // a re-walked chain is written before it is dropped
+  let E = 0;
+  let nTiles = 0;
+  eStart[0] = 0;
+  for (let n = 0; n < V; n++) {
+    const u = nodeTile[n];
     for (let d = 0; d < 4; d++) {
       let cur = step(u, d);
-      if (!isRoad(cur)) continue;
+      if (cur < 0 || kind[cur] < 0) continue;
       let prev = u;
-      chain.length = 0;
+      const chainFrom = nTiles;
       while (!isNode[cur]) {
-        chain.push(cur);
+        eTiles[nTiles++] = cur;
         let next = -1;
-        for (let k = 0; k < 4; k++) {
-          const j = step(cur, k);
-          if (j !== prev && isRoad(j)) {
-            next = j;
-            break;
-          }
-        }
+        const x = cur & (MAP - 1);
+        // The first road neighbour other than the one we came from, in step() order (N, W, E, S).
+        if (cur >= MAP && cur - MAP !== prev && kind[cur - MAP] >= 0) next = cur - MAP;
+        else if (x > 0 && cur - 1 !== prev && kind[cur - 1] >= 0) next = cur - 1;
+        else if (x < MAP - 1 && cur + 1 !== prev && kind[cur + 1] >= 0) next = cur + 1;
+        else if (cur < TILES - MAP && cur + MAP !== prev && kind[cur + MAP] >= 0) next = cur + MAP;
         prev = cur;
         cur = next;
       }
       const v = nodeOf[cur];
-      if (v <= n) continue; // found from the other end, or a loop back to itself
-      eA.push(n);
-      eB.push(v);
-      for (const c of chain) eTiles.push(c);
-      eStart.push(eTiles.length);
+      if (v <= n) {
+        nTiles = chainFrom; // found from the other end, or a loop back to itself
+        continue;
+      }
+      eA[E] = n;
+      eB[E] = v;
+      E++;
+      eStart[E] = nTiles;
     }
   }
-  const E = eA.length;
-  const V = nodeList.length;
-  const adjCount = new Int32Array(V + 1);
+  const adjCount = monthI32(V + 1);
   for (let e = 0; e < E; e++) {
     adjCount[eA[e] + 1]++;
     adjCount[eB[e] + 1]++;
   }
   for (let n = 0; n < V; n++) adjCount[n + 1] += adjCount[n];
   const adjStart = Int32Array.from(adjCount);
-  const fillAt = Int32Array.from(adjCount);
+  const fillAt = monthI32(V + 1);
+  fillAt.set(adjCount);
   const adjEdge = new Int32Array(2 * E);
   const adjNode = new Int32Array(2 * E);
   for (let e = 0; e < E; e++) {
@@ -380,13 +457,13 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
   }
   const portNode = new Int32Array(DISTRICTS).fill(-1);
   for (let d = 0; d < DISTRICTS; d++) if (port[d] >= 0) portNode[d] = nodeOf[port[d]];
-  const signNode = Int32Array.from(SIGNPOSTS.map((s) => (isRoad(s) ? nodeOf[s] : -1)));
+  const signNode = Int32Array.from(SIGNPOSTS.map((sg) => (sg >= 0 && kind[sg] >= 0 ? nodeOf[sg] : -1)));
   // The district each cell's access is measured from.
   const cellDistrict = new Int16Array(CELLS).fill(-1);
   const ported: number[] = [];
   for (let d = 0; d < DISTRICTS; d++) if (port[d] >= 0) ported.push(d);
   // The answer depends only on the cell's own district (dx, dy): find it once per district.
-  const nearestPorted = new Int16Array(DISTRICTS);
+  const nearestPorted = monthI16(DISTRICTS);
   for (let own = 0; own < DISTRICTS; own++) {
     const dx = own % DISTRICTS_PER_SIDE;
     const dy = (own - dx) / DISTRICTS_PER_SIDE;
@@ -415,29 +492,32 @@ export function buildRoadNet(key: Uint8Array, reach: number): RoadNet {
     reach,
     kind,
     rail,
-    railTiles: Int32Array.from(railList),
-    hasRail: railList.length > 0,
+    railTiles,
+    hasRail: nRail > 0,
     roads,
     comp,
     comps,
     attach,
     attachDist,
     port,
-    nodeTile: Int32Array.from(nodeList),
+    nodeTile,
     nodeOf,
-    edgeA: Int32Array.from(eA),
-    edgeB: Int32Array.from(eB),
-    edgeStart: Int32Array.from(eStart),
-    edgeTiles: Int32Array.from(eTiles),
+    edgeA: eA.slice(0, E),
+    edgeB: eB.slice(0, E),
+    edgeStart: eStart.slice(0, E + 1),
+    edgeTiles: eTiles.slice(0, nTiles),
     adjStart,
     adjEdge,
     adjNode,
     portNode,
     signNode,
-    kingsportComp: isRoad(SIGNPOST_KINGSPORT) ? comp[SIGNPOST_KINGSPORT] : -1,
+    kingsportComp: SIGNPOST_KINGSPORT >= 0 && kind[SIGNPOST_KINGSPORT] >= 0 ? comp[SIGNPOST_KINGSPORT] : -1,
     cellDistrict,
   };
 }
+
+/** buildRoadNet's scratch: each road tile's frontage (map neighbours that are not road), by road index. */
+const FRONT = new Int32Array(TILES);
 
 /** Per-tile minutes along a road (lane 1.2, street 0.8, avenue 0.5, County Road at avenue speed). */
 export function roadMinutes(kind: number): number {
@@ -481,17 +561,22 @@ export function dijkstraInto(
   off: number,
   want: Uint8Array | null = null,
   wanted = 0,
+  arcRange: Float64Array | null = null,
 ): number {
   const V = net.nodeTile.length;
   dist.fill(Infinity, off, off + V);
   parent.fill(-1, off, off + V);
   if (src < 0) return 0;
+  // The lightest and heaviest arc (arcRange: the caller's [min, max] of these same weights, found once for many trees).
   let minArc = Infinity;
   let maxArc = 0;
-  for (let k = 0; k < aw.length; k++) {
-    const x = aw[k];
-    if (x < minArc) minArc = x;
-    if (x > maxArc) maxArc = x;
+  if (arcRange !== null) {
+    minArc = arcRange[0];
+    maxArc = arcRange[1];
+  } else {
+    arcSpan(aw, ARC_SPAN);
+    minArc = ARC_SPAN[0];
+    maxArc = ARC_SPAN[1];
   }
   const delta = minArc < 0.25 ? minArc : 0.25;
   if (!(delta > 0)) return dijkstraHeap(net, aw, src, dist, parent, order, off, want, wanted);
@@ -560,6 +645,20 @@ export function dijkstraInto(
   }
   return count;
 }
+
+/** [min, max] of the arc weights into `out` (Infinity and 0 for none), as dijkstraInto scans them. */
+export function arcSpan(aw: Float64Array, out: Float64Array): void {
+  let minArc = Infinity;
+  let maxArc = 0;
+  for (let k = 0; k < aw.length; k++) {
+    const x = aw[k];
+    if (x < minArc) minArc = x;
+    if (x > maxArc) maxArc = x;
+  }
+  out[0] = minArc;
+  out[1] = maxArc;
+}
+const ARC_SPAN = new Float64Array(2);
 
 /** The binary-heap Dijkstra (used only if some arc weighs nothing, where buckets cannot be exact). */
 function dijkstraHeap(
@@ -824,7 +923,7 @@ function clamp01(x: number): number {
 
 /** Per tile 1 where a sparse [tile, value] list has a positive value. */
 function expand(list: readonly number[]): Uint8Array {
-  const out = new Uint8Array(TILES);
+  const out = monthU8(TILES);
   for (let i = 0; i + 1 < list.length; i += 2) {
     const tile = list[i];
     if (tile >= 0 && tile < TILES && list[i + 1] > 0) out[tile] = 1;
@@ -838,7 +937,7 @@ export function buildModel(t: TownState, p: Params): SpaceModel {
   const terrain = terrainOf(t);
   const pl = planesOf(t);
   const building = expand(t.construction);
-  const marks = new Uint8Array(TILES);
+  const marks = monthU8(TILES);
   for (let i = 0; i + 1 < t.marks.length; i += 2) if (t.marks[i] >= 0 && t.marks[i] < TILES) marks[t.marks[i]] = t.marks[i + 1] & 0xff;
 
   const P = t.people;
@@ -849,8 +948,8 @@ export function buildModel(t: TownState, p: Params): SpaceModel {
   const part = p.people.participation;
 
   // Completed tiles: zone, level and capacity.
-  const zone = new Int8Array(TILES).fill(-1);
-  const level = new Uint8Array(TILES);
+  const zone = monthI8(TILES).fill(-1);
+  const level = monthU8(TILES);
   const homesCap = [0, 0, 0];
   const zoned = zonedTiles(pl.use);
   for (let q = 0; q < zoned.length; q++) {
@@ -887,17 +986,17 @@ export function buildModel(t: TownState, p: Params): SpaceModel {
   const retShare = [0, 1, 2].map((h) => share(h, STAGE_R));
 
   const cellDistrict = net.cellDistrict;
-  const res = new Float64Array(TILES);
-  const jobs = new Float64Array(TILES);
-  const cellRes = new Float64Array(CELLS);
-  const cellChildren = new Float64Array(CELLS);
-  const cellFamilies = new Float64Array(CELLS);
-  const cellRetired = new Float64Array(CELLS);
-  const cellJobs = new Float64Array(CELLS);
-  const distWorkers = [new Float64Array(DISTRICTS), new Float64Array(DISTRICTS), new Float64Array(DISTRICTS)];
-  const distJobsT = [new Float64Array(DISTRICTS), new Float64Array(DISTRICTS), new Float64Array(DISTRICTS)];
-  const distJobs = new Float64Array(DISTRICTS);
-  const distRes = new Float64Array(DISTRICTS);
+  const res = monthF64(TILES);
+  const jobs = monthF64(TILES);
+  const cellRes = monthF64(CELLS);
+  const cellChildren = monthF64(CELLS);
+  const cellFamilies = monthF64(CELLS);
+  const cellRetired = monthF64(CELLS);
+  const cellJobs = monthF64(CELLS);
+  const distWorkers = [monthF64(DISTRICTS), monthF64(DISTRICTS), monthF64(DISTRICTS)];
+  const distJobsT = [monthF64(DISTRICTS), monthF64(DISTRICTS), monthF64(DISTRICTS)];
+  const distJobs = monthF64(DISTRICTS);
+  const distRes = monthF64(DISTRICTS);
   const unattachedWorkers = [0, 0, 0];
   const mix = mixFor(p.labour.entryMixL2);
   // Only zoned tiles have a level.
@@ -966,7 +1065,7 @@ export function buildModel(t: TownState, p: Params): SpaceModel {
   const workforce = [0, 1, 2].map((h) => part.W * P[person(STAGE_W, h)] + part.P * P[person(STAGE_P, h)] + (h === 0 ? part.S * students : 0));
   let nPop = 0;
   for (let c = 0; c < CELLS; c++) if (cellRes[c] > 0) nPop++;
-  const popCells = new Int32Array(nPop);
+  const popCells = monthI32(nPop);
   nPop = 0;
   for (let c = 0; c < CELLS; c++) if (cellRes[c] > 0) popCells[nPop++] = c;
   return {
@@ -1047,6 +1146,21 @@ export function cellBox(px: number, py: number, radiusTiles: number): [number, n
     Math.max(0, Math.ceil((py - radiusTiles - 1) / 2)),
     Math.min(CELLS_PER_SIDE - 1, Math.floor((py + radiusTiles - 1) / 2)),
   ];
+}
+
+/** cellBox into `out` [x0, x1, y0, y1] (the same numbers, for loops that would otherwise allocate the tuple per building). */
+export function cellBoxInto(px: number, py: number, radiusTiles: number, out: Int32Array): void {
+  if (radiusTiles === Infinity) {
+    out[0] = 0;
+    out[1] = CELLS_PER_SIDE - 1;
+    out[2] = 0;
+    out[3] = CELLS_PER_SIDE - 1;
+    return;
+  }
+  out[0] = Math.max(0, Math.ceil((px - radiusTiles - 1) / 2));
+  out[1] = Math.min(CELLS_PER_SIDE - 1, Math.floor((px + radiusTiles - 1) / 2));
+  out[2] = Math.max(0, Math.ceil((py - radiusTiles - 1) / 2));
+  out[3] = Math.min(CELLS_PER_SIDE - 1, Math.floor((py + radiusTiles - 1) / 2));
 }
 
 /**

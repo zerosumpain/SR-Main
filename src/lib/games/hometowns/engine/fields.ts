@@ -17,6 +17,7 @@
 
 import { BEACH } from './content';
 import type { Params } from './params';
+import { monthF64, monthU8 } from './pool';
 import { flowsFor } from './core';
 import { smooth } from './fx';
 import { homesTaxPercent, landValueTargets, landValueTerms, nextLandValue, premiumOf, scenicOf, type LandValueInputs } from './landvalue';
@@ -54,6 +55,20 @@ export function spread(a: Float64Array, keep: number, side: number, passes: numb
     cur = out;
   }
   return passes > 0 ? cur : Float64Array.from(a);
+}
+
+/** spread() into the month's pool (pool.ts), for a result that dies with the month. */
+function spreadMonth(a: Float64Array, keep: number, side: number, passes: number): Float64Array {
+  let cur = a;
+  for (let k = 0; k < passes; k++) {
+    const out = monthF64(CELLS);
+    spreadPass(cur, keep, side, out);
+    cur = out;
+  }
+  if (passes > 0) return cur;
+  const copy = monthF64(CELLS);
+  copy.set(a);
+  return copy;
 }
 
 /** spread() into two scratch arrays (ping-pong), for a result read only inside this module. */
@@ -174,7 +189,7 @@ function accessRows(
 }
 
 function toCells(perDistrict: Float64Array, cellDistrict: Int16Array): Float64Array {
-  const out = new Float64Array(CELLS);
+  const out = monthF64(CELLS);
   for (let c = 0; c < CELLS; c++) {
     const d = cellDistrict[c];
     if (d >= 0) out[c] = perDistrict[d];
@@ -274,8 +289,8 @@ export function fieldsOf(run: SpaceRun): FieldsOut {
   const trees = svc.trees;
   const treeF = policyOn(t, 'treePlanting') ? f.treePlanting : 1;
   const prevPoll = cellsOr(t.lag.poll, 0, true);
-  const poll = new Uint8Array(CELLS);
-  const pollution = new Float64Array(CELLS);
+  const poll = monthU8(CELLS);
+  const pollution = monthF64(CELLS);
   {
     const parkAbsorb = f.parkAbsorb;
     const treeAbsorb = f.treeAbsorb;
@@ -296,7 +311,7 @@ export function fieldsOf(run: SpaceRun): FieldsOut {
     const v = noiseSrc[c] + noiseRoad * maxLoad[c];
     noise0[c] = v > 100 ? 100 : v;
   }
-  const noise = spread(noise0, f.pollKeep, f.pollSpread, f.noisePasses);
+  const noise = spreadMonth(noise0, f.pollKeep, f.pollSpread, f.noisePasses);
   const carFreeNoise = f.carFreeNoise;
   for (let c = 0; c < CELLS; c++) {
     let v = noise[c] * (carFree[c] ? carFreeNoise : 1);
@@ -353,7 +368,7 @@ export function fieldsOf(run: SpaceRun): FieldsOut {
 
   // ---- Land value ---------------------------------------------------------------------
   const roadsLow = t.funding[FUNDING_KEYS.indexOf('roads')] === FUND_LOW;
-  const potholes = new Uint8Array(CELLS);
+  const potholes = monthU8(CELLS);
   if (roadsLow) for (let c = 0; c < CELLS; c++) potholes[c] = roadCell[c];
   const scenic = scenicOf(m.terrain, p.landValue.scenic);
   const premium = premiumOf(t, cr.safety, homesTaxPercent(t, m.tierPop), p);
@@ -430,8 +445,8 @@ export function accessFields(run: SpaceRun, tr: TravelSlot, pollution: Float64Ar
   // The beach: 15 appeal shared over its districts, plus 2 per clean beach tile.
   if (t.siteKind === 'coast') {
     let beachTiles = 0;
-    const perD = new Float64Array(DISTRICTS);
-    const clean = new Float64Array(DISTRICTS);
+    const perD = monthF64(DISTRICTS);
+    const clean = monthF64(DISTRICTS);
     for (let i = 0; i < TILES; i++) {
       if (!isBeach(t, m.terrain, i)) continue;
       const d = net.cellDistrict[cellOf(i)];

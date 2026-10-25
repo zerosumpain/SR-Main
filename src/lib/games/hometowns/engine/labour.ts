@@ -19,6 +19,7 @@
 // Support (A1) and pensions are paid from outside the town, like a state
 // benefit, so a jobless hamlet still has an income and shops to spend it in.
 
+import { monthF64, monthU8 } from './pool';
 import { BUILDINGS, CIVIC_MIX, ENTRY_MIX_L1 } from './content';
 import { flow, flowsFor, population } from './core';
 import { clamp, expFx, powFx, T } from './fx';
@@ -52,7 +53,7 @@ export const ROW_CIVIC = SECTOR_COUNT;
  * buildings hire £ only; the rest hire the civic mix). Flattened b·3 + h.
  */
 export function civicStaffNeeds(t: TownState, building: (b: number) => boolean = () => true): Float64Array {
-  const out = new Float64Array(t.buildings.length * 3);
+  const out = monthF64(t.buildings.length * 3);
   const pop = population(t);
   for (let i = 0; i < t.buildings.length; i++) {
     const b = t.buildings[i];
@@ -122,7 +123,7 @@ export function workReach(t: TownState, m: MonthContext): Uint8Array | null {
   let anyJobs = false;
   for (let d = 0; d < nd; d++) if (jobs[d]) anyJobs = true;
   if (!travel || !anyJobs) return null;
-  const reach = new Uint8Array(nd);
+  const reach = monthU8(nd);
   const minutes = travel.minutes;
   const max = m.params.labour.maxCommute;
   for (let a = 0; a < nd; a++)
@@ -180,7 +181,7 @@ export function stepLabour(t: TownState, m: MonthContext): void {
   const needs = civicStaffNeeds(t, (i) => building[tileIndex(t.buildings[i][B_X], t.buildings[i][B_Y])] === 0);
   const civicNeed = [0, 0, 0];
   for (let i = 0; i < t.buildings.length; i++) for (let h = 0; h < 3; h++) civicNeed[h] += needs[i * 3 + h];
-  const slots = new Float64Array(ROWS * 3);
+  const slots = monthF64(ROWS * 3);
   for (let s = 0; s < SECTOR_COUNT; s++) for (let h = 0; h < 3; h++) slots[s * 3 + h] = Math.round(dev.jobs[s * 3 + h] ?? 0);
   for (let h = 0; h < 3; h++) slots[ROW_CIVIC * 3 + h] = Math.round(civicNeed[h]);
   const open = Float64Array.from(slots);
@@ -193,10 +194,10 @@ export function stepLabour(t: TownState, m: MonthContext): void {
 
   // Per row and slot tier: own-tier staff, underemployed from the tier above,
   // trainees from the tier below, and in-commuters.
-  const own = new Float64Array(ROWS * 3);
-  const under = new Float64Array(ROWS * 3);
-  const trainee = new Float64Array(ROWS * 3);
-  const inComm = new Float64Array(ROWS * 3);
+  const own = monthF64(ROWS * 3);
+  const under = monthF64(ROWS * 3);
+  const trainee = monthF64(ROWS * 3);
+  const inComm = monthF64(ROWS * 3);
   const add = (into: Float64Array, h: number, parts: number[]) => {
     let n = 0;
     for (let r = 0; r < ROWS; r++) {
@@ -219,7 +220,7 @@ export function stepLabour(t: TownState, m: MonthContext): void {
   // 2. Trainees one tier up, at most traineeShare of each row's slots of that tier (A4).
   const trainees = [0, 0, 0];
   for (let h = 1; h >= 0; h--) {
-    const cap = new Float64Array(ROWS);
+    const cap = monthF64(ROWS);
     for (let r = 0; r < ROWS; r++) cap[r] = Math.floor(slots[r * 3 + h + 1] * lp.traineeShare);
     trainees[h] = add(trainee, h + 1, spread(open, h + 1, left[h], cap));
     left[h] -= trainees[h];

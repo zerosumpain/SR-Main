@@ -18,6 +18,7 @@
 // outside supplier.
 
 import type { Params } from './params';
+import { monthF64, monthI32, monthU8 } from './pool';
 import { areaClass, modelOf, runFor, scratch, scratchI32, scratchU8, type SpaceModel, type SpaceRun } from './space';
 import { MAP, TILES } from './tiles';
 import { FUNDING_KEYS, Z_FARMS, Z_HOMES, Z_INDUSTRY, Z_OFFICES, type MonthContext, type TownState, type UtilitiesSlot } from './types';
@@ -132,8 +133,8 @@ function unitsOf(t: TownState, model: SpaceModel, p: Params, winter: boolean): {
 /** Road distance (tiles) from the nearest plant's attachment road, within each component. */
 function plantDistances(model: SpaceModel, plants: Plant[], which: 'power' | 'water'): Int32Array {
   const kind = model.net.kind;
-  const dist = new Int32Array(TILES).fill(-1);
-  const queue = new Int32Array(TILES);
+  const dist = monthI32(TILES).fill(-1);
+  const queue = monthI32(TILES);
   let head = 0;
   let tail = 0;
   for (const pl of plants) {
@@ -178,8 +179,8 @@ interface GridResult {
 function serve(model: SpaceModel, units: Units, plants: Plant[], which: 'power' | 'water', canImport: boolean): GridResult {
   const net = model.net;
   const C = net.comps;
-  const supplyC = new Float64Array(C);
-  const demandC = new Float64Array(C);
+  const supplyC = monthF64(C);
+  const demandC = monthF64(C);
   const need = which === 'power' ? units.power : units.water;
   const N = units.n;
   let supply = 0;
@@ -195,11 +196,11 @@ function serve(model: SpaceModel, units: Units, plants: Plant[], which: 'power' 
     if (units.comp[k] >= 0) demandC[units.comp[k]] += need[k];
   }
   const kc = net.kingsportComp;
-  const live = new Uint8Array(C);
+  const live = monthU8(C);
   for (let c = 0; c < C; c++) if (supplyC[c] > 0 || (c === kc && canImport)) live[c] = 1;
   let imported = 0;
   let exported = 0;
-  const cut = new Uint8Array(N);
+  const cut = monthU8(N);
   let dist: Int32Array | null = null;
   for (let c = 0; c < C; c++) {
     if (!live[c]) continue;
@@ -226,7 +227,7 @@ function serve(model: SpaceModel, units: Units, plants: Plant[], which: 'power' 
     }
   }
   // Flags: every tile attached to a live grid (empty lots included: they would be served), then the cut units cleared.
-  const flags = new Uint8Array(TILES);
+  const flags = monthU8(TILES);
   const attach = net.attach;
   const comp = net.comp;
   for (let i = 0; i < TILES; i++) {

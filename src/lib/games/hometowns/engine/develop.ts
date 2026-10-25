@@ -45,7 +45,8 @@
 
 import { TICKS_PER_MONTH, TICKS_PER_YEAR } from './clock';
 import { ZONE_DEFS, tileMix } from './content';
-import { fromBase64, rleDecode, rleEncode, toBase64 } from './codec';
+import { decodeRle64, encodeRle64, fromBase64, toBase64 } from './codec';
+import { monthU8 } from './pool';
 import { flow, flowIndex, population, postPeople, postWhole } from './core';
 import { neutral } from './derived';
 import { sigma } from './fx';
@@ -72,6 +73,7 @@ import {
   makeLvl,
   pairGet,
   pairSet,
+  sameUse,
   planesForWrite,
   planesOf,
   type Planes,
@@ -250,7 +252,7 @@ function encodeTick(d: DevState): string {
 function decodeMonth(s: string): Uint8Array | null {
   if (!s) return null;
   try {
-    return rleDecode(fromBase64(s), MONTH_BYTES);
+    return decodeRle64(s, MONTH_BYTES);
   } catch {
     return null;
   }
@@ -449,7 +451,7 @@ interface Facts {
 }
 
 function sparseMask(list: readonly number[], positiveOnly: boolean): Uint8Array {
-  const out = new Uint8Array(N_TILES);
+  const out = monthU8(N_TILES);
   for (let i = 0; i + 1 < list.length; i += 2) {
     const v = list[i + 1];
     if (positiveOnly ? v > 0 : v !== 0) out[list[i]] = v > 255 ? 255 : v;
@@ -493,9 +495,12 @@ function upgradeFrom(f: Facts, i: number): number {
 function roadMask(use: Uint16Array, reach: number): Uint8Array {
   // Memoised per decoded use plane on an exact copy of where its roads are (the
   // plane is changed in place, so the copy is the key): every tick and month
-  // memo asks, and the roads rarely move. The mask is shared: read only.
+  // memo asks, and the roads rarely move. The mask is shared: read only. A
+  // copy of the whole plane answers most checks at once (sameUse); only when
+  // something else changed are the roads compared one by one.
   const hit = ROAD_MASKS.get(use);
   if (hit && hit.reach === reach) {
+    if (sameUse(hit.plane, use)) return hit.mask;
     const key = hit.roads;
     let same = true;
     for (let i = 0; i < N_TILES; i++)
@@ -503,16 +508,19 @@ function roadMask(use: Uint16Array, reach: number): Uint8Array {
         same = false;
         break;
       }
-    if (same) return hit.mask;
+    if (same) {
+      hit.plane.set(use);
+      return hit.mask;
+    }
   }
   const roads = new Uint8Array(N_TILES);
   for (let i = 0; i < N_TILES; i++) if (use[i] >>> 12 === 1) roads[i] = 1;
   const mask = roadMaskOf(use, reach);
-  ROAD_MASKS.set(use, { reach, roads, mask });
+  ROAD_MASKS.set(use, { reach, roads, plane: use.slice(), mask });
   return mask;
 }
 
-const ROAD_MASKS = new WeakMap<Uint16Array, { reach: number; roads: Uint8Array; mask: Uint8Array }>();
+const ROAD_MASKS = new WeakMap<Uint16Array, { reach: number; roads: Uint8Array; plane: Uint16Array; mask: Uint8Array }>();
 
 function roadMaskOf(use: Uint16Array, reach: number): Uint8Array {
   const row = new Uint8Array(N_TILES);
@@ -701,16 +709,7 @@ const FREE_EMPTY = new WeakMap<Uint16Array, FreeEmpty>();
  */
 function freeEmptyCombos(use: Uint16Array, parcels: number, terrain: Uint8Array): Int32Array {
   const hit = FREE_EMPTY.get(use);
-  if (hit && hit.parcels === parcels && hit.terrain === terrain) {
-    const key = hit.key;
-    let same = true;
-    for (let i = 0; i < N_TILES; i++)
-      if (key[i] !== use[i]) {
-        same = false;
-        break;
-      }
-    if (same) return hit.combos;
-  }
+  if (hit && hit.parcels === parcels && hit.terrain === terrain && sameUse(hit.key, use)) return hit.combos;
   const seen = new Uint8Array(2 * N_CELLS);
   const list: number[] = [];
   for (let i = 0; i < N_TILES; i++) {
@@ -891,7 +890,7 @@ export function stepDevelopMemo(t: TownState, m: MonthContext): void {
   // Per tile: power, water and the months a built tile has gone without a road, power or water.
   const { use, lvl } = f.pl;
   const road = roadMask(use, p.roadReach);
-  const zoneInCell = new Uint8Array(N_CELLS);
+  const zoneInCell = monthU8(N_CELLS);
   const powered = util ? util.powered : null;
   const watered = util ? util.watered : null;
   const busy = f.busy;
@@ -950,7 +949,7 @@ export function stepDevelopMemo(t: TownState, m: MonthContext): void {
   }
 
   d.month = out;
-  d.monthSrc = toBase64(rleEncode(out));
+  d.monthSrc = encodeRle64(out);
   writeDev(t, d);
 
   const carts = t.books.pop[flowIndex('carts')];

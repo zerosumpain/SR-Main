@@ -18,6 +18,7 @@
 // its undo always survive the Deputy; the Deputy's builds and zoning go on the
 // town's Deputy undo list (ops.ts DEPUTY_UNDO_MAX, deputyZoned), never the mayor's.
 
+import { monthF64, monthU8 } from './pool';
 import { BUILDINGS, ORDER_DEFAULTS, TIER_DEFS, ZONE_DEFS, buildingIndex, roadDef } from './content';
 import { lineIndex, population, postWhole } from './core';
 import { civicMemo, deputyNote, levelPayment, monthsOfSpending, monthlySpending, type MonthBooks } from './finance';
@@ -28,7 +29,7 @@ import { roadNetOf } from './space';
 import { appendTileEvent } from './records';
 import { CHECKLISTS, GREAT_METROPOLIS, checkFacts, type CheckFacts } from './tiers';
 import { T_FOREST, TOWN_HALL_AT, buildable, terrainKind, terrainOf } from './terrain';
-import { B_KIND, B_STAFF, B_X, B_Y, CAT_ROAD, CAT_ZONE, MAP, TILES, USE_EMPTY, cellOf, constructionLeft, footprint, inMap, parcelOpen, planesForWrite, planesOf, roadAccess, tileIndex, useCat, usePayload, zoneUse, zonedTiles } from './tiles';
+import { B_KIND, B_STAFF, B_X, B_Y, CAT_ROAD, CAT_ZONE, MAP, TILES, USE_EMPTY, cellOf, constructionLeft, footprint, inMap, pairPlane, parcelOpen, planesForWrite, planesOf, roadAccess, tileIndex, useCat, usePayload, zoneUse, zonedTiles } from './tiles';
 import {
   COVERAGES,
   EngineError,
@@ -137,11 +138,12 @@ function zoneRoadside(t: TownState, z: number, n: number, plan: ZonePlan, first:
   if (n <= 0) return 0;
   const terrain = terrainOf(t);
   const read = planesOf(t).use;
+  const left = pairPlane(t.construction); // constructionLeft for every tile at once
   const picks: number[] = [];
   for (let pass = first ? 0 : 1; pass < 2; pass++)
     for (const i of BY_DISTANCE) {
       if (picks.length >= n) break;
-      if (read[i] !== USE_EMPTY || constructionLeft(t, i) > 0 || mayors(i)) continue;
+      if (read[i] !== USE_EMPTY || left[i] > 0 || mayors(i)) continue;
       if (first) {
         const d = roadDistrict(first.attach, i);
         if ((pass === 0) !== (d >= 0 && first.far[d] === 1)) continue; // the far districts' lots in the first pass only
@@ -263,6 +265,7 @@ function civicSite(t: TownState, m: MonthContext, kind: number, cover: (typeof C
   }
   if (touched.length === 0) return null;
   const access = roadAccess(t, m.params.develop.roadReach);
+  const left = pairPlane(t.construction); // constructionLeft for every tile at once
   let best: [number, number] | null = null;
   let bestScore = 0;
   for (const i of BY_DISTANCE) {
@@ -280,7 +283,7 @@ function civicSite(t: TownState, m: MonthContext, kind: number, cover: (typeof C
         }
         const j = tileIndex(x, y);
         const v = terrain[j];
-        if (p.use[j] !== USE_EMPTY || mayors(j) || !access[j] || constructionLeft(t, j) > 0 || !buildable(v) || terrainKind(v) === T_FOREST || !parcelOpen(t, x, y)) ok = false;
+        if (p.use[j] !== USE_EMPTY || mayors(j) || !access[j] || left[j] > 0 || !buildable(v) || terrainKind(v) === T_FOREST || !parcelOpen(t, x, y)) ok = false;
         else if (!edge && nextToRoad(p.use, j)) edge = true;
       }
     if (!ok) continue;
@@ -309,7 +312,8 @@ function waterSite(t: TownState, m: MonthContext): [number, number] | null {
   const net = roadNetOf(t, m.params.develop.roadReach);
   const p = planesOf(t);
   const caps = ZONE_DEFS[Z_HOMES].capacity;
-  const dry = new Float64Array(net.comps);
+  const dry = monthF64(net.comps);
+  const left = pairPlane(t.construction); // constructionLeft for every tile at once
   const zoned = zonedTiles(p.use);
   for (let q = 0; q < zoned.length; q++) {
     const i = zoned[q];
@@ -317,7 +321,7 @@ function waterSite(t: TownState, m: MonthContext): [number, number] | null {
     if (useCat(use) !== CAT_ZONE || usePayload(use) !== Z_HOMES || u.watered[i]) continue;
     const level = p.lvl[i] & 7;
     const a = net.attach[i];
-    if (level === 0 || a < 0 || constructionLeft(t, i) > 0) continue;
+    if (level === 0 || a < 0 || left[i] > 0) continue;
     dry[net.comp[a]] += caps[level - 1] ?? 0;
   }
   let target = -1;
@@ -328,7 +332,7 @@ function waterSite(t: TownState, m: MonthContext): [number, number] | null {
   let edge: [number, number] | null = null;
   for (const j of BY_DISTANCE) {
     const a = net.attach[j];
-    if (a < 0 || net.comp[a] !== target || p.use[j] !== USE_EMPTY || mayors(j) || !access[j] || constructionLeft(t, j) > 0) continue;
+    if (a < 0 || net.comp[a] !== target || p.use[j] !== USE_EMPTY || mayors(j) || !access[j] || left[j] > 0) continue;
     const v = terrain[j];
     const x = j % MAP;
     const y = (j - x) / MAP;
@@ -457,9 +461,10 @@ function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number,
   const terrain = terrainOf(t);
   const use = planesOf(t).use;
   const lane = roadDef('lane').build;
+  const left = pairPlane(t.construction); // constructionLeft for every tile at once
   // Where the lane may run: empty, open, buildable land (Forest included: the road clears it, as a mayor's does).
   const open = (i: number): boolean => {
-    if (use[i] !== USE_EMPTY || mayors(i) || constructionLeft(t, i) > 0 || !buildable(terrain[i])) return false;
+    if (use[i] !== USE_EMPTY || mayors(i) || left[i] > 0 || !buildable(terrain[i])) return false;
     const x = i % MAP;
     return parcelOpen(t, x, (i - x) / MAP);
   };
@@ -577,7 +582,7 @@ function farDistricts(t: TownState, m: MonthContext): { far: Uint8Array; attach:
   if (!reach) return null;
   const homes = homeTiles(t, m);
   const attach = attachOf(t, m);
-  const far = new Uint8Array(reach.length);
+  const far = monthU8(reach.length);
   let any = false;
   for (let k = 0; k < homes.count; k++) {
     const d = roadDistrict(attach, homes.tile[k]);
@@ -605,11 +610,12 @@ function rezoneEmptyHomes(t: TownState, z: number, n: number, plan: ZonePlan, fi
   if (most <= 0) return 0;
   const read = planesOf(t);
   const homes = zoneUse(Z_HOMES);
+  const left = pairPlane(t.construction); // constructionLeft for every tile at once
   const picks: number[] = [];
   for (let pass = first ? 0 : 1; pass < 2; pass++)
     for (const i of BY_DISTANCE) {
       if (picks.length >= most) break;
-      if (read.use[i] !== homes || read.lvl[i] !== 0 || attach[i] < 0 || mayors(i) || constructionLeft(t, i) > 0) continue;
+      if (read.use[i] !== homes || read.lvl[i] !== 0 || attach[i] < 0 || mayors(i) || left[i] > 0) continue;
       if (first) {
         const d = roadDistrict(first.attach, i);
         if ((pass === 0) !== (d >= 0 && first.far[d] === 1)) continue;

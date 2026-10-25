@@ -16,7 +16,7 @@
 
 import { calendarMonth, countyMonth, gridEndAt, gridOfTownTick, gridTickAt, townTarget } from './clock';
 import { commitTown, rollMonthBooks, settleTown } from './core';
-import { SLOT_NAMES, newDerivedCache } from './derived';
+import { SLOT_NAMES, newDerivedCache, readSlots } from './derived';
 import { forgetDev } from './develop';
 import { checkTown } from './invariants';
 import { applyBudget, applyBuild, applyUndo, type OpsEnv } from './ops';
@@ -24,6 +24,7 @@ import { paramsFor, type Params } from './params';
 import { STREAMS, h32 } from './rand';
 import { forgetRecords } from './records';
 import { STEPS } from './steps';
+import { closeMonthPool, openMonthPool } from './pool';
 import { planesSnapshot, restorePlanes, type PlanesSnapshot } from './tiles';
 import type { CountyState, DerivedCache, MonthContext, Snapshot, StepTable, TickContext, TownState } from './types';
 import { MonthWhy, commitWhy } from './why';
@@ -169,9 +170,23 @@ export function advanceTown(t: TownState, ctx: TickContext, steps: StepTable = S
     t.pending = t.pending.filter((r) => r.atTick > t.tick);
     pushAlert(t, ctx.at, ctx.townIndex, 'tick-reverted', `tick ${t.tick} skipped: ${problems.slice(0, 3).join('; ')}`);
   }
-  if (t.tick % 4 === 3) monthStep(t, ctx, steps);
+  if (t.tick % 4 === 3) pooledMonthStep(t, ctx, steps);
   t.tick += 1;
   settleTown(t);
+}
+
+/**
+ * monthStep with the month's typed arrays drawn from the pool (pool.ts) and
+ * handed back when it ends: nothing outside advanceTown sees this month's
+ * blackboard, so its planes can be reused by the next one.
+ */
+function pooledMonthStep(t: TownState, ctx: TickContext, steps: StepTable): void {
+  openMonthPool();
+  try {
+    monthStep(t, ctx, steps);
+  } finally {
+    closeMonthPool();
+  }
 }
 
 /** The month step (§5.3) for the tick in ctx. Exposed for tests and the Lab. */
@@ -181,15 +196,16 @@ export function monthStep(t: TownState, ctx: TickContext, steps: StepTable = STE
   const why = new MonthWhy();
   const m: MonthContext = { ...ctx, month: ctx.world.month, derived, why };
   let problems: string[] = [];
-  const slots = derived as unknown as Record<string, unknown>;
-  const had: unknown[] = new Array(SLOT_NAMES.length);
+  const had: unknown[] = new Array(SLOT_NAMES.length).fill(null);
+  const now: unknown[] = new Array(SLOT_NAMES.length).fill(null);
   try {
     for (const step of steps.month) {
-      for (let k = 0; k < SLOT_NAMES.length; k++) had[k] = slots[SLOT_NAMES[k]];
+      readSlots(derived, had);
       step.run(t, m);
+      readSlots(derived, now);
       for (let k = 0; k < SLOT_NAMES.length; k++) {
+        if (now[k] === had[k]) continue;
         const n = SLOT_NAMES[k];
-        if (slots[n] === had[k]) continue;
         if (had[k] !== null) problems.push(`${step.id} replaced the ${n} slot another step wrote`);
         else if (!step.writes.includes(n)) problems.push(`${step.id} wrote the ${n} slot without declaring it`);
       }

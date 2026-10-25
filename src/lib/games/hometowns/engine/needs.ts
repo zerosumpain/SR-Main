@@ -14,6 +14,7 @@
 // Culture star is its only reader in the people model): it fills with venue
 // culture, old buildings and a mix of people, and drains with τ 36 months.
 
+import { monthF64, monthU8 } from './pool';
 import { BUILDINGS, buildingIndex } from './content';
 import { flowsFor, population } from './core';
 import { clamp, smooth, T } from './fx';
@@ -289,7 +290,7 @@ const KIND_MASKS: readonly number[] = BUILDINGS.map((def, k) => {
 
 /** Per cell, the MASK_* bits of every finished building that reaches it (Manhattan tiles from its centre ≤ its radius). */
 function reachMasks(t: TownState, busy: Uint8Array): Uint8Array {
-  const out = new Uint8Array(N_CELLS_SIDE * N_CELLS_SIDE);
+  const out = monthU8(N_CELLS_SIDE * N_CELLS_SIDE);
   for (const b of t.buildings) {
     const bits = KIND_MASKS[b[B_KIND]] ?? 0;
     if (!bits || busy[tileIndex(b[B_X], b[B_Y])]) continue;
@@ -335,8 +336,8 @@ export function townNeeds(t: TownState, m: MonthContext): NeedsSlot {
   const homes = facts.homes;
 
   // Where things are, by district.
-  const flags = new Uint8Array(N_DISTRICTS);
-  const highStreet = new Float64Array(N_DISTRICTS);
+  const flags = monthU8(N_DISTRICTS);
+  const highStreet = monthF64(N_DISTRICTS);
   const zoned = zonedTiles(use);
   for (let q = 0; q < zoned.length; q++) {
     const i = zoned[q];
@@ -363,13 +364,13 @@ export function townNeeds(t: TownState, m: MonthContext): NeedsSlot {
     if (def && def.tier >= 1 && def.staff > 0) flags[d] |= 1 << D_TOPJOBS;
   }
   // Minutes to the nearest district of each kind, and high-street tiles within 15 minutes.
-  const near = new Float64Array(N_DISTRICTS * D_KINDS).fill(Infinity);
-  const streets = new Float64Array(N_DISTRICTS);
+  const near = monthF64(N_DISTRICTS * D_KINDS).fill(Infinity);
+  const streets = monthF64(N_DISTRICTS);
   // Only districts with something in them matter (ascending, as the full scan visits them).
   const busyD: number[] = [];
   for (let b = 0; b < N_DISTRICTS; b++) if (flags[b] || highStreet[b]) busyD.push(b);
   // Only the districts that hold homes are read below.
-  const homeD = new Uint8Array(N_DISTRICTS);
+  const homeD = monthU8(N_DISTRICTS);
   for (let k = 0; k < homes.count; k++) {
     const tile = homes.tile[k];
     homeD[((tile >> 9) << 3) | ((tile & 63) >> 3)] = 1;
@@ -397,9 +398,9 @@ export function townNeeds(t: TownState, m: MonthContext): NeedsSlot {
   // One pass over the homes: met value of every item, summed per tier (capacity-weighted;
   // occupancy is uniform within a tier) and over all homes.
   const items = NEED_ITEMS.length;
-  const sums = new Float64Array(4 * items); // tiers 0–2, then all homes
+  const sums = monthF64(4 * items); // tiers 0–2, then all homes
   const weight = [0, 0, 0, 0];
-  const v = new Float64Array(items);
+  const v = monthF64(items);
   for (let k = 0; k < homes.count; k++) {
     const tile = homes.tile[k];
     const cell = ((tile >> 7) << 5) | ((tile & 63) >> 1); // cellOf for the 64-wide map

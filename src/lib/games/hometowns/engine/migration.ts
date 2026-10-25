@@ -23,6 +23,7 @@
 // drain emerge on its own: a town that educates its children without the
 // jobs, homes and fun its new professionals want watches them leave.
 
+import { monthF64, monthI32 } from './pool';
 import { flow, population, postPeople } from './core';
 import { expFx, lnFx, powFx, T } from './fx';
 import { neutral } from './derived';
@@ -67,15 +68,6 @@ const ARRIVE_Q = COHORTS.map((c) => `arrive.${c}`);
 const DEPART_Q = COHORTS.map((c) => `depart.${c}`);
 
 /** Softmax over utilities at temperature T (stable: shifted by the maximum). */
-/** [stay, outside, ...destinations], built element by element (a spread literal's array kind kept changing, deoptimising the step). */
-function choices(stay: number, out: number, dest: readonly number[]): number[] {
-  const v = new Array<number>(2 + dest.length);
-  v[0] = stay;
-  v[1] = out;
-  for (let i = 0; i < dest.length; i++) v[2 + i] = dest[i];
-  return v;
-}
-
 export function logit(v: readonly number[], temp: number): number[] {
   let max = -Infinity;
   for (const x of v) if (x > max) max = x;
@@ -83,6 +75,25 @@ export function logit(v: readonly number[], temp: number): number[] {
   let s = 0;
   for (const x of e) s += x;
   return e.map((x) => x / s);
+}
+
+/**
+ * logit(choices(stay, out, dest[0 .. n)), temp) into `res` (2 + n long):
+ * the same maximum, the same terms and the same sum in the same order, so
+ * the same probabilities, without the four arrays the month made per
+ * mover group.
+ */
+function logitInto(stay: number, out: number, dest: Float64Array, n: number, temp: number, res: Float64Array): void {
+  let max = -Infinity;
+  if (stay > max) max = stay;
+  if (out > max) max = out;
+  for (let i = 0; i < n; i++) if (dest[i] > max) max = dest[i];
+  res[0] = expFx((stay - max) / temp);
+  res[1] = expFx((out - max) / temp);
+  for (let i = 0; i < n; i++) res[2 + i] = expFx((dest[i] - max) / temp);
+  let s = 0;
+  for (let i = 0; i < 2 + n; i++) s += res[i];
+  for (let i = 0; i < 2 + n; i++) res[i] = res[i] / s;
 }
 
 /** Is town row j a hidden gem (§5.11): small against the county median, with a strong Buzz? */
@@ -152,7 +163,7 @@ export function stepMigration(t: TownState, m: MonthContext): void {
   const forcedParts = { squeezed: new Array<number>(COHORT_COUNT).fill(0), unemployed: new Array<number>(COHORT_COUNT).fill(0), retier: new Array<number>(COHORT_COUNT).fill(0) };
   /** Long-term unemployed movers in workers (not family persons), by tier and [Workers, Parents]. */
   // [Workers, Parents] per tier, flat (h·2, h·2 + 1): one numeric array, not arrays of two kinds.
-  const luMovers = new Float64Array(6);
+  const luMovers = monthF64(6);
   for (let h = 0; h < 3; h++) {
     const W = people[person(STAGE_W, h)];
     const P = people[person(STAGE_P, h)];
@@ -218,6 +229,11 @@ export function stepMigration(t: TownState, m: MonthContext): void {
   const pOutMean = new Array<number>(COHORT_COUNT).fill(0);
   const intents = new Array<number>(Math.max(1, snap.towns.length) * COHORT_COUNT).fill(0);
   const utility = new Array<number>(COHORT_COUNT).fill(0);
+  // Scratch for the choices: destination rows and utilities, and the two logits' probabilities.
+  const optJ = monthI32(Math.max(1, dests.length));
+  const vDest = monthF64(Math.max(1, dests.length));
+  const pr = monthF64(2 + dests.length);
+  const ref = monthF64(2 + dests.length);
   for (let k = 0; k < COHORT_COUNT; k++) {
     const w = mp.weights[k];
     const terms = utilityTerms(k, actual, needs.cohort[k], homesTaxL, m);
@@ -226,28 +242,37 @@ export function stepMigration(t: TownState, m: MonthContext): void {
     utility[k] = uOwn;
     const very = t.happy[k] > mp.veryHappy[0] ? mp.veryHappy[2] : 0;
     const base = w[W_INERTIA] + gemOwn + freshOwn + very;
-    const options = dests.filter((d) => hosts(k, d.row.tier >= 3));
     // A20/§8.6: yesterday's adverts aimed at this cohort here add their bonus to each advertiser.
     const adBonus = ownFlows?.advert?.[k] ?? 0;
     const adBy = ownFlows?.advertBy?.[k] ?? 0;
-    const vDest = options.map((d) => utilitySum(k, d.row.perceived, d.row.needs[k] ?? 1, d.row.homesTax[0] ?? 0, m) + d.bonus + ((adBy >> d.j) & 1 ? adBonus : 0));
-    for (const g of groups[k]) {
+    // The destinations that host cohort k (dests order) and their utilities, in scratch.
+    let nOpt = 0;
+    for (let i = 0; i < dests.length; i++) {
+      const d = dests[i];
+      if (!hosts(k, d.row.tier >= 3)) continue;
+      optJ[nOpt] = d.j;
+      vDest[nOpt] = utilitySum(k, d.row.perceived, d.row.needs[k] ?? 1, d.row.homesTax[0] ?? 0, m) + d.bonus + ((adBy >> d.j) & 1 ? adBonus : 0);
+      nOpt++;
+    }
+    const gs = groups[k];
+    for (let gi = 0; gi < gs.length; gi++) {
+      const g = gs[gi];
       if (g.movers <= 0) continue;
       const stay = hosts(k, uniOwn) ? uOwn + base + g.stay : -Infinity;
-      const pr = logit(choices(stay, vOut, vDest), temp);
-      const ref = logit(choices(hosts(k, uniOwn) ? base + g.stay : -Infinity, vOut, vDest), temp);
+      logitInto(stay, vOut, vDest, nOpt, temp, pr);
+      logitInto(hosts(k, uniOwn) ? base + g.stay : -Infinity, vOut, vDest, nOpt, temp, ref);
       leaveRaw[k] += g.movers * pr[1];
       leaveRef[k] += g.movers * ref[1];
       moversTotal[k] += g.movers;
-      const homeGrown = g !== groups[k][0];
+      const homeGrown = gi !== 0;
       if (homeGrown) {
         leaveYoung[k / 3] += g.movers * pr[1];
         homeGrownOut[0][k] += g.movers * pr[1];
       }
-      options.forEach((d, i) => {
-        intents[d.j * COHORT_COUNT + k] += g.movers * pr[2 + i];
+      for (let i = 0; i < nOpt; i++) {
+        intents[optJ[i] * COHORT_COUNT + k] += g.movers * pr[2 + i];
         if (homeGrown) homeGrownOut[1][k] += g.movers * pr[2 + i];
-      });
+      }
     }
     pOutMean[k] = moversTotal[k] > 0 ? leaveRaw[k] / moversTotal[k] : 0;
   }
@@ -357,19 +382,22 @@ export function stepMigration(t: TownState, m: MonthContext): void {
     if (leftK[k] !== 0 || leaveRaw[k] > 0) {
       const ref = leaveRef[k];
       const p0 = moversTotal[k] > 0 ? ref / moversTotal[k] : 0;
-      const parts: [string, number][] = [
-        ['mig.out.squeezed', forcedParts.squeezed[k] * p0],
-        ['mig.out.unemployed', forcedParts.unemployed[k] * p0],
-        ['mig.out.retier', forcedParts.retier[k] * p0],
-        ['mig.out.unhappy', unhappyPart[k] * p0],
-      ];
+      const xSq = forcedParts.squeezed[k] * p0;
+      const xUn = forcedParts.unemployed[k] * p0;
+      const xRe = forcedParts.retier[k] * p0;
+      const xUh = unhappyPart[k] * p0;
       let named = 0;
-      for (const [key, x] of parts) {
-        m.why.add(key, x, qOut);
-        named += x;
-      }
+      m.why.add('mig.out.squeezed', xSq, qOut);
+      named += xSq;
+      m.why.add('mig.out.unemployed', xUn, qOut);
+      named += xUn;
+      m.why.add('mig.out.retier', xRe, qOut);
+      named += xRe;
+      m.why.add('mig.out.unhappy', xUh, qOut);
+      named += xUh;
       m.why.add('mig.out.base', ref - named, qOut);
-      share(m, qOut, leaveRaw[k] - ref, ownTerms[k].map((x) => -x), OUT_KEYS);
+      // Departures weigh the town's own terms the other way round (each negated, as before).
+      share(m, qOut, leaveRaw[k] - ref, ownTerms[k], OUT_KEYS, -1);
       m.why.add('mig.out.cap', -(leaveBeforeCap[k] - leave[k]), qOut);
       m.why.set(qOut, -leftK[k]);
     }
@@ -389,16 +417,21 @@ export function stepMigration(t: TownState, m: MonthContext): void {
 }
 
 /** Shares `delta` over terms in proportion to their signed contributions (the log-share split of §5.19). */
-function share(m: MonthContext, quantity: string, delta: number, contributions: readonly number[], keys: readonly string[]): void {
+function share(m: MonthContext, quantity: string, delta: number, contributions: readonly number[], keys: readonly string[], sign: 1 | -1 = 1): void {
+  // sign · c is c or −c exactly, so a sign of −1 is the same as passing the negated terms.
   let s = 0;
   let a = 0;
-  for (const c of contributions) {
+  for (let i = 0; i < contributions.length; i++) {
+    const c = sign * contributions[i];
     s += c;
     a += Math.abs(c);
   }
   // A near-cancelling sum would blow small terms up into huge opposite ones; leave that to the residual.
   if (a === 0 || Math.abs(s) < 0.05 * a || delta === 0) return;
-  for (let i = 0; i < contributions.length; i++) if (contributions[i] !== 0) m.why.add(keys[i], (delta * contributions[i]) / s, quantity);
+  for (let i = 0; i < contributions.length; i++) {
+    const c = sign * contributions[i];
+    if (c !== 0) m.why.add(keys[i], (delta * c) / s, quantity);
+  }
 }
 
 /**

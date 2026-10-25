@@ -8,6 +8,7 @@
 // Registry order is the packed index, so both lists are append-only.
 
 import { fromBase64, toBase64 } from './codec';
+import { monthF64, monthU8 } from './pool';
 import { COHORTS, LEDGER_LINES, METERS, STARS, type TownState, type WhyWriter } from './types';
 
 export type WhyUnit = 'people' | '£' | 'points' | 'stars' | 'meter' | 'visitors' | 'units' | 'LV';
@@ -146,8 +147,14 @@ function quantityOf(ti: number, amount: number, quantity: string | null | undefi
 }
 
 export class MonthWhy implements WhyWriter {
-  /** Per quantity index: term sums by term index. */
-  private readonly sums = new Map<number, Map<number, number>>();
+  /**
+   * Per quantity index: the term sums by term index (a row is taken from the
+   * month's pool on the quantity's first term), the terms in the order they
+   * first arrived, and whether each has arrived.
+   */
+  private readonly rows: (Float64Array | null)[] = new Array<Float64Array | null>(QUANTITIES.length).fill(null);
+  private readonly seen: (Uint8Array | null)[] = new Array<Uint8Array | null>(QUANTITIES.length).fill(null);
+  private readonly order: (number[] | null)[] = new Array<number[] | null>(QUANTITIES.length).fill(null);
   private readonly values = new Map<number, number>();
   /** Unknown keys or mismatched quantities, kept for tests (the writer never throws mid-month). */
   readonly problems: string[] = [];
@@ -165,9 +172,20 @@ export class MonthWhy implements WhyWriter {
       this.problems.push(`term ${key} cannot explain ${String(q)}`);
       return;
     }
-    let m = this.sums.get(qi);
-    if (!m) this.sums.set(qi, (m = new Map()));
-    m.set(ti, (m.get(ti) ?? 0) + amount);
+    let row = this.rows[qi];
+    let seen = this.seen[qi];
+    let order = this.order[qi];
+    if (row === null || seen === null || order === null) {
+      this.rows[qi] = row = monthF64(TERMS.length);
+      this.seen[qi] = seen = monthU8(TERMS.length);
+      this.order[qi] = order = [];
+    }
+    if (seen[ti] === 0) {
+      seen[ti] = 1;
+      order.push(ti);
+    }
+    // 0 + amount is amount exactly (amount is finite and not 0), as the first add was before.
+    row[ti] += amount;
   }
 
   set(quantity: string, v: number): void {
@@ -182,10 +200,13 @@ export class MonthWhy implements WhyWriter {
   /** The month's entries in quantity order: top three |amount| terms (ties by registry index) and the residual. */
   entries(): WhyEntry[] {
     const out: WhyEntry[] = [];
-    const qis = new Set<number>([...this.sums.keys(), ...this.values.keys()]);
-    for (const qi of [...qis].sort((a, b) => a - b)) {
-      const m = this.sums.get(qi);
-      const terms = m ? [...m.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]) || a[0] - b[0]) : [];
+    for (let qi = 0; qi < QUANTITIES.length; qi++) {
+      const row = this.rows[qi];
+      const order = this.order[qi];
+      if (row === null && !this.values.has(qi)) continue;
+      const terms: [number, number][] = [];
+      if (row !== null && order !== null) for (const ti of order) terms.push([ti, row[ti]]);
+      terms.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]) || a[0] - b[0]);
       let all = 0;
       for (const [, a] of terms) all += a;
       const v = this.values.has(qi) ? this.values.get(qi)! : all;

@@ -36,6 +36,31 @@ export const SLOT_NAMES = [
   'migration', 'spend', 'firms', 'goods', 'tourism', 'ledger', 'mood',
 ] as const satisfies readonly (keyof DerivedCache)[];
 
+/**
+ * The slots in SLOT_NAMES order, read into `out`. The month step compares
+ * them before and after every step; named reads of the one blackboard shape
+ * are monomorphic, where reading them by name from the list was a keyed
+ * lookup each time.
+ */
+export function readSlots(d: DerivedCache, out: unknown[]): void {
+  out[0] = d.development;
+  out[1] = d.utilities;
+  out[2] = d.fields;
+  out[3] = d.coverage;
+  out[4] = d.travel;
+  out[5] = d.labour;
+  out[6] = d.housing;
+  out[7] = d.stars;
+  out[8] = d.needs;
+  out[9] = d.migration;
+  out[10] = d.spend;
+  out[11] = d.firms;
+  out[12] = d.goods;
+  out[13] = d.tourism;
+  out[14] = d.ledger;
+  out[15] = d.mood;
+}
+
 export function newDerivedCache(): DerivedCache {
   return {
     development: null, utilities: null, fields: null, coverage: null, travel: null, labour: null, housing: null,

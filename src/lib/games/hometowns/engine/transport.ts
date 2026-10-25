@@ -36,11 +36,13 @@
 
 import { RAIL_DEF, RAIL_WAIT_MINUTES } from './content';
 import { flowsFor } from './core';
+import { monthF64, monthI16, monthI32, monthU8 } from './pool';
 import { servicesOf } from './services';
 import {
   DISTRICT_OF,
   arcWeights,
   decay,
+  arcSpan,
   dijkstraInto,
   edgeWeights,
   modelOf,
@@ -79,8 +81,8 @@ export function ratioOfBpr(bpr: number, alpha: number): number {
  * district's road tiles (what the average trip through it experiences), capped.
  */
 export function districtRatio(net: RoadNet, load: Float64Array, maxRatio: number): Float64Array {
-  const num = new Float64Array(DISTRICTS);
-  const den = new Float64Array(DISTRICTS);
+  const num = monthF64(DISTRICTS);
+  const den = monthF64(DISTRICTS);
   for (let k = 0; k < net.roads.length; k++) {
     const i = net.roads[k];
     const l = load[i];
@@ -90,7 +92,7 @@ export function districtRatio(net: RoadNet, load: Float64Array, maxRatio: number
     num[d] += l * (r > maxRatio ? maxRatio : r);
     den[d] += l;
   }
-  const out = new Float64Array(DISTRICTS);
+  const out = monthF64(DISTRICTS);
   for (let d = 0; d < DISTRICTS; d++) out[d] = den[d] > 0 ? num[d] / den[d] : 0;
   return out;
 }
@@ -105,7 +107,7 @@ export function districtBpr(net: RoadNet, load: Float64Array, alpha: number, max
 
 /** Mean of a per-cell array over each district's 4×4 cells. */
 function perDistrict(cells: Float64Array): Float64Array {
-  const out = new Float64Array(DISTRICTS);
+  const out = monthF64(DISTRICTS);
   for (let c = 0; c < cells.length; c++) {
     const v = cells[c];
     if (v === 0) continue;
@@ -129,9 +131,9 @@ function railTimes(run: SpaceRun): Float64Array | null {
   if (stations.length < 2) return null;
   // Rail distance in tiles between stations: breadth-first over track from the tiles beside each station.
   const S = stations.length;
-  const between = new Float64Array(S * S).fill(Infinity);
-  const dist = new Int32Array(TILES);
-  const queue = new Int32Array(TILES);
+  const between = monthF64(S * S).fill(Infinity);
+  const dist = monthI32(TILES);
+  const queue = monthI32(TILES);
   const touching = stations.map((b) => {
     const out: number[] = [];
     for (const ti of b.tiles) for (const j of neighbours(ti)) if (j >= 0 && net.rail[j] && !out.includes(j)) out.push(j);
@@ -161,7 +163,7 @@ function railTimes(run: SpaceRun): Float64Array | null {
     }
   }
   // Each district uses its nearest station (Manhattan from the district centre; lower index on ties).
-  const nearest = new Int32Array(DISTRICTS);
+  const nearest = monthI32(DISTRICTS);
   for (let d = 0; d < DISTRICTS; d++) {
     const x = (d % DISTRICTS_PER_SIDE) * 8 + 4;
     const y = ((d - (d % DISTRICTS_PER_SIDE)) / DISTRICTS_PER_SIDE) * 8 + 4;
@@ -176,7 +178,7 @@ function railTimes(run: SpaceRun): Float64Array | null {
     }
     nearest[d] = bi;
   }
-  const out = new Float64Array(DISTRICTS * DISTRICTS).fill(Infinity);
+  const out = monthF64(DISTRICTS * DISTRICTS).fill(Infinity);
   const wait = run.p.transport.rail[1] ?? RAIL_WAIT_MINUTES;
   for (let a = 0; a < DISTRICTS; a++)
     for (let b = 0; b < DISTRICTS; b++) {
@@ -230,16 +232,19 @@ export function routesFor(t: TownState, net: RoadNet, key: Float64Array): Routes
   const P = portList.length;
   const portD = Int32Array.from(portList);
   const portN = Int32Array.from(portList.map((d) => net.portNode[d]));
-  const dist = new Float64Array(V);
+  const dist = monthF64(V);
   const parent = new Int32Array(P * V);
   const order = new Int32Array(P * V);
   const counts = new Int32Array(P);
-  const want = new Uint8Array(V);
-  const par = new Int32Array(V);
-  const ord = new Int32Array(V);
+  const want = monthU8(V);
+  const par = monthI32(V);
+  const ord = monthI32(V);
+  // Every tree runs on the same weights: their lightest and heaviest arc once, not once a tree.
+  const span = monthF64(2);
+  arcSpan(key, span);
   for (let s = 0; s < P; s++) {
     for (let q = s + 1; q < P; q++) want[portN[q]] = 1;
-    const c = s < P - 1 ? dijkstraInto(net, key, portN[s], dist, par, ord, 0, want, P - 1 - s) : 0;
+    const c = s < P - 1 ? dijkstraInto(net, key, portN[s], dist, par, ord, 0, want, P - 1 - s, span) : 0;
     for (let q = s + 1; q < P; q++) want[portN[q]] = 0;
     parent.set(par, s * V);
     if (c > 0) order.set(ord.subarray(0, c), s * V);
@@ -252,7 +257,7 @@ export function routesFor(t: TownState, net: RoadNet, key: Float64Array): Routes
   for (let k = 0; k < net.signNode.length; k++) {
     const sp = new Int32Array(V);
     const so = new Int32Array(V);
-    signCounts.push(net.signNode[k] >= 0 ? dijkstraInto(net, key, net.signNode[k], dist, sp, so, 0) : 0);
+    signCounts.push(net.signNode[k] >= 0 ? dijkstraInto(net, key, net.signNode[k], dist, sp, so, 0, null, 0, span) : 0);
     signParent.push(sp);
     signOrder.push(so);
   }
@@ -443,9 +448,9 @@ export function travelOf(run: SpaceRun): Travel {
   let tripsAll = 0;
   let busAll = 0;
   let railAll = 0;
-  const kDist = new Float64Array(V).fill(Infinity);
+  const kDist = monthF64(V).fill(Infinity);
   const kNode = net.signNode[0];
-  const stats = new Float64Array(5);
+  const stats = monthF64(5);
 
   for (let pass = 0; pass < passes; pass++) {
     // Exact and route (rounded) weights.
@@ -467,19 +472,22 @@ export function travelOf(run: SpaceRun): Travel {
       railC = scratch('tr.railC', P * P).fill(Infinity);
       tripsH = [scratch('tr.t0', P * P), scratch('tr.t1', P * P), scratch('tr.t2', P * P)];
       if (anyBus || rail)
-        for (let s = 0; s < P; s++)
+        for (let s = 0; s < P; s++) {
+          const a = portD[s];
+          const busA = busD[a];
+          const railA = railD[a];
           for (let q = 0; q < P; q++) {
-            const a = portD[s];
             const b = portD[q];
             const rt = rail ? rail[a * DISTRICTS + b] : Infinity;
-            const bs = anyBus ? (busMax * Math.min(busD[a], busD[b]) * busPolicy) / 100 : 0;
-            const rs = rt !== Infinity ? (railMax * Math.min(railD[a], railD[b])) / 100 : 0;
+            const bs = anyBus ? (busMax * Math.min(busA, busD[b]) * busPolicy) / 100 : 0;
+            const rs = rt !== Infinity ? (railMax * Math.min(railA, railD[b])) / 100 : 0;
             const tot = bs + rs;
             const k = tot > tp.maxTransitShare ? tp.maxTransitShare / tot : 1;
             busS[s * P + q] = bs * k;
             railS[s * P + q] = rs * k;
             railC[s * P + q] = rt;
           }
+        }
     }
     // Times along the routes, with the exact factors.
     for (let s = 0; s < P; s++) {
@@ -561,7 +569,7 @@ export function travelOf(run: SpaceRun): Travel {
       bpr = districtBpr(net, tileLoad, alpha, maxRatio);
     }
   }
-  const meanLoad = new Float64Array(TILES);
+  const meanLoad = monthF64(TILES);
   for (let k = 0; k < R; k++) meanLoad[roads[k]] = loadSum[roads[k]] / passes;
   // And across months: blend this month's Load/Cap with last month's.
   const xNew = districtRatio(net, meanLoad, maxRatio);
@@ -571,19 +579,26 @@ export function travelOf(run: SpaceRun): Travel {
   // Outputs: the 64×64 matrix, signpost times, trips, congestion.
   const rt = routes as Routes;
   const portD = rt.portD;
-  const minutes = new Float64Array(DISTRICTS * DISTRICTS).fill(Infinity);
-  const trips = new Float64Array(DISTRICTS * DISTRICTS);
-  for (let s = 0; s < P; s++)
-    for (let q = 0; q < P; q++) {
-      const sq = s * P + q;
-      const ab = portD[s] * DISTRICTS + portD[q];
-      minutes[ab] = C[sq];
-      trips[ab] = (tripsH[0][sq] + tripsH[1][sq] + tripsH[2][sq]) * (1 - busS[sq] - railS[sq]);
+  const minutes = monthF64(DISTRICTS * DISTRICTS).fill(Infinity);
+  const trips = monthF64(DISTRICTS * DISTRICTS);
+  {
+    const t0 = tripsH[0];
+    const t1 = tripsH[1];
+    const t2 = tripsH[2];
+    for (let s = 0; s < P; s++) {
+      const rowAB = portD[s] * DISTRICTS;
+      for (let q = 0; q < P; q++) {
+        const sq = s * P + q;
+        const ab = rowAB + portD[q];
+        minutes[ab] = C[sq];
+        trips[ab] = (t0[sq] + t1[sq] + t2[sq]) * (1 - busS[sq] - railS[sq]);
+      }
     }
-  const toSignpost = [new Float64Array(DISTRICTS).fill(Infinity), new Float64Array(DISTRICTS).fill(Infinity), new Float64Array(DISTRICTS).fill(Infinity)];
+  }
+  const toSignpost = [monthF64(DISTRICTS).fill(Infinity), monthF64(DISTRICTS).fill(Infinity), monthF64(DISTRICTS).fill(Infinity)];
   for (let k = 0; k < 3; k++) {
     if (net.signNode[k] < 0 || rt.signCounts[k] <= 0) continue;
-    const dk = k === 0 ? kDist : new Float64Array(V);
+    const dk = k === 0 ? kDist : monthF64(V);
     if (k > 0) measure(net, w, rt.signParent[k], rt.signOrder[k], 0, rt.signCounts[k], dk);
     for (let s = 0; s < P; s++) toSignpost[k][portD[s]] = dk[rt.portN[s]];
   }
@@ -597,7 +612,7 @@ export function travelOf(run: SpaceRun): Travel {
     cd += l;
   }
 
-  const port = new Int16Array(DISTRICTS);
+  const port = monthI16(DISTRICTS);
   for (let d = 0; d < DISTRICTS; d++) port[d] = net.port[d];
   const slot: TravelSlot = {
     port,

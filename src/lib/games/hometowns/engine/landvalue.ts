@@ -14,6 +14,7 @@
 // ("+40 near jobs · +18 park · +15 river · −22 factory smoke"): landValueTerms.
 
 import type { Params } from './params';
+import { monthF64, monthU8 } from './pool';
 import { T_FOREST, T_HILL, T_SAND, T_WATER, TF_COAST, TF_RIVER, terrainElevation, terrainKind } from './terrain';
 import { CELLS, CELLS_PER_SIDE, MAP } from './tiles';
 import { STARS, type TownState } from './types';
@@ -132,7 +133,7 @@ export function landValueTerms(i: LandValueInputs, p: Params, c: number): [key: 
 
 /** LV* per cell, clamped to the plane's 1–250. */
 export function landValueTargets(i: LandValueInputs, p: Params): Float64Array {
-  const out = new Float64Array(CELLS);
+  const out = monthF64(CELLS);
   const [wj, wn, ws, wh, wc, wt] = p.landValue.weights;
   const [pp, pn, pc] = p.landValue.penalties;
   const base = p.fields.lvBase;
@@ -161,7 +162,7 @@ export function landValueTargets(i: LandValueInputs, p: Params): Float64Array {
 
 /** One month of the rate-capped move toward LV* (whole numbers, 1–250). */
 export function nextLandValue(lv: Uint8Array, target: Float64Array, cap: number): Uint8Array {
-  const out = new Uint8Array(CELLS);
+  const out = monthU8(CELLS);
   for (let c = 0; c < CELLS; c++) {
     const cur = lv[c];
     // A u8 plane would store a NaN as 0 and nothing downstream could tell: fail the month instead.

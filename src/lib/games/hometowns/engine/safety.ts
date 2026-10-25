@@ -17,6 +17,7 @@
 // figures.
 
 import type { Params } from './params';
+import { monthF64, monthI32 } from './pool';
 import { scratch, type SpaceModel } from './space';
 import { CELLS } from './tiles';
 
@@ -174,7 +175,7 @@ function spatial(i: CrimeInputs, p: Params): SpatialFactors {
   }
   let na = 0;
   for (let c = 0; c < CELLS; c++) if (weights[c] > 0) na++;
-  const active = new Int32Array(na);
+  const active = monthI32(na);
   na = 0;
   for (let c = 0; c < CELLS; c++) if (weights[c] > 0) active[na++] = c;
   const out: SpatialFactors = { youth, dens, lv, police, weights, active, neutral: { youth: 1, dens: db + ds * 0.5, lv: 1, police: 1 } };
@@ -186,7 +187,7 @@ function spatial(i: CrimeInputs, p: Params): SpatialFactors {
 export function crimeField(i: CrimeInputs, p: Params, off: SafetyFactor | null = null, keepField = true): CrimeResult {
   const f = spatial(i, p);
   const cp0 = crimePressure(i, p, off);
-  const crime = keepField ? new Float64Array(CELLS) : NO_FIELD;
+  const crime = keepField ? monthF64(CELLS) : NO_FIELD;
   const Y = off === 'youth' ? null : f.youth;
   const D = off === 'density' ? null : f.dens;
   const L = off === 'landValue' ? null : f.lv;

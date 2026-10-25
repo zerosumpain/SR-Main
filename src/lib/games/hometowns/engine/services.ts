@@ -18,10 +18,11 @@
 // Cap/(N/250 + N_R/150) compares.
 
 import { utilitiesOf } from './utilities';
-import { cellBox, falloff, modelOf, scratch, type BuildingInfo, type SpaceRun } from './space';
+import { cellBoxInto, falloff, modelOf, scratch, type BuildingInfo, type SpaceRun } from './space';
 import { CELLS, CELLS_PER_SIDE, TILES, cellOf } from './tiles';
 import { T_FOREST, T_WATER, terrainKind } from './terrain';
 import { flowsFor } from './core';
+import { monthF64 } from './pool';
 import { COVERAGES, FUNDING_KEYS, type CoverageKind, type CoverageSlot } from './types';
 
 export const COV: Record<CoverageKind, number> = { police: 0, fire: 1, health: 2, school: 3, fun: 4, culture: 5, nature: 6, transit: 7 };
@@ -46,8 +47,7 @@ const PARK_GROUP = 'park';
  * A weighted Manhattan blur over cells: out[c] = Σ_{d(c, c') ≤ reach} w[c']·(1 − d/(reach + 1)).
  * The nature terms (trees, water, parks within 3 cells, linear falloff).
  */
-export function diamondBlur(w: Float64Array, reach: number): Float64Array {
-  const out = new Float64Array(CELLS);
+export function diamondBlur(w: Float64Array, reach: number, out: Float64Array = new Float64Array(CELLS)): Float64Array {
   for (let c = 0; c < CELLS; c++) {
     const v = w[c];
     if (v === 0) continue;
@@ -89,8 +89,14 @@ export function terrainNature(terrain: Uint8Array, tree: number, water: number, 
   return out;
 }
 
-/** What the people within a building's radius ask of it, in its capacity's units, or 0 for no capacity rule. */
-function demandWithin(run: SpaceRun, b: BuildingInfo): { cap: number; demand: number } {
+/** Scratch: a building's cell box (cellBoxInto), and demandWithin's [cap, demand]. */
+const BOX = new Int32Array(4);
+/** Scratch: one building's coverage strengths (spreadBuilding reads the first nArr). */
+const SPREAD_STRENGTHS = new Float64Array(16);
+const CAP_DEMAND = new Float64Array(2);
+
+/** What the people within a building's radius ask of it, in its capacity's units (0 for no capacity rule): CAP_DEMAND [cap, demand]. */
+function demandWithin(run: SpaceRun, b: BuildingInfo): void {
   const def = b.def;
   const group = def.group;
   const m = modelOf(run);
@@ -98,12 +104,20 @@ function demandWithin(run: SpaceRun, b: BuildingInfo): { cap: number; demand: nu
   const isSchool = group === 'primary' || group === 'secondary';
   const isHealth = group === 'health';
   const hasCap = isSchool ? (def.seats ?? 0) > 0 : (group === 'police' || group === 'fire' || isHealth) && (def.capacity ?? 0) > 0;
-  if (!hasCap) return { cap: 0, demand: 0 };
+  if (!hasCap) {
+    CAP_DEMAND[0] = 0;
+    CAP_DEMAND[1] = 0;
+    return;
+  }
   let res = 0;
   let kids = 0;
   let ret = 0;
   const r = def.radius / 2;
-  const [x0, x1, y0, y1] = cellBox(b.cx, b.cy, def.radius);
+  cellBoxInto(b.cx, b.cy, def.radius, BOX);
+  const x0 = BOX[0];
+  const x1 = BOX[1];
+  const y0 = BOX[2];
+  const y1 = BOX[3];
   const cellRes = m.cellRes;
   const px = b.cx;
   const py = b.cy;
@@ -123,10 +137,19 @@ function demandWithin(run: SpaceRun, b: BuildingInfo): { cap: number; demand: nu
     }
   }
   const sec = p.people.secondaryShare;
-  if (group === 'primary') return { cap: def.seats ?? 0, demand: kids * (1 - sec) };
-  if (group === 'secondary') return { cap: def.seats ?? 0, demand: kids * sec };
-  if (isHealth) return { cap: (def.capacity ?? 0) / p.fields.healthPerBed, demand: res / p.fields.healthPerBed + ret / p.fields.healthPerBedRetired };
-  return { cap: def.capacity ?? 0, demand: res };
+  if (group === 'primary') {
+    CAP_DEMAND[0] = def.seats ?? 0;
+    CAP_DEMAND[1] = kids * (1 - sec);
+  } else if (group === 'secondary') {
+    CAP_DEMAND[0] = def.seats ?? 0;
+    CAP_DEMAND[1] = kids * sec;
+  } else if (isHealth) {
+    CAP_DEMAND[0] = (def.capacity ?? 0) / p.fields.healthPerBed;
+    CAP_DEMAND[1] = res / p.fields.healthPerBed + ret / p.fields.healthPerBedRetired;
+  } else {
+    CAP_DEMAND[0] = def.capacity ?? 0;
+    CAP_DEMAND[1] = res;
+  }
 }
 
 /** Share of `weights` (per cell) reached by the given buildings, each cell counting min(1, Σ falloff) (or inside-radius with `binary`). */
@@ -135,7 +158,11 @@ function reachShare(buildings: BuildingInfo[], weights: Float64Array, binary = f
   const f = scratch('sv.reach', CELLS);
   for (const b of buildings) {
     const radius = b.def.radius;
-    const [x0, x1, y0, y1] = cellBox(b.cx, b.cy, radius);
+    cellBoxInto(b.cx, b.cy, radius, BOX);
+    const x0 = BOX[0];
+    const x1 = BOX[1];
+    const y0 = BOX[2];
+    const y1 = BOX[3];
     const px = b.cx;
     const py = b.cy;
     for (let cy = y0; cy <= y1; cy++) {
@@ -173,7 +200,8 @@ function spreadBuilding(
   radius: number,
   cRadius: number,
   arrs: Float64Array[],
-  strengths: number[],
+  strengths: Float64Array,
+  nArr: number,
   lvBonusS: number,
   lvBonus: Float64Array,
   youthS: number,
@@ -181,9 +209,12 @@ function spreadBuilding(
   cultureS: number,
   culture: Float64Array,
 ): void {
-  const nArr = arrs.length;
   const reach = Math.max(radius > 0 ? radius : 0, cultureS > 0 ? cRadius : 0) / 2;
-  const [x0, x1, y0, y1] = cellBox(px, py, 2 * reach);
+  cellBoxInto(px, py, 2 * reach, BOX);
+  const x0 = BOX[0];
+  const x1 = BOX[1];
+  const y0 = BOX[2];
+  const y1 = BOX[3];
   for (let cy = y0; cy <= y1; cy++) {
     // cellDistance, with the row's term hoisted: (|dx| + |dy|) / 2 from the cell centres 2·c + 1.
     const dy = 2 * cy + 1 - py;
@@ -229,15 +260,16 @@ export function servicesOf(run: SpaceRun): Services {
   const m = modelOf(run);
   const util = run.derived?.utilities ?? utilitiesOf(run);
   const f = p.fields;
-  const cov = COVERAGES.map(() => new Float64Array(CELLS));
+  const cov: Float64Array[] = [];
+  for (let k = 0; k < COVERAGES.length; k++) cov.push(monthF64(CELLS));
   // Scratch where only this month's own steps read them (the published coverage arrays are fresh).
   const bus = scratch('sv.bus', CELLS);
   const rail = scratch('sv.rail', CELLS);
   const youth = scratch('sv.youth', CELLS);
-  const lvBonus = new Float64Array(CELLS);
+  const lvBonus = monthF64(CELLS);
   const parkW = scratch('sv.parkW', CELLS);
   const parkTiles = scratch('sv.parkTiles', CELLS);
-  const effect = new Float64Array(t.buildings.length);
+  const effect = monthF64(t.buildings.length);
   const staffNeeded = new Array<number>(t.buildings.length).fill(0);
   const staffDemand = [0, 0, 0];
   const busDepot = m.buildings.some((b) => b.active && b.def.id === 'busDepot');
@@ -252,6 +284,8 @@ export function servicesOf(run: SpaceRun): Services {
   let funVenue = false;
 
   const cul0 = cov[COV.culture];
+  const arrs: Float64Array[] = [];
+  const strengths = SPREAD_STRENGTHS;
   for (const b of m.buildings) {
     const def = b.def;
     if (b.complete) {
@@ -261,7 +295,9 @@ export function servicesOf(run: SpaceRun): Services {
     if (!b.active) continue;
     const powered = util.powered[b.anchor] === 1;
     const run1 = b.fundEffect * (powered ? 1 : f.unpoweredEffect) * (b.attach >= 0 ? 1 : f.noRoadEffect);
-    const { cap, demand } = demandWithin(run, b);
+    demandWithin(run, b);
+    const cap = CAP_DEMAND[0];
+    const demand = CAP_DEMAND[1];
     const capRatio = cap > 0 && demand > 0 ? Math.min(1, cap / demand) : 1;
     effect[b.index] = run1 * capRatio;
     const eff = run1 * capRatio * b.staffFill;
@@ -281,16 +317,16 @@ export function servicesOf(run: SpaceRun): Services {
         parkW[cellOf(ti)] += f.naturePark;
         parkTiles[cellOf(ti)] += 1;
       }
-    const arrs: Float64Array[] = [];
-    const strengths: number[] = [];
+    // The coverage arrays this building adds to and its strength in each (reused between buildings).
+    let nArr = 0;
     if (def.cover && !(def.id === 'busStop' && !busDepot))
       for (const k of COVERAGES) {
         const v = def.cover[k];
         if (!v) continue;
-        arrs.push(k === 'transit' ? (def.id === 'busStop' ? bus : rail) : cov[COV[k]]);
-        strengths.push(v * eff);
+        arrs[nArr] = k === 'transit' ? (def.id === 'busStop' ? bus : rail) : cov[COV[k]];
+        strengths[nArr] = v * eff;
+        nArr++;
       }
-    const nArr = arrs.length;
     const culture = def.culture ?? 0;
     const radius = def.radius;
     const youthClub = g === 'youth';
@@ -303,6 +339,7 @@ export function servicesOf(run: SpaceRun): Services {
       cRadius,
       arrs,
       strengths,
+      nArr,
       def.lvBonus ? def.lvBonus * run1 : 0,
       lvBonus,
       youthClub ? eff : 0,
@@ -314,7 +351,7 @@ export function servicesOf(run: SpaceRun): Services {
 
   // Nature: terrain trees and water, park tiles, and the buildings' own nature strength.
   const tn = terrainNature(m.terrain, f.natureTree, f.natureWater, f.natureReach);
-  const parks = diamondBlur(parkW, f.natureReach);
+  const parks = diamondBlur(parkW, f.natureReach, monthF64(CELLS));
   const nat = cov[COV.nature];
   const cul = cov[COV.culture];
   const tr = cov[COV.transit];
