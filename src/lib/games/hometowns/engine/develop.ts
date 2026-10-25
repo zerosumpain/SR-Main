@@ -390,26 +390,26 @@ export function farmDesirability(t: TownState, terrainByte: number, p: DevelopPa
   return L < -100 ? -100 : L > 100 ? 100 : L;
 }
 
-/** A cell's measured Place from the month's fields (M14b). */
-function placeFrom(cell: number, lv: Uint8Array, f: FieldsSlot, cov: CoverageSlot): Place {
-  const c = (k: number) => cov.cov[k]?.[cell] ?? 0;
+/** A cell's measured Place from the month's fields (M14b), written into `out` (the memo reuses one object for its 1,024 cells). */
+function placeInto(out: Place, cell: number, lv: Uint8Array, f: FieldsSlot, cov: CoverageSlot): Place {
+  const cv = cov.cov;
   const crime = f.crime[cell];
-  return {
-    lv: lv[cell],
-    poll: f.pollution[cell],
-    noise: f.noise[cell],
-    safety: 100 - crime,
-    crime,
-    school: c(COV_SCHOOL),
-    nature: c(COV_NATURE),
-    cust: f.custAccess[cell],
-    visitor: f.visitorAccess[cell],
-    freight: f.freight[cell],
-    fun: c(COV_FUN),
-    culture: c(COV_CULTURE),
-    transit: c(COV_TRANSIT),
-  };
+  out.lv = lv[cell];
+  out.poll = f.pollution[cell];
+  out.noise = f.noise[cell];
+  out.safety = 100 - crime;
+  out.crime = crime;
+  out.school = cv[COV_SCHOOL]?.[cell] ?? 0;
+  out.nature = cv[COV_NATURE]?.[cell] ?? 0;
+  out.cust = f.custAccess[cell];
+  out.visitor = f.visitorAccess[cell];
+  out.freight = f.freight[cell];
+  out.fun = cv[COV_FUN]?.[cell] ?? 0;
+  out.culture = cv[COV_CULTURE]?.[cell] ?? 0;
+  out.transit = cv[COV_TRANSIT]?.[cell] ?? 0;
+  return out;
 }
+const MEMO_PLACE: Place = { lv: 0, poll: 0, noise: 0, safety: 0, crime: 0, school: 0, nature: 0, cust: 0, visitor: 0, freight: 0, fun: 0, culture: 0, transit: 0 };
 
 // ---- Level caps (§3.3) -------------------------------------------------------------------------
 
@@ -925,7 +925,7 @@ export function stepDevelopMemo(t: TownState, m: MonthContext): void {
     out[M_CELL + c] = CB_KNOWN | Math.max(0, Math.min(20, Math.round((fc ?? 0) / 5))) | (vis ? CB_VISITOR : 0);
     const zs = zoneInCell[c];
     if (!zs) continue;
-    const place = placeFrom(c, lv, fields, cov);
+    const place = placeInto(MEMO_PLACE, c, lv, fields, cov);
     for (let z = 0; z < N_ZONES; z++) if (zs & (1 << z) && z !== ZF) out[M_L + z * N_CELLS + c] = encL(desirability(z, place, p));
   }
 

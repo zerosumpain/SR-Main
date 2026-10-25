@@ -59,6 +59,12 @@ const OFFICES = SECTORS.indexOf('offices');
 const IN_KEYS = [...STARS.map((s) => `mig.in.${s}`), 'mig.in.needs'];
 const OUT_KEYS = [...STARS.map((s) => `mig.out.${s}`), 'mig.out.needs'];
 const IN_KEYS_ALL = [...IN_KEYS, 'mig.in.gem', 'mig.in.fresh'];
+// The per-cohort flow and Why keys, built once rather than every month.
+const FLOW_OUT = Array.from({ length: COHORT_COUNT }, (_, k) => `mig.out.${k}`);
+const FLOW_IN = Array.from({ length: COHORT_COUNT }, (_, k) => `mig.in.${k}`);
+const FLOW_WAIT = Array.from({ length: COHORT_COUNT }, (_, k) => `mig.wait.${k}`);
+const ARRIVE_Q = COHORTS.map((c) => `arrive.${c}`);
+const DEPART_Q = COHORTS.map((c) => `depart.${c}`);
 
 /** Softmax over utilities at temperature T (stable: shifted by the maximum). */
 export function logit(v: readonly number[], temp: number): number[] {
@@ -267,8 +273,8 @@ export function stepMigration(t: TownState, m: MonthContext): void {
   }
 
   // ---- Whole people, housing limits and caps ----
-  const leave = cohorts.map((n, k) => Math.min(n, flow(t, `mig.out.${k}`, leaveRaw[k])));
-  const arrive = arriveRaw.map((x, k) => flow(t, `mig.in.${k}`, x));
+  const leave = cohorts.map((n, k) => Math.min(n, flow(t, FLOW_OUT[k] ?? `mig.out.${k}`, leaveRaw[k])));
+  const arrive = arriveRaw.map((x, k) => flow(t, FLOW_IN[k] ?? `mig.in.${k}`, x));
   const stayers = cohorts.map((n, k) => n - leave[k]);
   const waiting = t.applicants.map((a, k) => a + arrive[k]);
   const housed = houseNewcomers(stayers, hs.cap, waiting);
@@ -305,7 +311,7 @@ export function stepMigration(t: TownState, m: MonthContext): void {
     came += cameK[k];
     // Whoever is still waiting stays on the list; a quarter give up each month.
     const still = waiting[k] - cameK[k];
-    t.applicants[k] = Math.max(0, still - flow(t, `mig.wait.${k}`, still * pp.applicantDecay));
+    t.applicants[k] = Math.max(0, still - flow(t, FLOW_WAIT[k], still * pp.applicantDecay));
   }
 
   // Young adults, the long-term unemployed and the displaced who left are no longer counted.
@@ -328,8 +334,8 @@ export function stepMigration(t: TownState, m: MonthContext): void {
 
   // ---- Why (§5.19): log-share splits of arrivals and departures ----
   for (let k = 0; k < COHORT_COUNT; k++) {
-    const qIn = `arrive.${COHORTS[k]}`;
-    const qOut = `depart.${COHORTS[k]}`;
+    const qIn = ARRIVE_Q[k];
+    const qOut = DEPART_Q[k];
     if (cameK[k] !== 0 || arriveRaw[k] > 0) {
       m.why.add('mig.in.base', arriveRef[k], qIn);
       share(m, qIn, arriveRaw[k] - arriveRef[k], arriveTerms[k], IN_KEYS_ALL);

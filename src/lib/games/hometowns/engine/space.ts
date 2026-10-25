@@ -740,6 +740,30 @@ export function staffMixOf(def: BuildingDef): readonly number[] {
   return def.tier === 0 ? ENTRY_MIX_L1 : CIVIC_MIX;
 }
 
+const FOOTPRINTS = new Map<number, number[]>();
+
+/**
+ * The in-map tiles of a w×h footprint at (x, y), row by row: memoised and
+ * SHARED (BuildingInfo.tiles is read only), since every month rebuilt the
+ * same lists for every building.
+ */
+function footprintTiles(x: number, y: number, w: number, h: number): number[] {
+  const cacheable = Number.isInteger(x) && Number.isInteger(y) && x >= -64 && x < 192 && y >= -64 && y < 192 && Number.isInteger(w) && Number.isInteger(h) && w >= 0 && w < 64 && h >= 0 && h < 64;
+  const key = cacheable ? ((x + 64) * 256 + (y + 64)) * 4096 + w * 64 + h : -1;
+  if (cacheable) {
+    const hit = FOOTPRINTS.get(key);
+    if (hit) return hit;
+  }
+  const tiles: number[] = [];
+  for (let yy = y; yy < y + h; yy++)
+    for (let xx = x; xx < x + w; xx++) {
+      if (xx < 0 || yy < 0 || xx >= MAP || yy >= MAP) continue;
+      tiles.push(tileIndex(xx, yy));
+    }
+  if (cacheable) FOOTPRINTS.set(key, tiles);
+  return tiles;
+}
+
 /** Building i's footprint, status and attachment. */
 export function buildingInfos(t: TownState, net: RoadNet, construction: Uint8Array, p: Params, pop: number): BuildingInfo[] {
   const out: BuildingInfo[] = [];
@@ -751,20 +775,17 @@ export function buildingInfos(t: TownState, net: RoadNet, construction: Uint8Arr
     const [w, h] = footprint(def.w, def.h, b[B_ROT]);
     const x = b[B_X];
     const y = b[B_Y];
-    const tiles: number[] = [];
+    const tiles = footprintTiles(x, y, w, h);
     let attach = -1;
     let ad = 127;
-    for (let yy = y; yy < y + h; yy++)
-      for (let xx = x; xx < x + w; xx++) {
-        if (xx < 0 || yy < 0 || xx >= MAP || yy >= MAP) continue;
-        const ti = tileIndex(xx, yy);
-        tiles.push(ti);
-        const a = net.attach[ti];
-        if (a >= 0 && (net.attachDist[ti] < ad || (net.attachDist[ti] === ad && a < attach))) {
-          attach = a;
-          ad = net.attachDist[ti];
-        }
+    for (let k = 0; k < tiles.length; k++) {
+      const ti = tiles[k];
+      const a = net.attach[ti];
+      if (a >= 0 && (net.attachDist[ti] < ad || (net.attachDist[ti] === ad && a < attach))) {
+        attach = a;
+        ad = net.attachDist[ti];
       }
+    }
     const anchor = tileIndex(x, y);
     const complete = construction[anchor] === 0;
     const staffNeeded = staffNeededOf(def, pop);
