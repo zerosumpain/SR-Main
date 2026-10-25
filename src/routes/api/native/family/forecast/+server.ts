@@ -29,7 +29,7 @@ export const GET: RequestHandler = withNativeAccess('any', async (event, _identi
   const asked = Number(event.url.searchParams.get('days'));
   const days = [7, 28, 90].includes(asked) ? asked : 28;
   const { loadForecast } = await import('$lib/home/presence/forecast.server');
-  const { forecast, insights, homeId } = await loadForecast(viewer, days);
+  const { forecast, insights, homeId, cal } = await loadForecast(viewer, days);
   // Coming up — the owner's calendar planned against the routes, for the
   // phone's list and its leave-by reminders. The OWNER's phone only: it is the
   // owner's calendar, and a member (or the owner viewing as one) never gets it.
@@ -40,7 +40,7 @@ export const GET: RequestHandler = withNativeAccess('any', async (event, _identi
       import('$lib/home/presence/agenda.server'),
       import('$lib/home/presence/agenda'),
     ]);
-    upcoming = await loadAgenda({ routes: insights.routes, live: insights.live, homeId })
+    upcoming = await loadAgenda({ routes: insights.routes, live: insights.live, homeId, routines: forecast.routines, cal })
       .then(phoneAgenda)
       .catch(() => ({ available: false, items: [] }));
   }

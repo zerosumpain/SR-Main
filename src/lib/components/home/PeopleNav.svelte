@@ -1,9 +1,10 @@
 <script lang="ts">
-  let { active, owner = true }: { active: 'now' | 'places'; owner?: boolean } = $props();
+  let { active, owner = true }: { active: 'now' | 'forecast' | 'places'; owner?: boolean } = $props();
 </script>
 <nav class="people-nav" aria-label="People pages">
   <a href="/home/people" aria-current={active === 'now' ? 'page' : undefined}>Travel desk</a>
   {#if owner}
+    <a href="/home/people/forecast" aria-current={active === 'forecast' ? 'page' : undefined}>Forecast</a>
     <a href="/home/people/places" aria-current={active === 'places' ? 'page' : undefined}>Places map</a>
     <a class="settings" href="/admin/access">Household settings ↗</a>
   {/if}

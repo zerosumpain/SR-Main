@@ -119,6 +119,20 @@ describe('toIncomingFix', () => {
     }
   });
 
+  it('takes how the phone was moving as the mode, the e-bike mark first', () => {
+    const at = (over: Partial<HouseholdFix>) => toIncomingFix({ ...fix('a@example.test', '1'), ...over }).mode;
+    expect(at({ motion: 'automotive' })).toBe('vehicle');
+    expect(at({ motion: 'cycling' })).toBe('active');
+    expect(at({ motion: 'running' })).toBe('active');
+    expect(at({ motion: 'walking' })).toBe('walking');
+    expect(at({ motion: 'stationary' })).toBe('still');
+    // Core Motion calls a 25 km/h e-bike a car often enough; the bike mark knows better.
+    expect(at({ motion: 'automotive', bike: true })).toBe('active');
+    expect(at({ bike: true })).toBe('active');
+    // No answer, or one we do not know: the writer infers from speed as before.
+    for (const motion of [null, undefined, 'unknown', 'flying'] as Array<string | null | undefined>) expect(at({ motion })).toBeUndefined();
+  });
+
   it('reads a negative or missing speed as unknown', () => {
     expect(toIncomingFix(fix('a@example.test', '1', { speed: -1 })).speedKmh).toBeNull();
     expect(toIncomingFix(fix('a@example.test', '1', { speed: null })).speedKmh).toBeNull();

@@ -155,7 +155,7 @@ export async function recordFix(
       ? Math.round(reported * 10) / 10
       : speedKmhBetween(prev ? { ts: prev.ts, lat: prev.lat, lon: prev.lon } : null, fix.lat, fix.lon, ts);
 
-  let mode = inferMode(speedKmh);
+  let mode = fix.mode ?? inferMode(speedKmh);
   if (mode === 'vehicle') {
     // `priors` is newest-first; looksLikeRail wants newest-last, and the
     // current fix is the newest of all.

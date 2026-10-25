@@ -28,6 +28,7 @@ import {
   type RoutedTime,
 } from './agenda';
 import type { LiveState, RouteInsight } from './insights';
+import type { Routine, SchoolCalendar } from './forecast';
 import { DEFAULT_SUBJECT } from './types';
 
 export const CALENDAR_MAP_KEY = 'home.agenda.calendars';
@@ -140,6 +141,8 @@ export async function loadAgenda(input: {
   live: LiveState[];
   homeId: string | null;
   now?: Date;
+  routines?: Routine[];
+  cal?: SchoolCalendar;
 }): Promise<AgendaRead> {
   const now = input.now ?? new Date();
   const [{ readCalendar }, { loadExclusionSet }] = await Promise.all([
@@ -195,7 +198,7 @@ export async function loadAgenda(input: {
   if (geoDirty) await writeSetting(GEO_CACHE_KEY, geoCache).catch(() => {});
 
   const base = {
-    events, people, places, geos, routes: input.routes, live: input.live, homeId: input.homeId,
+    events, people, places, geos, routes: input.routes, live: input.live, homeId: input.homeId, routines: input.routines, cal: input.cal,
     ownerSubject: members.find((m) => m.subject === DEFAULT_SUBJECT)?.subject ?? members[0]?.subject ?? DEFAULT_SUBJECT,
     calendarMap, now,
   };

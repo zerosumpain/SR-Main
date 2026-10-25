@@ -248,6 +248,12 @@ export interface IncomingFix {
    * speed.
    */
   speedKmh?: number | null;
+  /**
+   * How the device itself said it was moving, as a trail mode (the app's
+   * Core Motion class, or its e-bike mark). Preferred over the mode a speed
+   * implies: a bike at 25 km/h is not a car, and a car in traffic is not a walk.
+   */
+  mode?: MovementMode | null;
 }
 
 /** The minimum a previous row has to expose to derive speed and mode. */

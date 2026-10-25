@@ -202,7 +202,7 @@ export function extractTrips(rows: InsightFix[], places: InsightPlace[], now: Da
         const moving = path.filter(p => +p.ts <= end);
         if (end - start >= 2 * MINUTE && end - start <= 4 * 60 * MINUTE && !adjacent(origin, f.placeId!, places)
           && metresBetween(path[0].lat, path[0].lon, pending[0].lat, pending[0].lon) >= MIN_JOURNEY_METRES) {
-          const fast = moving.filter(p => (p.speedKmh ?? 0) > 18 || p.mode === 'vehicle' || p.mode === 'rail').length;
+          const fast = moving.filter(fastFix).length;
           trips.push({ subject: f.subject, from: origin, to: f.placeId!, start, end, minutes: (end - start) / MINUTE,
             mode: fast > moving.length / 3 ? 'vehicle' : 'active', path: moving });
         }
@@ -276,6 +276,93 @@ export function normaliseReadings(rows: InsightFix[], heartbeatMaxS = HEARTBEAT_
   return out;
 }
 
+/**
+ * The longest silence of a sleeping app phone that still reads as "there".
+ * The app turns GPS off while the phone is still and is woken by leaving
+ * (region exit, significant change, visit departure), so its silence is
+ * stillness — a school day, a night. Past this a flat battery is likelier.
+ */
+export const SLEEP_BRIDGE_MAX_S = 16 * 3600;
+/** Still fixes looked back over to decide which place the phone fell asleep at. */
+const SLEEP_LOOKBACK_MS = 15 * MINUTE;
+/** Walking pace assumed for a phone that woke without knowing its speed. */
+const WAKE_SPEED_MPS = 1.4;
+
+/** The place a phone fell asleep at: the one most of its last still fixes sit in. */
+function sleepPlace(list: InsightFix[], i: number, places: InsightPlace[], now: number): InsightPlace | null {
+  const a = list[i] as Fix, counts = new Map<string, number>();
+  for (let k = i; k >= 0; k--) {
+    const f = list[k];
+    if (+a.ts - +f.ts > SLEEP_LOOKBACK_MS || !usableFix(f, now) || (f.speedKmh ?? 0) > 3
+      || metresBetween(f.lat, f.lon, a.lat, a.lon) > STILL_RADIUS_M) break;
+    const id = located(f, places).placeId;
+    if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  const best = [...counts].sort((x, y) => y[1] - x[1])[0];
+  return best ? places.find(p => p.id === best[0]) ?? null : null;
+}
+
+/**
+ * Put back the stays a sleeping app phone does not report. PURE.
+ *
+ * A Life360 phone repeats its reading every poll, and `normaliseReadings`
+ * turns the repeats into heartbeats; the app sends one still fix and goes
+ * quiet until it moves. Its first fix after waking is often already a few
+ * hundred metres out. Without heartbeats the stay before that and the trail
+ * into the journey are both a gap, and no trip is ever made — every app user's
+ * trips stopped the day they moved off Life360 (measured 2026-10-25).
+ *
+ * For each silence longer than `CONTINUOUS_GAP_MINS` between two app fixes
+ * (no reading age): if the phone fell asleep still inside a place, and woke
+ * either there or close enough to have left it in the last few minutes, still
+ * heartbeats at that place fill the silence until it left. The silence after
+ * the last fix runs to `now` the same way. Anything else stays a gap. Provider
+ * readings are never bridged.
+ */
+export function bridgeSleeps(rows: InsightFix[], places: InsightPlace[], now: Date): InsightFix[] {
+  const bySubject = new Map<string, InsightFix[]>();
+  for (const r of rows) {
+    const list = bySubject.get(r.subject) ?? [];
+    list.push(r); bySubject.set(r.subject, list);
+  }
+  const out: InsightFix[] = [];
+  for (const list of bySubject.values()) {
+    list.sort((x, y) => +x.ts - +y.ts);
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i], b: InsightFix | undefined = list[i + 1];
+      out.push(a);
+      // The last fix is a silence up to `now`: asleep since arriving home.
+      const until = b ? +b.ts : +now;
+      if (a.readingAgeS != null || (b && b.readingAgeS != null) || !usableFix(a, +now) || (b && !usableFix(b, +now))) continue;
+      if (until - +a.ts <= CONTINUOUS_GAP_MINS * MINUTE || (a.speedKmh ?? 0) > 3) continue;
+      // Past the cap a flat battery is likelier than a still phone: a gap.
+      if (until - +a.ts > SLEEP_BRIDGE_MAX_S * 1000) continue;
+      const place = sleepPlace(list, i, places, +now);
+      if (!place) continue;
+      let leftAt = until;
+      if (b) {
+        // Woke INSIDE another place (a visit wake on arriving): it went
+        // somewhere unseen; back-dating a departure would invent a trip.
+        const woke = located(b as Fix, places).placeId;
+        if (woke && woke !== place.id) continue;
+        const edge = Math.max(0, metresBetween(place.lat, place.lon, b.lat!, b.lon!) - place.radiusM);
+        const speed = (b.speedKmh ?? 0) > 1 ? b.speedKmh! / 3.6 : WAKE_SPEED_MPS;
+        leftAt = +b.ts - (edge / speed) * 1000;
+        // Woke too far out to have only just left: where it was meanwhile is unknown.
+        if (+b.ts - leftAt > (CONTINUOUS_GAP_MINS - 1) * MINUTE) continue;
+      }
+      const end = leftAt - 1000;
+      // At the fix's own spot if that is the place, else the place's centre (a
+      // fix flickering into an overlapping circle must not move the stay).
+      const at = located(a as Fix, places).placeId === place.id ? { lat: a.lat, lon: a.lon } : { lat: place.lat, lon: place.lon };
+      const beat = (t: number): InsightFix => ({ ...a, ...at, ts: new Date(t), speedKmh: 0, mode: 'still', placeId: place.id });
+      for (let t = +a.ts + 2 * MINUTE; t < end; t += 2 * MINUTE) out.push(beat(t));
+      if (end > +a.ts) out.push(beat(end));
+    }
+  }
+  return out.sort((x, y) => +x.ts - +y.ts);
+}
+
 /** Trips far beyond a route's usual time missed their arrival (a stay the
  *  trail did not see) — they are shown, never averaged. */
 export const BROKEN_TRIP_FACTOR = 3;
@@ -288,6 +375,14 @@ export function cleanDurations(minutes: number[]): { clean: number[]; broken: bo
 }
 
 function routeKey(t: Trip) { return `${t.subject}:${t.from}:${t.to}:${t.mode}`; }
+/** A fix in a vehicle: by its mode when the trail has a moving one, else by
+ *  speed. A mode the phone knew wins — a 25 km/h bike ride is not a drive,
+ *  and a car crawling in traffic is not a walk. */
+function fastFix(p: InsightFix): boolean {
+  if (p.mode === 'vehicle' || p.mode === 'rail') return true;
+  if (p.mode === 'active' || p.mode === 'walking') return false;
+  return (p.speedKmh ?? 0) > 18;
+}
 /** Match a fix to a historical polyline, returning progress and cross-track distance. */
 function progressOn(f: Fix, path: Fix[]): { fraction: number; distance: number } {
   const scale = Math.cos(f.lat * Math.PI / 180), lengths: number[] = [];
@@ -310,7 +405,7 @@ export function predictArrival(active: Fix[], trips: Trip[], places: InsightPlac
   const last = active.at(-1), previous = active.at(-2), first = active[0];
   if (!last || !previous || !first || +now - +last.ts > 3 * MINUTE || +now < +last.ts || !continuous(previous, last)
     || metresBetween(previous.lat, previous.lon, last.lat, last.lon) < 40) return null;
-  const mode = (last.speedKmh ?? 0) > 18 || last.mode === 'vehicle' || last.mode === 'rail' ? 'vehicle' : 'active';
+  const mode = fastFix(last) ? 'vehicle' : 'active';
   const grouped = new Map<string, Trip[]>();
   for (const t of trips) {
     const delta = Math.abs(minuteOfDay(t.start) - minuteOfDay(+first.ts));
@@ -366,6 +461,29 @@ export function liveState(subject: string, fixes: InsightFix[], active: Fix[], p
   }
   return { ...state, placeId: here, since: since.ts.toISOString() };
 }
+/** Trips grouped into learned routes, busiest first. PURE — the analysis and
+ *  the forecast's backtest (`forecast-eval.ts`) build routes the same way. */
+export function routesOf(allTrips: Trip[], places: InsightPlace[], people: InsightPerson[]): RouteInsight[] {
+  const routes = new Map<string, Trip[]>();
+  for (const t of allTrips) { const key = routeKey(t), list = routes.get(key) ?? []; list.push(t); routes.set(key, list); }
+  return [...routes].map(([id, list]): RouteInsight => {
+    const first = list[0], { clean: values, broken } = cleanDurations(list.map(t => t.minutes));
+    const morning = list.filter(t => minuteOfDay(t.start) >= 480 && minuteOfDay(t.start) < 540 && !weekend(t.start)).length;
+    return { id, subject: first.subject, person: people.find(p => p.subject === first.subject)?.displayName ?? first.subject,
+      fromId: first.from, toId: first.to, from: placeTitle(places.find(p => p.id === first.from)), to: placeTitle(places.find(p => p.id === first.to)),
+      samples: list.length, average: round(values.reduce((a, b) => a + b, 0) / values.length), median: round(percentile(values, 0.5)),
+      low: round(percentile(values, 0.1)), high: round(percentile(values, 0.9)), mode: first.mode,
+      departure: hhmm(circularMedianMinute(list.map(t => minuteOfDay(t.start)))), morning,
+      broken: broken.filter(Boolean).length,
+      trips: list.map((t, i) => ({ start: new Date(t.start).toISOString(), minutes: round(t.minutes), broken: broken[i] })) };
+  }).sort((a, b) => b.samples - a.samples);
+}
+/** One person's trips from their (normalised) rows, with a sleeping app phone's
+ *  stays put back first. The summaries are NOT bridged: a silence is still
+ *  unobserved time there. PURE. */
+export function tripsFrom(rows: InsightFix[], places: InsightPlace[], now: Date): { trips: Trip[]; active: Fix[] } {
+  return extractTrips(analysisFixes(bridgeSleeps(rows, places, now), now), places, now);
+}
 export function analysePresence(rows: InsightFix[], places: InsightPlace[], people: InsightPerson[], now: Date, days: number): PresenceInsights {
   const start = +now - days * DAY;
   rows = normaliseReadings(rows);
@@ -373,8 +491,9 @@ export function analysePresence(rows: InsightFix[], places: InsightPlace[], peop
   const legsByPerson = new Map<string, Leg[]>(), allTrips: Trip[] = [], activeByPerson = new Map<string, Fix[]>();
   const summaries: PersonInsight[] = [], live: LiveState[] = [];
   for (const person of people) {
-    const fixes = analysisFixes(rows.filter(f => f.subject === person.subject && +f.ts >= start && +f.ts <= +now), now);
-    const { trips, active } = extractTrips(fixes, places, now); allTrips.push(...trips); activeByPerson.set(person.subject, active);
+    const mine = rows.filter(f => f.subject === person.subject && +f.ts >= start && +f.ts <= +now);
+    const fixes = analysisFixes(mine, now);
+    const { trips, active } = tripsFrom(mine, places, now); allTrips.push(...trips); activeByPerson.set(person.subject, active);
     live.push(liveState(person.subject, fixes, active, places, now));
     const summary: PersonInsight = { ...person, observed: 0, coverage: 0, home: 0, away: 0, wander: 0, daylight: 0,
       stationary: 0, longestStill: 0, distanceKm: 0, places: 0, lastSeen: null };
@@ -439,21 +558,9 @@ export function analysePresence(rows: InsightFix[], places: InsightPlace[], peop
     }
     if (shared) together += (next - t) / MINUTE;
   }
-  const routes = new Map<string, Trip[]>();
-  for (const t of allTrips) { const key = routeKey(t), list = routes.get(key) ?? []; list.push(t); routes.set(key, list); }
   return { generatedAt: now.toISOString(), days, people: summaries, live, together: round(together),
     daily: [...daily.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({ ...d, observed: round(d.observed), wander: round(d.wander), daylight: round(d.daylight) })),
     groups: [...groups].map(([key, minutes]) => ({ subjects: key.split('|'), names: key.split('|').map(s => people.find(p => p.subject === s)?.displayName ?? s), minutes: round(minutes) })).sort((a, b) => b.minutes - a.minutes),
-    routes: [...routes].map(([id, list]): RouteInsight => {
-      const first = list[0], { clean: values, broken } = cleanDurations(list.map(t => t.minutes));
-      const morning = list.filter(t => minuteOfDay(t.start) >= 480 && minuteOfDay(t.start) < 540 && !weekend(t.start)).length;
-      return { id, subject: first.subject, person: people.find(p => p.subject === first.subject)?.displayName ?? first.subject,
-        fromId: first.from, toId: first.to, from: placeTitle(places.find(p => p.id === first.from)), to: placeTitle(places.find(p => p.id === first.to)),
-        samples: list.length, average: round(values.reduce((a, b) => a + b, 0) / values.length), median: round(percentile(values, 0.5)),
-        low: round(percentile(values, 0.1)), high: round(percentile(values, 0.9)), mode: first.mode,
-        departure: hhmm(circularMedianMinute(list.map(t => minuteOfDay(t.start)))), morning,
-        broken: broken.filter(Boolean).length,
-        trips: list.map((t, i) => ({ start: new Date(t.start).toISOString(), minutes: round(t.minutes), broken: broken[i] })) };
-    }).sort((a, b) => b.samples - a.samples),
+    routes: routesOf(allTrips, places, people),
     arrivals: people.map(p => predictArrival(activeByPerson.get(p.subject) ?? [], allTrips, places, p, now)).filter((a): a is ArrivalInsight => a != null) };
 }
