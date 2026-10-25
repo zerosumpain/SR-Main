@@ -594,7 +594,17 @@ describe('Keep the town growing: jobs and services for the next tier (G3)', () =
     const lanes = notes(k.t, 'deputy.awayRoad');
     expect(lanes.length).toBeGreaterThan(1); // a card a lane
     expect(lanes.length).toBeLessThanOrEqual(GROWTH_LANES);
-    expect(k.t.deputyUndo!.filter((e) => e.planId === `deputy.${k.c.dayIndex}.road`)).toHaveLength(lanes.length);
+    const ids = k.t.deputyUndo!.filter((e) => e.planId.startsWith(`deputy.${k.c.dayIndex}.road`)).map((e) => e.planId);
+    expect(ids).toHaveLength(lanes.length);
+    expect(new Set(ids).size).toBe(ids.length); // a planId a lane, so undoing one never takes another
+    // The newest lane first (a later lane may branch off an earlier one): each undo takes exactly its own lane.
+    for (const id of [...ids].reverse()) {
+      const before = k.t.deputyUndo!.length;
+      expect(applyUndo(k.t, id, { params: P, dayIndex: k.c.dayIndex, profile: 'adult' }).ok).toBe(true);
+      expect(k.t.deputyUndo!.length).toBe(before - 1);
+      expect(k.t.deputyUndo!.some((e) => e.planId === id)).toBe(false);
+      expect(() => applyUndo(k.t, id, { params: P, dayIndex: k.c.dayIndex, profile: 'adult' })).toThrow();
+    }
     expect(lots(k.t, Z_INDUSTRY, false)).toBeGreaterThan(0);
     expect(lots(k.t, Z_INDUSTRY, false)).toBeLessThanOrEqual(24);
   });

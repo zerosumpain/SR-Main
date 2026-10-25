@@ -487,13 +487,15 @@ function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number,
     }
   }
   if (!best) return false;
+  // A planId a lane: growth help may lay up to GROWTH_LANES a day, and the undo of one must not take another.
+  const nth = memo.roadsToday! > 1 ? `.${memo.roadsToday}` : '';
   try {
-    applyBuild(t, `deputy.${m.dayIndex}.road`, [{ op: 'road', kind: 'lane', path: [best.x0, best.y0, best.x1, best.y1] }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid', deputy: true });
+    applyBuild(t, `deputy.${m.dayIndex}.road${nth}`, [{ op: 'road', kind: 'lane', path: [best.x0, best.y0, best.x1, best.y1] }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid', deputy: true });
   } catch (e) {
     if (e instanceof EngineError) return false;
     throw e;
   }
-  deputyNote(t, m, 'awayRoad', { tiles: best.n, cost: best.cost }, memo.roadsToday! > 1 ? String(memo.roadsToday) : undefined); // a card a lane
+  deputyNote(t, m, 'awayRoad', { tiles: best.n, cost: best.cost }, nth ? nth.slice(1) : undefined); // a card a lane
   return true;
 }
 
