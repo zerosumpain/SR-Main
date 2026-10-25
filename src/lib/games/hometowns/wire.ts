@@ -106,6 +106,12 @@ function mapFor<V>(store: WeakMap<object, Map<string, V>>, room: object): Map<st
   return m;
 }
 
+/** An erased player (hometowns.ts `erasePlayer`): what this process remembers sending them, and their seat's probe. */
+export function forgetViewer(room: object, playerId: string, seat: string | null): void {
+  VERSIONS.get(room)?.delete(playerId);
+  if (seat) PROBES.get(room)?.delete(seat);
+}
+
 const hashJson = (v: unknown): string => fnv64(JSON.stringify(v ?? null));
 
 // ---- The derived block -----------------------------------------------------------------------------

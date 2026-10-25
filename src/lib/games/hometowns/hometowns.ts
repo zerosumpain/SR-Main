@@ -60,8 +60,10 @@ import {
   type ParamsVersion,
   type SeatSettings,
 } from './engine/index';
+import type { RoomBase } from '../catalogue';
+import { eraseMayor, formerSeat } from './erase-mayor';
 import { closePushWindow, emptyPush, openPushWindow, prunePushWindow, type PushState } from './push';
-import { toWire as wireFor, type WireOptions } from './wire';
+import { forgetViewer, toWire as wireFor, type WireOptions } from './wire';
 
 export const GAME = 'hometowns' as const;
 /** Stored shape; bump with a migration in MIGRATIONS (A38). */
@@ -208,12 +210,26 @@ function seatDefaults(parent: boolean): SeatSettings {
 
 function seatPlayer(room: Room, p: Player, parent: boolean): void {
   if (p.seat) return;
-  const taken = room.players.filter((q) => q.seat !== null).length;
+  // Every seat label in use: a player's, a town's and a seat's settings. A
+  // new seat is the first label none of them holds. Counting players alone
+  // would collide after an erasure (s1, s3, s4 left: "s4" again); an erased
+  // mayor's label is free, since `eraseMayor` replaced it everywhere, and
+  // their town still holds its site under a placeholder (A33), so it counts
+  // towards the six.
+  const c = room.county;
+  const used = new Set<string>([
+    ...room.players.map((q) => q.seat).filter((s): s is string => s !== null),
+    ...c.towns.map((t) => t.seat),
+    ...Object.keys(c.settings.perSeat),
+  ]);
+  const taken = new Set([...room.players.map((q) => q.seat).filter((s): s is string => s !== null), ...c.towns.map((t) => t.seat)]).size;
   if (taken >= MAX_SEATS) throw new GameError(409, `${room.county.name} is full: six mayors already.`);
-  const seat = `s${taken + 1}`;
+  let n = 1;
+  while (used.has(`s${n}`)) n++;
+  const seat = `s${n}`;
   p.seat = seat;
-  room.county.settings.perSeat[seat] = seatDefaults(parent);
-  if (parent && !room.county.parents.includes(seat)) room.county.parents.push(seat);
+  c.settings.perSeat[seat] = seatDefaults(parent);
+  if (parent && !c.parents.includes(seat)) c.parents.push(seat);
 }
 
 function bump(room: Room, now: number): void {
@@ -489,7 +505,66 @@ export function revive(state: Record<string, unknown>, fromSchema: number, now =
   return room;
 }
 
-export const durable = { schema: SCHEMA, revive, reviveAll: true };
+/**
+ * Erasing an account (`$lib/people/erase`, catalogue `durable.erasePlayer`):
+ * the county is kept for everybody else. The engine side is `eraseMayor`
+ * (their town archived and renamed "Old Town <n>", their seat a placeholder
+ * everywhere in the CountyState); this takes them out of the room around it:
+ *   - `players`: their row goes, name and all;
+ *   - `viewing`: their own entry goes, and anybody visiting their town now
+ *     visits it under its placeholder (or comes home when they had no town);
+ *   - `push.open`: their seat leaves the day's push window (closed if it was
+ *     the only one); `push.tiers` is by town index and names nobody;
+ *   - the in-memory presence and wire caches keyed by their seat or id;
+ *   - `hostId`: a host who is erased passes it to another joined parent, or
+ *     the room is deleted after all (null), as the contract asks;
+ *   - with no joined mayor left the county closes (A33), like a last leave.
+ * `queued` and `setup` hold settings only, never a seat or a person. Pure
+ * apart from those caches; in place on the copy the registry hands over.
+ */
+export function erasePlayer(room: Room, playerId: string, now: number): Room | null {
+  const p = room.players.find((q) => q.id === playerId);
+  if (!p) return room;
+  const c = room.county;
+  const seat = p.seat;
+  if (seat) {
+    const index = eraseMayor(c, { seat, ownerId: playerId });
+    const placeholder = index === null ? null : formerSeat(c.towns[index].site);
+    const viewing: Record<string, string | null> = {};
+    for (const [k, v] of Object.entries(room.viewing ?? {})) if (k !== seat) viewing[k] = v === seat ? placeholder : v;
+    room.viewing = viewing;
+    const open = room.push?.open;
+    if (open) {
+      const seats = open.seats.filter((s) => s !== seat && s !== placeholder);
+      room.push.open = seats.length ? { ...open, seats } : null;
+    }
+    RECENT.get(room)?.delete(seat);
+    forgetViewer(room, playerId, seat);
+  } else forgetViewer(room, playerId, null);
+  room.players = room.players.filter((q) => q.id !== playerId);
+  if (!room.players.length) return null;
+  const rest = room.players.filter((q) => q.status === 'joined' && q.seat);
+  const parentOf = (q: Player) => !!q.seat && c.parents.includes(q.seat);
+  if (!rest.length) {
+    // A33: the last mayor gone closes the county. A closed room still names a person as its host.
+    room.phase = 'closed';
+    if (room.hostId === playerId) room.hostId = (room.players.find(parentOf) ?? room.players[0]).id;
+  } else if (room.hostId === playerId) {
+    const parent = rest.find(parentOf);
+    if (!parent) return null;
+    room.hostId = parent.id;
+  }
+  bump(room, now);
+  return room;
+}
+
+export const durable = {
+  schema: SCHEMA,
+  revive,
+  reviveAll: true,
+  erasePlayer: (room: RoomBase, playerId: string, now: number): RoomBase | null =>
+    erasePlayer(room as unknown as Room, playerId, now) as unknown as RoomBase | null,
+};
 export const paces = ['async'] as const;
 export const maxPlayers = MAX_SEATS;
 

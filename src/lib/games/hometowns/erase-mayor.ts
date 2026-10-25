@@ -1,9 +1,11 @@
 // Erasing a mayor from a county (spec §10.14, §20 A33): their town is
 // archived and everything that names them is scrubbed, while every other
-// town, link and ledger in the county carries on. The game's
-// `durable.erasePlayer` (the server adapter's) calls this on the room's
-// county, then takes the person off the room's own player list; the
-// registry then checks that the player id appears nowhere (`erase-seat.ts`).
+// town, link and ledger in the county carries on. The adapter's
+// `durable.erasePlayer` (hometowns.ts `erasePlayer`) calls this on the room's
+// county with the mayor's seat and player id, then scrubs the room around it
+// (players, visits, the push window, the host) and closes a county left with
+// nobody; the registry then checks that the player id and name appear
+// nowhere (`erase-seat.ts` keepSeat) and deletes the room if either does.
 //
 // What archiving does to the economy — links closing at the next Regional
 // Day, contracts ending without penalty, intents dropped — is the engine's,
@@ -71,7 +73,8 @@ function replaceDeep(value: unknown, swaps: readonly [string, string][]): unknow
 
 /**
  * Archive and scrub the town of the mayor seated as `seat` (or owned by
- * `ownerId`, the player id the adapter founded it with). Returns the town's
+ * `ownerId`: the adapter founds a town with its seat as the owner, and passes
+ * the player id here too, so either finds it). Returns the town's
  * index, or null when they had no town yet (their seat is still taken out of
  * the county's settings, parents and log). Safe to run twice.
  */
