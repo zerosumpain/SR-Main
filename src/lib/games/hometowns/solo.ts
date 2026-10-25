@@ -26,8 +26,18 @@ export function soloMayor(room: Pick<Room, 'phase' | 'players'>): Room['players'
   return joined.length === 1 ? joined[0] : null;
 }
 
+/**
+ * The sole mayor who may pause (and so hold an uncapped pause): soloMayor, on a
+ * parent's seat, else null. A pause left over from before decision 13 in a
+ * county whose only mayor is now a child keeps its season cap, since that
+ * child cannot end it.
+ */
+export function soloPauser(room: Pick<Room, 'phase' | 'players' | 'county'>): Room['players'][number] | null {
+  const solo = soloMayor(room);
+  return solo && room.county.parents.includes(solo.seat!) ? solo : null;
+}
+
 /** Whether `playerId` may pause the county now: its sole mayor, on a parent's seat. */
 export function canPause(room: Pick<Room, 'phase' | 'players' | 'county'>, playerId: string): boolean {
-  const solo = soloMayor(room);
-  return !!solo && solo.id === playerId && room.county.parents.includes(solo.seat!);
+  return soloPauser(room)?.id === playerId;
 }

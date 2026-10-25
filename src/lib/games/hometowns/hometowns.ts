@@ -63,7 +63,7 @@ import {
 import type { RoomBase } from '../catalogue';
 import { eraseMayor, formerSeat } from './erase-mayor';
 import { closePushWindow, emptyPush, openPushWindow, prunePushWindow, type PushState } from './push';
-import { SOLO_PAUSE_MESSAGE, seatedMayors, soloMayor } from './solo';
+import { SOLO_PAUSE_MESSAGE, seatedMayors, soloMayor, soloPauser } from './solo';
 import { forgetViewer, toWire as wireFor, type WireOptions } from './wire';
 
 export const GAME = 'hometowns' as const;
@@ -437,8 +437,9 @@ export function advance(room: Room, now: number, _rng?: Rng): boolean {
   const p = paramsFor(c.paramsVersion);
   let changed = false;
   let mutated = false;
-  // A solo pause lasts until its mayor resumes; one from before decision 13 keeps its season cap.
-  if (c.pause && !soloMayor(room) && c.pauseUsedMs + (now - c.pause.since) >= PAUSE_MAX_MS) {
+  // A solo pause lasts until its mayor resumes; any other (one from before decision 13, or one a
+  // child is left alone with and cannot end) keeps its season cap.
+  if (c.pause && !soloPauser(room) && c.pauseUsedMs + (now - c.pause.since) >= PAUSE_MAX_MS) {
     setPause(c, false, now);
     changed = true;
   }
@@ -475,7 +476,7 @@ export function deadline(room: Room): number | null {
   // A40: the heartbeats stop once 90 days pass with no hello; the row then expires as abandoned.
   const beat = room.heartbeatAt + p.clock.heartbeatMs;
   const heartbeat = beat - c.lastHelloAt > p.social.napHeartbeatMaxDays * DAY_MS ? null : beat;
-  if (c.pause && soloMayor(room)) return heartbeat;
+  if (c.pause && soloPauser(room)) return heartbeat;
   if (c.pause) {
     const end = c.pause.since + Math.max(0, PAUSE_MAX_MS - c.pauseUsedMs);
     return heartbeat === null ? end : Math.min(end, heartbeat);

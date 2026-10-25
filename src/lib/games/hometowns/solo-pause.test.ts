@@ -111,6 +111,24 @@ describe('pause is solo only', () => {
     expect(room.county.pause).toBeNull();
   });
 
+  it('a pause from before decision 13 left with a child as the sole mayor keeps its 21-day cap', () => {
+    const room = newRoom([kid]);
+    join(room, kid.id, T0);
+    start(room, host.id, T0);
+    let now = foundAndSprint(room, T0 + 1000);
+    now = foundAndSprint(room, now, kid.id, 1);
+    // As a row from before the rule would hold it.
+    room.county.pause = { since: now };
+    leave(room, host.id, now + MIN);
+    expect(canPause(room, kid.id)).toBe(false);
+    drain(room, now + 2 * MIN);
+    expect(room.county.pause).not.toBeNull();
+    const end = deadline(room)!;
+    expect(end).toBeLessThanOrEqual(now + PAUSE_MAX_MS);
+    drain(room, now + PAUSE_MAX_MS);
+    expect(room.county.pause).toBeNull();
+  });
+
   it('a second mayor joining ends the pause exactly as an explicit unpause at that instant does', () => {
     function paused(): { room: Room; now: number } {
       const room = newRoom([kid]);
