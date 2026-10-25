@@ -5,6 +5,7 @@ import { db } from '$lib/db';
 import { jkaiBuilds, jkaiIterations, jkaiLogs } from '$lib/db/schema';
 import { desc, eq, and, asc } from 'drizzle-orm';
 import { resolvePublishSlug } from '$lib/jkai/publish-slug';
+import { isStaticProjectKey } from '$lib/projects/visibility';
 import { publishedLink } from '$lib/builds/published-link';
 
 /**
@@ -275,7 +276,7 @@ register({
       if (!build) return { success: false, error: 'Build not found' };
 
       const requested = typeof args.slug === 'string' ? args.slug.trim() : '';
-      const resolved = resolvePublishSlug(build, requested);
+      const resolved = resolvePublishSlug(build, requested, isStaticProjectKey);
       if (!resolved.ok) return { success: false, error: resolved.error };
       const slug = resolved.slug;
 
