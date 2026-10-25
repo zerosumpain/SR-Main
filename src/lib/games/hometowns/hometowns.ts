@@ -710,7 +710,9 @@ function applySettings(room: Room, seat: string, cmd: Extract<Command, { type: '
   const patch: Partial<SeatSettings> = {};
   if (seatPatch) {
     target = typeof seatPatch.seat === 'string' ? seatPatch.seat : seat;
-    const now0 = c.settings.perSeat[target];
+    // Own keys only: a posted seat of '__proto__' or 'constructor' must not
+    // reach Object.prototype through the Object.assign below.
+    const now0 = Object.hasOwn(c.settings.perSeat, target) ? c.settings.perSeat[target] : undefined;
     if (!now0) throw new GameError(404, 'That mayor isn’t in this county.');
     if ('profile' in seatPatch) {
       if (seatPatch.profile !== 'kid' && seatPatch.profile !== 'adult') throw new GameError(400, 'A seat is a child’s or an adult’s.');

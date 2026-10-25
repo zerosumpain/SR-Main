@@ -269,6 +269,17 @@ describe('settings, pause and nap', () => {
     expect(room.queued).toBeNull();
   });
 
+  it('refuses a seat named after an Object.prototype key, and never touches the prototype', () => {
+    const room = newRoom(devCounty(), [kid]);
+    join(room, kid.id, T0);
+    start(room, host.id, T0);
+    for (const [i, seat] of ['__proto__', 'constructor', 'toString'].entries()) {
+      expect(() => play(room, host.id, 'settings', { moveId: `p${i}`, seat: { seat, profile: 'adult', pushes: true } }, T0)).toThrow('isn’t in this county');
+    }
+    expect(({} as Record<string, unknown>).profile).toBeUndefined();
+    expect(({} as Record<string, unknown>).pushes).toBeUndefined();
+  });
+
   it('a paused county writes a weekly heartbeat, and the pause ends by itself after 21 days', () => {
     const room = newRoom({ county: { seed: 7 } });
     start(room, host.id, T0);
