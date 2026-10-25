@@ -615,6 +615,91 @@ export function departureGrid(routes: RouteInsight[], fromIds: Set<string>): num
   return grid;
 }
 
+// ── The day ahead ───────────────────────────────────────────────────────────
+
+/** Most journeys chained into one person's day. */
+const AHEAD_MAX_TRIPS = 6;
+
+export type AheadSegment =
+  | { kind: 'stay'; placeId: string | null; place: string; from: string; to: string; open: boolean }
+  | {
+      kind: 'trip'; fromId: string; toId: string; from: string; to: string;
+      leave: string; arriveFrom: string; arriveTo: string; arrive: string;
+      confidence: 'live' | 'established' | 'emerging'; routineId: string | null;
+    };
+
+export interface DayAhead {
+  subject: string;
+  /** Local midnight that ends the day. */
+  until: string;
+  segments: AheadSegment[];
+}
+
+/** The instant of the next local midnight after `now`. */
+function nextMidnight(now: number): number {
+  return now + (1440 - localClock(now).minute) * MINUTE - (now % MINUTE);
+}
+
+/**
+ * Each person's rest of today, as their routines would have it: where they
+ * are, then each dependable routine from there in turn — leave, the journey's
+ * arrival window, the next place — to midnight. A live journey with an ETA
+ * starts the chain where it is going. Someone whose place is unknown, or on a
+ * journey with no ETA, gets no day: a guess from nowhere is not a plan. PURE.
+ */
+export function dayAhead(
+  routines: Routine[], live: LiveState[], arrivals: ArrivalInsight[], now: Date,
+  corrections: readonly ForecastCorrection[] = [], cal: SchoolCalendar = NO_SCHOOL_CALENDAR,
+): DayAhead[] {
+  const clock = localClock(now);
+  const until = nextMidnight(+now);
+  const out: DayAhead[] = [];
+  for (const state of live) {
+    const segments: AheadSegment[] = [];
+    let placeId: string | null = state.placeId, place = '', at = +now;
+    const arrival = arrivals.find((a) => a.subject === state.subject);
+    if (arrival && !corrections.some((c) => c.kind === 'arriving' && c.subject === state.subject && c.departedAt === arrival.departedAt)) {
+      segments.push({
+        kind: 'trip', fromId: '', toId: arrival.toId, from: arrival.from, to: arrival.to, leave: arrival.departedAt,
+        arriveFrom: arrival.earliest, arriveTo: arrival.latest, arrive: arrival.eta, confidence: 'live', routineId: null,
+      });
+      placeId = arrival.toId; place = arrival.to; at = Date.parse(arrival.eta);
+    } else if (!state.placeId || state.moving) continue;
+    const taken = new Set<string>();
+    for (let n = 0; n < AHEAD_MAX_TRIPS && placeId && at < until; n++) {
+      const minute = localClock(at).minute;
+      const next = routines
+        .filter((r) => r.subject === state.subject && r.fromId === placeId && runsOn(r, clock) && !offForHoliday(r, cal, clock.date))
+        .filter((r) => !taken.has(r.id) && !ranToday(r, clock.date) && !correctedToday(r, corrections, clock.date))
+        .filter((r) => correctedShare(r, corrections) >= NEXT_MIN_SHARE)
+        // Still to come: leaves after we get there (a late start up to the end of its window).
+        .filter((r) => clockDelta(r.window[1], minute) >= 0 && r.departureMin + r.minutes.median < 1440)
+        .sort((a, b) => a.departureMin - b.departureMin)[0];
+      const fromName = place || next?.from || routines.find((r) => r.fromId === placeId)?.from || '';
+      if (!next) {
+        segments.push({ kind: 'stay', placeId, place: fromName, from: new Date(at).toISOString(), to: new Date(until).toISOString(), open: true });
+        break;
+      }
+      taken.add(next.id);
+      const leave = Math.max(at, atLocalMinute(+now, next.departureMin));
+      segments.push({ kind: 'stay', placeId, place: fromName, from: new Date(at).toISOString(), to: new Date(leave).toISOString(), open: false });
+      const arrive = leave + next.minutes.median * MINUTE;
+      segments.push({
+        kind: 'trip', fromId: next.fromId, toId: next.toId, from: next.from, to: next.to, leave: new Date(leave).toISOString(),
+        arriveFrom: new Date(leave + next.minutes.low * MINUTE).toISOString(), arriveTo: new Date(leave + next.minutes.high * MINUTE).toISOString(),
+        arrive: new Date(arrive).toISOString(),
+        confidence: next.days >= 8 && !correctedDays(next, corrections).length ? 'established' : 'emerging', routineId: next.id,
+      });
+      placeId = next.toId; place = next.to; at = arrive;
+      if (n === AHEAD_MAX_TRIPS - 1 && at < until) {
+        segments.push({ kind: 'stay', placeId, place, from: new Date(at).toISOString(), to: new Date(until).toISOString(), open: true });
+      }
+    }
+    if (segments.length) out.push({ subject: state.subject, until: new Date(until).toISOString(), segments });
+  }
+  return out;
+}
+
 // ── The whole forecast ──────────────────────────────────────────────────────
 
 export interface FamilyForecast {
@@ -628,6 +713,8 @@ export interface FamilyForecast {
   departures: number[][];
   /** Where each person at a known place is likeliest to go next. */
   odds: PlaceOdds[];
+  /** Each person's rest of today, chained from their routines. */
+  ahead: DayAhead[];
 }
 
 /**
@@ -654,5 +741,6 @@ export function buildForecast(
     arrivals: insights.arrivals,
     departures: departureGrid(insights.routes, mainHome ? new Set([mainHome]) : homeIds),
     odds: oddsFor(insights.routes, insights.live, now, cal),
+    ahead: dayAhead(routines, insights.live, insights.arrivals, now, corrections, cal),
   };
 }

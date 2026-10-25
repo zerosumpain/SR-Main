@@ -5,6 +5,7 @@ import {
   predictionBand,
   placeOdds,
   oddsFor,
+  dayAhead,
   correctedShare,
   departureGrid,
   learnedTravel,
@@ -294,5 +295,37 @@ describe('where next: the odds', () => {
     const moving: LiveState = { subject: 'alex', placeId: null, since: null, lastSeen: null, moving: { fromId: 'home', departedAt: '2026-09-28T06:55:00Z' } };
     expect(oddsFor([town, station], [atHome()], new Date('2026-09-28T07:00:00Z'))).toHaveLength(1);
     expect(oddsFor([town, station], [moving], new Date('2026-09-28T07:00:00Z'))).toHaveLength(0);
+  });
+});
+
+describe('the day ahead', () => {
+  const inbound = route({ id: 'alex:school:home:vehicle', fromId: 'school', toId: 'home', from: 'School', to: 'Home', starts: WEEKDAYS.slice(0, 12).map((d) => `${d}T14:30:00Z`) });
+  const routines = routinesOf([schoolRun(), inbound], new Date('2026-09-28T05:00:00Z'), 28);
+
+  it('chains home → school → home to midnight', () => {
+    const [day] = dayAhead(routines, [atHome('alex', '2026-09-28T05:55:00Z')], [], new Date('2026-09-28T06:00:00Z'));
+    expect(day.segments.map((s) => (s.kind === 'stay' ? `stay:${s.place}` : `trip:${s.to}`))).toEqual([
+      'stay:Home', 'trip:School', 'stay:School', 'trip:Home', 'stay:Home',
+    ]);
+    const last = day.segments.at(-1)!;
+    expect(last.kind === 'stay' && last.open).toBe(true);
+    expect(day.until).toBe('2026-09-28T23:00:00.000Z');
+  });
+
+  it('starts from a live journey’s destination, and gives no day to someone nowhere', () => {
+    const arriving = { id: 'a', subject: 'alex', person: 'Alex', from: 'Home', to: 'School', toId: 'school', departedAt: '2026-09-28T07:20:00Z',
+      observedAt: '2026-09-28T07:28:00Z', eta: '2026-09-28T07:37:00Z', earliest: '2026-09-28T07:35:00Z', latest: '2026-09-28T07:40:00Z',
+      minutesLeft: 9, samples: 12, confidence: 'established' as const, returningHome: false };
+    const moving: LiveState = { subject: 'alex', placeId: null, since: null, lastSeen: '2026-09-28T07:28:00Z', moving: { fromId: 'home', departedAt: '2026-09-28T07:20:00Z' } };
+    const [day] = dayAhead(routines, [moving], [arriving], new Date('2026-09-28T07:28:00Z'));
+    expect(day.segments[0]).toMatchObject({ kind: 'trip', confidence: 'live', to: 'School' });
+    expect(day.segments[2]).toMatchObject({ kind: 'trip', to: 'Home' });
+    expect(dayAhead(routines, [moving], [], new Date('2026-09-28T07:28:00Z'))).toEqual([]);
+  });
+
+  it('skips the school run on a holiday', () => {
+    const cal = { holidays: [{ from: '2026-09-28', to: '2026-09-28' }], schoolIds: new Set(['school']) };
+    const [day] = dayAhead(routines, [atHome('alex', '2026-09-28T05:55:00Z')], [], new Date('2026-09-28T06:00:00Z'), [], cal);
+    expect(day.segments).toHaveLength(1);
   });
 });

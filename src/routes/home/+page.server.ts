@@ -5,7 +5,7 @@ import { DEVICES_TEMPLATE, houseOnly, summariseDevices, type DevicesPayload } fr
 import { errMsg } from '$lib/home/presence/types';
 import { loadHousehold } from '$lib/home/presence/household';
 import { loadHoldContext } from '$lib/home/presence/location-hold.server';
-import { peopleViewerOf, scopeHousehold } from '$lib/home/presence/viewer';
+import { mayOpenPerson, peopleViewerOf, scopeHousehold } from '$lib/home/presence/viewer';
 import { areaAccess } from '$lib/server/area-scope';
 
 // The house, now: one slice of each sub-page, every read on its own so one
@@ -45,6 +45,25 @@ async function people(event: Parameters<PageServerLoad>[0]) {
   return scopeHousehold(hold ? hold.apply({ presence: members, positions: [] }).presence : members, viewer);
 }
 
+/**
+ * The rest of today for the people this viewer may see (`loadForecast` scopes
+ * to them), plus what changed this fortnight, from the nightly digest. Null
+ * for a viewer with no people card. Streamed: the house paints first.
+ */
+async function ahead(event: Parameters<PageServerLoad>[0]) {
+  const viewer = await peopleViewerOf(event);
+  if (!viewer) return null;
+  const [{ loadForecast }, { loadDigest }] = await Promise.all([
+    import('$lib/home/presence/forecast.server'),
+    import('$lib/home/presence/forecast-digest.server'),
+  ]);
+  const now = new Date();
+  const [{ forecast, insights }, digest] = await Promise.all([loadForecast(viewer, 28, null, now), loadDigest()]);
+  const names = Object.fromEntries(insights.people.map((p) => [p.subject, p.displayName]));
+  const changes = (digest?.changes ?? []).filter((c) => mayOpenPerson(viewer, c.subject)).slice(0, 3);
+  return { now: now.toISOString(), ahead: forecast.ahead, names, changes, isOwner: viewer.kind === 'owner' };
+}
+
 export const load: PageServerLoad = async (event) => {
   const access = await areaAccess(event, 'home');
   // The voice log is everyone's speech, and the Echo readings the household's
@@ -57,6 +76,11 @@ export const load: PageServerLoad = async (event) => {
     settle('devices', devices().then((d) => (access.level === 'owner' ? d : houseOnly(d)))),
   ]);
   return {
+    // Not awaited: the day ahead streams in under the people card.
+    ahead: ahead(event).catch((err) => {
+      console.error('[home] day ahead failed:', errMsg(err));
+      return null;
+    }),
     members: family.value ?? [],
     /** False when the viewer may not see the household's people at all. */
     showPeople: family.value !== null || family.error !== null,

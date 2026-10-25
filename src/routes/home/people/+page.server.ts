@@ -139,7 +139,26 @@ export const load: PageServerLoad = async (event) => {
   // is read from their phone, keyed on the session (see my-day.ts).
   const own = await ownDayOf(event).catch(() => null);
   const ownSubject = own?.subject ?? null;
-  const moving = { movement, person, ownSubject, movementDays: DEFAULT_WINDOW_DAYS, days, forecast, naming, agenda, notify };
+  // A member's share of the forecast page (the owner has the page itself):
+  // what changed for the people they may see, and their OWN week of health —
+  // a guardian sees a ward's movements, never a ward's health. Streamed.
+  const mine =
+    viewer.kind === 'household'
+      ? import('$lib/home/presence/forecast-digest.server')
+          .then(({ loadDigest }) => loadDigest())
+          .then((digest) => ({
+            digestAt: digest?.generatedAt ?? null,
+            changes: (digest?.changes ?? []).filter((c) => mayOpenPerson(viewer, c.subject)),
+            health: Object.entries(digest?.health ?? {})
+              .filter(([subject]) => subject === viewer.subject)
+              .map(([subject, week]) => ({ subject, ...week })),
+          }))
+          .catch((err) => {
+            console.error('[home/people] digest failed:', errMsg(err));
+            return null;
+          })
+      : null;
+  const moving = { movement, person, ownSubject, movementDays: DEFAULT_WINDOW_DAYS, days, forecast, naming, agenda, notify, mine };
 
   // The owner's location hold: anyone else sees him at the held point
   // (`location-hold`), on the map and on his card alike.
