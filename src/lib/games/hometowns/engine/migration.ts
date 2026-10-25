@@ -67,6 +67,15 @@ const ARRIVE_Q = COHORTS.map((c) => `arrive.${c}`);
 const DEPART_Q = COHORTS.map((c) => `depart.${c}`);
 
 /** Softmax over utilities at temperature T (stable: shifted by the maximum). */
+/** [stay, outside, ...destinations], built element by element (a spread literal's array kind kept changing, deoptimising the step). */
+function choices(stay: number, out: number, dest: readonly number[]): number[] {
+  const v = new Array<number>(2 + dest.length);
+  v[0] = stay;
+  v[1] = out;
+  for (let i = 0; i < dest.length; i++) v[2 + i] = dest[i];
+  return v;
+}
+
 export function logit(v: readonly number[], temp: number): number[] {
   let max = -Infinity;
   for (const x of v) if (x > max) max = x;
@@ -142,7 +151,8 @@ export function stepMigration(t: TownState, m: MonthContext): void {
   const forced = new Array<number>(COHORT_COUNT).fill(0);
   const forcedParts = { squeezed: new Array<number>(COHORT_COUNT).fill(0), unemployed: new Array<number>(COHORT_COUNT).fill(0), retier: new Array<number>(COHORT_COUNT).fill(0) };
   /** Long-term unemployed movers in workers (not family persons), by tier and [Workers, Parents]. */
-  const luMovers = [0, 0, 0].map(() => [0, 0]);
+  // [Workers, Parents] per tier, flat (h·2, h·2 + 1): one numeric array, not arrays of two kinds.
+  const luMovers = new Float64Array(6);
   for (let h = 0; h < 3; h++) {
     const W = people[person(STAGE_W, h)];
     const P = people[person(STAGE_P, h)];
@@ -151,9 +161,10 @@ export function stepMigration(t: TownState, m: MonthContext): void {
     const wp = m.params.people.participation.P * P;
     const lu = mp.forcedUnemployed * t.longUnemployed[h];
     if (ww + wp > 0) {
-      luMovers[h] = [(lu * ww) / (ww + wp), (lu * wp) / (ww + wp)];
-      forcedParts.unemployed[h * 3] = luMovers[h][0];
-      forcedParts.unemployed[h * 3 + 1] = luMovers[h][1] * ((P + C) / Math.max(1, P));
+      luMovers[h * 2] = (lu * ww) / (ww + wp);
+      luMovers[h * 2 + 1] = (lu * wp) / (ww + wp);
+      forcedParts.unemployed[h * 3] = luMovers[h * 2];
+      forcedParts.unemployed[h * 3 + 1] = luMovers[h * 2 + 1] * ((P + C) / Math.max(1, P));
     }
     // The displaced are shared over the tier's cohorts as its squeezed are.
     let sq = 0;
@@ -223,8 +234,8 @@ export function stepMigration(t: TownState, m: MonthContext): void {
     for (const g of groups[k]) {
       if (g.movers <= 0) continue;
       const stay = hosts(k, uniOwn) ? uOwn + base + g.stay : -Infinity;
-      const pr = logit([stay, vOut, ...vDest], temp);
-      const ref = logit([hosts(k, uniOwn) ? base + g.stay : -Infinity, vOut, ...vDest], temp);
+      const pr = logit(choices(stay, vOut, vDest), temp);
+      const ref = logit(choices(hosts(k, uniOwn) ? base + g.stay : -Infinity, vOut, vDest), temp);
       leaveRaw[k] += g.movers * pr[1];
       leaveRef[k] += g.movers * ref[1];
       moversTotal[k] += g.movers;
@@ -318,7 +329,7 @@ export function stepMigration(t: TownState, m: MonthContext): void {
   for (let h = 0; h < 3; h++) {
     const W = people[person(STAGE_W, h)];
     memo.young[h] = Math.max(0, Math.min(W, memo.young[h] - Math.round(-leftK[h * 3] * youngShare[h])));
-    const luOut = Math.round(luMovers[h][0] * pOutMean[h * 3] + luMovers[h][1] * pOutMean[h * 3 + 1]);
+    const luOut = Math.round(luMovers[h * 2] * pOutMean[h * 3] + luMovers[h * 2 + 1] * pOutMean[h * 3 + 1]);
     t.longUnemployed[h] = Math.max(0, Math.min(W + people[person(STAGE_P, h)], t.longUnemployed[h] - luOut));
     memo.displaced[h] = 0;
   }
