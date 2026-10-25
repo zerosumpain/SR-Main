@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HEARTBEAT_MAX_S, analysePresence, cleanDurations, extractTrips, inDaylight, normaliseReadings, predictArrival, qualifiedStop, type InsightFix, type InsightPlace } from './insights';
+import { HEARTBEAT_MAX_S, SLEEP_BRIDGE_MAX_S, analysePresence, bridgeSleeps, cleanDurations, extractTrips, inDaylight, normaliseReadings, predictArrival, qualifiedStop, type InsightFix, type InsightPlace } from './insights';
 const places: InsightPlace[] = [
   { id: 'home', label: 'Home', kind: 'home', lat: 51.5, lon: -.12, radiusM: 100 },
   { id: 'school', label: 'Sample College', kind: 'school', lat: 51.59, lon: -.12, radiusM: 100 },
@@ -186,5 +186,53 @@ describe('what makes a stay and whose place it is', () => {
     const b = fix(+now - 2 * 60_000, 51.51, { readingAgeS: 1 });         // moved ~1.1 km
     const repeat = fix(+now, 51.51, { readingAgeS: 121 });                // same reading, 2 min on
     expect(normaliseReadings([a, b, repeat])).toHaveLength(2);
+  });
+});
+describe('a sleeping app phone (GPS off while still)', () => {
+  // The app's day, as it reaches the trail: one still fix as the phone goes
+  // to sleep, nothing for hours, then the walk already under way.
+  const app = (t: string, lat: number, extra: Partial<InsightFix> = {}) => fix(t, lat, { readingAgeS: null, ...extra });
+  function schoolDay(day: string): InsightFix[] {
+    const walk = (from: number, to: number, start: number) => Array.from({ length: 9 }, (_, i) =>
+      app(new Date(start + (i + 1) * 120_000).toISOString(), from + (to - from) * (i + 1) / 10, { speedKmh: 30, mode: 'vehicle', isHome: false }));
+    const t = (hhmm: string) => +new Date(`${day}T${hhmm}:00Z`);
+    return [
+      app(`${day}T05:40:00Z`, 51.5),                       // asleep at home
+      app(`${day}T07:22:00Z`, 51.502, { speedKmh: 30, mode: 'vehicle', isHome: false }), // woke 220 m out
+      ...walk(51.502, 51.59, t('07:22')),
+      app(`${day}T07:42:00Z`, 51.59), app(`${day}T07:45:00Z`, 51.59), // four minutes at school, then asleep
+      app(`${day}T14:30:00Z`, 51.59),                      // 6 h 45 m later
+      app(`${day}T14:33:00Z`, 51.588, { speedKmh: 30, mode: 'vehicle', isHome: false }),
+      ...walk(51.588, 51.5, t('14:33')),
+      app(`${day}T14:53:00Z`, 51.5), app(`${day}T14:55:00Z`, 51.5),
+    ];
+  }
+  const now = new Date('2026-09-26T18:00Z');
+  const days = ['2026-09-21', '2026-09-22', '2026-09-23'];
+
+  it('stays at the place it fell asleep until the move that woke it, and the school run is a trip again', () => {
+    const data = analysePresence(days.flatMap(schoolDay), places, [person], now, 28);
+    const run = data.routes.find(r => r.fromId === 'home' && r.toId === 'school');
+    expect(run?.samples).toBe(3);
+    expect(run?.median).toBeGreaterThan(18);
+    expect(run?.median).toBeLessThan(24);
+    expect(data.routes.find(r => r.fromId === 'school' && r.toId === 'home')?.samples).toBe(3);
+  });
+
+  it('bridges at most SLEEP_BRIDGE_MAX_S, and never a Life360 reading', () => {
+    const asleep = app('2026-09-20T05:40:00Z', 51.5);
+    const woke = app('2026-09-21T03:00:00Z', 51.5);
+    const beats = bridgeSleeps([asleep, woke], places, woke.ts).filter(f => f !== asleep && f !== woke);
+    expect(beats.length).toBeGreaterThan(400);
+    expect(Math.max(...beats.map(f => +f.ts))).toBeLessThanOrEqual(+asleep.ts + SLEEP_BRIDGE_MAX_S * 1000);
+    const life360 = [fix('2026-09-21T05:40:00Z', 51.5, { readingAgeS: 0 }), fix('2026-09-21T07:22:00Z', 51.502, { readingAgeS: 0 })];
+    expect(bridgeSleeps(life360, places, now)).toHaveLength(2);
+    expect(bridgeSleeps([app('2026-09-21T05:40:00Z', 51.5)], places, new Date('2026-09-21T05:45:00Z'))).toHaveLength(1);
+  });
+
+  it('does not bridge a phone that fell asleep away from any place, or woke too far off to have just left', () => {
+    const at = new Date('2026-09-21T07:22:00Z');
+    expect(bridgeSleeps([app('2026-09-21T05:40:00Z', 51.55), app('2026-09-21T07:22:00Z', 51.551, { speedKmh: 30 })], places, at)).toHaveLength(2);
+    expect(bridgeSleeps([app('2026-09-21T05:40:00Z', 51.5), app('2026-09-21T07:22:00Z', 51.55, { speedKmh: 5 })], places, at)).toHaveLength(2);
   });
 });

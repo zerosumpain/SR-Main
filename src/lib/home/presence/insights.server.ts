@@ -22,7 +22,7 @@ const ROWS_KEPT = 4;
 const ROWS_MAX_DAYS = 28;
 const rowsCache = new Map<string, { at: number; generation: number; rows: Promise<InsightFix[]> }>();
 
-function trailRows(key: string, subjects: string[], days: number, now: Date): Promise<InsightFix[]> {
+export function trailRows(key: string, subjects: string[], days: number, now: Date): Promise<InsightFix[]> {
   const generation = trailGeneration();
   const hit = rowsCache.get(key);
   // Rows read at `hit.at` cover a later `now` only while nothing was written
