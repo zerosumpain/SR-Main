@@ -16,8 +16,8 @@
   }
  ],
  "client": {
-  "engineHash": "373d2e654c7ed2dd",
-  "page": "/projects/hometowns/3f7b4b50ba2f3b03/mobile.html",
+  "engineHash": "5b3c469ab5c597fc",
+  "page": "/projects/hometowns/0474276ae2d2f39e/mobile.html",
   "bridge": 1
  },
  "clock": {
@@ -39,56 +39,56 @@
   "seat": "s1",
   "profile": "adult",
   "isParent": true,
-  "townHash": "4b66f6c787e7509d",
+  "townHash": "c130f02795d41122",
   "derived": {
    "stars": [
-    41.9,
-    67.3,
-    66.6,
-    7.7,
-    45.8,
-    59.6,
+    33.3,
+    60.6,
+    66.7,
+    7.8,
+    46.9,
+    56.6,
     95.6,
-    79.1,
+    79,
     94.6,
-    70.1,
-    38.7,
-    63,
-    35.3,
-    28.6,
-    70.3,
-    69.8,
-    56.3,
+    70,
+    38.5,
+    47.1,
+    29,
+    24.9,
+    65.9,
+    62.4,
+    47.9,
     71.1,
     67,
     57.1
    ],
    "meters": [
-    -20.6,
-    -53.4,
-    -55.9,
-    -24.7,
-    -23,
-    -4,
-    -68.6,
-    -21.2
+    -21.5,
+    -54.2,
+    -58.5,
+    -35.4,
+    -39,
+    3.6,
+    -75.4,
+    -26.5
    ],
    "wants": [
     {
      "key": "talk.jobs",
-     "severity": 101394,
+     "severity": 149941,
      "tile": -1,
      "hatched": false
     },
     {
      "key": "talk.schools",
-     "severity": 69183,
+     "severity": 67935,
      "tile": -1,
      "hatched": false
     },
     {
      "key": "talk.homes",
-     "severity": 44902,
+     "severity": 62118,
      "tile": -1,
      "hatched": false
     }
@@ -214,7 +214,7 @@
       },
       {
        "key": "leisureVenue",
-       "met": 0.26,
+       "met": 0.27,
        "buildable": true
       },
       {
@@ -280,7 +280,7 @@
       },
       {
        "key": "leisureVenue",
-       "met": 0.32,
+       "met": 0.33,
        "buildable": true
       },
       {
@@ -290,7 +290,7 @@
       },
       {
        "key": "cultureVenue",
-       "met": 0.55,
+       "met": 0.51,
        "buildable": true
       },
       {
@@ -323,24 +323,24 @@
    ],
    "pipeline": {
     "homes": 82,
-    "movers": 802
+    "movers": 434
    },
    "townTalk": [
     [
      "jobs",
-     39
+     47
     ],
     [
      "schools",
-     27
+     21
     ],
     [
      "homes",
-     17
+     19
     ],
     [
      "safety",
-     17
+     13
     ]
    ]
   },
