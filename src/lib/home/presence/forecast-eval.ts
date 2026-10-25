@@ -12,7 +12,7 @@
 // is a simplification — a wander that never became a trip is invisible — and
 // it is the same for every version of the forecast being compared.
 
-import { learnedTravel, localClock, nextMoves, NO_SCHOOL_CALENDAR, routinesOf, watchItems, type ForecastCorrection, type SchoolCalendar } from './forecast';
+import { learnedTravel, localClock, nextMoves, NO_SCHOOL_CALENDAR, placeOdds, routinesOf, watchItems, type ForecastCorrection, type SchoolCalendar } from './forecast';
 import { percentile, predictArrival, routesOf, type InsightFix, type InsightPerson, type InsightPlace, type LiveState, type Trip } from './insights';
 
 const MINUTE = 60_000;
@@ -79,6 +79,15 @@ export interface Scorecard {
     band: number | null;
     /** Share of trips at or under p80 — what a leave-by time is set against; 0.8 is honest. */
     p80: number | null;
+  };
+  /** Where next, asked half an hour before each eligible trip. */
+  odds: {
+    trips: number;
+    offered: number;
+    top1: number | null;
+    top2: number | null;
+    /** Mean share the odds gave the place they really went: higher is sharper. */
+    sharpness: number | null;
   };
   /** Live arrival estimates part-way through each trip. */
   eta: {
@@ -196,6 +205,8 @@ export function scoreForecast(input: EvalInput, generatedAt = new Date()): Score
   let predictions = 0, hits = 0, eligible = 0, foreseen = 0;
   const durErrors: number[] = [];
   let durTrips = 0, durEstimated = 0, inBand = 0, underP80 = 0;
+  let oddsTrips = 0, oddsOffered = 0, oddsTop1 = 0, oddsTop2 = 0;
+  const oddsShares: number[] = [];
   let etaChecks = 0, etaOffered = 0, etaRight = 0, etaWrong = 0, etaInWindow = 0;
   const etaErrors: number[] = [];
   let overdueFired = 0, overdueLate = 0, overdueSkipped = 0;
@@ -253,6 +264,16 @@ export function scoreForecast(input: EvalInput, generatedAt = new Date()): Score
         eligible++;
         byPerson.get(trip.subject)!.eligible++;
         if (hitTrips.has(trip)) { foreseen++; byPerson.get(trip.subject)!.foreseen++; }
+        oddsTrips++;
+        const asked = trip.start - NEXT_LEAD_MINS * MINUTE;
+        const odds = placeOdds(routesOf(known(asked), places, people), trip.subject, trip.from, new Date(asked), cal);
+        if (odds) {
+          oddsOffered++;
+          const rank = odds.options.findIndex((o) => o.toId === trip.to);
+          if (rank === 0) oddsTop1++;
+          if (rank === 0 || rank === 1) oddsTop2++;
+          oddsShares.push(rank >= 0 ? odds.options[rank].share : 0);
+        }
       }
 
       const history = known(trip.start);
@@ -296,6 +317,7 @@ export function scoreForecast(input: EvalInput, generatedAt = new Date()): Score
     learnDays,
     next: { predictions, hits, precision: ratio(hits, predictions), eligible, foreseen, recall: ratio(foreseen, eligible), byPerson: [...byPerson.values()] },
     duration: { trips: durTrips, estimated: durEstimated, mae: mean(durErrors), medianError: median(durErrors), band: ratio(inBand, durEstimated), p80: ratio(underP80, durEstimated) },
+    odds: { trips: oddsTrips, offered: oddsOffered, top1: ratio(oddsTop1, oddsOffered), top2: ratio(oddsTop2, oddsOffered), sharpness: mean(oddsShares.map((x) => x * 100)) },
     eta: { checks: etaChecks, offered: etaOffered, rightPlace: etaRight, wrongPlace: etaWrong, mae: mean(etaErrors), window: ratio(etaInWindow, etaRight) },
     overdue: { fired: overdueFired, late: overdueLate, skipped: overdueSkipped, recent: overdueRecent.slice(-OVERDUE_KEPT) },
   };

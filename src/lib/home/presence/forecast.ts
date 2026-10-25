@@ -430,6 +430,65 @@ export function nextMoves(
   return out;
 }
 
+// ── Where next: the odds ────────────────────────────────────────────────────
+
+/** Departures this far either side of the time of day count toward the odds. 90 beat
+ *  60/120/180 on the backtest (2026-10-25): top pick right 68%, top two 76%. */
+export const ODDS_WINDOW_MINS = 90;
+/** Fewest departures before odds are offered. */
+export const ODDS_MIN_SAMPLES = 4;
+/** A trip this old counts half as much as one today. */
+export const ODDS_HALF_LIFE_DAYS = 14;
+
+export interface PlaceOdds {
+  subject: string;
+  fromId: string;
+  from: string;
+  /** Destinations, likeliest first; shares sum to at most 1 (the rest is "somewhere else"). */
+  options: Array<{ toId: string; to: string; share: number; usual: string }>;
+  /** Departures the odds stand on. */
+  samples: number;
+}
+
+/**
+ * Where someone at a place goes next, as shares: their own departures from
+ * that place on this kind of day within ODDS_WINDOW_MINS of the time,
+ * newer trips weighing more. Unlike a routine it never needs one answer to
+ * dominate — "Town or the station" is still worth saying. PURE.
+ */
+export function placeOdds(routes: RouteInsight[], subject: string, fromId: string, now: Date, cal: SchoolCalendar = NO_SCHOOL_CALENDAR): PlaceOdds | null {
+  const clock = localClock(now), dayType = dayTypeOf(clock.weekday);
+  const holiday = holidayOn(cal, clock.date) != null;
+  const weights = new Map<string, { to: string; w: number; minutes: number[] }>();
+  let total = 0, samples = 0;
+  for (const r of routes) {
+    if (r.subject !== subject || r.fromId !== fromId) continue;
+    if (holiday && isSchoolRoutine(r, cal)) continue;
+    for (const t of r.trips) {
+      const at = Date.parse(t.start);
+      if (at > +now) continue;
+      const c = localClock(at);
+      if (dayTypeOf(c.weekday) !== dayType || Math.abs(clockDelta(c.minute, clock.minute + ODDS_WINDOW_MINS / 2)) > ODDS_WINDOW_MINS) continue;
+      const w = Math.pow(0.5, (+now - at) / (ODDS_HALF_LIFE_DAYS * 86_400_000));
+      const e = weights.get(r.toId) ?? { to: r.to, w: 0, minutes: [] };
+      e.w += w; e.minutes.push(c.minute); weights.set(r.toId, e);
+      total += w; samples++;
+    }
+  }
+  if (samples < ODDS_MIN_SAMPLES || !total) return null;
+  const from = routes.find((r) => r.fromId === fromId && r.subject === subject)?.from ?? fromId;
+  const options = [...weights].map(([toId, e]) => ({ toId, to: e.to, share: Math.round((e.w / total) * 100) / 100, usual: hhmm(circularMedianMinute(e.minutes)) }))
+    .sort((a, b) => b.share - a.share).slice(0, 3);
+  return { subject, fromId, from, options, samples };
+}
+
+/** Odds for everyone sitting at a known place. PURE. */
+export function oddsFor(routes: RouteInsight[], live: LiveState[], now: Date, cal: SchoolCalendar = NO_SCHOOL_CALENDAR): PlaceOdds[] {
+  return live.filter((s) => s.placeId && !s.moving)
+    .map((s) => placeOdds(routes, s.subject, s.placeId!, now, cal))
+    .filter((o): o is PlaceOdds => o != null);
+}
+
 // ── Watch: what looks off ───────────────────────────────────────────────────
 
 export const WATCH_KINDS = ['overdue', 'running-long', 'quiet'] as const;
@@ -566,6 +625,8 @@ export interface FamilyForecast {
   arrivals: ArrivalInsight[];
   /** Departures from home by weekday × hour. */
   departures: number[][];
+  /** Where each person at a known place is likeliest to go next. */
+  odds: PlaceOdds[];
 }
 
 /**
@@ -591,5 +652,6 @@ export function buildForecast(
     watch: watchItems({ routines, routes: insights.routes, live: insights.live, arrivals: insights.arrivals, names, homeIds, now, corrections, cal }),
     arrivals: insights.arrivals,
     departures: departureGrid(insights.routes, mainHome ? new Set([mainHome]) : homeIds),
+    odds: oddsFor(insights.routes, insights.live, now, cal),
   };
 }

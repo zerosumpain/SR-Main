@@ -3,6 +3,8 @@ import {
   buildForecast,
   cleanHolidays,
   predictionBand,
+  placeOdds,
+  oddsFor,
   correctedShare,
   departureGrid,
   learnedTravel,
@@ -266,5 +268,31 @@ describe('school holidays', () => {
       { from: '2026-10-09', to: '2026-10-09' }, { from: '2026-10-26', to: '2026-10-30', label: 'Half term' },
     ]);
     expect(cleanHolidays(null)).toEqual([]);
+  });
+});
+
+describe('where next: the odds', () => {
+  const at = (d: string, hhmmZ: string) => `${d}T${hhmmZ}:00Z`;
+  // From home on weekday mornings: town three times, the station once, school never.
+  const town = route({ id: 'alex:home:town:active', toId: 'town', to: 'Town', starts: WEEKDAYS.slice(0, 3).map((d) => at(d, '08:00')) });
+  const station = route({ id: 'alex:home:station:active', toId: 'station', to: 'Station', starts: [at(WEEKDAYS[3], '08:10')] });
+  const late = route({ id: 'alex:home:pub:active', toId: 'pub', to: 'Pub', starts: WEEKDAYS.slice(0, 5).map((d) => at(d, '19:00')) });
+
+  it('splits the morning between town and the station, and leaves the evening out', () => {
+    const odds = placeOdds([town, station, late], 'alex', 'home', new Date('2026-09-28T07:00:00Z'));
+    expect(odds?.samples).toBe(4);
+    expect(odds?.options.map((o) => o.to)).toEqual(['Town', 'Station']);
+    expect(odds!.options[0].share).toBeGreaterThan(0.6);
+    expect(odds!.options[0].usual).toBe('09:00');
+  });
+
+  it('says nothing on thin evidence', () => {
+    expect(placeOdds([station], 'alex', 'home', new Date('2026-09-28T07:00:00Z'))).toBeNull();
+  });
+
+  it('is offered for someone sitting at a place, not someone on the move', () => {
+    const moving: LiveState = { subject: 'alex', placeId: null, since: null, lastSeen: null, moving: { fromId: 'home', departedAt: '2026-09-28T06:55:00Z' } };
+    expect(oddsFor([town, station], [atHome()], new Date('2026-09-28T07:00:00Z'))).toHaveLength(1);
+    expect(oddsFor([town, station], [moving], new Date('2026-09-28T07:00:00Z'))).toHaveLength(0);
   });
 });
