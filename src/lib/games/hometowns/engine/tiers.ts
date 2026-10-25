@@ -91,6 +91,31 @@ export const CHECKLISTS: readonly (readonly CheckItem[])[] = [
   [{ id: 'culture75', ok: (f) => f.cultureStar >= f.greatCulture }],
 ];
 
+/**
+ * The checklists' service-coverage items (decision 8b): the share of homes a
+ * service reaches. A town "keeps its services covered" when the ones of its
+ * own tier and the next still hold.
+ */
+export const SERVICE_ITEMS: readonly string[] = ['green70', 'surgery70', 'police50', 'fire70', 'bus40'];
+
+/**
+ * Share (0–1) of the service-coverage items of the checklists up to the
+ * town's next tier (a Metropolis: up to its own) that hold on these facts.
+ * A Hamlet is judged on the green, a Village on the green, surgery, police
+ * and fire, a Town and above also on the buses.
+ */
+export function servicesCovered(t: TownState, f: CheckFacts): number {
+  let n = 0;
+  let met = 0;
+  for (let tier = 1; tier <= Math.min(t.tier + 1, 4); tier++)
+    for (const it of CHECKLISTS[tier]) {
+      if (!SERVICE_ITEMS.includes(it.id)) continue;
+      n++;
+      if (it.ok(f)) met++;
+    }
+  return n > 0 ? met / n : 0;
+}
+
 /** The Great Metropolis title is checked as a pseudo-tier above Metropolis. */
 export const GREAT_METROPOLIS = 5;
 

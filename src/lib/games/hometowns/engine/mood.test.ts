@@ -11,7 +11,8 @@ import { population } from './core';
 import { moodFace, townTalk } from './mood';
 import { paramsFor } from './params';
 import { readHistory } from './records';
-import { COHORT_COUNT, STARS, STAR_COUNT, person, starTier, type TownState } from './types';
+import { COHORT_COUNT, STARS, STAR_COUNT, person, starTier, type MonthContext, type TownState } from './types';
+import { checkFacts, servicesCovered } from './tiers';
 import { readWhy } from './why';
 
 const P = paramsFor('v1');
@@ -81,9 +82,36 @@ describe('Approval (§5.15, A13)', () => {
     expect(term('approval.tax')).toBeCloseTo(-1.5 * 4, 6);
     const unmet = (100 - term('approval.checklist') / P.civic.approvalChecklist) / 10;
     expect(Math.abs(unmet - Math.round(unmet))).toBeLessThan(1e-3);
-    const target = term('approval.mood') + term('approval.checklist') + term('approval.tax');
+    // Decision 8b: + civic.approvalServices × the share of service-coverage items held.
+    const share = servicesCovered(t, checkFacts(t, { derived: d, params: P } as Parameters<typeof checkFacts>[1]));
+    const services = P.civic.approvalServices * share;
+    const target = term('approval.mood') + term('approval.checklist') + term('approval.tax') + services;
     expect(t.approval).toBeCloseTo(before + (target - before) / 6, 1);
     expect(e.v).toBeCloseTo(t.approval, 1);
+  });
+
+  it('adds a small bonus for keeping the services covered (decision 8b), within its params bounds', () => {
+    expect(P.civic.approvalServices).toBeGreaterThan(0);
+    expect(P.civic.approvalServices).toBeLessThanOrEqual(10);
+    const run = (covered: boolean) => {
+      const { c, i, t } = town();
+      const script = (_t: TownState, m: MonthContext) => {
+        // Every home in reach of every service, or of none, at the coverage step's output.
+        const cov = m.derived.coverage;
+        if (cov) for (const f of cov.cov) f.fill(covered ? 100 : 0);
+        return { ...RICH, stars: { actual: stars(50), uHappy: new Array(COHORT_COUNT).fill(0.5) } };
+      };
+      runMonths(c, i, 1, civicSteps(script));
+      const e = readWhy(t).monthly.at(-1)!.entries.find((x) => x.q === 'approval')!;
+      return { approval: t.approval, terms: e.terms };
+    };
+    const on = run(true);
+    const off = run(false);
+    // The checklist term moves too (those items are on it), so compare the services term itself.
+    const term = (r: typeof on) => r.terms.find(([k]) => k === 'approval.services')?.[1] ?? 0;
+    expect(term(off)).toBe(0);
+    expect(term(on)).toBeCloseTo(P.civic.approvalServices, 6); // every service item holds: the whole bonus
+    expect(on.approval).toBeGreaterThan(off.approval);
   });
 
   it('a homes tax at 16% costs approval that 10% does not (the land-limited brake)', () => {

@@ -370,6 +370,7 @@
     "why.approval.mood": { "kid": "How happy people are", "adult": "town mood" },
     "why.approval.checklist": { "kid": "Wishes still to tick off", "adult": "unmet checklist items", "kidLess": "Wishes still to tick off", "adultLess": "unmet checklist items" },
     "why.approval.tax": { "kid": "Town Tax feels high", "adult": "homes tax above 10%" },
+    "why.approval.services": { "kid": "Parks, doctors and helpers close by", "adult": "services covered" },
 
     "why.vis.attractions": { "kid": "Fun places to visit", "adult": "attraction appeal" },
     "why.vis.quality": { "kid": "A clean, pretty town", "adult": "tourism quality", "kidLess": "A bit untidy for visitors", "adultLess": "tourism quality" },

@@ -63,7 +63,7 @@ add('line.*', 'line.tier.L', 'line.tier.M', 'line.tier.H', 'line.base', 'line.ra
 // Happiness and approval (WP2d).
 for (const s of STARS) add('happy.*', `happy.${s}`);
 add('happy.*', 'happy.needs', 'happy.overcrowding', 'happy.overqualified', 'happy.irritation');
-add('approval', 'approval.mood', 'approval.checklist', 'approval.tax');
+add('approval', 'approval.mood', 'approval.checklist', 'approval.tax', 'approval.services');
 // Visitors (WP2c), goods (WP2c), commuters (WP2b), safety (WP2a).
 add('visitors', 'vis.attractions', 'vis.quality', 'vis.reputation', 'vis.awareness', 'vis.hotelTax', 'vis.beds', 'vis.season', 'vis.world', 'vis.satisfaction', 'vis.dayTrips', 'vis.overflow');
 add('goodsNet', 'goods.production', 'goods.use', 'goods.allocIn', 'goods.allocOut', 'goods.export', 'goods.import', 'goods.construction');

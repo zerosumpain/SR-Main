@@ -24,7 +24,7 @@ import { largestRemainder } from './num';
 import { utilityTerms } from './needs';
 import { pushHistoryMonth } from './records';
 import { cohortsOf, facesOf } from './snapshot';
-import { checkFacts, judgeChecklist } from './tiers';
+import { checkFacts, judgeChecklist, servicesCovered } from './tiers';
 import {
   COHORTS,
   COHORT_COUNT,
@@ -148,11 +148,14 @@ export function stepRecords(t: TownState, m: MonthContext): void {
   const aMood = cv.approvalMood * mood;
   const aCheck = cv.approvalChecklist * (100 - cv.approvalPerUnmet * pre.unmetOthers);
   const aTax = -cv.approvalTaxSlope * (Math.max(0, meanHomesTax(t) - cv.approvalTaxFree) / 100);
-  t.approval = clamp(smooth(t.approval, clamp(aMood + aCheck + aTax, 0, 100), sp.approvalTau), 0, 100);
+  // Decision 8b: a small bonus for keeping the services covered (the checklists' coverage items up to the next tier).
+  const aServices = cv.approvalServices * servicesCovered(t, facts);
+  t.approval = clamp(smooth(t.approval, clamp(aMood + aCheck + aTax + aServices, 0, 100), sp.approvalTau), 0, 100);
   m.why.set('approval', t.approval);
   m.why.add('approval.mood', aMood);
   m.why.add('approval.checklist', aCheck);
   m.why.add('approval.tax', aTax);
+  m.why.add('approval.services', aServices);
   facts.approval = t.approval;
   const check = judgeChecklist(t, facts);
   memo.check = { tier: check.tier, met: check.met, items: check.items };

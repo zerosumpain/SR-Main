@@ -436,6 +436,7 @@
     "approvalChecklist": {"value":0.33,"min":0.1,"max":0.4,"unit":"weight","doc":"Approval* + this·(100 − perUnmet·#unmet next-tier items) (§5.15 says 0.25; Lab round 1: 0.3, as the founding fortnight's jobless months otherwise hold a hamlet under 50 on day 1; round 2: 0.33, because with the slower meters a plainly played hamlet (the map page's harness bot, the Kid) sat at approval 46–49 for a week with every other Village item met).","loop":null},
     "approvalPerUnmet": {"value":10,"min":5,"max":20,"unit":"points","doc":"Approval points lost per unmet item of the next tier's checklist.","loop":null},
     "approvalTaxSlope": {"value":1.5,"min":0.75,"max":3,"unit":"points/%","doc":"Approval* − this·max(0, HomesTax% − approvalTaxFree%) (A13).","loop":null},
+    "approvalServices": {"value":5,"min":0,"max":10,"unit":"points","doc":"Approval* + this·(share of the checklists' service-coverage items, green, surgery, police, fire and buses, up to the next tier that hold) (decision 8b: a town that keeps its services covered gets a small approval bonus).","loop":null},
     "approvalTaxFree": {"value":1000,"min":800,"max":1200,"unit":"bp","doc":"Homes tax up to this costs no approval directly.","loop":null},
     "talkAt": {"value":55,"min":40,"max":70,"unit":"index","doc":"Town Talk: a star below this is talked about, in proportion to how far (§5.15).","loop":null},
     "talkTop": {"value":4,"min":3,"max":6,"unit":"items","doc":"Town Talk shows this many items.","loop":null},

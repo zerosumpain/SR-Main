@@ -10,7 +10,7 @@ import { TIER_DEFS } from './content';
 import { population, postPeople } from './core';
 import { civicMemo } from './finance';
 import { paramsFor } from './params';
-import { CHECKLISTS, checklistOf, judgeChecklist, stepTierCheck, type CheckFacts } from './tiers';
+import { CHECKLISTS, SERVICE_ITEMS, checklistOf, judgeChecklist, servicesCovered, stepTierCheck, type CheckFacts } from './tiers';
 import { COVERAGES, person, type CountyState, type RegionalContext, type TownState } from './types';
 
 const P = paramsFor('v1');
@@ -148,5 +148,19 @@ describe('promotion', () => {
     expect(memo.check.tier).toBe(3);
     expect(memo.check.items).toBe(7);
     expect(checklistOf(t).map((x) => x.id)).toEqual(CHECKLISTS[3].map((i) => i.id));
+  });
+});
+
+describe('services covered (decision 8b)', () => {
+  const P8 = paramsFor('v1');
+  const cov = (over: Partial<Record<(typeof COVERAGES)[number], number>>) => COVERAGES.map((k) => over[k] ?? 0);
+  it('judges a Hamlet on the green, a Village also on surgery, police and fire, a Town and above also on the buses', () => {
+    expect(servicesCovered(at(0), facts({ covered: cov({ nature: 0.7 }) }))).toBe(1);
+    expect(servicesCovered(at(0), facts({ covered: cov({ fun: 0.69 }) }))).toBe(0);
+    expect(servicesCovered(at(1), facts({ covered: cov({ nature: 1, health: 0.7, police: 0.5 }) }))).toBe(3 / 4);
+    expect(servicesCovered(at(2), facts({ covered: cov({ nature: 1, health: 1, police: 1, fire: 1 }) }))).toBe(4 / 5);
+    expect(servicesCovered(at(4), facts())).toBe(1);
+    expect(SERVICE_ITEMS.every((id) => CHECKLISTS.some((c) => c.some((it) => it.id === id)))).toBe(true);
+    expect(P8.civic.approvalServices).toBeGreaterThan(0);
   });
 });
