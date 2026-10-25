@@ -16,8 +16,8 @@
   }
  ],
  "client": {
-  "engineHash": "5b3c469ab5c597fc",
-  "page": "/projects/hometowns/0474276ae2d2f39e/mobile.html",
+  "engineHash": "812e0a1fdb84343c",
+  "page": "/projects/hometowns/56912350e210a064/mobile.html",
   "bridge": 1
  },
  "clock": {
@@ -39,56 +39,56 @@
   "seat": "s1",
   "profile": "adult",
   "isParent": true,
-  "townHash": "c130f02795d41122",
+  "townHash": "6cf51050e50f0b90",
   "derived": {
    "stars": [
     33.3,
-    60.6,
+    44.5,
     66.7,
-    7.8,
-    46.9,
-    56.6,
+    7.7,
+    47.3,
+    56.5,
     95.6,
-    79,
+    79.2,
     94.6,
-    70,
-    38.5,
-    47.1,
-    29,
+    70.1,
+    38.4,
+    46.6,
+    29.4,
     24.9,
-    65.9,
-    62.4,
-    47.9,
+    36,
+    52.1,
+    38.4,
     71.1,
     67,
     57.1
    ],
    "meters": [
-    -21.5,
-    -54.2,
-    -58.5,
-    -35.4,
-    -39,
-    3.6,
+    -5.2,
+    -30.1,
+    -37.9,
+    -35,
+    -39.2,
+    3.7,
     -75.4,
     -26.5
    ],
    "wants": [
     {
      "key": "talk.jobs",
-     "severity": 149941,
+     "severity": 148409,
      "tile": -1,
      "hatched": false
     },
     {
      "key": "talk.schools",
-     "severity": 67935,
+     "severity": 67590,
      "tile": -1,
      "hatched": false
     },
     {
      "key": "talk.homes",
-     "severity": 62118,
+     "severity": 62038,
      "tile": -1,
      "hatched": false
     }
@@ -199,7 +199,7 @@
       },
       {
        "key": "secondary",
-       "met": 0.07,
+       "met": 0.06,
        "buildable": true
       },
       {
@@ -214,12 +214,12 @@
       },
       {
        "key": "leisureVenue",
-       "met": 0.27,
+       "met": 0.28,
        "buildable": true
       },
       {
        "key": "library",
-       "met": 0.09,
+       "met": 0.1,
        "buildable": true
       }
      ]
@@ -245,7 +245,7 @@
       },
       {
        "key": "green",
-       "met": 0.14,
+       "met": 0.13,
        "buildable": true
       },
       {
@@ -260,7 +260,7 @@
       },
       {
        "key": "busStop",
-       "met": 0.06,
+       "met": 0.07,
        "buildable": true
       },
       {
@@ -285,12 +285,12 @@
       },
       {
        "key": "library",
-       "met": 0.09,
+       "met": 0.08,
        "buildable": true
       },
       {
        "key": "cultureVenue",
-       "met": 0.51,
+       "met": 0.53,
        "buildable": true
       },
       {
@@ -305,7 +305,7 @@
       },
       {
        "key": "park",
-       "met": 0.14,
+       "met": 0.13,
        "buildable": true
       },
       {
@@ -322,8 +322,8 @@
     }
    ],
    "pipeline": {
-    "homes": 82,
-    "movers": 434
+    "homes": 312,
+    "movers": 407
    },
    "townTalk": [
     [

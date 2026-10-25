@@ -95,6 +95,12 @@ function tuned(over: Partial<Record<keyof Params['develop'], unknown>>): Params 
   Object.assign(p.develop, over);
   return p as unknown as Params;
 }
+/** p with the Lab round 3 demand gates off (they have their own tests below): the bare §5.2 rules. */
+function bare(p: Params): Params {
+  const q = JSON.parse(JSON.stringify(p)) as { rules: Record<string, unknown> };
+  Object.assign(q.rules, { homesStartsToGap: false });
+  return q as unknown as Params;
+}
 /** Growth and level-up become certain for any z above zMid: the scan's rules are then what the test sees. */
 const CERTAIN = tuned({ pGrow: 1, pLevel: 1, zScale: 0.001 });
 
@@ -253,7 +259,7 @@ describe('the development stride (A24)', () => {
     paint(t, tiles, Z_HOMES);
     setLv(t, 60);
     t.meters[0] = 100;
-    const params = tuned({ pGrow: 1, zScale: 0.001, buildersBase: 4000 });
+    const params = bare(tuned({ pGrow: 1, zScale: 0.001, buildersBase: 4000 }));
     const startedOn = new Map<number, number>();
     for (let k = 0; k < 4; k++) {
       const tick = t.tick;
@@ -367,20 +373,56 @@ describe('growth and the Builders cap', () => {
     // Nothing is powered or watered: an L1 home does not care, an L3 office does (z − 100).
     const dark = { ...neutral.utilities(), powered: new Uint8Array(4096), watered: new Uint8Array(4096) };
     stepDevelopMemo(t, monthContext(c, 0, { utilities: dark }));
-    for (let k = 0; k < 4; k++) devTick(x, { params: tuned({ pGrow: 1, zScale: 0.001, zMid: 10 }) });
+    for (let k = 0; k < 4; k++) devTick(x, { params: bare(tuned({ pGrow: 1, zScale: 0.001, zMid: 10 })) });
     expect(lvlLevel(planesOf(t).lvl[near])).toBe(1);
     expect(lvlLevel(planesOf(t).lvl[far])).toBe(0);
     expect(explainGrowth(t, far, P).blocked).toBe('noRoad');
     // The dark office's score is 100 + L − 100 − ... below zMid, so even a "certain" roll fails.
     expect(lvlLevel(planesOf(t).lvl[office])).toBe(0);
     stepDevelopMemo(t, monthContext(c, 0, {}));
-    for (let k = 0; k < 4; k++) devTick(x, { params: tuned({ pGrow: 1, zScale: 0.001 }) });
+    for (let k = 0; k < 4; k++) devTick(x, { params: bare(tuned({ pGrow: 1, zScale: 0.001 })) });
     expect(lvlLevel(planesOf(t).lvl[office])).toBe(3);
     expect(events(t, 'started').find((e) => e.tile === office)?.value).toBe(3);
   });
 });
 
 // ---- Level-ups, declines and the supply count -----------------------------------------------------------
+
+describe('builders start only into demand (§5.2, Lab round 3)', () => {
+  /** CERTAIN with some rules flags changed. */
+  const ruled = (over: Partial<Record<keyof Params['rules'], boolean>>): Params => {
+    const p = JSON.parse(JSON.stringify(CERTAIN)) as { rules: Record<string, unknown> };
+    Object.assign(p.rules, over);
+    return p as unknown as Params;
+  };
+  /** 32 Homes lots on a road in a town past its carts, with `waiting` £ Workers on the list; starts over one month. */
+  const homesMonth = (params: Params, waiting: number, sprinting = false): number => {
+    const x = town(21, 0, sprinting);
+    const { t } = x;
+    road(t, 20);
+    paint(t, row(21, 16, 47), Z_HOMES);
+    setLv(t, 60);
+    t.meters[0] = 100;
+    t.applicants[cohort(0, 0)] = waiting;
+    const since = t.tick;
+    for (let k = 0; k < 4; k++) devTick(x, { params, sprint: sprinting });
+    return events(t, 'started', since).length;
+  };
+
+  it('starts Homes only until built and building homes meet the demand, less the 3% kept waiting', () => {
+    expect(P.rules.homesStartsToGap).toBe(true);
+    // Nobody waiting and nobody housed: no room, so nothing starts.
+    expect(homesMonth(ruled({ homesStartsToGap: true }), 0)).toBe(0);
+    // 40 waiting: room 40 × 0.97 / 0.95 = 40.8 persons, so six 8-person cottages (the last one overshoots).
+    expect(homesMonth(ruled({ homesStartsToGap: true }), 40)).toBe(6);
+    // The bare §5.2 rule fills the builders' 3 a tick regardless.
+    expect(homesMonth(ruled({ homesStartsToGap: false }), 0)).toBe(12);
+  });
+
+  it('leaves the gate off while the founders\' carts run (they arrive only into vacancies)', () => {
+    expect(homesMonth(ruled({ homesStartsToGap: true }), 0, true)).toBeGreaterThan(0);
+  });
+});
 
 describe('level-ups, declines and the supply count', () => {
   it('an L1 cottage levels up to L2 only with power and water (§3.5), and never declines for want of them', () => {

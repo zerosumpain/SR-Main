@@ -77,6 +77,7 @@ import {
   type Planes,
 } from './tiles';
 import {
+  COHORT_S,
   COVERAGES,
   SECTOR_COUNT,
   STAGE_C,
@@ -969,14 +970,17 @@ interface Candidate {
 /** Live occupancy of each Homes tier and sector, from stored people and last month's workers. */
 class Occupancy {
   private readonly homesCap: number[];
+  private readonly homesPipe: number[];
   private readonly jobs: number[];
   private occ: number[] | null = null;
+  private squeezedTier: number[] | null = null;
   private constructor(
     private readonly t: TownState,
     private readonly filled: number[] | null,
     s: DevelopmentSlot,
   ) {
     this.homesCap = [...s.cap];
+    this.homesPipe = [...s.pipeline];
     this.jobs = new Array<number>(N_SECTORS).fill(0);
     for (let k = 0; k < N_SECTORS; k++) for (let h = 0; h < 3; h++) this.jobs[k] += s.jobs[k * 3 + h];
   }
@@ -996,8 +1000,31 @@ class Occupancy {
   /** Homes tier h's occupancy (1 with no homes of that tier). */
   homes(h: number): number {
     if (this.homesCap[h] <= 0) return 1;
-    if (!this.occ) this.occ = allocate(cohortPersons(this.t.people), this.homesCap).occ;
-    return this.occ[h] / this.homesCap[h];
+    if (!this.occ) this.allocateNow();
+    return this.occ![h] / this.homesCap[h];
+  }
+  private allocateNow(): void {
+    const a = allocate(cohortPersons(this.t.people), this.homesCap);
+    this.occ = a.occ;
+    this.squeezedTier = a.squeezedTier;
+  }
+  /**
+   * Persons of tier-h homes the builders may still start this tick (§5.2,
+   * rules.homesStartsToGap): the homes the tier's demand would fill at the
+   * Homes meter's vacancy target (§5.8's ratio at 1, the residents housed
+   * there, the squeezed, the waiting list and aspirants), less a `queue`
+   * share of that demand kept waiting, less the homes built and building.
+   * At or below 0 a new start would only add to a glut.
+   */
+  homesRoom(h: number, vacancyTarget: number, queue: number): number {
+    if (!this.occ) this.allocateNow();
+    const t = this.t;
+    let waiting = 0;
+    for (let kind = 0; kind < 3; kind++) waiting += t.applicants[h * 3 + kind];
+    if (h === 0) waiting += t.applicants[COHORT_S];
+    const asp = h > 0 ? t.aspirants[h - 1] : 0;
+    const demand = this.occ![h] + this.squeezedTier![h] + waiting + asp;
+    return (demand * (1 - queue)) / (1 - vacancyTarget) - (this.homesCap[h] + this.homesPipe[h]);
   }
   /** Sector s's job fill (1 before any month has counted workers). */
   sector(s: number): number {
@@ -1015,10 +1042,12 @@ class Occupancy {
       const h = tierBits > 2 ? 2 : tierBits;
       this.homesCap[h] = Math.max(0, this.homesCap[h] - lost);
       this.occ = null;
+      this.squeezedTier = null;
     } else this.jobs[ZSECTOR[zone]] = Math.max(0, this.jobs[ZSECTOR[zone]] - lost);
   }
   peopleChanged(): void {
     this.occ = null;
+    this.squeezedTier = null;
   }
 }
 
@@ -1303,12 +1332,32 @@ export function stepDevelop(t: TownState, ctx: TickContext): void {
   const allow = Math.max(0, flow(t, 'dev.builders', buildersPerTick(population(t), p)));
   if (candidates.length) {
     candidates.sort((a, b) => b.score - a.score || a.rank - b.rank || a.tile - b.tile);
-    const n = Math.min(allow, candidates.length);
     const w = planesForWrite(t);
     // The World's Builders' Shortage (§5.16): every start this tick takes one tick longer.
     const shortage = ctx.world.event?.id === 'buildersShortage' ? 1 : 0;
-    for (let k = 0; k < n; k++) {
+    // Builders start only into demand (§5.2, the supply line of §5.8): with rules.homesStartsToGap a Homes
+    // start waits while the tier's built and building homes already meet its demand (homesRoom). Held
+    // starts are not "builders busy": the lot simply waits for the market. While the founders' carts run
+    // the gate is off: carts arrive only into vacancies (A12), so a founding hamlet must build ahead.
+    const homesGate = P.rules.homesStartsToGap && !cartsRunning(t, P);
+    let room: number[] | null = null;
+    let n = 0;
+    let held = 0;
+    for (let k = 0; k < candidates.length && n < allow; k++) {
       const c = candidates[k];
+      const zone = payloadOf(use[c.tile]);
+      if (zone === ZH) {
+        if (homesGate) {
+          room ??= [0, 1, 2].map((h) => occ.homesRoom(h, P.meters.vacancyTarget, P.develop.homesQueue));
+          const h = Math.min(2, tierOf(c.lvl));
+          if (room[h] <= 0) {
+            held++;
+            continue;
+          }
+          room[h] -= (ZCAP[ZH][c.level - 1] ?? 0) - (c.from > 0 ? (ZCAP[ZH][c.from - 1] ?? 0) : 0);
+        }
+      }
+      n++;
       w.lvl[c.tile] = c.lvl;
       w.age[c.tile] = 0;
       pairSet(t.construction, c.tile, (p.buildTicks[c.level - 1] ?? 2) + shortage);
@@ -1316,7 +1365,7 @@ export function stepDevelop(t: TownState, ctx: TickContext): void {
       if (c.from > 0) pairSet(d.aux, c.tile, aux(AUX_UPGRADE, c.from));
       appendTileEvent(t, ctx.tick, c.tile, c.from > 0 ? 'levelUp' : 'started', c.level);
     }
-    d.turnedAway = Math.min(255, d.turnedAway + candidates.length - n);
+    d.turnedAway = Math.min(255, d.turnedAway + candidates.length - n - held);
   }
 
   // Incidents (§5.2 step 3): a monthly chance per building, met once a month by the stride, capped at 2% a month.
@@ -1361,6 +1410,12 @@ function incidents(t: TownState, ctx: TickContext, d: DevState, f: Facts, visite
   }
 }
 
+/** Founders' carts still come (A12): the town is under cartsUnderPop people and younger than cartsDays (the fortnight included). */
+function cartsRunning(t: TownState, P: Params): boolean {
+  const p = P.develop;
+  return t.tick < p.cartsDays * TICKS_PER_DAY + P.clock.sprintTicks && population(t) < p.cartsUnderPop;
+}
+
 /**
  * Founders' carts: while the town is under 300 people and younger than 21
  * days (the fortnight included), +min(20, £ vacancy) Outside World arrivals
@@ -1376,8 +1431,7 @@ function incidents(t: TownState, ctx: TickContext, d: DevState, f: Facts, visite
  */
 function carts(t: TownState, ctx: TickContext, occ: Occupancy): void {
   const p = ctx.params.develop;
-  if (t.tick >= p.cartsDays * TICKS_PER_DAY + ctx.params.clock.sprintTicks) return;
-  if (population(t) >= p.cartsUnderPop) return;
+  if (!cartsRunning(t, ctx.params)) return;
   // Homes that finished this tick are open now; closed ones are not.
   const n = Math.min(p.cartsPerTick, Math.max(0, occ.vacantModest()));
   if (n > 0) {
