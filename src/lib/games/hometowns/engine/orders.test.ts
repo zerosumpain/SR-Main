@@ -147,6 +147,28 @@ describe('While I am away, zone next to roads', () => {
       expect(Array.from(planesOf(t).use)).toEqual(Array.from(before));
     }
   });
+
+  it('zones from a lower line in a Hamlet (civic.awayHamletMeterAt, G8): a hamlet’s meters never reach 60', () => {
+    expect(P.civic.awayHamletMeterAt).toBe(20);
+    const got: Record<number, number> = {};
+    for (const tier of [0, 1] as const) {
+      const { c, i, t } = kitTown({ tier });
+      road(t, 4, 30, 60, 30, 'street');
+      t.orders = only('awayZoning');
+      t.away.lastHelloAt = 0;
+      postWhole(t, 'other', 1e7);
+      const homes0 = zoned(t, Z_HOMES);
+      runMonths(c, i, 12, civicSteps((tt) => {
+        tt.meters.fill(0);
+        tt.meters[0] = 30; // above the Hamlet line (20), under the order's own 60
+        tt.meters[METER_SHOPS] = -20;
+        return {};
+      }));
+      got[tier] = zoned(t, Z_HOMES) - homes0;
+    }
+    expect(got[0]).toBe(12); // the Hamlet zones its day's allowance of Homes lots
+    expect(got[1]).toBe(0); // a Village keeps the order's 60
+  });
 });
 
 describe('While I am away, build the Village checklist (decision 6)', () => {
@@ -228,11 +250,11 @@ describe('While I am away, build the Village checklist (decision 6)', () => {
   it('zones the market’s Shops lots by the road once shops are wanted, inside the day’s zoning allowance', () => {
     const { c, i, t } = hamlet();
     postWhole(t, 'other', 1e6);
-    runMonths(c, i, 1, civicSteps(hold(30)));
+    runMonths(c, i, 1, civicSteps(hold(15)));
     const p = planesOf(t);
     let lots = 0;
     for (let k = 0; k < MAP * MAP; k++) if (p.use[k] === zoneUse(Z_SHOPS)) lots++;
-    // The Shops meter (30) is under the zoning order's 60, so every lot is the market's.
+    // The Shops meter (15) is under the zoning order's Hamlet line (20), so every lot is the market's.
     expect(lots).toBe(MARKET_LOTS);
     expect(notes(t, 'deputy.awayCivic.market')[0].data.shops).toBe(MARKET_LOTS);
     expect(ids(t)).toEqual([]); // the market was today's item

@@ -445,6 +445,7 @@
     "coveredAt": {"value":20,"min":10,"max":40,"unit":"index","doc":"A home counts as covered by a service where the coverage field reaches this (§7 checklists).","loop":null},
     "struggleShare": {"value":0.9,"min":0.75,"max":0.95,"unit":"share","doc":"Below this share of its peak population a town shows the struggling badge (§7).","loop":null},
     "deputyStep": {"value":50,"min":10,"max":100,"unit":"bp","doc":"The budget order raises homes tax this much a month (§5.18).","loop":null},
+    "awayHamletMeterAt": {"value":20,"min":0,"max":60,"unit":"meter","doc":"In a Hamlet, the away order zones Homes, Shops or job lots when that meter is above this (or the order's own threshold, if lower): a hamlet's meters sit at 20–45, so the order's 60 never fired and an absent hamlet stopped at its first roads' lots (G8, §5.18).","loop":null},
     "deputyLogKeep": {"value":12,"min":6,"max":24,"unit":"items","doc":"Deputy action cards kept in the inbox.","loop":null},
     "policyRects": {"value":8,"min":4,"max":16,"unit":"rects","doc":"Most rectangles in a painted policy area.","loop":null},
     "greatMetropolis": {"value":[150000,75],"min":[100000,60],"max":[200000,90],"unit":"[persons, index]","doc":"The Great Metropolis title: population and Culture star (§7).","loop":null}

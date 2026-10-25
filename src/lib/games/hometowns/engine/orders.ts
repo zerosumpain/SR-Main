@@ -647,9 +647,9 @@ export function repayLoan(t: TownState, amount: number, p: Params): number {
  * zones whose meter is above `meterAt` (Homes, Shops, then the job zone),
  * the remainder to Homes first. `kinds` counts the zones wanted.
  */
-function zoneWanted(t: TownState, left: number, meterAt: number): { kinds: number; homes: number; shops: number; jobs: number } {
+function zoneWanted(t: TownState, left: number, meterAt: number, shopsAt = meterAt): { kinds: number; homes: number; shops: number; jobs: number } {
   const homes = zoneAllowed(t, Z_HOMES) && Math.max(t.meters[0], t.meters[1], t.meters[2]) > meterAt;
-  const shops = zoneAllowed(t, Z_SHOPS) && t.meters[METER_SHOPS] > meterAt;
+  const shops = zoneAllowed(t, Z_SHOPS) && t.meters[METER_SHOPS] > shopsAt;
   // Review amendment to §5.18: also the job zone (Industry or Farms, the higher meter) when it is
   // wanted. With Homes and Shops alone a town whose people had no work sat at a fixed point no
   // order could leave (Bramble's steps give 10 jobs for 96 founders: G8).
@@ -708,7 +708,11 @@ function runEach(t: TownState, m: MonthContext, books: MonthBooks): void {
         break;
       }
       case 'awayZoning': {
-        const [tiles, meterAt, months] = o.args;
+        const [tiles, orderMeterAt, months] = o.args;
+        // G8: a Hamlet's Homes and job meters sit at 20–45, below the order's 60, so it zones them from a lower
+        // line there. Shops keep the order's line: a hamlet's shops are the market item's (decision 6), and
+        // extra Shops lots on a small town's spending only cycle its Shops meter round zero (G10).
+        const meterAt = t.tier === 0 ? Math.min(orderMeterAt, m.params.civic.awayHamletMeterAt) : orderMeterAt;
         const away = m.at - t.away.lastHelloAt > m.params.clock.awayAfterMs;
         if (!away || t.money.reserves <= months * spend) break;
         if (memo.zonedDay !== m.dayIndex) {
@@ -720,12 +724,12 @@ function runEach(t: TownState, m: MonthContext, books: MonthBooks): void {
         const civic = awayCivic(t, m, memo, floor, Math.max(0, Math.floor(tiles) - memo.zonedToday));
         memo.zonedToday += civic.tiles;
         let left = Math.max(0, Math.floor(tiles) - memo.zonedToday);
-        let z = zoneWanted(t, left, meterAt);
+        let z = zoneWanted(t, left, meterAt, orderMeterAt);
         // Decision 8: wanted lots but no free roadside land left (for them or the market): one short lane a day,
         // then the rest of today's allowance on its new frontage.
         if ((civic.starved || (z.kinds > 0 && z.homes + z.shops + z.jobs < left)) && awayRoad(t, m, memo, floor)) {
           left -= z.homes + z.shops + z.jobs;
-          const more = zoneWanted(t, left, meterAt);
+          const more = zoneWanted(t, left, meterAt, orderMeterAt);
           z = { kinds: z.kinds, homes: z.homes + more.homes, shops: z.shops + more.shops, jobs: z.jobs + more.jobs };
         }
         memo.zonedToday += z.homes + z.shops + z.jobs;
