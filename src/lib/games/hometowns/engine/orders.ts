@@ -342,7 +342,8 @@ export const AWAY_ROAD_TILES = 6;
  * never count as new lots, as the Deputy never zones Forest. Flood plain is
  * allowed, as the rules allow roads and homes up to L3 there. A lane is scored
  * by the new roadside lots it opens (empty, open, non-Forest tiles beside it
- * or beyond its end that are not already by a road); the best score wins,
+ * that are not already by a road; not the tile beyond its end, which the
+ * Deputy's zoning leaves free as a dead end's continuation); the best score wins,
  * then the lane clearing fewer Forest tiles, then the shorter, then the start
  * nearest the Town Hall (directions east, west, south, north). Its cost must
  * leave reserves above the order's safety floor. It goes through the same
@@ -385,14 +386,9 @@ function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number)
         if (terrainKind(terrain[i]) === T_FOREST) trees++;
         cost += roadTileCost(t, lane, i, m.params);
         if (cost >= spare) break;
-        // This tile is road now: it was the lot beyond the previous end.
-        const at = seen.indexOf(i);
-        if (at >= 0) {
-          seen.splice(at, 1);
-          score--;
-        }
-        // New lots: its two sides and the tile beyond it (none of them on the lane itself).
-        for (const [sx, sy] of [[dy, dx], [-dy, -dx], [dx, dy]] as const) {
+        // New lots: its two sides. Not the tile beyond its end: the lane ends in a dead end, and the
+        // Deputy's zoning leaves the tile continuing a dead end free (continuesDeadEnd), so it is never a lot.
+        for (const [sx, sy] of [[dy, dx], [-dy, -dx]] as const) {
           const ax = x + sx;
           const ay = y + sy;
           if (!inMap(ax, ay)) continue;
@@ -492,9 +488,11 @@ export const GROWTH_KEEP_HOMES = 16;
 /**
  * Rezones up to `n` empty Homes lots (level 0, nothing under way) as zone
  * `z`, the far districts' first, then nearest the Town Hall, leaving
- * GROWTH_KEEP_HOMES of them; returns tiles rezoned.
+ * GROWTH_KEEP_HOMES of them; only lots with a road in reach (`attach`, the
+ * road net's: a lot builders cannot reach would sit empty as work too);
+ * returns tiles rezoned.
  */
-function rezoneEmptyHomes(t: TownState, z: number, n: number, first: { far: Uint8Array; attach: Int32Array } | null): number {
+function rezoneEmptyHomes(t: TownState, z: number, n: number, first: { far: Uint8Array; attach: Int32Array } | null, attach: Int32Array): number {
   const spare = emptyLots(t, Z_HOMES) - GROWTH_KEEP_HOMES;
   const most = Math.min(n, spare);
   if (most <= 0) return 0;
@@ -504,7 +502,7 @@ function rezoneEmptyHomes(t: TownState, z: number, n: number, first: { far: Uint
   for (let pass = first ? 0 : 1; pass < 2; pass++)
     for (const i of BY_DISTANCE) {
       if (picks.length >= most) break;
-      if (read.use[i] !== homes || read.lvl[i] !== 0 || constructionLeft(t, i) > 0) continue;
+      if (read.use[i] !== homes || read.lvl[i] !== 0 || attach[i] < 0 || constructionLeft(t, i) > 0) continue;
       if (first) {
         const d = roadDistrict(first.attach, i);
         if ((pass === 0) !== (d >= 0 && first.far[d] === 1)) continue;
@@ -590,7 +588,7 @@ function growthHelp(t: TownState, m: MonthContext, memo: CivicMemo, tiles: numbe
       if (n < want && awayRoad(t, m, memo, floor)) n += zoneRoadside(t, z, want - n, far);
       if (n > 0) deputyNote(t, m, 'growthHelp.jobs', { tiles: n, zone: ZONE_DEFS[z].id });
       // Still short, and the roads lined with Homes lots no builder has started: repaint the surplus for work.
-      const r = n < want ? rezoneEmptyHomes(t, z, want - n, far) : 0;
+      const r = n < want ? rezoneEmptyHomes(t, z, want - n, far, attachOf(t, m)) : 0;
       if (r > 0) deputyNote(t, m, 'growthHelp.rezone', { tiles: r, zone: ZONE_DEFS[z].id });
       continue;
     }

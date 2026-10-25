@@ -330,6 +330,24 @@ describe('While I am away, lay a short lane when the roadside is full (decision 
     expect(t.money.reserves).toBeGreaterThan(floor);
   });
 
+  it('lays no lane that would open no lot to zone: the tile beyond its dead end does not count', () => {
+    const { c, i, t } = boxed();
+    // Both ways out of the lane's ends lined with built homes: a lane there would only open the tile beyond its end,
+    // which the Deputy leaves free as a dead end's continuation.
+    const w = planesForWrite(t);
+    for (const xs of [[14, 19], [26, 31]])
+      for (let x = xs[0]; x <= xs[1]; x++)
+        for (const y of [29, 31]) {
+          w.use[tileIndex(x, y)] = zoneUse(Z_HOMES);
+          w.lvl[tileIndex(x, y)] = 1;
+        }
+    postWhole(t, 'other', 1e6);
+    runMonths(c, i, 12, civicSteps(homesWanted));
+    expect(t.inbox.filter((x) => x.kind === 'deputy.awayRoad')).toHaveLength(0);
+    expect(isRoad(t, 26, 30)).toBe(false);
+    expect(isRoad(t, 19, 30)).toBe(false);
+  });
+
   it('lays nothing while roadside land is free, when nothing is wanted, or for a mayor who is here', () => {
     for (const setup of ['free', 'unwanted', 'present'] as const) {
       const { c, i, t } = boxed();
@@ -443,6 +461,28 @@ describe('Keep the town growing: jobs and services for the next tier (G3)', () =
     expect(lots(k.t, Z_HOMES)).toBe(GROWTH_KEEP_HOMES);
     expect(lots(k.t, Z_INDUSTRY)).toBe(40 - GROWTH_KEEP_HOMES);
     expect(rezoned[0].data).toMatchObject({ tiles: 40 - GROWTH_KEEP_HOMES, zone: 'industry' });
+  });
+
+  it('repaints only empty Homes lots a builder can reach from a road', () => {
+    const k = kitTown({ tier: 1 });
+    road(k.t, 10, 40, 29, 40, 'street');
+    place(k.t, 'villageGreen', 9, 40);
+    place(k.t, 'villageGreen', 30, 40);
+    const w = planesForWrite(k.t);
+    for (let x = 10; x < 30; x++)
+      for (const y of [39, 41]) {
+        w.use[tileIndex(x, y)] = zoneUse(Z_HOMES);
+        w.lvl[tileIndex(x, y)] = 0;
+      }
+    // Ten more empty Homes lots with no road in reach, nearer the Town Hall (33, 44) than the street's.
+    for (let x = 33; x < 38; x++) for (const y of [46, 47]) w.use[tileIndex(x, y)] = zoneUse(Z_HOMES);
+    k.t.orders = only('growthHelp');
+    k.t.away.lastHelloAt = 9e15;
+    postWhole(k.t, 'other', 1e6);
+    runMonths(k.c, k.i, 1, civicSteps(economy(20, 240, 1200)));
+    expect(lots(k.t, Z_INDUSTRY)).toBe(24); // the day's most
+    expect(lots(k.t, Z_HOMES)).toBe(50 - 24);
+    for (let x = 33; x < 38; x++) for (const y of [46, 47]) expect(planesOf(k.t).use[tileIndex(x, y)], `${x},${y}`).toBe(zoneUse(Z_HOMES));
   });
 
   it('does nothing in a Hamlet, under Hold, with the order off, or below the safety floor', () => {
