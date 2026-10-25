@@ -29,7 +29,7 @@
 // build default would 404 it.
 //
 // `hometowns` is the same shape: the Hometowns map page, one versioned bundle
-// per engine hash at /projects/hometowns/<ENGINE_HASH>/mobile.html, loaded by
+// per page hash at /projects/hometowns/<PAGE_HASH>/mobile.html, loaded by
 // the iPhone app (games/hometowns-view, scripts/hometowns/deploy-page.sh). It
 // has no card and holds no data, so it defaults public. Being a static key is
 // also what gives it FIRST_PARTY_BUNDLE_CSP (no sandbox): the page's forecast

@@ -31,7 +31,7 @@ describe('/projects card ↔ registry parity', () => {
   });
 
   it('keeps the Hometowns map page registered but card-less', () => {
-    // The app loads /projects/hometowns/<ENGINE_HASH>/mobile.html; there is
+    // The app loads /projects/hometowns/<PAGE_HASH>/mobile.html; there is
     // nothing at /projects/hometowns/ for a card to link to.
     expect(STATIC_PROJECT_KEYS).toContain('hometowns');
     expect(keys).not.toContain('hometowns');

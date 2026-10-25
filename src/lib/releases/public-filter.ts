@@ -164,7 +164,7 @@ const PRIVATE_SURFACE_RE = /(^|\/)(admin|api)(\/|$)/i;
 /**
  * Static keys that default public only so their versioned files are served,
  * not because there is a page to visit: /projects/hometowns/ has no index (the
- * iPhone app loads /projects/hometowns/<ENGINE_HASH>/mobile.html) and is a
+ * iPhone app loads /projects/hometowns/<PAGE_HASH>/mobile.html) and is a
  * family game's renderer. A release item naming it stays off public surfaces,
  * as it did before the key was registered.
  */
