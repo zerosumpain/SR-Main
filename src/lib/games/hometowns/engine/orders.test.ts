@@ -13,7 +13,7 @@ import { monthlySpending } from './finance';
 import { lineIndex, postWhole } from './core';
 import { civicMemo, upkeepOf } from './finance';
 import { stateHash } from './index';
-import { AWAY_GREENS, MARKET_LOTS, renewsContracts } from './orders';
+import { AWAY_GREENS, AWAY_ROAD_TILES, MARKET_LOTS, renewsContracts } from './orders';
 import { paramsFor } from './params';
 import { B_KIND, CAT_ROAD, CAT_ZONE, MAP, planesForWrite, planesOf, tileIndex, useCat, usePayload, zoneUse } from './tiles';
 import { BUILDINGS } from './content';
@@ -249,6 +249,96 @@ describe('While I am away, build the Village checklist (decision 6)', () => {
       expect(ids(t), setup).toEqual([]);
       expect(notes(t, 'deputy.awayCivic.build'), setup).toHaveLength(0);
       expect(notes(t, 'deputy.awayCivic.market'), setup).toHaveLength(0);
+    }
+  });
+});
+
+describe('While I am away, lay a short lane when the roadside is full (decision 8)', () => {
+  type Town = ReturnType<typeof kitTown>['t'];
+  /** A Hamlet with a Lane from x 20 to 25 at y 30, both sides lined with built homes, its mayor long gone. */
+  const boxed = () => {
+    const k = kitTown({ tier: 0 });
+    road(k.t, 20, 30, 25, 30, 'lane');
+    const w = planesForWrite(k.t);
+    for (let x = 20; x <= 25; x++)
+      for (const y of [29, 31]) {
+        w.use[tileIndex(x, y)] = zoneUse(Z_HOMES);
+        w.lvl[tileIndex(x, y)] = 1;
+      }
+    k.t.orders = only('awayZoning');
+    k.t.away.lastHelloAt = 0;
+    return k;
+  };
+  /** Homes wanted (80, over the order's 60); nothing else. */
+  const homesWanted = (tt: Town) => {
+    tt.meters.fill(0);
+    tt.meters[0] = 80;
+    return {};
+  };
+  const isRoad = (t: Town, x: number, y: number) => useCat(planesOf(t).use[tileIndex(x, y)]) === CAT_ROAD;
+  const homesAt = (t: Town) => {
+    const out: number[] = [];
+    const p = planesOf(t);
+    for (let k = 0; k < MAP * MAP; k++) if (p.use[k] === zoneUse(Z_HOMES) && p.lvl[k] === 0) out.push(k);
+    return out;
+  };
+
+  it('extends a dead end by up to six tiles, once a Regional Day, through the build plan, then zones the new frontage', () => {
+    const { c, i, t } = boxed();
+    postWhole(t, 'other', 1e6);
+    const before = t.money.reserves;
+    runMonths(c, i, 12, civicSteps(homesWanted));
+    // The east end is nearer the Town Hall: Lane tiles 26…31, and nothing else today.
+    for (let x = 26; x < 26 + AWAY_ROAD_TILES; x++) expect(isRoad(t, x, 30), `x ${x}`).toBe(true);
+    expect(isRoad(t, 19, 30)).toBe(false);
+    expect(isRoad(t, 26 + AWAY_ROAD_TILES, 30)).toBe(false);
+    const card = t.inbox.filter((x) => x.kind === 'deputy.awayRoad');
+    expect(card).toHaveLength(1);
+    expect(card[0].data).toMatchObject({ tiles: AWAY_ROAD_TILES, cost: AWAY_ROAD_TILES * 1500 });
+    expect(t.undo.some((e) => e.planId === `deputy.${c.dayIndex}.road`)).toBe(true);
+    expect(before - t.money.reserves).toBeGreaterThanOrEqual(AWAY_ROAD_TILES * 1500);
+    // The day's twelve Homes lots went on the new lane's sides; the tiles beyond both dead ends stay free.
+    const lots = homesAt(t);
+    expect(lots).toHaveLength(12);
+    for (const k of lots) {
+      const x = k % MAP;
+      const y = (k - x) / MAP;
+      expect(x >= 26 && x <= 31 && (y === 29 || y === 31), `lot ${x},${y}`).toBe(true);
+    }
+    expect(planesOf(t).use[tileIndex(19, 30)]).toBe(0);
+    expect(planesOf(t).use[tileIndex(32, 30)]).toBe(0);
+    // The next Regional Day: one more lane.
+    c.dayIndex += 1;
+    runMonths(c, i, 12, civicSteps(homesWanted));
+    expect(t.inbox.filter((x) => x.kind === 'deputy.awayRoad')).toHaveLength(2);
+  });
+
+  it('only spends the money above the safety floor: a shorter lane when that is all it can pay for', () => {
+    const { c, i, t } = boxed();
+    t.away.lastHelloAt = 9e15; // present for a month, so the books know the spending
+    postWhole(t, 'other', 1e6);
+    runMonths(c, i, 1, civicSteps(homesWanted));
+    const floor = 3 * monthlySpending(t);
+    postWhole(t, 'other', -t.money.reserves + floor + 7_000); // under six Lane tiles (£9,000) above the floor
+    t.away.lastHelloAt = 0;
+    runMonths(c, i, 1, civicSteps(homesWanted));
+    const n = t.inbox.find((x) => x.kind === 'deputy.awayRoad')!.data.tiles as number;
+    expect(n).toBeGreaterThanOrEqual(1);
+    expect(n).toBeLessThan(AWAY_ROAD_TILES);
+    expect(isRoad(t, 25 + n, 30)).toBe(true);
+    expect(isRoad(t, 26 + n, 30)).toBe(false);
+    expect(t.money.reserves).toBeGreaterThan(floor);
+  });
+
+  it('lays nothing while roadside land is free, when nothing is wanted, or for a mayor who is here', () => {
+    for (const setup of ['free', 'unwanted', 'present'] as const) {
+      const { c, i, t } = boxed();
+      postWhole(t, 'other', 1e6);
+      if (setup === 'free') road(t, 20, 40, 40, 40, 'lane');
+      if (setup === 'present') t.away.lastHelloAt = 9e15;
+      runMonths(c, i, 12, civicSteps(setup === 'unwanted' ? (tt: Town) => (tt.meters.fill(0), {}) : homesWanted));
+      expect(t.inbox.filter((x) => x.kind === 'deputy.awayRoad'), setup).toHaveLength(0);
+      expect(isRoad(t, 26, 30), setup).toBe(false);
     }
   });
 });

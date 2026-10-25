@@ -97,7 +97,8 @@ export function placeCost(t: TownState, kind: number, p: Params): number {
   return Math.round(c);
 }
 
-function roadTileCost(t: TownState, build: number, tile: number, p: Params): number {
+/** £ to build one road tile of `build` here (hilly tiles on a Hills site cost more). */
+export function roadTileCost(t: TownState, build: number, tile: number, p: Params): number {
   if (t.siteKind !== 'hills') return build;
   const v = terrainOf(t)[tile];
   return terrainKind(v) === T_HILL || terrainElevation(v) >= 2 ? Math.round(build * p.build.hillRoadMult) : build;

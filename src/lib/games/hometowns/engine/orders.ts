@@ -12,10 +12,10 @@
 // fixDamaged is applied by WP2e's tick step (develop.ts repairs); Bramble
 // reports the month's repair bill here.
 
-import { BUILDINGS, ORDER_DEFAULTS, TIER_DEFS, ZONE_DEFS, buildingIndex } from './content';
+import { BUILDINGS, ORDER_DEFAULTS, TIER_DEFS, ZONE_DEFS, buildingIndex, roadDef } from './content';
 import { lineIndex, population, postWhole } from './core';
 import { civicMemo, deputyNote, levelPayment, monthsOfSpending, monthlySpending, type MonthBooks } from './finance';
-import { applyBuild, placeCost } from './ops';
+import { applyBuild, placeCost, roadTileCost } from './ops';
 import { appendTileEvent } from './records';
 import { CHECKLISTS } from './tiers';
 import { T_FOREST, TOWN_HALL_AT, buildable, terrainKind, terrainOf } from './terrain';
@@ -76,6 +76,9 @@ const BY_DISTANCE: readonly number[] = (() => {
   return tiles.sort((a, b) => d(a) - d(b) || a - b);
 })();
 
+/** Unit steps east, west, south, north: the fixed order the Deputy tries directions in. */
+const DIRS: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
 function nextToRoad(use: Uint16Array, i: number): boolean {
   const x = i % MAP;
   const y = (i - x) / MAP;
@@ -87,7 +90,30 @@ function nextToRoad(use: Uint16Array, i: number): boolean {
   );
 }
 
-/** Zones up to `n` empty roadside tiles with zone `z` (nearest the Town Hall first); returns tiles zoned. */
+const isRoad = (use: Uint16Array, x: number, y: number): boolean => inMap(x, y) && useCat(use[tileIndex(x, y)]) === CAT_ROAD;
+
+/**
+ * Does tile i continue a road's dead end straight on (decision 8)? The Deputy
+ * leaves that tile unzoned, so a later lane (awayRoad) can extend the road
+ * instead of finding every road end capped by its own lots.
+ */
+function continuesDeadEnd(use: Uint16Array, i: number): boolean {
+  const x = i % MAP;
+  const y = (i - x) / MAP;
+  for (const [dx, dy] of DIRS) {
+    // r = the road tile behind i; a dead end when its only road neighbour is the one behind it.
+    const rx = x - dx;
+    const ry = y - dy;
+    if (isRoad(use, rx, ry) && isRoad(use, rx - dx, ry - dy) && !isRoad(use, rx + dy, ry + dx) && !isRoad(use, rx - dy, ry - dx)) return true;
+  }
+  return false;
+}
+
+/**
+ * Zones up to `n` empty roadside tiles with zone `z` (nearest the Town Hall
+ * first), leaving the tile beyond each road's dead end free (decision 8);
+ * returns tiles zoned.
+ */
 function zoneRoadside(t: TownState, z: number, n: number): number {
   if (n <= 0) return 0;
   const terrain = terrainOf(t);
@@ -99,7 +125,7 @@ function zoneRoadside(t: TownState, z: number, n: number): number {
     const v = terrain[i];
     if (!buildable(v) || terrainKind(v) === T_FOREST) continue;
     const x = i % MAP;
-    if (!parcelOpen(t, x, (i - x) / MAP) || !nextToRoad(read, i)) continue;
+    if (!parcelOpen(t, x, (i - x) / MAP) || !nextToRoad(read, i) || continuesDeadEnd(read, i)) continue;
     picks.push(i);
   }
   if (picks.length === 0) return 0;
@@ -240,14 +266,16 @@ function civicSite(t: TownState, m: MonthContext, kind: number, cover: (typeof C
  * (placement, tier, Helper Mode, the undo entry), and each action is a Deputy
  * card for the Welcome-back sheet. Returns the Shops tiles it zoned.
  */
-function awayCivic(t: TownState, m: MonthContext, memo: CivicMemo, floor: number, tilesLeft: number): number {
-  if (t.tier !== 0 || memo.civicDay === m.dayIndex) return 0;
+function awayCivic(t: TownState, m: MonthContext, memo: CivicMemo, floor: number, tilesLeft: number): { tiles: number; starved: boolean } {
+  const none = { tiles: 0, starved: false };
+  if (t.tier !== 0 || memo.civicDay === m.dayIndex) return none;
   // One look a Regional Day, at its first away month (an item, or nothing, until the next day):
   // the site search walks the whole map, and the month step's budget (G12) has no room for it monthly.
   memo.civicDay = m.dayIndex;
   const schools = groupCount(t, 'primary');
   const parks = groupCount(t, 'park');
   const underWay = schools.building + parks.building > 0; // one building at a time: wait for this one to open
+  let starved = false;
   for (const item of AWAY_CIVIC_ITEMS) {
     if (villageItemMet(memo, item)) continue;
     if (item === 'market') {
@@ -263,9 +291,12 @@ function awayCivic(t: TownState, m: MonthContext, memo: CivicMemo, floor: number
       const want = Math.min(MARKET_LOTS - lots, tilesLeft);
       if (want <= 0) continue; // the lots are down; the builders will fill them
       const n = zoneRoadside(t, Z_SHOPS, want);
-      if (n === 0) continue;
+      if (n === 0) {
+        starved = true; // no free roadside land for the market (decision 8: Bramble may lay a lane)
+        continue;
+      }
       deputyNote(t, m, 'awayCivic.market', { shops: n });
-      return n;
+      return { tiles: n, starved: n < want };
     }
     const id = item === 'school' ? 'schoolHouse' : 'villageGreen';
     if (underWay || (item === 'school' ? schools.built > 0 : parks.built >= AWAY_GREENS)) continue;
@@ -281,9 +312,100 @@ function awayCivic(t: TownState, m: MonthContext, memo: CivicMemo, floor: number
       throw e;
     }
     deputyNote(t, m, 'awayCivic.build', { building: id, item, cost });
-    return 0;
+    return { tiles: 0, starved };
   }
-  return 0;
+  return { tiles: 0, starved };
+}
+
+// ---- Away road extensions (decision 8, §5.18) ---------------------------------------------------------------
+
+/** Longest lane the Deputy lays in one go (tiles). */
+export const AWAY_ROAD_TILES = 6;
+
+/**
+ * Decision 8 (John, 2026-10-25): when the away order wants to zone (or lay
+ * the market) but finds no free roadside land, Bramble lays one short Lane a
+ * Regional Day to open new frontage. It runs straight out from an existing
+ * road tile (extending a road's dead end, which the Deputy's zoning leaves
+ * free for this, or branching off a road's side), 1 to AWAY_ROAD_TILES tiles,
+ * over empty, open, buildable land: water and rock are never buildable, and
+ * Forest may be crossed (the road clears it, as a mayor's does) but its tiles
+ * never count as new lots, as the Deputy never zones Forest. Flood plain is
+ * allowed, as the rules allow roads and homes up to L3 there. A lane is scored
+ * by the new roadside lots it opens (empty, open, non-Forest tiles beside it
+ * or beyond its end that are not already by a road); the best score wins,
+ * then the lane clearing fewer Forest tiles, then the shorter, then the start
+ * nearest the Town Hall (directions east, west, south, north). Its cost must
+ * leave reserves above the order's safety floor. It goes through the same
+ * build plan as a mayor's road (undo entry, tile log), with a Deputy card.
+ * Returns whether a lane was laid.
+ */
+function awayRoad(t: TownState, m: MonthContext, memo: CivicMemo, floor: number): boolean {
+  if (memo.roadDay === m.dayIndex) return false;
+  memo.roadDay = m.dayIndex; // one look a Regional Day, laid or not
+  const spare = t.money.reserves - floor;
+  if (spare <= 0) return false;
+  const terrain = terrainOf(t);
+  const use = planesOf(t).use;
+  const lane = roadDef('lane').build;
+  // Where the lane may run: empty, open, buildable land (Forest included: the road clears it, as a mayor's does).
+  const open = (i: number): boolean => {
+    if (use[i] !== USE_EMPTY || constructionLeft(t, i) > 0 || !buildable(terrain[i])) return false;
+    const x = i % MAP;
+    return parcelOpen(t, x, (i - x) / MAP);
+  };
+  // A lot the lane opens: open land the Deputy would zone (not Forest) that is not by a road yet.
+  const lot = (i: number): boolean => open(i) && terrainKind(terrain[i]) !== T_FOREST && !nextToRoad(use, i);
+  let best: { x0: number; y0: number; x1: number; y1: number; n: number; score: number; trees: number; cost: number } | null = null;
+  const seen: number[] = [];
+  for (const r of BY_DISTANCE) {
+    if (useCat(use[r]) !== CAT_ROAD) continue;
+    const rx = r % MAP;
+    const ry = (r - rx) / MAP;
+    for (const [dx, dy] of DIRS) {
+      seen.length = 0;
+      let score = 0;
+      let trees = 0;
+      let cost = 0;
+      for (let k = 1; k <= AWAY_ROAD_TILES; k++) {
+        const x = rx + dx * k;
+        const y = ry + dy * k;
+        if (!inMap(x, y)) break;
+        const i = tileIndex(x, y);
+        if (!open(i)) break;
+        if (terrainKind(terrain[i]) === T_FOREST) trees++;
+        cost += roadTileCost(t, lane, i, m.params);
+        if (cost >= spare) break;
+        // This tile is road now: it was the lot beyond the previous end.
+        const at = seen.indexOf(i);
+        if (at >= 0) {
+          seen.splice(at, 1);
+          score--;
+        }
+        // New lots: its two sides and the tile beyond it (none of them on the lane itself).
+        for (const [sx, sy] of [[dy, dx], [-dy, -dx], [dx, dy]] as const) {
+          const ax = x + sx;
+          const ay = y + sy;
+          if (!inMap(ax, ay)) continue;
+          const a = tileIndex(ax, ay);
+          if (seen.includes(a) || !lot(a)) continue;
+          seen.push(a);
+          score++;
+        }
+        if (score === 0 || (best && (score < best.score || (score === best.score && (trees > best.trees || (trees === best.trees && k >= best.n)))))) continue;
+        best = { x0: rx + dx, y0: ry + dy, x1: x, y1: y, n: k, score, trees, cost };
+      }
+    }
+  }
+  if (!best) return false;
+  try {
+    applyBuild(t, `deputy.${m.dayIndex}.road`, [{ op: 'road', kind: 'lane', path: [best.x0, best.y0, best.x1, best.y1] }], { params: m.params, dayIndex: m.dayIndex, profile: 'kid' });
+  } catch (e) {
+    if (e instanceof EngineError) return false;
+    throw e;
+  }
+  deputyNote(t, m, 'awayRoad', { tiles: best.n, cost: best.cost });
+  return true;
 }
 
 /** Repays up to `amount` of the Town Loan with the 1% early-repayment fee; returns the principal repaid. */
@@ -299,6 +421,32 @@ export function repayLoan(t: TownState, amount: number, p: Params): number {
   if (loan.principal < 1) t.money.loan = null;
   else loan.payment = levelPayment(loan.principal, loan.rate, loan.monthsLeft); // same term, smaller payment
   return principal;
+}
+
+/**
+ * The away order's zoning: up to `left` roadside tiles split evenly between the
+ * zones whose meter is above `meterAt` (Homes, Shops, then the job zone),
+ * the remainder to Homes first. `kinds` counts the zones wanted.
+ */
+function zoneWanted(t: TownState, left: number, meterAt: number): { kinds: number; homes: number; shops: number; jobs: number } {
+  const homes = zoneAllowed(t, Z_HOMES) && Math.max(t.meters[0], t.meters[1], t.meters[2]) > meterAt;
+  const shops = zoneAllowed(t, Z_SHOPS) && t.meters[METER_SHOPS] > meterAt;
+  // Review amendment to §5.18: also the job zone (Industry or Farms, the higher meter) when it is
+  // wanted. With Homes and Shops alone a town whose people had no work sat at a fixed point no
+  // order could leave (Bramble's steps give 10 jobs for 96 founders: G8).
+  const ind = zoneAllowed(t, Z_INDUSTRY) && t.meters[METER_INDUSTRY] > meterAt ? t.meters[METER_INDUSTRY] : -Infinity;
+  const farm = zoneAllowed(t, Z_FARMS) && t.meters[METER_FARMS] > meterAt ? t.meters[METER_FARMS] : -Infinity;
+  const jobZone = ind === -Infinity && farm === -Infinity ? -1 : farm > ind ? Z_FARMS : Z_INDUSTRY;
+  const kinds = (homes ? 1 : 0) + (shops ? 1 : 0) + (jobZone >= 0 ? 1 : 0);
+  if (left <= 0 || kinds === 0) return { kinds, homes: 0, shops: 0, jobs: 0 };
+  // An even split, the remainder to Homes first (fixed order: Homes, Shops, jobs).
+  const share = Math.floor(left / kinds);
+  let extra = left - share * kinds;
+  const quota = () => share + (extra-- > 0 ? 1 : 0);
+  const h = homes ? zoneRoadside(t, Z_HOMES, quota()) : 0;
+  const s = shops ? zoneRoadside(t, Z_SHOPS, jobZone >= 0 ? quota() : left - h) : 0;
+  const j = jobZone >= 0 ? zoneRoadside(t, jobZone, left - h - s) : 0;
+  return { kinds, homes: h, shops: s, jobs: j };
 }
 
 /** Runs the standing orders in their list order (M13). "Hold" switches every other order off. */
@@ -340,27 +488,20 @@ export function runOrders(t: TownState, m: MonthContext, books: MonthBooks): voi
           memo.zonedToday = 0;
         }
         // Decision 6: the Village checklist's civic items first; the market's lots share the daily allowance.
-        memo.zonedToday += awayCivic(t, m, memo, months * spend, Math.max(0, Math.floor(tiles) - memo.zonedToday));
-        const left = Math.max(0, Math.floor(tiles) - memo.zonedToday);
-        const homes = zoneAllowed(t, Z_HOMES) && Math.max(t.meters[0], t.meters[1], t.meters[2]) > meterAt;
-        const shops = zoneAllowed(t, Z_SHOPS) && t.meters[METER_SHOPS] > meterAt;
-        // Review amendment to §5.18: also the job zone (Industry or Farms, the higher meter) when it is
-        // wanted. With Homes and Shops alone a town whose people had no work sat at a fixed point no
-        // order could leave (Bramble's steps give 10 jobs for 96 founders: G8).
-        const ind = zoneAllowed(t, Z_INDUSTRY) && t.meters[METER_INDUSTRY] > meterAt ? t.meters[METER_INDUSTRY] : -Infinity;
-        const farm = zoneAllowed(t, Z_FARMS) && t.meters[METER_FARMS] > meterAt ? t.meters[METER_FARMS] : -Infinity;
-        const jobZone = ind === -Infinity && farm === -Infinity ? -1 : farm > ind ? Z_FARMS : Z_INDUSTRY;
-        const kinds = (homes ? 1 : 0) + (shops ? 1 : 0) + (jobZone >= 0 ? 1 : 0);
-        if (left === 0 || kinds === 0) break;
-        // An even split, the remainder to Homes first (fixed order: Homes, Shops, jobs).
-        const share = Math.floor(left / kinds);
-        let extra = left - share * kinds;
-        const quota = () => share + (extra-- > 0 ? 1 : 0);
-        const h = homes ? zoneRoadside(t, Z_HOMES, quota()) : 0;
-        const s = shops ? zoneRoadside(t, Z_SHOPS, jobZone >= 0 ? quota() : left - h) : 0;
-        const j = jobZone >= 0 ? zoneRoadside(t, jobZone, left - h - s) : 0;
-        memo.zonedToday += h + s + j;
-        if (h + s + j > 0) deputyNote(t, m, 'awayZoning', { homes: h, shops: s, jobs: j });
+        const floor = months * spend;
+        const civic = awayCivic(t, m, memo, floor, Math.max(0, Math.floor(tiles) - memo.zonedToday));
+        memo.zonedToday += civic.tiles;
+        let left = Math.max(0, Math.floor(tiles) - memo.zonedToday);
+        let z = zoneWanted(t, left, meterAt);
+        // Decision 8: wanted lots but no free roadside land left (for them or the market): one short lane a day,
+        // then the rest of today's allowance on its new frontage.
+        if ((civic.starved || (z.kinds > 0 && z.homes + z.shops + z.jobs < left)) && awayRoad(t, m, memo, floor)) {
+          left -= z.homes + z.shops + z.jobs;
+          const more = zoneWanted(t, left, meterAt);
+          z = { kinds: z.kinds, homes: z.homes + more.homes, shops: z.shops + more.shops, jobs: z.jobs + more.jobs };
+        }
+        memo.zonedToday += z.homes + z.shops + z.jobs;
+        if (z.homes + z.shops + z.jobs > 0) deputyNote(t, m, 'awayZoning', { homes: z.homes, shops: z.shops, jobs: z.jobs });
         break;
       }
       case 'repayLoan': {
