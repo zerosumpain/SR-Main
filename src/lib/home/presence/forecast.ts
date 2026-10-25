@@ -45,6 +45,7 @@ function atLocalMinute(now: number, minute: number): number {
 
 /** Signed distance between two clock minutes, the short way round. */
 const clockDelta = (a: number, b: number) => ((a - b + 720 + 1440) % 1440) - 720;
+export const clockDeltaMinutes = clockDelta;
 
 // ── Routines ────────────────────────────────────────────────────────────────
 

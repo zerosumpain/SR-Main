@@ -17,7 +17,7 @@ import { alexaSignalsSync, alexaVoiceSync, alexaVoiceTopics } from './activities
 import { newsBrief } from './activities/news-brief';
 import { familySteps, familySteps4pm } from './activities/family-steps';
 import { familyBacklogDigest } from './activities/family-backlog';
-import { forecastScorecard } from './activities/forecast-scorecard';
+import { forecastNightly } from './activities/forecast-nightly';
 import { backlogGrooming } from './activities/backlog-grooming';
 import { forgeSchedulesActivity } from './activities/forge-schedules';
 import { modelRouting } from './activities/model-routing';
@@ -50,7 +50,7 @@ const handlers: ActivityHandler[] = [
   familySteps,
   familySteps4pm,
   familyBacklogDigest,
-  forecastScorecard,
+  forecastNightly,
   backlogGrooming,
   forgeSchedulesActivity,
   modelRouting,
