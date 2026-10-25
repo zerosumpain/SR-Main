@@ -12,6 +12,7 @@
 import { register } from '../registry-internal';
 import type { ToolResult } from '../registry-internal';
 import { getPublishedDir } from '$lib/jkai/sandbox';
+import { isStaticProjectKey } from '$lib/projects/visibility';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 
@@ -106,6 +107,11 @@ export async function handlePublishPage(args: PublishArgs): Promise<ToolResult> 
   const slug = sanitizeSlug(args.slug);
   if (!slug) {
     return { success: false, error: 'slug must be a non-empty string of letters, digits, and hyphens (max 80 chars).' };
+  }
+  // A static key is a hand-deployed bundle served with the first-party CSP;
+  // a chat-written index.html must not land inside it.
+  if (isStaticProjectKey(slug)) {
+    return { success: false, error: `slug "${slug}" belongs to a hand-deployed page; choose another slug.` };
   }
   if (typeof args.content !== 'string' || !args.content.length) {
     return { success: false, error: 'content must be a non-empty string.' };

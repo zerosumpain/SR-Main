@@ -27,6 +27,14 @@
 // A relocated static bundle belongs here too even when it renders no card —
 // `pulse` is reachable by URL only and is not a build, so without an entry the
 // build default would 404 it.
+//
+// `hometowns` is the same shape: the Hometowns map page, one versioned bundle
+// per page hash at /projects/hometowns/<PAGE_HASH>/mobile.html, loaded by
+// the iPhone app (games/hometowns-view, scripts/hometowns/deploy-page.sh). It
+// has no card and holds no data, so it defaults public. Being a static key is
+// also what gives it FIRST_PARTY_BUNDLE_CSP (no sandbox): the page's forecast
+// runs in a module Web Worker, which an opaque-origin sandboxed document
+// cannot start from its own files.
 export const STATIC_PROJECT_KEYS = [
   'hex',
   'engine-room',
@@ -44,6 +52,7 @@ export const STATIC_PROJECT_KEYS = [
   'marbler',
   'local-plan-navigator',
   'wildmind',
+  'hometowns',
 ] as const;
 
 const STATIC_KEYS: ReadonlySet<string> = new Set(STATIC_PROJECT_KEYS);

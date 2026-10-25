@@ -161,6 +161,15 @@ const PII_RE = new RegExp(
  */
 const PRIVATE_SURFACE_RE = /(^|\/)(admin|api)(\/|$)/i;
 
+/**
+ * Static keys that default public only so their versioned files are served,
+ * not because there is a page to visit: /projects/hometowns/ has no index (the
+ * iPhone app loads /projects/hometowns/<PAGE_HASH>/mobile.html) and is a
+ * family game's renderer. A release item naming it stays off public surfaces,
+ * as it did before the key was registered.
+ */
+const UNLISTED_PROJECT_KEYS: ReadonlySet<string> = new Set(['hometowns']);
+
 /** Pull the /projects/<key> slug out of a surface string, if it is one. */
 export function projectKeyOf(surface: string): string | null {
   const m = /^\/projects\/([^/\s]+)/.exec(surface.trim());
@@ -186,6 +195,7 @@ export function isSurfacePublic(surface: string, visibility: Record<string, bool
 
   const key = projectKeyOf(s);
   if (key !== null) {
+    if (UNLISTED_PROJECT_KEYS.has(key)) return false;
     // A `surfaces` entry is LLM-written prose, not a foreign key, so slugs drift
     // ("/projects/compound-interest/" against a row keyed
     // compound-interest-calculator). An exact miss must not read as "public" —
@@ -257,6 +267,7 @@ function isPrivateSurface(surface: string, visibility: Record<string, boolean>):
   if (PRIVATE_SURFACE_RE.test(s) || INFRA_RE.test(s) || ENV_VAR_RE.test(s)) return true;
   const key = projectKeyOf(s);
   if (key === null) return false;
+  if (UNLISTED_PROJECT_KEYS.has(key)) return true;
   if (!(visibility[key] ?? defaultsPublic(key))) return true;
   return Object.keys(visibility).some(
     (k) => visibility[k] === false && (k.startsWith(key) || key.startsWith(k)),

@@ -5,6 +5,7 @@ import { jkaiBuilds } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { publishBuild } from '$lib/jkai/sandbox';
 import { resolvePublishSlug } from '$lib/jkai/publish-slug';
+import { isStaticProjectKey } from '$lib/projects/visibility';
 import { normaliseCardFields } from '$lib/jkai/project-card';
 
 export const POST: RequestHandler = async ({ params, request }) => {
@@ -16,7 +17,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => ({}) as Record<string, unknown>);
   const requested = typeof body?.slug === 'string' ? body.slug.trim() : '';
 
-  const resolved = resolvePublishSlug(build, requested);
+  const resolved = resolvePublishSlug(build, requested, isStaticProjectKey);
   if (!resolved.ok) return json({ error: resolved.error }, { status: 400 });
   const slug = resolved.slug;
 
