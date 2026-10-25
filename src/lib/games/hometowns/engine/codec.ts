@@ -18,12 +18,22 @@ const B64_CODES = (() => {
 /** Characters per String.fromCharCode call: well under every engine's argument limit. */
 const CHUNK = 8192;
 
-export function toBase64(bytes: Uint8Array): string {
+// Working buffers, reused between calls (grown when a longer input arrives):
+// the planes, the history, the Why and the tile log are all encoded every
+// month, and a fresh buffer per call was a large share of the month's
+// allocations. Nothing returned aliases them.
+let CODES = new Uint16Array(4096);
+let RLE = new Uint8Array(8192);
+let RAW = new Uint8Array(8192);
+
+/** Base64 of bytes[0 .. n). */
+function base64Of(bytes: Uint8Array, n: number): string {
   // Character codes into one buffer, then strings a chunk at a time: the
   // planes are encoded every tick, and four-character concatenations were
   // most of the cost. The output is the same string.
-  const n = bytes.length;
-  const codes = new Uint16Array(Math.ceil(n / 3) * 4);
+  const need = Math.ceil(n / 3) * 4;
+  if (CODES.length < need) CODES = new Uint16Array(need + (need >> 1));
+  const codes = CODES;
   let o = 0;
   let i = 0;
   for (; i + 2 < n; i += 3) {
@@ -46,10 +56,17 @@ export function toBase64(bytes: Uint8Array): string {
   return out;
 }
 
-export function fromBase64(s: string): Uint8Array {
+export function toBase64(bytes: Uint8Array): string {
+  return base64Of(bytes, bytes.length);
+}
+
+/** Decodes base64 into RAW (grown as needed) and returns the byte count. */
+function base64Into(s: string): number {
   let len = s.length;
-  while (len > 0 && s[len - 1] === '=') len--;
-  const out = new Uint8Array(Math.floor((len * 3) / 4));
+  while (len > 0 && s.charCodeAt(len - 1) === 61) len--;
+  const max = Math.floor((len * 3) / 4);
+  if (RAW.length < max) RAW = new Uint8Array(max + (max >> 1));
+  const out = RAW;
   let o = 0;
   let acc = 0;
   let bits = 0;
@@ -57,33 +74,37 @@ export function fromBase64(s: string): Uint8Array {
     const c = s.charCodeAt(i);
     const v = c < 128 ? B64_INDEX[c] : -1;
     if (v < 0) throw new Error('bad base64');
-    acc = (acc << 6) | v;
+    acc = ((acc << 6) | v) & 0xffffff;
     bits += 6;
     if (bits >= 8) {
       bits -= 8;
       out[o++] = (acc >> bits) & 255;
     }
   }
-  return out.subarray(0, o);
+  return o;
 }
 
-/**
- * PackBits-style run-length coding. A control byte n < 128 is followed by
- * n + 1 literal bytes; n ≥ 128 means the next byte repeats n − 125 times
- * (3–130). Empty map rows compress to almost nothing.
- */
-export function rleEncode(src: Uint8Array): Uint8Array {
+export function fromBase64(s: string): Uint8Array {
+  const n = base64Into(s); // first: it may replace RAW
+  return RAW.slice(0, n);
+}
+
+/** PackBits-style coding of src into RLE (grown as needed); returns the coded length. */
+function rleInto(src: Uint8Array): number {
   const n = src.length;
   // Worst case: all literals, one control byte per 128.
-  const out = new Uint8Array(n + Math.ceil(n / 128) + 1);
+  const need = n + Math.ceil(n / 128) + 1;
+  if (RLE.length < need) RLE = new Uint8Array(need + (need >> 1));
+  const out = RLE;
   let o = 0;
   let i = 0;
   while (i < n) {
+    const v = src[i];
     let run = 1;
-    while (i + run < n && run < 130 && src[i + run] === src[i]) run++;
+    while (i + run < n && run < 130 && src[i + run] === v) run++;
     if (run >= 3) {
       out[o++] = run + 125;
-      out[o++] = src[i];
+      out[o++] = v;
       i += run;
       continue;
     }
@@ -98,28 +119,55 @@ export function rleEncode(src: Uint8Array): Uint8Array {
     out[o++] = lit - 1;
     for (let j = start; j < start + lit; j++) out[o++] = src[j];
   }
-  return out.slice(0, o);
+  return o;
 }
 
-export function rleDecode(src: Uint8Array, expected: number): Uint8Array {
+/**
+ * PackBits-style run-length coding. A control byte n < 128 is followed by
+ * n + 1 literal bytes; n ≥ 128 means the next byte repeats n − 125 times
+ * (3–130). Empty map rows compress to almost nothing.
+ */
+export function rleEncode(src: Uint8Array): Uint8Array {
+  const n = rleInto(src); // first: it may replace RLE with a bigger buffer
+  return RLE.slice(0, n);
+}
+
+/** toBase64(rleEncode(src)) without the intermediate copy. */
+export function encodeRle64(src: Uint8Array): string {
+  const n = rleInto(src); // first: it may replace RLE with a bigger buffer
+  return base64Of(RLE, n);
+}
+
+/** Run-length decoding of src[0 .. len) into a fresh array of `expected` bytes. */
+function rleDecodeRange(src: Uint8Array, len: number, expected: number): Uint8Array {
   const out = new Uint8Array(expected);
   let o = 0;
   let i = 0;
-  while (i < src.length) {
+  while (i < len) {
     const c = src[i++];
     if (c < 128) {
       const n = c + 1;
-      if (o + n > expected || i + n > src.length) throw new Error('bad rle');
+      if (o + n > expected || i + n > len) throw new Error('bad rle');
       for (let j = 0; j < n; j++) out[o++] = src[i++];
     } else {
       const n = c - 125;
-      if (o + n > expected || i >= src.length) throw new Error('bad rle');
+      if (o + n > expected || i >= len) throw new Error('bad rle');
       const v = src[i++];
       for (let j = 0; j < n; j++) out[o++] = v;
     }
   }
   if (o !== expected) throw new Error('bad rle length');
   return out;
+}
+
+export function rleDecode(src: Uint8Array, expected: number): Uint8Array {
+  return rleDecodeRange(src, src.length, expected);
+}
+
+/** rleDecode(fromBase64(s), expected) without the intermediate copy. */
+export function decodeRle64(s: string, expected: number): Uint8Array {
+  const n = base64Into(s); // first: it may replace RAW
+  return rleDecodeRange(RAW, n, expected);
 }
 
 /** Little-endian Int32 array ⇄ bytes (history rings). */
@@ -143,9 +191,9 @@ export function bytesToInt32(b: Uint8Array): Int32Array {
 
 /** A u8 plane (land value, pollution lag) as base64 of its RLE. */
 export function encodeU8(plane: Uint8Array): string {
-  return toBase64(rleEncode(plane));
+  return encodeRle64(plane);
 }
 
 export function decodeU8(s: string, n: number): Uint8Array {
-  return rleDecode(fromBase64(s), n);
+  return decodeRle64(s, n);
 }

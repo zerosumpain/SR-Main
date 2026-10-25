@@ -4,7 +4,7 @@
 // many times a tick, so like the planes it is decoded once per town object
 // and written back by commitRecords (the driver calls it with commitPlanes).
 
-import { bytesToInt32, fromBase64, int32ToBytes, rleDecode, rleEncode, toBase64 } from './codec';
+import { bytesToInt32, decodeRle64, encodeRle64, int32ToBytes } from './codec';
 import type { TownState } from './types';
 
 // ---- History: 14 series × (12 monthly + 42 daily) Int32 ---------------------------------
@@ -36,7 +36,7 @@ const SIZE = HEAD + SERIES * (HISTORY_MONTHS + HISTORY_DAYS);
 
 function loadHistory(t: TownState): Int32Array {
   if (!t.history) return new Int32Array(SIZE);
-  return bytesToInt32(rleDecode(fromBase64(t.history), SIZE * 4));
+  return bytesToInt32(decodeRle64(t.history, SIZE * 4));
 }
 
 function scaled(v: number, scale: number): number {
@@ -53,7 +53,7 @@ function push(t: TownState, values: Partial<Record<HistorySeries, number>>, dail
   for (let s = 0; s < SERIES; s++) a[base + s * len + slot] = scaled(values[HISTORY_SERIES[s].id] ?? 0, HISTORY_SERIES[s].scale);
   a[hi] = (slot + 1) % len;
   a[hi + 1] = Math.min(len, a[hi + 1] + 1);
-  t.history = toBase64(rleEncode(int32ToBytes(a)));
+  t.history = encodeRle64(int32ToBytes(a));
 }
 
 /** Month end sample (WP2d's M14 calls it; the stub records pop and reserves). */
@@ -107,7 +107,7 @@ const LOG_BYTES = 4 + TILE_LOG_SIZE * 6;
 function logOf(t: TownState): LogEntry {
   let e = LOG_CACHE.get(t);
   if (!e || (!e.dirty && e.src !== t.tileLog)) {
-    const bytes = t.tileLog ? rleDecode(fromBase64(t.tileLog), LOG_BYTES) : new Uint8Array(LOG_BYTES);
+    const bytes = t.tileLog ? decodeRle64(t.tileLog, LOG_BYTES) : new Uint8Array(LOG_BYTES);
     e = { src: t.tileLog, bytes, dirty: false };
     LOG_CACHE.set(t, e);
   }
@@ -157,7 +157,7 @@ export function commitRecords(t: TownState): void {
   const e = LOG_CACHE.get(t);
   if (!e || !e.dirty) return;
   e.dirty = false;
-  e.src = toBase64(rleEncode(e.bytes));
+  e.src = encodeRle64(e.bytes);
   t.tileLog = e.src;
 }
 
