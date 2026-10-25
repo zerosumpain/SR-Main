@@ -58,6 +58,16 @@ const SWEEP_FIRST_MS = 30_000;
 const RETRY_MS = [2_000, 5_000, 15_000, 60_000];
 /** Node's timers overflow past 2^31 - 1 ms (24.8 days). */
 const MAX_TIMER_MS = 2 ** 31 - 1;
+/**
+ * The settle guard's lines (spec 2026-10-24 Hometowns §10.12 F4). Every room
+ * runs on Main's one event loop, so an `advance` slower than this is a stall
+ * every page on the site feels, and a stored row larger than this is the
+ * trigger for moving a game's state out of `game_rooms` jsonb.
+ */
+export const SLOW_SETTLE_MS = 50;
+export const LARGE_ROW_BYTES = 400 * 1024;
+/** How many recent `advance` timings each game keeps for its rolling p95. */
+const SETTLE_SAMPLES = 200;
 
 interface Live {
   room: RoomBase;
@@ -113,6 +123,8 @@ interface Live {
   touchedAt: number;
   /** When this finish happened, for retention. */
   finishedAt: number | null;
+  /** The size of the row last written, in bytes (0 until the first write), for the settle guard. */
+  rowBytes: number;
 }
 
 /** Writes a finished round and says who set a record; `results.server` unless a test swaps it. */
@@ -199,6 +211,78 @@ function emit(live: Live): void {
   live.emitter.emit('change');
 }
 
+// ── the settle guard ─────────────────────────────────────────────────────────
+
+/** The guard's clock; `performance.now` unless a test swaps it. */
+let settleClock: () => number = () => performance.now();
+
+/** Tests only: swap the settle guard's clock (null puts `performance.now` back). */
+export function _setSettleClock(fn: (() => number) | null): void {
+  settleClock = fn ?? (() => performance.now());
+}
+
+/** Each game's recent `advance` timings, oldest first: what its rolling p95 is read from. */
+const settleSamples = new Map<string, number[]>();
+
+function p95(samples: readonly number[]): number {
+  if (!samples.length) return 0;
+  const sorted = [...samples].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)];
+}
+
+/**
+ * One line when a room went over a guard line, with what the operator needs
+ * to see whether it is one room or the game: the room, this `advance`, the
+ * row last written, and the game's p95 so far. Never thrown, never shown.
+ */
+function warnSlow(live: Live, ms: number): void {
+  const game = live.room.game;
+  const line = { game, room: live.room.id, ms: Math.round(ms), bytes: live.rowBytes, p95: Math.round(p95(settleSamples.get(game) ?? [])) };
+  console.warn(`[games] slow settle ${JSON.stringify(line)}`);
+}
+
+/**
+ * `advance`, timed. Every call into a room's clock goes through here, so a
+ * game whose catch-up has grown past what one event-loop turn can afford is
+ * named in the log the first time it happens, not found by a slow site.
+ */
+function advanceRoom(live: Live, now: number): boolean {
+  const start = settleClock();
+  const moved = live.rules.advance(live.room, now, Math.random);
+  const ms = Math.max(0, settleClock() - start);
+  const game = live.room.game;
+  let samples = settleSamples.get(game);
+  if (!samples) settleSamples.set(game, (samples = []));
+  samples.push(ms);
+  if (samples.length > SETTLE_SAMPLES) samples.shift();
+  if (ms > SLOW_SETTLE_MS) warnSlow(live, ms);
+  return moved;
+}
+
+/** A row about to be written: measured, and named in the log when it is over the line. */
+function measureRow(live: Live, bytes: number): void {
+  live.rowBytes = bytes;
+  if (bytes > LARGE_ROW_BYTES) warnSlow(live, settleSamples.get(live.room.game)?.at(-1) ?? 0);
+}
+
+/**
+ * Each game's rolling `advance` p95 and worst time over its last
+ * SETTLE_SAMPLES calls, and the largest row any of its rooms in memory last
+ * wrote — for a health page or the local stack to read. Games not yet
+ * advanced in this process are absent.
+ */
+export function settleStats(): Record<string, { samples: number; p95Ms: number; maxMs: number; maxRowBytes: number }> {
+  const out: Record<string, { samples: number; p95Ms: number; maxMs: number; maxRowBytes: number }> = {};
+  for (const [game, samples] of settleSamples) {
+    out[game] = { samples: samples.length, p95Ms: p95(samples), maxMs: Math.max(0, ...samples), maxRowBytes: 0 };
+  }
+  for (const live of rooms.values()) {
+    const row = out[live.room.game];
+    if (row) row.maxRowBytes = Math.max(row.maxRowBytes, live.rowBytes);
+  }
+  return out;
+}
+
 /**
  * Advance the room to now, tell its subscribers if it moved, and arm the timer
  * for its next deadline. Every mutation ends here, so the clock never drifts
@@ -207,7 +291,7 @@ function emit(live: Live): void {
 function settle(live: Live, changed: boolean): void {
   if (live.dead) return;
   const now = Date.now();
-  if (live.rules.advance(live.room, now, Math.random)) changed = true;
+  if (advanceRoom(live, now)) changed = true;
   record(live, now);
   // Written before it is sent, so the wire's `version` is the one being saved.
   if (changed) persist(live);
@@ -277,6 +361,7 @@ function makeLive(room: RoomBase, rules: GameRules, optionKeys: string[]): Live 
     updatedAt: now,
     touchedAt: now,
     finishedAt: null,
+    rowBytes: 0,
   };
   live.emitter.setMaxListeners(20);
   return live;
@@ -341,6 +426,9 @@ function snapshot(live: Live): StoredRoom {
   const { room, rules } = live;
   const due = rules.deadline(room);
   const now = Date.now();
+  // Serialised once: the copy that is stored is also the size the guard measures.
+  const text = JSON.stringify(room);
+  measureRow(live, Buffer.byteLength(text));
   return {
     id: room.id,
     game: room.game,
@@ -349,7 +437,7 @@ function snapshot(live: Live): StoredRoom {
     phase: room.phase,
     hostId: room.hostId,
     playerIds: room.players.map((p) => p.id),
-    state: JSON.parse(JSON.stringify(room)) as Record<string, unknown>,
+    state: JSON.parse(text) as Record<string, unknown>,
     meta: metaOf(live),
     version: live.version,
     dueAt: due === null || !Number.isFinite(due) ? null : new Date(due),
@@ -460,7 +548,7 @@ function retryLater(live: Live, err: unknown): void {
 /** The stored room as this game can play it now, or null (unknown schema and no `revive`). */
 function revived(rules: GameRules, row: StoredRoom): RoomBase | null {
   if (!rules.durable) return null;
-  if (row.stateSchema === rules.durable.schema) return row.state as unknown as RoomBase;
+  if (row.stateSchema === rules.durable.schema && !(rules.durable.reviveAll && rules.durable.revive)) return row.state as unknown as RoomBase;
   try {
     return rules.durable.revive?.(row.state, row.stateSchema) ?? null;
   } catch (err) {
@@ -529,6 +617,28 @@ export function dropRooms(ids: readonly string[]): void {
   for (const id of ids) {
     const live = rooms.get(id);
     if (live) drop(live);
+  }
+}
+
+/**
+ * Rooms an account erasure rewrote without one person's seat
+ * (`durable.erasePlayer`): the erased players' streams end, then the copy in
+ * memory is replaced by the stored row — the lost-write-race path, so a
+ * change not yet saved (which still held the seat) is dropped, as it would
+ * have lost its compare-and-set anyway. Everyone else's phones are re-sent.
+ */
+export async function reloadRooms(ids: readonly string[], erased: readonly string[]): Promise<void> {
+  for (const id of erased) hydrated.delete(id);
+  for (const id of ids) {
+    const live = rooms.get(id);
+    if (!live || live.dead) continue;
+    live.emitter.emit('evict', erased);
+    if (live.retry) clearTimeout(live.retry);
+    live.retry = null;
+    live.dirty = false;
+    // A write in flight either landed before the erasure (and is superseded) or loses to it.
+    if (live.writing) await live.writing.catch(() => {});
+    if (!live.dead) await reload(live);
   }
 }
 
@@ -905,6 +1015,23 @@ export function createGame(input: {
   return wire(live, input.host.id, now);
 }
 
+/**
+ * Which game a room is, for a player in it — what `roomFor` would refuse it
+ * refuses, without building the wire (a game's wire need not name its game,
+ * and a large one is not built only to be read for that).
+ */
+export function gameOf(id: string, playerId: string): GameId {
+  const live = get(id);
+  if (!inRoom(live.room, playerId)) throw new GameError(403, 'You are not in this game.');
+  return live.room.game;
+}
+
+/** Which game a loaded room is and the phase it is in, or null when it is not loaded. */
+export function roomStage(id: string): { game: GameId; phase: string } | null {
+  const live = rooms.get(id);
+  return live && !live.dead ? { game: live.room.game, phase: live.room.phase } : null;
+}
+
 export function roomFor(id: string, playerId: string): WireRoom {
   const live = get(id);
   if (!inRoom(live.room, playerId)) throw new GameError(403, 'You are not in this game.');
@@ -925,7 +1052,7 @@ export function act(id: string, playerId: string, action: string, body: Record<s
   // judged against the closed round, not a timer that has not fired yet. What
   // that moved is sent whether or not the action itself is then refused —
   // otherwise the round's result goes to nobody.
-  const moved = rules.advance(live.room, now, Math.random);
+  const moved = advanceRoom(live, now);
   // A round that finished in that catch-up is recorded before the action can
   // move the room on ("Play again" leaves `finished` at once).
   record(live, now);
@@ -934,8 +1061,11 @@ export function act(id: string, playerId: string, action: string, body: Record<s
     settle(live, moved);
     throw new GameError(409, 'That game has finished.');
   }
+  // A move that says it changed nothing (`false`: telemetry) is neither
+  // written nor sent; what the catch-up above moved still is.
+  let changed = true;
   try {
-    if (move) move(room, playerId, body, now);
+    if (move) changed = move(room, playerId, body, now) !== false;
     else rules[action as Verb](room, playerId, now);
     // "Play again" asks everyone afresh: nobody has had THAT invite yet.
     if (action === 'again') {
@@ -948,38 +1078,53 @@ export function act(id: string, playerId: string, action: string, body: Record<s
     settle(live, moved);
     throw err;
   }
-  settle(live, true);
+  settle(live, changed || moved);
   // A phone that says what it holds (`since`) is answered with only what is new.
   const since = typeof body.since === 'number' && Number.isInteger(body.since) ? body.since : null;
   return wire(live, playerId, Date.now(), since);
 }
 
 /**
- * The API has checked `playerId` is a parent: a game that cares (Manhunt)
- * remembers it for the host handoff. Nothing on the wire changes.
+ * The API has checked `playerId` is a parent: a game that cares remembers it
+ * (Manhunt, for the host handoff). A game whose rule says that changed the
+ * room (Hometowns: the seat becomes an adult's) has it written and sent like
+ * any change, and the parent's own view after it is returned; otherwise null
+ * (nothing on the wire changed).
  */
-export function noteParent(id: string, playerId: string): void {
+export function noteParent(id: string, playerId: string): WireRoom | null {
   const live = get(id);
-  if (inRoom(live.room, playerId)) live.rules.noteParent?.(live.room, playerId);
+  if (!inRoom(live.room, playerId)) return null;
+  if (live.rules.noteParent?.(live.room, playerId) !== true) return null;
+  settle(live, true);
+  return wire(live, playerId);
+}
+
+/** A lobby, or a `joinRunning` game under way: a room an invite can be open in. */
+function invitable(live: Live): boolean {
+  const { phase } = live.room;
+  return phase === 'lobby' || (live.rules.joinRunning === true && phase !== 'finished' && phase !== 'closed');
 }
 
 /**
- * The host asks more people in while the lobby is open. Somebody who declined
- * or left is asked again; somebody already in or invited is left alone. The
- * lobby is held open at least INVITE_HOLD_MS from now, so an invite sent in
- * its last seconds still has time to be answered.
+ * The host asks more people in while the lobby is open — or, for a
+ * `joinRunning` game, while it runs, the game's `seat` placing each one.
+ * Somebody who declined or left is asked again; somebody already in or
+ * invited is left alone. The lobby is held open at least INVITE_HOLD_MS from
+ * now, so an invite sent in its last seconds still has time to be answered.
  */
 export function inviteTo(id: string, hostId: string, people: { id: string; name: string }[]): WireRoom {
   const live = get(id);
   const now = Date.now();
-  const moved = live.rules.advance(live.room, now, Math.random);
+  const moved = advanceRoom(live, now);
   const { room } = live;
   const refuse = (status: ConstructorParameters<typeof GameError>[0], message: string) => {
     settle(live, moved);
     return new GameError(status, message);
   };
   if (room.hostId !== hostId) throw refuse(403, 'Only the host can invite.');
-  if (room.phase !== 'lobby') throw refuse(409, 'That game has already started.');
+  // A `joinRunning` game takes invites while it is under way; every other game only in its lobby.
+  const late = room.phase !== 'lobby';
+  if (late && !invitable(live)) throw refuse(409, 'That game has already started.');
   const inPlay = (s: string) => s === 'joined' || s === 'invited';
   const fresh = people.filter((p, i, all) => p.id !== hostId && all.findIndex((q) => q.id === p.id) === i);
   const adding = fresh.filter((p) => !room.players.some((q) => q.id === p.id && inPlay(q.status)));
@@ -987,14 +1132,29 @@ export function inviteTo(id: string, hostId: string, people: { id: string; name:
   if (room.players.filter((p) => inPlay(p.status)).length + adding.length > cap) {
     throw refuse(400, `Up to ${cap} players.`);
   }
-  for (const p of adding) {
-    const known = room.players.find((q) => q.id === p.id);
-    if (known) known.status = 'invited';
-    else room.players.push(live.rules.player(p.id, p.name, 'invited'));
-    live.sawInvite.delete(p.id);
-    live.pushed.delete(p.id);
+  // Seating a late joiner is the game's call and may be refused (no free place): all or none.
+  const before =
+    late && adding.length ? { room: structuredClone(room), saw: new Set(live.sawInvite), pushed: new Set(live.pushed) } : null;
+  try {
+    for (const p of adding) {
+      const known = room.players.find((q) => q.id === p.id);
+      if (late && live.rules.seat) live.rules.seat(room, p, now);
+      else if (known) known.status = 'invited';
+      else room.players.push(live.rules.player(p.id, p.name, 'invited'));
+      live.sawInvite.delete(p.id);
+      live.pushed.delete(p.id);
+    }
+  } catch (err) {
+    if (before) {
+      live.room = before.room;
+      live.sawInvite = before.saw;
+      live.pushed = before.pushed;
+    }
+    settle(live, moved);
+    throw err;
   }
-  if (adding.length) room.phaseEndsAt = Math.max(room.phaseEndsAt ?? 0, now + INVITE_HOLD_MS);
+  // A running game's `phaseEndsAt` is its own clock, never an invite's hold.
+  if (adding.length && !late) room.phaseEndsAt = Math.max(room.phaseEndsAt ?? 0, now + INVITE_HOLD_MS);
   settle(live, moved || adding.length > 0);
   return wire(live, hostId);
 }
@@ -1004,7 +1164,7 @@ export function invitesFor(playerId: string) {
   const out = [];
   for (const live of rooms.values()) {
     const { room, rules } = live;
-    if (room.phase !== 'lobby') continue;
+    if (!invitable(live)) continue;
     const me = room.players.find((p) => p.id === playerId);
     if (me?.status !== 'invited') continue;
     // This read IS the delivery: the phone raises its notification from it.
@@ -1021,7 +1181,8 @@ export function invitesFor(playerId: string) {
       about: rules.about?.(room) ?? null,
       hostName: host?.name ?? 'Someone',
       players: room.players.filter((p) => p.status === 'joined' || p.status === 'invited').map((p) => p.name),
-      expiresAt: room.phaseEndsAt,
+      // A late invite into a running game does not expire with the game's clock.
+      expiresAt: room.phase === 'lobby' ? room.phaseEndsAt : null,
       // A push already rang for this one; the phone lists it without a banner.
       pushed: live.pushed.has(playerId),
     });
@@ -1044,7 +1205,7 @@ export function unpushedInvites(id: string): {
   expiresAt: number | null;
 } | null {
   const live = rooms.get(id);
-  if (!live || live.room.phase !== 'lobby') return null;
+  if (!live || !invitable(live)) return null;
   const { room, rules } = live;
   const host = room.players.find((p) => p.id === room.hostId);
   return {
@@ -1055,7 +1216,7 @@ export function unpushedInvites(id: string): {
     hostName: host?.name ?? 'Someone',
     players: room.players.filter((p) => p.status === 'joined' || p.status === 'invited').map((p) => p.name),
     invitees: room.players.filter((p) => p.status === 'invited' && !live.pushed.has(p.id)).map((p) => p.id),
-    expiresAt: room.phaseEndsAt ?? null,
+    expiresAt: room.phase === 'lobby' ? (room.phaseEndsAt ?? null) : null,
   };
 }
 
@@ -1101,6 +1262,8 @@ export function roomsFor(playerId: string): RoomSummary[] {
       continue;
     }
     const waiting = live.rules.waitingOn?.(room) ?? null;
+    // A deadline of "now" (0: a county still catching up) is not a time a row can show.
+    const due = live.rules.deadline(room);
     const names = (waiting?.ids ?? [])
       .map((id) => room.players.find((p) => p.id === id)?.name)
       .filter((n): n is string => !!n);
@@ -1110,7 +1273,7 @@ export function roomsFor(playerId: string): RoomSummary[] {
       pace: room.pace ?? 'live',
       myTurn: !!waiting?.ids.includes(playerId),
       waitingFor: names.length ? names : null,
-      dueAt: live.rules.deadline(room),
+      dueAt: due !== null && due > 0 && Number.isFinite(due) ? due : null,
       updatedAt: live.updatedAt,
     });
   }
@@ -1136,15 +1299,23 @@ export function subscribe(
     onRoom(wire(live, playerId, Date.now(), since));
     since = live.rules.revision?.(live.room) ?? null;
   };
+  // An erased player's stream ends; the room goes on for everyone else (`reloadRooms`).
+  const evict = (ids: readonly string[]) => {
+    if (!ids.includes(playerId)) return;
+    stop();
+    onGone();
+  };
   live.emitter.on('change', change);
   live.emitter.once('gone', onGone);
+  live.emitter.on('evict', evict);
   // A player watching the room is not pushed about it.
   live.subscribers.set(playerId, (live.subscribers.get(playerId) ?? 0) + 1);
   change();
   let open = true;
-  return () => {
+  const stop = () => {
     live.emitter.off('change', change);
     live.emitter.off('gone', onGone);
+    live.emitter.off('evict', evict);
     if (!open) return;
     open = false;
     const n = (live.subscribers.get(playerId) ?? 1) - 1;
@@ -1152,6 +1323,7 @@ export function subscribe(
     else live.subscribers.delete(playerId);
     live.touchedAt = Date.now();
   };
+  return stop;
 }
 
 /** Tests only. */
@@ -1166,6 +1338,7 @@ export function _resetRooms(): void {
   loading.clear();
   hydrated.clear();
   recording.clear();
+  settleSamples.clear();
 }
 
 /**

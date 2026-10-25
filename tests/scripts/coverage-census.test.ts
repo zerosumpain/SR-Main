@@ -82,7 +82,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // Share-link visitors (projects/share-visits.integration, 2026-10-24) check the
 // upsert, the row cap and the ranked stats query against project_share_visit;
 // rows hang off throwaway links under one project key, removed each case.
-const INTEGRATION_FILES = 47;
+// Erasing a seat (games/erase-seat.integration, 2026-10-25) runs the account
+// erasure's room delete beside keepErasedSeats in one transaction against
+// game_rooms; rows carry an id prefix and are removed each case.
+const INTEGRATION_FILES = 48;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

@@ -1,0 +1,253 @@
+{
+ "id": "g_fixturelob",
+ "game": "hometowns",
+ "phase": "running",
+ "serverNow": 1792497660000,
+ "rev": 2,
+ "base": null,
+ "hostId": "p_fixture_host",
+ "meId": "p_fixture_host",
+ "players": [
+  {
+   "id": "p_fixture_host",
+   "name": "Mayor",
+   "status": "joined",
+   "seat": "s1"
+  },
+  {
+   "id": "p_fixture_child",
+   "name": "Young mayor",
+   "status": "invited",
+   "seat": null
+  }
+ ],
+ "client": {
+  "engineHash": "bfb39e883267b3d0",
+  "page": "/projects/hometowns/a7b47866c6bb2dce/mobile.html",
+  "bridge": 1
+ },
+ "clock": {
+  "gridTick": 0,
+  "tickMs": 1800000,
+  "nextTickAt": 1792499400000,
+  "nextRegionalDayAt": 1792515600000,
+  "nextGazetteAt": 1792951200000,
+  "paused": false,
+  "napping": false,
+  "season": {
+   "n": 1,
+   "theme": "founders",
+   "day": 0,
+   "daysLeft": 42
+  }
+ },
+ "me": {
+  "seat": "s1",
+  "profile": "adult",
+  "isParent": true,
+  "townHash": "",
+  "derived": {
+   "stars": [],
+   "meters": [],
+   "wants": [],
+   "advisors": [],
+   "needs": [],
+   "pipeline": {
+    "homes": 0,
+    "movers": 0
+   },
+   "townTalk": []
+  },
+  "affordances": {
+   "unlocked": [],
+   "costs": {},
+   "initiatives": 0,
+   "slots": 0,
+   "canUndo": []
+  },
+  "snapshot": {
+   "worldSeed": 1,
+   "dayIndex": -1,
+   "at": 0,
+   "month": 0,
+   "towns": [],
+   "kingsport": {
+    "pop": 40000,
+    "stars": [
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60
+    ]
+   },
+   "sumN": 0,
+   "medianPop": 0,
+   "prices": {
+    "goods": 1,
+    "food": 1
+   },
+   "universitySeats": 0,
+   "season": {
+    "n": 1,
+    "theme": "founders",
+    "startMonth": 0,
+    "boomBust": false
+   },
+   "event": null,
+   "flows": [],
+   "allocations": []
+  },
+  "inbox": [],
+  "predict": {
+   "townIndex": -1,
+   "dayIndex": 0,
+   "rivalry": "friendly",
+   "mishaps": "mild",
+   "paramsVersion": "v1"
+  },
+  "moves": [],
+  "welcomeBack": []
+ },
+ "county": {
+  "name": "Kingsport County",
+  "sites": [
+   {
+    "index": 0,
+    "kind": "flatland",
+    "terrainSeed": 3212722306,
+    "owner": null
+   },
+   {
+    "index": 1,
+    "kind": "forest",
+    "terrainSeed": 3415376875,
+    "owner": null
+   },
+   {
+    "index": 2,
+    "kind": "hills",
+    "terrainSeed": 4212645474,
+    "owner": null
+   },
+   {
+    "index": 3,
+    "kind": "river",
+    "terrainSeed": 3194522065,
+    "owner": null
+   },
+   {
+    "index": 4,
+    "kind": "coast",
+    "terrainSeed": 710969547,
+    "owner": null
+   },
+   {
+    "index": 5,
+    "kind": "river",
+    "terrainSeed": 3730261618,
+    "owner": null
+   }
+  ],
+  "kingsport": {
+   "seat": "kingsport",
+   "name": "Kingsport",
+   "avatar": "kingsport",
+   "flag": 0,
+   "tier": 4,
+   "pop": 40000,
+   "faces": [],
+   "stars": [
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60
+   ],
+   "taxes": {
+    "homes": [
+     0,
+     0,
+     0
+    ],
+    "business": 0,
+    "sales": 0,
+    "hotel": 0
+   },
+   "holiday": false,
+   "archived": false,
+   "inFortnight": false,
+   "skyline": "",
+   "mayor": "",
+   "linked": []
+  },
+  "links": [],
+  "offers": [],
+  "contracts": [],
+  "pacts": [],
+  "market": {
+   "goods": {
+    "p": 1,
+    "band": [
+     0.8,
+     1.25
+    ]
+   },
+   "food": {
+    "p": 1,
+    "band": [
+     0.8,
+     1.25
+    ]
+   }
+  },
+  "flowsSummary": {
+   "commutersIn": 0,
+   "commutersOut": 0,
+   "shoppersIn": 0,
+   "shoppersOut": 0,
+   "dayTrips": 0,
+   "touristShare": 0
+  },
+  "greatWork": null,
+  "goals": {
+   "week": 0,
+   "goals": []
+  },
+  "council": {
+   "question": null,
+   "options": [],
+   "myVote": null,
+   "totals": null
+  },
+  "awards": {
+   "week": 0,
+   "recent": []
+  },
+  "fund": 0,
+  "bulletin": []
+ },
+ "visiting": null,
+ "towns": []
+}

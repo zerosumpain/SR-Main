@@ -1,0 +1,1664 @@
+{
+ "id": "g_fixtureham",
+ "game": "hometowns",
+ "phase": "running",
+ "serverNow": 1792670401000,
+ "rev": 2,
+ "base": null,
+ "hostId": "p_fixture_host",
+ "meId": "p_fixture_host",
+ "players": [
+  {
+   "id": "p_fixture_host",
+   "name": "Mayor",
+   "status": "joined",
+   "seat": "s1"
+  },
+  {
+   "id": "p_fixture_other",
+   "name": "Neighbour",
+   "status": "joined",
+   "seat": "s2"
+  }
+ ],
+ "client": {
+  "engineHash": "bfb39e883267b3d0",
+  "page": "/projects/hometowns/a7b47866c6bb2dce/mobile.html",
+  "bridge": 1
+ },
+ "clock": {
+  "gridTick": 96,
+  "tickMs": 1800000,
+  "nextTickAt": 1792672200000,
+  "nextRegionalDayAt": 1792688400000,
+  "nextGazetteAt": 1792951200000,
+  "paused": false,
+  "napping": false,
+  "season": {
+   "n": 1,
+   "theme": "founders",
+   "day": 2,
+   "daysLeft": 40
+  }
+ },
+ "me": {
+  "seat": "s1",
+  "profile": "adult",
+  "isParent": true,
+  "townHash": "6bec7ad9aa092243",
+  "derived": {
+   "stars": [
+    14.8,
+    26.8,
+    70.9,
+    7.1,
+    6.7,
+    71.3,
+    5.4,
+    7.3,
+    76.9,
+    96.3,
+    40.5,
+    12.7,
+    45.2,
+    51,
+    26.1,
+    8.2,
+    15.5,
+    72.9,
+    65.4,
+    57.3
+   ],
+   "meters": [
+    21.9,
+    0,
+    0,
+    -10.3,
+    14.6,
+    39.9,
+    30.1,
+    68.2
+   ],
+   "wants": [
+    {
+     "key": "talk.jobs",
+     "severity": 343,
+     "tile": -1,
+     "hatched": false
+    },
+    {
+     "key": "power",
+     "severity": 280,
+     "tile": -1,
+     "hatched": false
+    },
+    {
+     "key": "water",
+     "severity": 280,
+     "tile": -1,
+     "hatched": false
+    }
+   ],
+   "advisors": [
+    {
+     "advisor": "bramble",
+     "key": "bramble.power",
+     "data": {
+      "action": "build:power"
+     }
+    },
+    {
+     "advisor": "bramble",
+     "key": "bramble.water",
+     "data": {
+      "action": "build:water"
+     }
+    },
+    {
+     "advisor": "mo",
+     "key": "mo.schools",
+     "data": {
+      "action": "build:school"
+     }
+    }
+   ],
+   "needs": [
+    {
+     "cohort": 1,
+     "tier": 0,
+     "items": [
+      {
+       "key": "water",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "primary",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 1,
+       "buildable": false
+      }
+     ]
+    },
+    {
+     "cohort": 4,
+     "tier": 1,
+     "items": [
+      {
+       "key": "water",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "primary",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "secondary",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "police",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "highStreet",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "leisureVenue",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "library",
+       "met": 1,
+       "buildable": false
+      }
+     ]
+    },
+    {
+     "cohort": 7,
+     "tier": 2,
+     "items": [
+      {
+       "key": "water",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "primary",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "secondary",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "police",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "highStreet",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "leisureVenue",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "library",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "cultureVenue",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "cleanAir",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "safeStreets",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "park",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "topJobs",
+       "met": 1,
+       "buildable": false
+      },
+      {
+       "key": "restaurants",
+       "met": 1,
+       "buildable": false
+      }
+     ]
+    }
+   ],
+   "pipeline": {
+    "homes": 0,
+    "movers": 63
+   },
+   "townTalk": [
+    [
+     "jobs",
+     41
+    ],
+    [
+     "homes",
+     26
+    ],
+    [
+     "fun",
+     17
+    ],
+    [
+     "health",
+     16
+    ]
+   ]
+  },
+  "affordances": {
+   "unlocked": [
+    "well",
+    "windmill",
+    "schoolHouse",
+    "villageGreen",
+    "pocketPark",
+    "road:lane",
+    "zone:homes",
+    "zone:shops",
+    "zone:industry",
+    "zone:farms"
+   ],
+   "costs": {
+    "busDepot": 60000,
+    "busStop": 5000,
+    "railStation": 250000,
+    "freightYard": 150000,
+    "harbour": 900000,
+    "airfield": 5000000,
+    "well": 1500,
+    "windmill": 12000,
+    "generator": 20000,
+    "waterTower": 25000,
+    "windTurbine": 120000,
+    "coalPlant": 400000,
+    "gasPlant": 650000,
+    "pumpingStation": 180000,
+    "solarFarm": 700000,
+    "waterWorks": 600000,
+    "constablePost": 25000,
+    "policeStation": 250000,
+    "fireVolunteers": 20000,
+    "fireStation": 220000,
+    "surgery": 30000,
+    "healthCentre": 300000,
+    "hospital": 3000000,
+    "schoolHouse": 12000,
+    "villageSchool": 50000,
+    "primarySchool": 400000,
+    "secondarySchool": 1400000,
+    "library": 150000,
+    "university": 6000000,
+    "villageGreen": 2000,
+    "pocketPark": 3000,
+    "park": 8000,
+    "playground": 5000,
+    "communityHall": 60000,
+    "viewpoint": 15000,
+    "sportsPitches": 60000,
+    "swimmingPool": 400000,
+    "cinema": 250000,
+    "youthClub": 80000,
+    "botanicGarden": 900000,
+    "museum": 600000,
+    "theatre": 1500000,
+    "stadium": 6000000,
+    "clockTower": 1000000,
+    "grandPier": 2000000,
+    "townLandmark": 4000000,
+    "road:lane": 1500,
+    "road:street": 4000,
+    "road:avenue": 12000,
+    "road:rail": 20000
+   },
+   "initiatives": 2,
+   "slots": 0,
+   "canUndo": []
+  },
+  "snapshot": {
+   "worldSeed": 101,
+   "dayIndex": 1,
+   "at": 1792602000000,
+   "month": 14,
+   "towns": [
+    {
+     "seat": "s1",
+     "active": true,
+     "tier": 0,
+     "pop": 345,
+     "cohorts": [
+      130,
+      156,
+      42,
+      0,
+      15,
+      2,
+      0,
+      0,
+      0,
+      0
+     ],
+     "perceived": [
+      45.220558523706615,
+      60.93280136605264,
+      55.91785957736878,
+      43.75,
+      41.666666666666664,
+      64.74044914695617,
+      33.333333333333336,
+      41.01276035707524,
+      68.69155742821474,
+      77.08333333333333,
+      44.0388846449831,
+      38.763023773394444,
+      56.71945927249892,
+      56.25,
+      52.72976472408139,
+      50.47585867589721,
+      47.587281591560554,
+      67.05555555555556,
+      54.65277777777778,
+      55.145833333333336
+     ],
+     "needs": [
+      0.3333333333333333,
+      0.25,
+      0.3333333333333333,
+      0.3333333333333333,
+      0.25,
+      0.3333333333333333,
+      0.6,
+      0.5,
+      0.6,
+      0.3333333333333333
+     ],
+     "vacancies": [
+      0,
+      2,
+      0
+     ],
+     "unemployed": [
+      44,
+      0,
+      0
+     ],
+     "jobs": [
+      118,
+      6,
+      0
+     ],
+     "attrQ": 6.252038250467305,
+     "rep": 53.5393964591366,
+     "aw": 0.05391527073567708,
+     "shopAppeal": 10.04510856630514,
+     "goodsSurplus": 71.34030535461767,
+     "foodSurplus": 261.06157205562636,
+     "linkTimes": [
+      -1
+     ],
+     "homesTax": [
+      800,
+      800,
+      800
+     ],
+     "salesTax": 200,
+     "hotelTax": 500,
+     "holiday": false,
+     "grace": false,
+     "skyline": ""
+    }
+   ],
+   "kingsport": {
+    "pop": 42868,
+    "stars": [
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60
+    ]
+   },
+   "sumN": 345,
+   "medianPop": 345,
+   "prices": {
+    "goods": 0.95,
+    "food": 0.95
+   },
+   "universitySeats": 0,
+   "season": {
+    "n": 1,
+    "theme": "founders",
+    "startMonth": 0,
+    "boomBust": false
+   },
+   "event": {
+    "id": "ferryFun",
+    "fromMonth": 12,
+    "toMonth": 35
+   },
+   "flows": [
+    {
+     "commutersIn": [
+      0,
+      0,
+      0
+     ],
+     "commutersOut": [
+      0,
+      0,
+      0
+     ],
+     "shoppersIn": 0,
+     "leak": 0,
+     "dayTripsIn": 0,
+     "touristShare": 0.00864479283165901,
+     "touristPool": 3353.5815300186923,
+     "sharedHealth": 0,
+     "sharedUniversity": 0,
+     "airIn": 0,
+     "advert": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "buzz": 0
+    }
+   ],
+   "allocations": [],
+   "contracts": []
+  },
+  "inbox": [],
+  "predict": {
+   "townIndex": 0,
+   "dayIndex": 2,
+   "rivalry": "friendly",
+   "mishaps": "mild",
+   "paramsVersion": "v1"
+  },
+  "moves": [],
+  "welcomeBack": [
+   {
+    "key": "welcomeBack.away",
+    "data": {
+     "ticks": 96
+    }
+   },
+   {
+    "key": "welcomeBack.people",
+    "data": {
+     "pop": 281
+    }
+   },
+   {
+    "key": "bulletin.steady",
+    "data": {
+     "pop": 345
+    }
+   },
+   {
+    "key": "bulletin.quiet",
+    "data": {}
+   }
+  ],
+  "town": {
+   "seat": "s1",
+   "ownerId": "s1",
+   "name": "Sunnyvale",
+   "avatar": "badger",
+   "flag": 0,
+   "site": 0,
+   "siteKind": "flatland",
+   "terrainSeed": 3830542273,
+   "seed": 2152391530,
+   "foundedAt": 1792497601000,
+   "foundGrid": 0,
+   "gridBase": 0,
+   "tick": 96,
+   "sprintLeft": 0,
+   "sprintAt": 1792497601000,
+   "sprintAuto": false,
+   "archived": false,
+   "tier": 0,
+   "tierHold": 0,
+   "parcels": 1632,
+   "parcelRights": 0,
+   "planes": "/wD/AP8A/wD/AP8A/wD/AIMAAQUEugAAAf8A/wD/AP8AygAAA/8A/wD/AP8A/wCpAAEBAfoABAUAAAMDhAAAAq0ABwUDAAEBAAABtgAAAYEAAAW3AAYDAAUABQADswAAAYQAAAG4AAADuQADAwAAA7wAgAMBAAO3AAIBAwW7AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAAD/wD/AP8A/wD/AP8A/wD/AKIAAUBAugAAQP8A/wD/AP8AygAAQP8A/wD/AP8A/wCmAAEwEIAwtwCEELUAgDAAEIIwhAAAQKsAgTAAEIIwABCyAIEwABCCMAAQsgCBMAAQgjAAELIAgTAAEIIwABCyAIIQAUBAgRCzAIAwAhBAQIAwtQACMDAQgTC3AAEwEIAwuQAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAEP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/ANcABMEAAEHh9gAIAWEhAEHBQaHhswAJAYEBgQDBoSHh4bUABwHhAAEBAEGhswAJoeHhQQABoQHhAbMACYEBwUEAQaFB4QH0AAKBAWGAAALh4SG1AAaBoQAhwcEhtwAD4QCBAf8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wDFAATSAABAxfYACFZMkwDPCEsHnrMACTSKPQgA138Uz0S1AAeKkwAfZwC8prMACX5xasIAXHbTyiazAAkwYaasAJKIsIl49AACPyuGgAACCMAltQAGCWkAU4tC1bcAA8kANgH/AP8A/wD/AP8A/wD/AP8AigA=",
+   "planesRev": 22,
+   "terrainEdits": [],
+   "construction": [],
+   "marks": [],
+   "lv": "gBwMHiAsKSwsKi0kIR8dHIEfCyAiLzQvLjQvIyEgH4EcCx4oLC8wLiwnJyUgHYIfCiEkMDMzMCQhIB8fghwLHiAiIyQvNTg2LyEggh8GISQmJSMhIIAfgxwDHh4fJIExAjcnIoMfBCEiISAggR+AHAAdgRwJHiIwODExOTUlIIMfACCEHxUcHB4eHRwcHSYnKjM3OTE4MiQgHyAghx8WHB4hIh8dHR4nJyknKjcxMTUlICAhIiCGHxceIi8wLB8dHR4gIiUmNDkxNSUhISUmIiCFHxghLzUuMiQfHR8hJCUnKzkxNSUiJTM0LyIghB8YIjAtLjIkHx0cHyAjIyY0LjIlJCk5MzQlIIQfBh4qLzAsHx2AHA4eIB8hLjAuIiQ0PDQ3JiGEHwUdHiEiHx2CHA8eHB4pKyIiJjY0NTopIyAggh8EHB0eHh2GHA0eHyAkKTc1NjssJyQiIIEfjBwNHiIwNTc8PDk4NjQoIyCAHwAcgB2HHBYdHyc1MTcwMTk8NDw6MiMgHx8dHyAfHYYcCB0gKTcyNiwrOIE0CjcnIiAfHyMmJR8dhRwYHR8mNC8zJic1PDQ0PDYmISAfKzI2Ni0fHYUcFx0iLjEtIiMpOzQ8OiojIB8fLjYxMTIiHoYcFh8iIyEfICQyNjYuKiQgHx8kNDkxMSIehRwDGx8eHYAfECAkKDM3ODIkIB8iKTk7MyMggR+BHgMcIyQjgSQPJyw5Nzg8LSglICY2OzQmI4EiBx8eHh0dIyQjgSQtJyw4Nzg9MCwnISY3Mzs4LCoqKSYiHx4dHSMkJCUkJCYoKzU5PDo5ODMjKDszM4I7AjYvIoAfEiMiIyQkJigzNDMuMDk8NDgkKDqEMwQyMiQhIIMfDyIkLyguJScyNjA0JCY0OzuAMwc7OzYuISAhIIMfGiItLisgISMxMy8tLCcsOjszOzksJiEgISopIIMfGSIjIB8gICMlIiUsIyUnNDY0KicjICAhKikggB9MICEfHyAfISMhICEgJyUbGhwfISErLSkcGhskIxoZGhseHxwaGhwoKygcGhkcGxkZGhwfIjArLyAcGhsaGRobHissKBwcIC0oLSAcGhuBGRoaHiMzLjIjHRoaGRkaHSEuJysfHiEvKS4hHBqCGQgaHCEwLDAhHBqAGQ4aHCAtJioeHB4sLiseGxk=",
+   "buildings": [
+    [
+     0,
+     33,
+     44,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     7,
+     21,
+     17,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     8,
+     45,
+     39,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     24,
+     43,
+     26,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     30,
+     23,
+     16,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     31,
+     22,
+     16,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ]
+   ],
+   "lag": {
+    "poll": "/wD/AP8A/wDHAAABmQAEAQECBQGXAAQBBAIBApgABQIEAgEDAZYABQEDAwIBApgABQEBAwQDAZkAgAH/AOgA",
+    "congestion": [
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000
+    ],
+    "routes": [
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000
+    ]
+   },
+   "pending": [],
+   "moveIds": [],
+   "people": [
+    93,
+    0,
+    0,
+    71,
+    2,
+    0,
+    70,
+    3,
+    0,
+    41,
+    1,
+    0,
+    0
+   ],
+   "applicants": [
+    23,
+    10,
+    2,
+    9,
+    7,
+    1,
+    6,
+    4,
+    1,
+    0
+   ],
+   "aspirants": [
+    1,
+    0
+   ],
+   "squeezed": 1,
+   "longUnemployed": [
+    22,
+    2,
+    0
+   ],
+   "carry": {
+    "dev.incidents": 140000,
+    "dev.builders": 997000,
+    "£.homesTax": 371334,
+    "ppl.births.0": 120092,
+    "ppl.settle.0": 483641,
+    "ppl.grow.0": 593750,
+    "ppl.nest.0": 671874,
+    "ppl.retW.0": 512962,
+    "ppl.dieR.0": 574998,
+    "ppl.dieW.0": 135700,
+    "ppl.dieP.0": 89700,
+    "ppl.asp.0": 105111,
+    "mig.out.0": 500574,
+    "mig.out.1": 324252,
+    "mig.out.2": 815394,
+    "mig.in.0": 805639,
+    "mig.in.1": 855190,
+    "mig.in.2": 281969,
+    "mig.in.3": 456094,
+    "mig.in.4": 381212,
+    "mig.in.5": 918067,
+    "mig.in.6": 233556,
+    "mig.in.7": 418307,
+    "mig.in.8": 732754,
+    "mig.kidsOut.0": 377727,
+    "mig.kidsIn.1": 500000,
+    "£.businessTax": 74101,
+    "£.upkeepCivic": -800000,
+    "lab.promote.0": 10000,
+    "ppl.births.1": 171802,
+    "ppl.grow.1": 276040,
+    "ppl.nest.1": 296875,
+    "ppl.retP.1": 105555,
+    "ppl.dieR.1": 151662,
+    "ppl.dieP.1": 5700,
+    "mig.out.4": 770195,
+    "mig.out.5": 108700,
+    "ppl.up.0": 320000,
+    "mig.kidsOut.1": 930591,
+    "mig.wait.7": 250000,
+    "ppl.retP.0": 661111,
+    "mig.wait.6": 750000,
+    "lab.long.0": 333334,
+    "mig.wait.2": 250000,
+    "house.aspDecay.0": 200000,
+    "mig.wait.0": 500000,
+    "mig.wait.3": 750000,
+    "mig.wait.4": 250000
+   },
+   "meters": [
+    21.925702538114038,
+    0,
+    0,
+    -10.277327516230585,
+    14.571427293472762,
+    39.89118620399122,
+    30.0538673465748,
+    68.20368427190134
+   ],
+   "margins": [
+    0.617449509293341,
+    0.36054906653731283,
+    -0.07264149636090463,
+    0.1434023864895938,
+    0.298304383741563,
+    0.617449509293341,
+    0.3598690494527311,
+    -0.07264149636090463,
+    0.1434023864895938,
+    0.298304383741563
+   ],
+   "perceived": [
+    14.830924510920031,
+    26.837005286519403,
+    70.89013118705581,
+    7.065869251430752,
+    6.729399287076904,
+    71.32598463499302,
+    5.383519429661524,
+    7.329214606260215,
+    76.9239118354325,
+    96.2988303921077,
+    40.47931569765214,
+    12.747942478601736,
+    45.169122470728226,
+    51.009409893061544,
+    26.108044172516845,
+    8.232411703923656,
+    15.537130850349975,
+    72.87843345215384,
+    65.42510188648461,
+    57.3294125445577
+   ],
+   "happy": [
+    15.941293509306828,
+    6.46309234640301,
+    26.206197500052937,
+    1.5244198487427925,
+    1.0237783912974079,
+    8.841816819839314,
+    65.45423296929032,
+    47.737165269888095,
+    35.52244283674297,
+    10.472823596437392
+   ],
+   "approval": 39.862066774351405,
+   "culture": 2.748252312605012,
+   "edu": 14.263185112296576,
+   "rep": 67.0588475442842,
+   "aw": 0.0760496472417911,
+   "ps": 1.958787502608608,
+   "goodsStock": [
+    9.898359939416713,
+    98.19381677740706
+   ],
+   "money": {
+    "reserves": 180062,
+    "loan": null,
+    "bonds": [],
+    "rating": 0,
+    "ratingHold": 0,
+    "overdraftMonths": 0,
+    "helper": null,
+    "lastHelperDay": null,
+    "lastWriteOffDay": null,
+    "fundAdvance": 0
+   },
+   "taxes": {
+    "town": 800,
+    "homes": [
+     800,
+     800,
+     800
+    ],
+    "business": 400,
+    "sales": 200,
+    "hotel": 500
+   },
+   "funding": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "policies": [],
+   "orders": [
+    {
+     "kind": "budgetHealthy",
+     "on": true,
+     "args": [
+      2,
+      200
+     ]
+    },
+    {
+     "kind": "buyUtilities",
+     "on": true,
+     "args": []
+    },
+    {
+     "kind": "fixDamaged",
+     "on": true,
+     "args": []
+    },
+    {
+     "kind": "renewContracts",
+     "on": false,
+     "args": []
+    },
+    {
+     "kind": "awayZoning",
+     "on": false,
+     "args": [
+      12,
+      60,
+      3
+     ]
+    },
+    {
+     "kind": "growthHelp",
+     "on": false,
+     "args": [
+      24,
+      3,
+      5
+     ]
+    },
+    {
+     "kind": "repayLoan",
+     "on": false,
+     "args": [
+      3
+     ]
+    },
+    {
+     "kind": "hold",
+     "on": false,
+     "args": []
+    }
+   ],
+   "initiatives": 2,
+   "away": {
+    "lastHelloAt": 1792584000000,
+    "weekStartPop": 345,
+    "weekLoss": 0
+   },
+   "holiday": {
+    "until": null,
+    "usedDays": 0
+   },
+   "grace": null,
+   "shield": null,
+   "improvement": [
+    52.4
+   ],
+   "history": "gQAADIAAAAGAAAABgAAtRgEAAFkBAABYAQAATQEAAEQBAAA7AQAAMQEAACkBAAAhAQAAGQEAACABAAAZAYAAfxcBAAFEAQAPdgEAC6ABAHDFAQAt6gEAwA0CAEoxAgDDVAIAHngCAAKcAgBevwIA8zwAAEBDAABMSAAAMUAAAJM7AADiOgAAsTkAAKA5AACJOQAAZDkAAPI5AABlOQAALxYAAD8WAAA+FgAANRYAAC4WAAAlFgAAHhYAABYWAAAQbxYAAAkWAAAOFgAACRYAALASAABwDwAArgsAAM0IAADzBgAA1wUAACAFAADMBAAAswQAAMgEAADKBAAA1wQAAG4XAAAMFwAASRYAAFEVAABLFAAAUBMAAGkSAACfEQAA8xAAAGcQAADyDwAAkg8AAHOAAAB8gAAAfIAAAHOAAABqgAAAaoAAAGqAAABqgAAAaoAAAGqAAABqgAAAaoAAACyAAAAsgAAAMYAAADiAAAA6gAAAM4AAAC+AAAAqgAAAJYAAACCAAAAfgAAAHbAAfLYFAADdBgAAEAcAAB0GAAAsBQAALAUAACsFAAArBQAAKwUAACoFAAAoBQAAJwUAAIURAACwDQAAWgsAAAcLAAB+CgAAsgkAAI8JAAABCQAAAQkAAPUIAACPCAAAkQgAAC0NAADWCgAA0wgAAAcHAABWBQAAvQMAAD4CAADVgAAAf4D/bTv+//8R/f///Pv//+sGAADgBgAAZgcAAEcIAABgCQAAfQoAAJILAACUDAAAfg0AAEkOAAD6DgAAlQ8AAGscAADFHAAALBwAAIwbAADTGgAAORsAAIQbAAD2GwAAaBwAAM0cAAD4HAAAEh0AAFkB/wChAAIBRAH/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AOIA",
+   "why": "AgIBLgooAAN/A6sBAh4GDgEDAB6MAgl9G0cCA1gfJDIUIAYDAx4eugEJRRsNBAM8HxQgEjIEBQMAHiYNERsPBgMCIwAyACAABwMAHpoBGz0SDAkDAB7UAQxRGzMKAxQiAB8ALAALAwAeKA0RGwsMAwIjACwAIAANAwAeKBsnEgYPAwAeKBshDBkRAwAeFBsJDQUVA+6AAzaPvwUz5rsEOJhxFgAAFwAAGAOOS0LimRQ/lbMKQafHBxkBursBPZrEAhoDjNgDQuTbGj+TkApB+dYGGwG6vAI9/NIEHAOGiQdCtMwbP5+6DEGf4QIdAo7iEkaK8AtFhPIGHgPT9AZX980FWbuHAVifHx8BhPIGaoLyBkQDxqoCcd+JA3L/twF6gK8BRQOSoQFx/90Ccv+3AXT/rgFGA866A3WfsgJy250Bds5ORwCO/AFIA6S1AXT/3QJxv+MBcvHDAUkD2MwBdY/IAnKtmAF4rYEBSgDM2AdLAPjaBUwAmqwETQDo1gFOArbgBYEBwJwDgAG0rgFPAABQAv7ZAY8BxPIBkAHFGFID+uEImgH+jQKYAc24AaAB8T0sASgAAw4CEgMPBg4BAwAeHAkNEggCAwgfBDICKAEDAxIeFBsOCQcEAwgfAiICIAAFAwAeBA0BCgAGAwAjADIAIAAHAwAeEBsFDwUJAwAeFgwJCgUKAwAiAC0AHwALAwAeBBsBDQEMAwAjADIAIAANAwAeBBsDEAMPAwAeBBsDDAMRAwAbAR4CDQEVA54iM8BGNqdGNewWFgAAFwAAGAPdC0LigAI/34wBQf9fGQGaFz3CFhoD9DtC7IIDP6GUAUHZYBsBwCw9/D8cA5BoQsb1Aj+lqwFBrSUdAuTnAUbSkQFFklYeA5tYV8VHWcUNWI8DHwGSVmqSVkQD4hhxryd6wBFy1RBFA/wJcf8idL8RctUQRgPUKHXPHnKlDnbKCkcAygNIA7QCdP8icbccctcTSQO2EHXnIHKnD3jtDEoAvGVLAO5JTADwNk0AlhBOAuQ/gQGgKYABtA1PAABQAtAUjwH8FpABqwJSA/BzmgH2GJgB1Q6gAfEFLgEoAAINAw8AAgEDAB4cCQ0SCAIDBh8CMQEyAgMDAB4UCQcMAwQDBh8CIgIgAgUDAB4EGwENAQYDACMAMgAgAAcDAB4QDwUKAwkDAB4WDAkKBQoDAiIAHwAsAAsDAB4EDQEKAAwDAiMALAAgAA0DAB4EGwMQAw8DAB4EDAMbAREDAB4CDQEQABUDoiIzrFM2p0Y1uBUWAAAXAAAYA4cQQqj/AT/3jQFBlV8ZAeIWPdoTGgOqPkKugAM/+5IBQYtgGwH6Lj2YQBwDyGpCsPQCP72qAUGdJR0CyuUBRoiSAUXCUx4DkVhXu0dZxQ1YjwMfAcJTasBTRAP0GHGvJ3rAEXL5EEUDjApx/yJ0vxFy+RBGA/oodc8ecsMOdtgKRwCwAkgDzAF0/yJxtxxy1xNJA+gNdecgcqcPeOsMSgCiZksAzEpMAMA3TQCuEE4CpD6BAaApgAHGDU8AAFACzhSPAfgWkAGpAlIDpHSaAcwYmAGhDqAB6wUCAigAA3ICWgYoAw8BAx4eKhIMHAsCAwofBDIEKAEDAxYeHBwHFAMEAwYfBDIAIgAFAwQeBBwDGwIGAwAjADIAJAAHAwAbGx4WEggJAx4eHhwNFAUKAwAiADIAHwALAwQeBBwBDgAMAwAjADIAJgANAwAbCx4GEgQPAwAbCx4GEQQRAwAbAx4EDgAVA7Y+NqdGNa0RM8gNFgAAFwAAGAOEMEL6jwE/2UZBgTkZAYYCPbANGgPMG0KKZD/VJ0GBGRsBggU9jh4cA7A/QsbSAT+3XkGFFR0C5oAERpTOAkXSsgEeA9uxAVevkAFZixtYnwYfAdKyAWrSsgFEA6JGca8nesARd48NRQPoP3H/InS/EXqQDUYDxEx1zx52lAp33whHAOBaSAPiS3S/EXGcDnfTB0kDiER1sxB4wwZ2nAZKANRgSwDYVEwAmkxNAOBATgL6XIAB5C+BAaApTwAAUAOmMo8BhjiQAY8FlQFPUgOwcpoBzBmYAekRoAH7Aw==",
+   "tileLog": "fxcAFwAwAAAingIwAADiuQIxAAAytgIxAADyoQIyAAAgngAyAADguQAyAABCngIzAADwoQAzAAAwtgA0AABAngA4AADjuQE8AAAjngE9AADzoQE9AAAzpgA9AAAztgE+AADDpQA/AADTpQBCAABDngFIAAAjvgBJAAAzvgBYAAAhDL4BWgAAIL4AXwAAE5b/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A0AA=",
+   "undo": [],
+   "inbox": [],
+   "stamps": [],
+   "trophies": [],
+   "residents": [],
+   "lastSeenTick": 0,
+   "books": {
+    "open": 180062,
+    "lines": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "popOpen": 281,
+    "pop": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "dayLines": [
+     56450,
+     97285,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     -45948,
+     -2000,
+     -8670,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "dayPop": [
+     3,
+     -3,
+     15,
+     -86,
+     0,
+     0,
+     7,
+     0
+    ]
+   },
+   "realised": {
+    "day": 2,
+    "commutersIn": [
+     0,
+     0,
+     0
+    ],
+    "commutersOut": [
+     0,
+     0,
+     0
+    ],
+    "shopperSpendIn": 0,
+    "shopperSpendOut": 0,
+    "dayTripSpend": 0,
+    "touristSpend": 0,
+    "visitorsHosted": 0,
+    "dayTripsHosted": 0,
+    "shipped": [],
+    "received": [],
+    "delivered": [],
+    "shortfall": [],
+    "sharedUsed": [
+     0,
+     0
+    ]
+   },
+   "dev": "AQIAAAA=|hQAAEoAAADaAAAAbiAACt3lz/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8AugABAwCAA/YAgAMAAIIDswCBAwAAggOzAIEDAACCA7MAgQMAAIIDswCBAwAAggP0AIADgACAA7UAAgMDAIEDtwABAwCAA/8A/wD/AP8A/wD/AP8A/wCJAP+A/4D/gP+A/4CDgAGBgZqAgYGYgIOBmICBgZqAAYGB/4DpgP8A/wD/AP8AxAABa22aAANragBsmQAEbGtwcXCYAARsbHFxcJkAA2wAcXGZAAJtAHD/AP8A/wD/AP8A/wDQAABzugAAc4B7mAAAc4AAAHu5AAB0/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AOMAAHeZAAB6nAADeQAAfpgAAHmeAIB+/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AOgA",
+   "alerts": [],
+   "peopleMemo": {
+    "displaced": [
+     0,
+     0,
+     0
+    ],
+    "young": [
+     0,
+     0,
+     0
+    ],
+    "vacHigh": 0,
+    "needs": [
+     0.3333333333333333,
+     0.25,
+     0.3333333333333333,
+     0.3333333333333333,
+     0.25,
+     0.3333333333333333,
+     0.6,
+     0.5,
+     0.6,
+     0.3333333333333333
+    ],
+    "vacancies": [
+     0,
+     0,
+     0
+    ],
+    "unemployed": [
+     27,
+     2,
+     0
+    ],
+    "jobs": [
+     106,
+     0,
+     0
+    ]
+   },
+   "marketMemo": {
+    "surplus": [
+     130.2094937931762,
+     591.3336922008071
+    ],
+    "lowMonths": [
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "sat": 78.48569195099859,
+    "visitors": 0,
+    "bedDemand": 2.5055574073931424,
+    "attrQ": 6.829863654381444,
+    "pull": 4.99438032175092,
+    "shopAppeal": 10.04510856630514
+   },
+   "civicMemo": {
+    "revenue": 14693,
+    "spending": 5641,
+    "deputyRaised": 0,
+    "zonedDay": -1,
+    "zonedToday": 0,
+    "paused": [],
+    "check": {
+     "tier": 1,
+     "met": 6,
+     "items": 5
+    },
+    "mood": 12.392352752622262,
+    "talk": [
+     [
+      "jobs",
+      44
+     ],
+     [
+      "homes",
+      25
+     ],
+     [
+      "fun",
+      16
+     ],
+     [
+      "health",
+      15
+     ]
+    ],
+    "wants": [
+     {
+      "key": "talk.jobs",
+      "severity": 399.5
+     },
+     {
+      "key": "power",
+      "severity": 281
+     },
+     {
+      "key": "water",
+      "severity": 281
+     }
+    ],
+    "advisors": [
+     "bramble.power",
+     "bramble.water",
+     "mo.schools"
+    ],
+    "peak": 345,
+    "struggling": false
+   }
+  }
+ },
+ "county": {
+  "name": "Kingsport County",
+  "sites": [
+   {
+    "index": 0,
+    "kind": "flatland",
+    "terrainSeed": 3830542273,
+    "owner": 0
+   },
+   {
+    "index": 1,
+    "kind": "river",
+    "terrainSeed": 1650374677,
+    "owner": 1
+   },
+   {
+    "index": 2,
+    "kind": "forest",
+    "terrainSeed": 3046473872,
+    "owner": null
+   },
+   {
+    "index": 3,
+    "kind": "coast",
+    "terrainSeed": 1869250613,
+    "owner": null
+   },
+   {
+    "index": 4,
+    "kind": "hills",
+    "terrainSeed": 1107367573,
+    "owner": null
+   },
+   {
+    "index": 5,
+    "kind": "coast",
+    "terrainSeed": 3067474800,
+    "owner": null
+   }
+  ],
+  "kingsport": {
+   "seat": "kingsport",
+   "name": "Kingsport",
+   "avatar": "kingsport",
+   "flag": 0,
+   "tier": 4,
+   "pop": 42868,
+   "faces": [],
+   "stars": [
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60
+   ],
+   "taxes": {
+    "homes": [
+     0,
+     0,
+     0
+    ],
+    "business": 0,
+    "sales": 0,
+    "hotel": 0
+   },
+   "holiday": false,
+   "archived": false,
+   "inFortnight": false,
+   "skyline": "",
+   "mayor": "",
+   "linked": []
+  },
+  "links": [],
+  "offers": [],
+  "contracts": [],
+  "pacts": [],
+  "market": {
+   "goods": {
+    "p": 0.95,
+    "band": [
+     0.8,
+     1.25
+    ]
+   },
+   "food": {
+    "p": 0.95,
+    "band": [
+     0.8,
+     1.25
+    ]
+   }
+  },
+  "flowsSummary": {
+   "commutersIn": 0,
+   "commutersOut": 0,
+   "shoppersIn": 0,
+   "shoppersOut": 0,
+   "dayTrips": 0,
+   "touristShare": 0.00864479283165901
+  },
+  "greatWork": null,
+  "goals": {
+   "week": 0,
+   "goals": []
+  },
+  "council": {
+   "question": null,
+   "options": [],
+   "myVote": null,
+   "totals": null
+  },
+  "awards": {
+   "week": 0,
+   "recent": []
+  },
+  "fund": 0,
+  "bulletin": [
+   {
+    "key": "bulletin.steady",
+    "data": {
+     "pop": 345
+    }
+   },
+   {
+    "key": "bulletin.quiet",
+    "data": {}
+   }
+  ]
+ },
+ "visiting": {
+  "seat": "s2",
+  "planes": "/wD/AP8A/wD/AP8A/wD/AIMAAQUEugAAAf8A/wD/AP8AygAAA/8A/wD/AP8A/wCpAAEBAfoABAUAAAMDhAAAAq0ABwUDAAEBAAABtgAAAYEAAAW3AAYDAAUABQADswAAAYQAAAG4AAADuQADAwAAA7wAgAMBAAO3AAIBAwW7AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAADvAAAA7wAAAO8AAAD/wD/AP8A/wD/AP8A/wD/AKIAAUBAugAAQP8A/wD/AP8AygAAQP8A/wD/AP8A/wCmAAEwEIAwtwCEELUAgDAAEIIwhAAAQKsAgTAAEIIwABCyAIEwABCCMAAQsgCBMAAQgjAAELIAgTAAEIIwABCyAIIQAUBAgRCzAIAwAhBAQIAwtQACMDAQgTC3AAEwEIAwuQAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAELwAABC8AAAQvAAAEP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/ANcABMEAAEHh9gAIAWEhAEHBQaHhswAJAYEBgQDBoSHh4bUABwHhAAEBAEGhswAJoeHhQQABoQHhAbMACYEBwUEAQaFB4QH0AAKBAWGAAALh4SG1AAaBoQAhwcEhtwAD4QCBAf8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wDFAATSAABAxfYACFZMkwDPCEsHnrMACTSKPQgA138Uz0S1AAeKkwAfZwC8prMACX5xasIAXHbTyiazAAkwYaasAJKIsIl49AACPyuGgAACCMAltQAGCWkAU4tC1bcAA8kANgH/AP8A/wD/AP8A/wD/AP8AigA=",
+  "lv": "gBwMHiAsKSwsKi0kIR8dHIEfCyAiLzQvLjQvIyEgH4EcCx4oLC8wLiwnJyUgHYIfCiEkMDMzMCQhIB8fghwLHiAiIyQvNTg2LyEggh8GISQmJSMhIIAfgxwDHh4fJIExAjcnIoMfBCEiISAggR+AHAAdgRwJHiIwODExOTUlIIMfACCEHxUcHB4eHRwcHSYnKjM3OTE4MiQgHyAghx8WHB4hIh8dHR4nJyknKjcxMTUlICAhIiCGHxceIi8wLB8dHR4gIiUmNDkxNSUhISUmIiCFHxghLzUuMiQfHR8hJCUnKzkxNSUiJTM0LyIghB8YIjAtLjIkHx0cHyAjIyY0LjIlJCk5MzQlIIQfBh4qLzAsHx2AHA4eIB8hLjAuIiQ0PDQ3JiGEHwUdHiEiHx2CHA8eHB4pKyIiJjY0NTopIyAggh8EHB0eHh2GHA0eHyAkKTc1NjssJyQiIIEfjBwNHiIwNTc8PDk4NjQoIyCAHwAcgB2HHBYdHyc1MTcwMTk8NDw6MiMgHx8dHyAfHYYcCB0gKTcyNiwrOIE0CjcnIiAfHyMmJR8dhRwYHR8mNC8zJic1PDQ0PDYmISAfKzI2Ni0fHYUcFx0iLjEtIiMpOzQ8OiojIB8fLjYxMTIiHoYcFh8iIyEfICQyNjYuKiQgHx8kNDkxMSIehRwDGx8eHYAfECAkKDM3ODIkIB8iKTk7MyMggR+BHgMcIyQjgSQPJyw5Nzg8LSglICY2OzQmI4EiBx8eHh0dIyQjgSQtJyw4Nzg9MCwnISY3Mzs4LCoqKSYiHx4dHSMkJCUkJCYoKzU5PDo5ODMjKDszM4I7AjYvIoAfEiMiIyQkJigzNDMuMDk8NDgkKDqEMwQyMiQhIIMfDyIkLyguJScyNjA0JCY0OzuAMwc7OzYuISAhIIMfGiItLisgISMxMy8tLCcsOjszOzksJiEgISopIIMfGSIjIB8gICMlIiUsIyUnNDY0KicjICAhKikggB9MICEfHyAfISMhICEgJyUbGhwfISErLSkcGhskIxoZGhseHxwaGhwoKygcGhkcGxkZGhwfIjArLyAcGhsaGRobHissKBwcIC0oLSAcGhuBGRoaHiMzLjIjHRoaGRkaHSEuJysfHiEvKS4hHBqCGQgaHCEwLDAhHBqAGQ4aHCAtJioeHB4sLiseGxk=",
+  "buildings": [
+   [
+    0,
+    33,
+    44,
+    0,
+    0,
+    1,
+    0,
+    1000
+   ],
+   [
+    7,
+    21,
+    17,
+    0,
+    0,
+    1,
+    0,
+    1000
+   ],
+   [
+    8,
+    45,
+    39,
+    0,
+    0,
+    1,
+    0,
+    1000
+   ],
+   [
+    24,
+    43,
+    26,
+    0,
+    0,
+    1,
+    0,
+    1000
+   ],
+   [
+    30,
+    23,
+    16,
+    0,
+    0,
+    1,
+    0,
+    1000
+   ],
+   [
+    31,
+    22,
+    16,
+    0,
+    0,
+    1,
+    0,
+    1000
+   ]
+  ],
+  "terrainSeed": 3830542273,
+  "siteKind": "flatland",
+  "terrainEdits": [],
+  "construction": []
+ },
+ "towns": [
+  {
+   "seat": "s1",
+   "name": "Sunnyvale",
+   "avatar": "badger",
+   "flag": 0,
+   "tier": 0,
+   "pop": 281,
+   "faces": [
+    93,
+    0,
+    146,
+    42,
+    0
+   ],
+   "stars": [
+    14.830924510920031,
+    26.837005286519403,
+    70.89013118705581,
+    7.065869251430752,
+    6.729399287076904,
+    71.32598463499302,
+    5.383519429661524,
+    7.329214606260215,
+    76.9239118354325,
+    96.2988303921077,
+    40.47931569765214
+   ],
+   "taxes": {
+    "homes": [
+     800,
+     800,
+     800
+    ],
+    "business": 400,
+    "sales": 200,
+    "hotel": 500
+   },
+   "holiday": false,
+   "archived": false,
+   "inFortnight": false,
+   "skyline": "/wD/AIMAAQIC/wCkAAAC/wCUAAIBAAGZAIIBgAAAApQAggGYAIIBmAAEAQECAgGZAIEB/wD/AIYA",
+   "mayor": "Mayor",
+   "linked": []
+  },
+  {
+   "seat": "s2",
+   "name": "Oakridge",
+   "avatar": "badger",
+   "flag": 0,
+   "tier": 0,
+   "pop": 281,
+   "faces": [
+    93,
+    0,
+    146,
+    42,
+    0
+   ],
+   "stars": [
+    14.830924510920031,
+    26.837005286519403,
+    70.89013118705581,
+    7.065869251430752,
+    6.729399287076904,
+    71.32598463499302,
+    5.383519429661524,
+    7.329214606260215,
+    76.9239118354325,
+    96.2988303921077,
+    40.47931569765214
+   ],
+   "taxes": {
+    "homes": [
+     800,
+     800,
+     800
+    ],
+    "business": 400,
+    "sales": 200,
+    "hotel": 500
+   },
+   "holiday": false,
+   "archived": false,
+   "inFortnight": false,
+   "skyline": "/wD/AIMAAQIC/wCkAAAC/wCUAAIBAAGZAIIBgAAAApQAggGYAIIBmAAEAQECAgGZAIEB/wD/AIYA",
+   "mayor": "Neighbour",
+   "linked": []
+  }
+ ]
+}

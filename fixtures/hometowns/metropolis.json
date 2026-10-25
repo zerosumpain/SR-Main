@@ -1,0 +1,2069 @@
+{
+ "id": "g_fixturemet",
+ "game": "hometowns",
+ "phase": "running",
+ "serverNow": 1797768000000,
+ "rev": 1,
+ "base": null,
+ "hostId": "p_fixture_host",
+ "meId": "p_fixture_host",
+ "players": [
+  {
+   "id": "p_fixture_host",
+   "name": "Mayor",
+   "status": "joined",
+   "seat": "s1"
+  }
+ ],
+ "client": {
+  "engineHash": "bfb39e883267b3d0",
+  "page": "/projects/hometowns/a7b47866c6bb2dce/mobile.html",
+  "bridge": 1
+ },
+ "clock": {
+  "gridTick": 2928,
+  "tickMs": 1800000,
+  "nextTickAt": 1797769800000,
+  "nextRegionalDayAt": 1797789600000,
+  "nextGazetteAt": 1797789600000,
+  "paused": false,
+  "napping": false,
+  "season": {
+   "n": 1,
+   "theme": "founders",
+   "day": 61,
+   "daysLeft": 0
+  }
+ },
+ "me": {
+  "seat": "s1",
+  "profile": "adult",
+  "isParent": true,
+  "townHash": "734fb40be8775312",
+  "derived": {
+   "stars": [
+    33.6,
+    44.4,
+    66.7,
+    7.7,
+    47.3,
+    56.4,
+    95.6,
+    79.2,
+    94.6,
+    70.1,
+    38.4,
+    47.9,
+    29.2,
+    24.9,
+    36.1,
+    52,
+    38,
+    71.1,
+    67,
+    57.1
+   ],
+   "meters": [
+    -5.2,
+    -30.1,
+    -37.5,
+    -35.5,
+    -38.8,
+    3.7,
+    -75.4,
+    -26.6
+   ],
+   "wants": [
+    {
+     "key": "talk.jobs",
+     "severity": 148502,
+     "tile": -1,
+     "hatched": false
+    },
+    {
+     "key": "talk.schools",
+     "severity": 67613,
+     "tile": -1,
+     "hatched": false
+    },
+    {
+     "key": "talk.homes",
+     "severity": 61081,
+     "tile": -1,
+     "hatched": false
+    }
+   ],
+   "advisors": [
+    {
+     "advisor": "mo",
+     "key": "mo.jobsWanted",
+     "data": {
+      "action": "zone:shops"
+     }
+    },
+    {
+     "advisor": "mo",
+     "key": "mo.schools",
+     "data": {
+      "action": "build:school"
+     }
+    },
+    {
+     "advisor": "mo",
+     "key": "mo.primarySeats",
+     "data": {
+      "action": "build:primarySchool"
+     }
+    }
+   ],
+   "needs": [
+    {
+     "cohort": 1,
+     "tier": 0,
+     "items": [
+      {
+       "key": "water",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0.14,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "primary",
+       "met": 0.02,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 0.04,
+       "buildable": true
+      }
+     ]
+    },
+    {
+     "cohort": 4,
+     "tier": 1,
+     "items": [
+      {
+       "key": "water",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0.13,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "primary",
+       "met": 0.02,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 0.06,
+       "buildable": true
+      },
+      {
+       "key": "secondary",
+       "met": 0.06,
+       "buildable": true
+      },
+      {
+       "key": "police",
+       "met": 0.2,
+       "buildable": true
+      },
+      {
+       "key": "highStreet",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "leisureVenue",
+       "met": 0.28,
+       "buildable": true
+      },
+      {
+       "key": "library",
+       "met": 0.1,
+       "buildable": true
+      }
+     ]
+    },
+    {
+     "cohort": 7,
+     "tier": 2,
+     "items": [
+      {
+       "key": "water",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "power",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "shop",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "green",
+       "met": 0.13,
+       "buildable": true
+      },
+      {
+       "key": "surgery",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "primary",
+       "met": 0.02,
+       "buildable": true
+      },
+      {
+       "key": "busStop",
+       "met": 0.07,
+       "buildable": true
+      },
+      {
+       "key": "secondary",
+       "met": 0.06,
+       "buildable": true
+      },
+      {
+       "key": "police",
+       "met": 0.21,
+       "buildable": true
+      },
+      {
+       "key": "highStreet",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "leisureVenue",
+       "met": 0.33,
+       "buildable": true
+      },
+      {
+       "key": "library",
+       "met": 0.08,
+       "buildable": true
+      },
+      {
+       "key": "cultureVenue",
+       "met": 0.53,
+       "buildable": true
+      },
+      {
+       "key": "cleanAir",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "safeStreets",
+       "met": 0,
+       "buildable": true
+      },
+      {
+       "key": "park",
+       "met": 0.13,
+       "buildable": true
+      },
+      {
+       "key": "topJobs",
+       "met": 1,
+       "buildable": true
+      },
+      {
+       "key": "restaurants",
+       "met": 1,
+       "buildable": true
+      }
+     ]
+    }
+   ],
+   "pipeline": {
+    "homes": 312,
+    "movers": 416
+   },
+   "townTalk": [
+    [
+     "jobs",
+     47
+    ],
+    [
+     "schools",
+     21
+    ],
+    [
+     "homes",
+     19
+    ],
+    [
+     "safety",
+     13
+    ]
+   ]
+  },
+  "affordances": {
+   "unlocked": [
+    "busDepot",
+    "busStop",
+    "railStation",
+    "freightYard",
+    "harbour",
+    "airfield",
+    "well",
+    "windmill",
+    "generator",
+    "waterTower",
+    "windTurbine",
+    "coalPlant",
+    "gasPlant",
+    "pumpingStation",
+    "solarFarm",
+    "waterWorks",
+    "constablePost",
+    "policeStation",
+    "fireVolunteers",
+    "fireStation",
+    "surgery",
+    "healthCentre",
+    "hospital",
+    "schoolHouse",
+    "villageSchool",
+    "primarySchool",
+    "secondarySchool",
+    "library",
+    "university",
+    "villageGreen",
+    "pocketPark",
+    "park",
+    "playground",
+    "communityHall",
+    "viewpoint",
+    "sportsPitches",
+    "swimmingPool",
+    "cinema",
+    "youthClub",
+    "botanicGarden",
+    "museum",
+    "theatre",
+    "stadium",
+    "clockTower",
+    "grandPier",
+    "townLandmark",
+    "road:lane",
+    "road:street",
+    "road:avenue",
+    "road:rail",
+    "zone:homes",
+    "zone:shops",
+    "zone:leisure",
+    "zone:industry",
+    "zone:offices"
+   ],
+   "costs": {
+    "busDepot": 60000,
+    "busStop": 5000,
+    "railStation": 250000,
+    "freightYard": 150000,
+    "harbour": 900000,
+    "airfield": 5000000,
+    "well": 1500,
+    "windmill": 12000,
+    "generator": 20000,
+    "waterTower": 25000,
+    "windTurbine": 120000,
+    "coalPlant": 400000,
+    "gasPlant": 650000,
+    "pumpingStation": 180000,
+    "solarFarm": 700000,
+    "waterWorks": 600000,
+    "constablePost": 25000,
+    "policeStation": 250000,
+    "fireVolunteers": 20000,
+    "fireStation": 220000,
+    "surgery": 30000,
+    "healthCentre": 300000,
+    "hospital": 3000000,
+    "schoolHouse": 12000,
+    "villageSchool": 50000,
+    "primarySchool": 400000,
+    "secondarySchool": 1400000,
+    "library": 150000,
+    "university": 6000000,
+    "villageGreen": 2000,
+    "pocketPark": 3000,
+    "park": 8000,
+    "playground": 5000,
+    "communityHall": 60000,
+    "viewpoint": 15000,
+    "sportsPitches": 60000,
+    "swimmingPool": 400000,
+    "cinema": 250000,
+    "youthClub": 80000,
+    "botanicGarden": 900000,
+    "museum": 600000,
+    "theatre": 1500000,
+    "stadium": 6000000,
+    "clockTower": 1000000,
+    "grandPier": 2000000,
+    "townLandmark": 4000000,
+    "road:lane": 1500,
+    "road:street": 4000,
+    "road:avenue": 12000,
+    "road:rail": 20000
+   },
+   "initiatives": 2,
+   "slots": 8,
+   "canUndo": []
+  },
+  "snapshot": {
+   "worldSeed": 303,
+   "dayIndex": 60,
+   "at": 1797703200000,
+   "month": 723,
+   "towns": [
+    {
+     "seat": "s1",
+     "active": true,
+     "tier": 4,
+     "pop": 107576,
+     "cohorts": [
+      11071,
+      13647,
+      3964,
+      18140,
+      22978,
+      6670,
+      10860,
+      13266,
+      3890,
+      3090
+     ],
+     "perceived": [
+      71.06481475443394,
+      69.96093335286142,
+      65.19286189326547,
+      31.93484296100791,
+      43.18330431225485,
+      64.8162488792236,
+      77.43055555555556,
+      72.08732209797147,
+      72.22222222222223,
+      60.4555573119964,
+      39.99381562356953,
+      75.1157407198449,
+      71.06481469432957,
+      69.90740740647722,
+      44.389527365431974,
+      75.31931753683318,
+      77.89383866793736,
+      58.9537037037037,
+      64.89583333333333,
+      54.4224537037037
+     ],
+     "needs": [
+      0.6966356142349709,
+      0.599555437683166,
+      0.6966356142349709,
+      0.5883581968212674,
+      0.49718744551466726,
+      0.5883581968212674,
+      0.6724153047625728,
+      0.6018079757627839,
+      0.6724153047625728,
+      0.6966356142349709
+     ],
+     "vacancies": [
+      8413,
+      12868,
+      9401
+     ],
+     "unemployed": [
+      0,
+      0,
+      0
+     ],
+     "jobs": [
+      23647,
+      36356,
+      23249
+     ],
+     "attrQ": 202.28448537809294,
+     "rep": 54.62052282220892,
+     "aw": 0.05593395564238035,
+     "shopAppeal": 995.847013178196,
+     "goodsSurplus": 9082.557864505781,
+     "foodSurplus": -116401.95890068164,
+     "linkTimes": [
+      -1
+     ],
+     "homesTax": [
+      800,
+      800,
+      800
+     ],
+     "salesTax": 200,
+     "hotelTax": 500,
+     "holiday": false,
+     "grace": false,
+     "skyline": ""
+    }
+   ],
+   "kingsport": {
+    "pop": 55000,
+    "stars": [
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60,
+     60
+    ]
+   },
+   "sumN": 107576,
+   "medianPop": 107576,
+   "prices": {
+    "goods": 0.95,
+    "food": 1.05
+   },
+   "universitySeats": 6000,
+   "season": {
+    "n": 1,
+    "theme": "founders",
+    "startMonth": 0,
+    "boomBust": false
+   },
+   "event": null,
+   "flows": [
+    {
+     "commutersIn": [
+      0,
+      0,
+      0
+     ],
+     "commutersOut": [
+      0,
+      0,
+      0
+     ],
+     "shoppersIn": 0,
+     "leak": 0,
+     "dayTripsIn": 0,
+     "touristShare": 0.291388385341566,
+     "touristPool": 43364.17941512372,
+     "sharedHealth": 0,
+     "sharedUniversity": 0,
+     "airIn": 0,
+     "advert": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     "buzz": 0
+    }
+   ],
+   "allocations": [],
+   "contracts": []
+  },
+  "inbox": [
+   {
+    "id": "deputy.buyUtilities.60",
+    "kind": "deputy.buyUtilities",
+    "day": 60,
+    "from": null,
+    "data": {
+     "power": 578591,
+     "water": 351707,
+     "cost": 3017775,
+     "times": 3
+    }
+   },
+   {
+    "id": "deputy.buyUtilities.61",
+    "kind": "deputy.buyUtilities",
+    "day": 61,
+    "from": null,
+    "data": {
+     "power": 1416739,
+     "water": 908190,
+     "cost": 7483338,
+     "times": 9
+    }
+   },
+   {
+    "id": "deputy.fixDamaged.61",
+    "kind": "deputy.fixDamaged",
+    "day": 61,
+    "from": null,
+    "data": {
+     "cost": 63000
+    }
+   }
+  ],
+  "predict": {
+   "townIndex": 0,
+   "dayIndex": 61,
+   "rivalry": "friendly",
+   "mishaps": "mild",
+   "paramsVersion": "v1"
+  },
+  "moves": [],
+  "welcomeBack": [
+   {
+    "key": "welcomeBack.away",
+    "data": {
+     "ticks": 2928
+    }
+   },
+   {
+    "key": "welcomeBack.people",
+    "data": {
+     "pop": 114459
+    }
+   },
+   {
+    "key": "bulletin.steady",
+    "data": {
+     "pop": 107576
+    }
+   },
+   {
+    "key": "bulletin.quiet",
+    "data": {}
+   },
+   {
+    "key": "bulletin.tomorrow",
+    "data": {
+     "event": "rainySpell"
+    }
+   },
+   {
+    "key": "welcomeBack.inbox",
+    "data": {
+     "n": 3
+    }
+   }
+  ],
+  "town": {
+   "seat": "s1",
+   "ownerId": "s1",
+   "name": "Kestrelhaven",
+   "avatar": "badger",
+   "flag": 2,
+   "site": 2,
+   "siteKind": "forest",
+   "terrainSeed": 3746801690,
+   "seed": 3177758113,
+   "foundedAt": 1792497601000,
+   "foundGrid": 0,
+   "gridBase": 0,
+   "tick": 2928,
+   "sprintLeft": 0,
+   "sprintAt": 1792497601000,
+   "sprintAuto": false,
+   "archived": false,
+   "tier": 4,
+   "tierHold": 0,
+   "parcels": 65535,
+   "parcelRights": 0,
+   "planes": "AgABAoAAAgMBAoAAAAKAAA8EAQACBAQCAAMCAgEDGRkEgAIrBAMBAAADBAIDAAQAAQAABAQCAAEEBAEBAAABAgADAQICAQABAQAAAwACAACAAQ0DAAQBAgAAAgQBABkZAIACBwQBAQADAwQCgQAFAQMAAAICgQABAQGAAAECA70CDQEEAgEDAAABAQADAAIAgB8KAQALCwQCCQkAAQGABwsAAgAAAQMBAQIEAAKBBB4BAAICAAIAAQIAAQQDAAECAQABAgMCAAABBAEAAQIEgB8KAQALCwACCQkCAgGABwsDAgMAAQABAAMEAgKBBAEBBIAABgICAwEAAQKAAAQCAgEEAoEABgEAAQACAgSAHwoBAwIAAwIBAQQAAYAHAQACgAAGAQEEAAEEAoEEBQEAAQAEAoAABgMBAQIAAAKAAAACgAABAQGBAA4CAwADAAEAAwABAgABAQCAAQQAAAIABIABAASAAAACgQQTAQAAAQACAAEAAAEBAAADAgABAQKGAQAChgEAAoYBAAKGAQAChgEAAoYBAAKAAQ8CBAMEAAEABAEBAgQEAAABgAMLAQIBAwAAAQQEAAQCgBwfAQEEAwIEAgAAAQABAgEAAAICDQ0AAQABBAACAgEEAgOAABkBHh4AAQIAAAMAAQACBAMCAAMAAAEAAAIAAoAcFQABAQABAAIAAAMCAQMDAAMCBA0NBAGBAB0CAgMEAgADAAABHh4EAAIEAAAEAQABAQACBAAEAAGAAAEEAoAcKAABAAMAAQIAAAQAAQECAwACAgQBAAEAAAEAAgIABAIABAAAAQAAAgQCgQAZAQQCAAQCAgAABAEABAABAgEDBAIBAAQABAKAAAECAYEACwIAAAEAAQEABAECBL0CIAAAAgAABAABAwMBAAIACAgBAQQABAACAAIAAAEEAA8PAoATCwABAAIEAgIABAEEAYAAEAECAAEAAAEDBAAAAgQAAAIBgAAZAQMDAAACAQgIAwEEAQQBAgQEAAABAAEPDwKAEwcAAQQBAAECBIAAAAGABIACKgQAAAEBBAQAAgAEAAIBBAAEAQMDBAACAwABAAEABAAAAgAAAQABAAABAAKAExAAAQQiAAECAAQABAEAAAQDAoAAHgMBAAQCAAIAAQQCAwQABAECAgQBAgAAAQABAgAABAKBAAUBAAEEBAKAAAIEAQGAABgCAAMCAAEAAwAAAgQEAAEBBAEABAIAAQEChgEAAoYBAAKGAQAChgEAAoYBAAKGAS0CAQAEAiEAAgABBAEAAAIAAAQFAQEABAQCBAEABAEAAgQAAgMAAAIBAAMAAAIDgAAPAQEAAAICBAQDAAEDAAAEAoAAFQIABAQAAQEEBAMCBAAAAQECAQEEAgSAAAsBAAAEAAIEAwAEAQOAAC8CAAABAAEAAAEAAgEEAgABAAEEAAIEAAQCAAADBAEEAgADAgADAAQBAAAEAwIBAAKCAQcAAgMAAQIBA4AAGQIAAwQAAQQABAECAQEEBAEEBAEAAgMEAAIDgAA4AQADAAECAgQAAAEAAAIAAgQAAAMBAAMCAQIEAAEAAQEAAgMCAQEAAQEEAAEAAgEBAAABBAABBAIAvQICAAQCgAAIAwEEFBQAAgAAgQEIAA4OAgAABAABgAACAQIAgBI8AQQCAAACAAEBAAEAAwMAAgQBAwABAAIBAgIDAAACAgQEAgEAAwAAAgAABAEBAAAODgIEAAADAQQAAQMCAIASDwECAAMAAgQAAgABAQQAAAKAAA8BAQAAAgACBAECAgADAAQBgAAWAQIEAAIBAQABAAACAwAEAAEAAwIAAgCAEgcBAAQAAAICBIABEgQAAAQCAAIABAEEAQQAAgQEAAKBAAoBAQIAAAIABAAAAYEADwICAwEEAQAAAQACAgEAAAGBAAECA4AACgEEAgQAAgAAAQABgAAFAQICAQEChgEAAoYBAAKGAQAChgEAAoYBAAKGAScCAQAEAgEBAAABAAEBAAIAAQAEAQEEAAACAAIEAAEEAAQEAgQCAgQBgQAKAgMDAAABACAgAAKBAAUBAAAEAAKAAAoCBAAEBAEDBAMAAoAAgAEXBAEAAgECBAEBBAEABAIBAwACAQEABAACgAALBAEAAAIAAgAEBAABgAMKAQIAAAECAAEDAwGBAAUCAAQABAGAAAcEAgABAwQBBIAAAAKAABoBAQQAAQECAQEAAAEABAEAAgABAQABAAEAAAKAAAACgQAAAYAAGQQCAgEEAAECAwADAgEAAAQBBAADAAIAAAQAgAEDAAICAYAAgAEDBAICAYAABgEABAAEAgC9AiUEAAIEAAMEAQAEAgACAAABBAEAAgEEAgEAAQQBAAADAAIEAAIAAYAABgQCAQQEAAGBFTsCAAMAAgEEBAAAAgAAAgIAAQADAQMEAAICAQAAAQEAAQAAAgAAAwABAQQEAAIEAgADAQABAQMCBAAAAwGBFQYCAAEAAAEDgAAAAoAAGQIEAAACAQAEAgACABYWAAECAAQDAgAAAwMBgAAMAwIDAAMEAQICAAACAYAAAAGBFSUCAAQCAAEEAQAEAgEBAAIBAAQAAQEEAAACABYWAAEAAAIBAgAAA4ABDQADAAIAAQAAAQAAAQICgAABBAGBFQ4CAwEBBAEAAgEAAgABAQKGAQAChgEAAoYBAAKGAQAChgEAAoYBCgIBAQACAAADAAECgAAGAgABAAABAYAADQIEAAIEAQIEAQACAwAAgAEbAAQAAgQAAAIBBAIEAAIBBgMEAQQDAAACBAAAAoEYDwEAAgABAgAAAwABBAEAAAKAAAIEAQCAHQUCAgMBBAGBAIACAwAAAQKAAAACgQAJAQQAAQACAAAEAoEYCgEDBAAAAgMAEREBgQAGAgIDAwIBAYAdBAIAAAEAgAEDBAACBIAAAAGAAA8BAgMDAAQBBAAABAICAQACgRgAAYEAFAIAABERAQABAAACAAMDAQECAAQAAoAACwEBAAEAAAICBAQDAYEACwIBAAABAQAAAQICBL0CAgAEAoADAQEBgRsLAgQCAAABAAMEAAIDgAAGAQACAAECAIAkCgEDBAEDAgEmBAMBgAAUAQIAAwAAAQADAwICAQAAAgACAQABgRsAAoEACgEDAwAAAgADAAEBgQAAA4AABgMBBAABAAKAAIABgAAOAgEABAEBAAACAQIDAQMCgQAAAYEbCgICAAQBAQQDBAECgAAVAQEAAAMEAwAABAQBBAEEBAIAAwIAAYAAAQECgAALAQEABAAAAgABAAIEgAAAAYEbMgICAAEAAQABAAICAQEAAAEABAEEAwMEAAABAAMEAAIAAAQEAQAAAwICBAAEBAEABAEBAoABAAKGAQAChgEAAoYBAAOGAQAChgEAAoYBCQIBAAACAAEBAwGABBgAAgAABAMBBAQBAwIEBAAEAQAABAQDAwIAgAENAAEAAgEABAABAAMABAKAAAIEAQGAACYCBAIBAgQAAAQBAAEAAQIAAQABAQAABAACAQIBBAEAAwAEAwMAAQCAAQcAAwIDAAEEAYAAAQQCgQAUAQQEAAACAAQDAgMAAgQBAAEAAAIBgAAFAQIAAQMCgQArAQQaGgMDAgABAgEAAQABAgABAAABAAEAAAIAAAQAAQEAAgACAgQEAgEAAQOAAREAAwIAAAMAAQAAAQICAQIBBAGBAB8DAAQAAAEAAAQAAgIABAABAAIABAIAAwAAAQAABAICAJ0CAAOcAggEAAIAAAQAAQOAAQICAACBAQcEBAICAwIBAIABJQAEAwAQEAABAAQKCgIDAAEAAQIBAgACAAABAwEAAwQBAgABAgIBgAAjAQADAAACAQADAAEAAwQEAgAAAQIBAgQAAAMAEBAAAQABCgoCgQATAQMAAQACAAEDAAEDAQACAgQABAKBAC8BAQAAAgIAAwABAQIABAECAgEBAgEEAgAAAwMBAgABAAEDAAIABAADAQABAAMCBACAARwEAgQAAgADBAIAAQMAAQECAAECAAQEAAEEAAEAAoAAEQIBAAEBAAMBAQIBAQADAAQCAYAAEwEEAAMAAgQEAAABAAIAAAIAAQEChgEAAoYBAAKGAQADhgEAAoYBAAKGARECAQAAAgIBAAQBBAECAAIAAQCAASIAAwACAAQAAAEjAgIAAwAAFxcBBAMAAAIBAAQEAQECBAMCAoAAAAGADAUAAgABAAKBJTIBAAAEAQIAAgAAAQACAAQCAAEAAQEABAEAAwQBFxcBAwEAAQIEAAQBAQAAAQACAAAEBAGADAUAAgAABAKBJQYBAAQAAQIEgAAHAQAEAAACAQSBARwDBAADAwABBAEAAAQEAgEAAwQBBAQAAAIEAAABAYAMBgICBAQCAgGAABQBAAADAgIEAQAAAQQAAAMCAQEAAwGBAAADgQAAAYAAEAQCBAMEBAEAAwEAAgQEAAEBgAwCAAIAnQIAA5wCAgQAAoAAAwMBAACAAiIEBAIAAQAEBAECAgAAAQEAAwMAAwAEAwABBAAABAICAAAEAYEADgIAAwMEAQABAAACATAwEIEwABCBMAAQgTAAEIEwABCBMAoQMEBAMBBAQDAwEIEwABCBMAAQgTAAEIEwABCBMAAQgDAAEIEwABCBMAAQgTAAEIEwABCBMAoQMEBAMBBAQDAwEIEwABCBMAAQgTAAEIEwABCBMAEQML0QAjAwEIEwABCBMAEQMIBAChAwQEAwEEBAMDAQgEABMBCBMAAQgTAAEIFAABCBMAAQgTAAEIEwABCAMAAQgTAAEIEwARAwgEAKEDBAQDAQQEAwMBCAQAEwEIEwABCBMAAQgUAAEIEwABCBMAAQgTAAEIAwABCBMAAQgTABEDCAQAAQgTAAEIEwABCAQAEwEIEwABCBMAAQgUAAEIEwABCBMAAQgTAAEIAwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIFAABCBMAAQgTAAEIEwARAwvRACMDAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgEABMBCBMAAQgTAAEIEwBRAwQEAwEIEwABCAMAAQgTAFEEBAMDAQgTAAEIEwABCBMAAQgTAAEIBAATAQgTAAEIEwABCBMAUQMEBAMBCBMAAQgDAAEIEwBRBAQDAwEIEwABCBMAAQgTAAEIEwABCAQAEwEIEwABCBMAAQgTAAEIEwABCBMAAQgDAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTABEDC9EAIwMBCBMAoQQEAwMBAwQEAwEIEwABCBMAUQMDBAQBCAQAEwEIEwABCBMAAQgTAAEIEwABCBMAAQgDAAEIEwChBAQDAwEDBAQDAQgTAAEIEwBRAwMEBAEIBAATAQgTAAEIEwABCBMAAQgTAAEIEwABCAMAAQgTAFEEBAMDAQgTAAEIEwABCBMAAQgTAAEIBABjAQMEAwMBCBMAAQgTAAEIEwABCBMAAQgDAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTABEDC9EAMwMBBAgDAAEIEwABCAMAFAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIAwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCAMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAFEEBAMDAQgTAAEIAwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAUQQEAwMBCBMAEQML0QAjAwEIEwBRAwQEAwEIEwBRAwMEBAEIEwABCBMAEQMIBAABCBMAAQgTAAEIEwABCBMAAQgTAAEIAwABCBMAAQgTAAEIEwBRAwMEBAEIEwABCBMAEQMIBAABCBMAAQgTAAEIEwABCBMAAQgTAAEIAwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwARAwgEAAEIEwABCBMAAQgTAAEIEwABCBMAAQgDAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTABEDC9EAIwMBCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwBRAwQEAwEIEwABCBMAAQgDAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIAwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCAMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAEQML0QAjAwEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIFAABCBMAAQgTAAEIAwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBQAAQgTAAEIEwABCAMAAQgTAAEIEwBRAwQEAwEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIFAABCBMAAQgTAAEIAwABCBMAAQgTAFEDBAQDAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgUAAEIEwABCBMAEQML0QAjAwEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwBRAwQDAwEIEwABCAMAAQgUAAEIEwABCBMAAQgTAAEIEwARAwgEAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIAwABCBQAAQgTAFEDAwQEAQgTAAEIEwARAwgEAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIAwABCBQAAQgTAFEDAwQEAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAAQgTAAEIEwABCBMAEQML0QAjAwEIEwABCBQAAQgTAAEIEwABCBMAAQgTABEDCAQAAQgTAFEDBAMDAQgTAAEIEwABCBMAAQgDAAEIEwABCBQAAQgTAAEIEwABCBMAAQgTAFEEBAMDAQgTAAEIEwABCBMAAQgTAAEIEwABCAMAAQgTAAEIFAABCBMAAQgTAAEIEwABCBMAUQQEAwMBCBMAAQgTAAEIEwABCB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",
+   "planesRev": 50,
+   "terrainEdits": [],
+   "construction": [
+    18,
+    3,
+    274,
+    2,
+    1626,
+    2,
+    1926,
+    2,
+    2024,
+    1,
+    2340,
+    1,
+    2342,
+    2,
+    2585,
+    1,
+    2841,
+    1,
+    3297,
+    1,
+    3509,
+    1,
+    3712,
+    1,
+    3934,
+    3,
+    4033,
+    1
+   ],
+   "marks": [
+    64,
+    1,
+    368,
+    1,
+    2179,
+    1,
+    2683,
+    1
+   ],
+   "lv": "f0dGR1JGQVJTVlFKOTY+TDc/QEFKT0RFQ1FASTlEOEtCNj5DU11VSEpQUj9DPVBTNkxKQ0FHTz9IPUxMQUVKSD4+UkhIbGhRVldRRkI6PkNOQEVNTzlDU0Q8NztBP0U7R0VRQE1ZWT5MTUdLQEM+PElFPEVGPkJMOFFHTT1CTU47f0BMTlNbU1BdYExMOkZFS1FPR05RRzg+ODZQQVFOSzs9UztMT15NRF1QQEtNN0RDR0dESFFTPzdCPEo6ODw4NzhCOUpESE5DRlJGTFFOSDo5Q0U6RUc8QTpGRUk3P0Y4P0ZMTEhWSkpCN0g/T0ZFUz1JREBOOUBAQUhFSEFTUD1Df0g6S0hSPEY8OE5PTEpET0xNQERSSlE5Rkc/Q0s7Tzk8R0pHPEQ4R0E4Sk1AP0FQUj9PQU5RPE1KOFM2RENFTVFDPjY8Uz9PPkdNTE5HQ0JTUDlTPDpFP002R05FRFM3SUlDUERJUUtHQUVLSUs/T0VTU0JJUU1GN1I6SUlDQU5Mf0pPUU89Tk5EQEtJRFJNR0c/TUk5QlFMT05PQD1MRlE7UTY/Rkw4UURAT1NKQ05FUDtMQjxSRVFQS05MQDo+Uk05Sk42S0ZJOExMOEpIPkBERVFTPktCO0NHR09KRVJHRTdGPUxFRDdNRTo7QU88UjdTPDs3RkhKUUhDOjxRRTdGET1MU0FAQlFFPEE8OUhHUEZMUoA4fzZBQ1E6Nz9KUEhPRDpIS0NSR0RNRExMQT1FQE5JUD1COUNOQUVMUzlRT0U9SVM/SFFJQ05MOlJAU0hMREZTTEVDTDs8PzhRU0M5O0xEOkFDSVNAQUw3TVNFUEM9NkdLOkY3OUpCSz9KRUpGRjtGOEtEP0xGOUVJPTw6R01ROj9RCTtBSD5NRzZQPkSAR39MQk43Tz86N0M+S0E8U0U7SFNCPzo6Q1I2RTxPQEhNTk84TU9HUj06RTtHTFNJSzs6QT5BRjlRSkpIR09PQEA5N046REFEOVNMOT5IOT9RRERISUpHPlJIUkVLST5STkxRUlM6SDg5Q0pLSjg3QU44N0VRQzpKREhARkVMPUxRQ39SUkVKOjtGSjdDQ0BLS1NAS0g5RE9SSEVCST5DPk45TDpHQlA8PTlCNjxEU0k8O0BJNj1LPUtFP0JRRVJOTE4+Ok5DRURNOUg3UEtNTUtMPzZCTURIU0k6RUtJRkhTSj0/Tkc4Szk7UjZBP0lMTT85Tk48Nj44SEZDTUVBPT9PUF1QOD87S09OUT46TEBAPEJQRURLU0tENj88TElJS1FRUE87NkZJTT04RzhSQT1FQ0I2QUdRTktOSDZCNjg9PDo2SEtCPTo+OzlPRE08Q0dBUEtNQkNNU0VHTkZQSEBH",
+   "buildings": [
+    [
+     0,
+     33,
+     44,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     14,
+     53,
+     20,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     14,
+     33,
+     0,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     13,
+     8,
+     13,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     15,
+     43,
+     3,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     11,
+     16,
+     18,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     11,
+     54,
+     38,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     12,
+     28,
+     3,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     18,
+     14,
+     13,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     18,
+     23,
+     3,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     20,
+     40,
+     53,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     20,
+     19,
+     3,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     23,
+     58,
+     58,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     22,
+     54,
+     8,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     22,
+     20,
+     23,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     26,
+     30,
+     13,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     26,
+     34,
+     53,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     26,
+     15,
+     40,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     27,
+     34,
+     23,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     27,
+     33,
+     13,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     28,
+     9,
+     23,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     29,
+     48,
+     33,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     32,
+     14,
+     35,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     32,
+     35,
+     58,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     40,
+     3,
+     39,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     37,
+     29,
+     0,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     38,
+     29,
+     50,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     43,
+     8,
+     43,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     42,
+     33,
+     8,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     41,
+     29,
+     39,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     44,
+     8,
+     9,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     46,
+     14,
+     3,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     1,
+     49,
+     28,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     2,
+     3,
+     18,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     2,
+     39,
+     15,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     2,
+     28,
+     58,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     3,
+     34,
+     43,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     4,
+     3,
+     59,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ],
+    [
+     39,
+     44,
+     43,
+     0,
+     0,
+     1,
+     0,
+     1000
+    ]
+   ],
+   "lag": {
+    "poll": "iAALCRMLEAoGBQcIDwsGhQAHAwAADAoAAAGAAA8QGRgaLCQcFxsYFxkVDgsDhAABFwqABBIMCggMERcKDicjHQsMDQsVCQUGhAAYBRUGAQEIHgkFDAsVBwMJCxUGBQQGFAcCBYQACwcXCQEBBhgJBgkBBYEACQ4HBQUGFgwGDgeEAAABgAACCRYKhwAHCgkACQsGCg6AAAIHBhSBAAMVGB0QgAAABIEADwQAFgkABAoUFRgEABUWDxqBAAMBCxoChgABAQ6BAAgICwMAAAoMCBmIAAABgQAIAwUWAwAEAAwRgQACAgYZjQAIBAcaCgAEAAMFggAIBxoABAMAAAULhgADDxMYBoAAAQYGgwAIEwACGhkaFxwKgAAbBgAGFxkfFxwLAAQKFRcYDAQCAAAQAAAMChANFoEADwQABBEXGQ4VAAACAAYHCwqBAAcEAAAHAwgAC4EADhAJFBATGBEWCgIVBgUEAoIABQEACAYEAYEADQoLFgwMAAASFRcHCBoKhQAEAgUVDAeBAA4HFhcZDw0AAA0RFgkKFgqEABgHGQUZGBYKAAQAExgaFxAOAAgTFxwVEBADgAAABIAAFAcZAAkLCg0FCQAPDAAFCwQAAAMGDYcAFQQHGQAACAQFBxYAFBQABggCAAkIAAGEAA8BAAAHBxkAAAgDAwYWCwwHgwACAQQPhAAYAgAKBgYNAAwPCAwMGAwMCAABAgAAChYOFIQAMB0dGAgIAQAmJRgWFRwWGB4LBQMAABgcFhsSBQYAAgAKIBwZDg8FBwoCAAAJFQoPHgqBAAITGQuIAAMFCg8JgQAMBRQGBQgHFAcEBQoYCIAAAxYHAQOCAAIGGgaBAAwHFQkFAggUBgcMChgHgAADGwcCBYIAAwUYAAGBABIOCAAAFBkKCAQMFwoAAAoYCQYGgQAmBggYAAECCwYBBQQAAA4gFw8AFh0WAAAXHhYXFQoEARQSDwwAAAsHgwAZAhcMAAANGg8AABEYDQsAAAEDEQoHAQAAAQWEAAsQEAMAEBcTAAgWFQOAAAQOFxUMCIMAAQMKhAAHBwUHAAAUCgOBAAEDCYYAAQUJhAAGEwwNCwgKB4IAAQIJhQADDw8VCoIBCQMSHh4lDxgXGAeAAQERFoEA",
+    "congestion": [
+     1000,
+     1000,
+     1001,
+     1003,
+     1136,
+     1158,
+     1224,
+     1000,
+     1001,
+     1076,
+     1220,
+     1277,
+     1175,
+     1163,
+     1072,
+     1000,
+     1117,
+     1168,
+     1243,
+     1175,
+     1228,
+     1255,
+     1118,
+     1000,
+     1210,
+     1133,
+     1033,
+     1000,
+     1178,
+     1156,
+     1307,
+     1000,
+     1161,
+     1061,
+     1276,
+     1113,
+     1183,
+     1138,
+     1248,
+     1000,
+     1141,
+     1170,
+     1282,
+     1212,
+     1361,
+     1254,
+     1370,
+     1000,
+     1159,
+     1065,
+     1130,
+     1400,
+     1215,
+     1216,
+     1236,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000
+    ],
+    "routes": [
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1494,
+     1259,
+     1251,
+     1328,
+     1000,
+     1000,
+     1259,
+     1000,
+     1299,
+     1000,
+     1257,
+     1353,
+     1000,
+     1273,
+     1000,
+     1000,
+     1000,
+     1309,
+     1450,
+     1313,
+     1000,
+     1000,
+     1262,
+     1276,
+     1301,
+     1307,
+     1389,
+     1373,
+     1000,
+     1000,
+     1252,
+     1275,
+     1503,
+     1336,
+     1601,
+     1309,
+     1000,
+     1270,
+     1302,
+     1262,
+     1449,
+     1259,
+     1353,
+     1265,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000,
+     1000
+    ]
+   },
+   "pending": [],
+   "moveIds": [],
+   "people": [
+    12808,
+    19961,
+    10759,
+    7233,
+    11555,
+    6554,
+    7389,
+    11867,
+    6691,
+    4271,
+    7092,
+    4123,
+    4156
+   ],
+   "applicants": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    416
+   ],
+   "aspirants": [
+    65,
+    0
+   ],
+   "squeezed": 0,
+   "longUnemployed": [
+    986,
+    6230,
+    4988
+   ],
+   "carry": {
+    "dev.incidents": 160000,
+    "dev.builders": 228000,
+    "£.homesTax": 574059,
+    "£.salesTax": 545636,
+    "£.fares": 747701,
+    "ppl.births.0": 911615,
+    "ppl.settle.0": 405723,
+    "ppl.grow.0": 432291,
+    "ppl.nest.0": 578125,
+    "ppl.retW.0": 337037,
+    "ppl.retP.0": 872223,
+    "ppl.dieR.0": 815027,
+    "ppl.dieW.0": 950200,
+    "ppl.dieP.0": 363100,
+    "ppl.asp.0": 604650,
+    "ppl.births.1": 514566,
+    "ppl.settle.1": 21567,
+    "ppl.grow.1": 786459,
+    "ppl.nest.1": 88541,
+    "ppl.retW.1": 744445,
+    "ppl.retP.1": 809259,
+    "ppl.dieR.1": 975432,
+    "ppl.dieW.1": 450200,
+    "ppl.dieP.1": 921700,
+    "ppl.asp.1": 659085,
+    "ppl.births.2": 260962,
+    "ppl.settle.2": 227911,
+    "ppl.grow.2": 218752,
+    "ppl.nest.2": 968749,
+    "ppl.retW.2": 292593,
+    "ppl.retP.2": 544446,
+    "ppl.dieR.2": 170946,
+    "ppl.dieW.2": 245800,
+    "ppl.dieP.2": 967400,
+    "ppl.up.0": 985586,
+    "ppl.up.1": 900000,
+    "ppl.down.1": 472204,
+    "ppl.down.2": 984576,
+    "ppl.grad": 805554,
+    "ppl.gradH": 800000,
+    "mig.out.0": 821329,
+    "mig.out.1": 826590,
+    "mig.out.2": 860114,
+    "mig.out.3": 750904,
+    "mig.out.4": 86028,
+    "mig.out.5": 389634,
+    "mig.out.6": 720052,
+    "mig.out.7": 192194,
+    "mig.out.8": 588571,
+    "mig.out.9": 926460,
+    "mig.in.0": 292231,
+    "mig.in.1": 96533,
+    "mig.in.2": 668733,
+    "mig.in.3": 37361,
+    "mig.in.4": 156430,
+    "mig.in.5": 976899,
+    "mig.in.6": 119867,
+    "mig.in.7": 442494,
+    "mig.in.8": 508951,
+    "mig.in.9": 268523,
+    "mig.kidsOut.0": 502711,
+    "mig.kidsOut.1": 660178,
+    "mig.kidsOut.2": 160796,
+    "£.businessTax": 353941,
+    "£.upkeepCivic": -100000,
+    "ppl.young.2": 458333,
+    "ppl.young.0": 749999,
+    "ppl.slide": 412755,
+    "ppl.young.1": 500001,
+    "mig.wait.3": 500000,
+    "mig.wait.9": 500000,
+    "lab.long.0": 999999,
+    "lab.long.1": 166667,
+    "mig.kidsIn.0": 500000,
+    "mig.kidsIn.2": 500000,
+    "lab.long.2": 333333,
+    "house.aspDecay.0": 200000,
+    "£.utilityImports": -400000
+   },
+   "meters": [
+    -5.175256707263285,
+    -30.095185002260312,
+    -37.54924914005106,
+    -35.4908059480637,
+    -38.81663337533535,
+    3.686123721829273,
+    -75.35587115035496,
+    -26.59734601680611
+   ],
+   "margins": [
+    -0.06495520698550128,
+    0.21766423853206143,
+    -0.21197568450162632,
+    -0.3300417527469434,
+    -0.7821817301276196,
+    -0.06495520698550128,
+    0.21038305190753884,
+    -0.21398710043640568,
+    -0.3315381284757543,
+    -0.7822119191357407
+   ],
+   "perceived": [
+    33.5900572420684,
+    44.40996360369968,
+    66.66294999732568,
+    7.715713747774061,
+    47.29484433961227,
+    56.37129559712865,
+    95.62589046340001,
+    79.18658798521429,
+    94.61648057033848,
+    70.08673915233578,
+    38.4336789788349,
+    47.9054703396991,
+    29.248919846108734,
+    24.875869827444042,
+    36.10513581885201,
+    52.02869389794637,
+    38.04929745314375,
+    71.08392697560001,
+    66.99529505346922,
+    57.105099234988465
+   ],
+   "happy": [
+    67.77878698873664,
+    55.17445590307923,
+    66.15310144049695,
+    59.629164804272946,
+    39.536308815466654,
+    74.13959162908633,
+    74.34263187738138,
+    52.77141844497713,
+    83.0028899462669,
+    81.23664345421707
+   ],
+   "approval": 85.38883374250241,
+   "culture": 1094.4045386845514,
+   "edu": 62.32991799113402,
+   "rep": 61.211413314818564,
+   "aw": 0.0760496472417911,
+   "ps": 5.382286586189804,
+   "goodsStock": [
+    12814.625822947957,
+    0
+   ],
+   "money": {
+    "reserves": 109638439,
+    "loan": null,
+    "bonds": [],
+    "rating": 0,
+    "ratingHold": 0,
+    "overdraftMonths": 0,
+    "helper": null,
+    "lastHelperDay": null,
+    "lastWriteOffDay": null,
+    "fundAdvance": 0
+   },
+   "taxes": {
+    "town": 800,
+    "homes": [
+     800,
+     800,
+     800
+    ],
+    "business": 400,
+    "sales": 200,
+    "hotel": 500
+   },
+   "funding": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "policies": [],
+   "orders": [
+    {
+     "kind": "budgetHealthy",
+     "on": true,
+     "args": [
+      2,
+      200
+     ]
+    },
+    {
+     "kind": "buyUtilities",
+     "on": true,
+     "args": []
+    },
+    {
+     "kind": "fixDamaged",
+     "on": true,
+     "args": []
+    },
+    {
+     "kind": "renewContracts",
+     "on": false,
+     "args": []
+    },
+    {
+     "kind": "awayZoning",
+     "on": false,
+     "args": [
+      12,
+      60,
+      3
+     ]
+    },
+    {
+     "kind": "growthHelp",
+     "on": false,
+     "args": [
+      24,
+      3,
+      5
+     ]
+    },
+    {
+     "kind": "repayLoan",
+     "on": false,
+     "args": [
+      3
+     ]
+    },
+    {
+     "kind": "hold",
+     "on": false,
+     "args": []
+    }
+   ],
+   "initiatives": 2,
+   "away": {
+    "lastHelloAt": 1797681600000,
+    "weekStartPop": 107576,
+    "weekLoss": 0
+   },
+   "holiday": {
+    "until": null,
+    "usedDays": 0
+   },
+   "grace": null,
+   "shield": null,
+   "improvement": [
+    60.76
+   ],
+   "history": "gQAADIAAAAGAAAABgAB/IZsBAIWfAQA4pAEANakBAGKuAQCpswEA7bgBAOW7AQDFvgEAdMABAL7AAQAbvwEAa2okAV3utQF4IEcCWZvWAn7SZAPmIvADstN1BKmM8gTjQWMFosXLBSwaLQYn84gGQu+8AOGvuwA5s7sAMU25AAQmtwB7ZrMAyPWsACZgowB/wM6XANkvjgAslIYAHbSAAJfzJwDvKyoAHoEqAFDSKQDf7igAExYoAPxEJwAvpyYAhhknABqsJQCiPyUAItskAEAcAABTHwAANiEAAIYiAABzIwAAICQAACskAABIIgAAeR8AANAcAADnGQAAIhcAABsZAADbGgAAiBwAABUeAABNfB8AALsgAADGIQAAbCIAAKMiAACBIgAADiIAAFshAAD2MQEAM0MBADRFAQAzIgEALAQBAEfpAAAp1AAARr0AAF2nAABykAAATnsAAFZqlwAVGwkAAHgdAAD+NAAAt00AANBjAAD4dK8AUCWyAgAnWgIAVEMCAMu+AgAGKwMAu9MDAPuaBAAwAQUAffkEABzjBABdBAUAnvwEAPoSAAAhDwAAuwsAAMsIAAAxBgAA/wMAAEsCAAAOAQAA1YD/AB2A/xSB/v//+v3//1wLAABUBwAAuQMAAKaAACgB/v//vfv//9f5//8G+P//K/b//3r0//8b8///I/L//w0FAABuAgAAIoAAGFf+//8V/f//dfz//5z8//9A/f//Hf7//xaA/wA5gAA2cQEAALEiAABdIgAAFSIAAOkhAAC3IQAAhyEAAIogAAA+GgAA5BMAAGIPAACjDgAACQ4AADikAf8AoAADeCBHAv8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A4QA=",
+   "why": "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",
+   "tileLog": "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",
+   "undo": [],
+   "inbox": [
+    {
+     "id": "deputy.buyUtilities.60",
+     "kind": "deputy.buyUtilities",
+     "day": 60,
+     "from": null,
+     "data": {
+      "power": 578591,
+      "water": 351707,
+      "cost": 3017775,
+      "times": 3
+     }
+    },
+    {
+     "id": "deputy.buyUtilities.61",
+     "kind": "deputy.buyUtilities",
+     "day": 61,
+     "from": null,
+     "data": {
+      "power": 1416739,
+      "water": 908190,
+      "cost": 7483338,
+      "times": 9
+     }
+    },
+    {
+     "id": "deputy.fixDamaged.61",
+     "kind": "deputy.fixDamaged",
+     "day": 61,
+     "from": null,
+     "data": {
+      "cost": 63000
+     }
+    }
+   ],
+   "stamps": [],
+   "trophies": [],
+   "residents": [],
+   "lastSeenTick": 0,
+   "books": {
+    "open": 109638439,
+    "lines": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "popOpen": 114459,
+    "pop": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "dayLines": [
+     39124739,
+     39720065,
+     10542075,
+     0,
+     3183,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     5077650,
+     0,
+     0,
+     0,
+     -14100045,
+     -592380,
+     -806310,
+     -7483338,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     -63000,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "dayPop": [
+     1464,
+     -857,
+     9539,
+     -3263,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "realised": {
+    "day": 61,
+    "commutersIn": [
+     0,
+     0,
+     0
+    ],
+    "commutersOut": [
+     0,
+     0,
+     0
+    ],
+    "shopperSpendIn": 0,
+    "shopperSpendOut": 0,
+    "dayTripSpend": 0,
+    "touristSpend": 0,
+    "visitorsHosted": 0,
+    "dayTripsHosted": 0,
+    "shipped": [],
+    "received": [],
+    "delivered": [],
+    "shortfall": [],
+    "sharedUsed": [
+     0,
+     0
+    ]
+   },
+   "dev": "ASQAEQASABJAACISARFwASJaBhHoBxKDCCEkCRImCREZChF7CiEZCxHhDBG1DRGADhJeDxLBDxE=|iQANlSAAACQbAADaEQAAVBWAAANhZHt9/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wD/AP8A/wC/AICAA4OlqKuCrASMi4iFg46AA4OFqKuDrAWMjIuIhYONgAODhairg6wFjIyLiIWDjoADg6Woq4KsBIyLiIWDkIADg4WIi4GMA4uIhYOSgAmDhYiLjIyLiIWDlIAHg4WIi4uIhYOWgAWDhYiIhYOYgAODhYWDmoABg4P/gP+AooAAgZiABYGBgIGEgZaAAIGAggOEh4SBlIAJgYKCg4aHiYeEgZKAC4GCgoOGiYuNiYeEgZKAC4GDhomLjYyMiYeEgZGABIGFiIuNgYwDiYeEgY+ABIGEh4qNg4wDiYeEgY2AA4GEh4mGjAOJh4SBjIADgYSHiYaMA4mHhIGNgAOBhIeJhIwDiYeEgY+AA4GEh4mCjAOJh4SBkYADgYSHiYCMA4mHhIGTgAiBhIeJjImHhIGEgA+KiIkAiYOVlgCXAH56AIx+gAAhfgB+gIOOgYZ8hX2JhQAAhpCcmY0AAJEAAHkAAHWEgwAAeYAADXWBfwCCAIsAgY6DiaWmgAAKlosAAIQAkoWGjoqBABx+eXmAgYh3iYSLggCXlACPko2RgACJAJCNAACCf4AAVo6HiYOFjoyAAACOkZqSkJqhkQB+kY+XmQAAkIuGcH15AIoAAIyLfwCQgY+SoI+InJWKkgCElI+RAACQlJB5eYN6i3t/gXp9AIl6iIUAiYAAAIeNjZeTioAAMICGAHgAAIKCgXZ/AHkAiACTkACNAIuFk4yRlZWaiwAAiQCDgYGEiwCEgo+ReXkAAJCAAGqLh4OVl4yXlJkAiowAlpKNAIyJgwCKAAB6fYiEioQAgouHAJAAAI2Ok5gAlQCUknyQjXmSAACAg4uQh3Z7hpeGjYmQkZIAigCNmgCEloeFg4KPd4oAiYaMfYiMeYsAAJKFhgCEAIGHgIqHhoAANo2EAHSHcwAAg4YAAIyHjQB7kYuMAI6LAJGTjot/AACBhwCRjo6Re3kAiJEAknWChwB/jIqIjpOAAH+JkgCKh4KUAJOTAJCEhH+DkgB/AI57iYKBgQAAfoMAg4eIAI8Af4x+e4iGhoKKhJGGiHx/fo2ChXOPiXp9epEAkH+Pf399iACLkYqHeH6RhHaEgQCIAHx9g30AfAAAhgCGgQCNdnN4AACAAABxgwAAh42DeIgAh42GiJCHjISDgSiFhgCMAICGAICQAACFkX6Pi4SCAI+BAJONAJKIAIN/AIuOfouWjgB/jIMAI4N4fId/gISCipOFho16h5IAi4cAdwCLfwB9gYqBg4OMh4KGh4AAHIt7eowAe4qCAACAhIiPgYSPAIeNgokAewB8hACLgwAJeXJzgACAfHqLeoQAK4CLb3p6iwAAjIGLewAAfIh9AIV4iACSiQCBAIiHgouBj4uDiQCJiIGFAHiOgABgg3yLiQCCiHsAAIiKjI6PiwCNAACJAIoAAI6FkQCRf355AICEAIgAdYIAgoGIjgB9iIOId4KJinyKAACRAIeEd3aKgwB4gX2JhImFj4t8goqNhYR5hX6BfIuAgX+LAAB3foIAQocAc3IAg3UAAHWBAHl3jgCQAIqOfniOgIeFjICDAJCLAACFjgB6g49/gZGLfoOMiACEiwB/AI8Af40AgZJ8hIUAjY2AAFGRggCEf4uJAI+JhYCCiwCNAIF9jIuPkIR5joSFfoiQAACKAIwAe4SAjIwAjY+OAIyBdIUAjYB/hACSAH2DhIR/gIQAjgCMhgCGAACCfoF8hwCEgAAbgn8AAI0Ag4SCAIeJgACNAImFjgAAi4IAZQBkaYAAA2xtAGqEAABohQAJXgBeYgBgYwAAb4UAAGuAAAJqAGeEAAVkAABmZGOAAAFzcoIAAWhmgQADZmsAYoAABV8AAF4AZYIAAGqDAAhqAGgAZgAAZ2mDAAdiAGQAZwAAZIEAAG2BAAFsZ4MABmpjZABiAGGBAABmiAABaWuBAAFla4AAAGSAAAZfAABjAFxigwADbAAAbYoABWYAAGMAXoIAAGuBAAlraQBraABqAGplgAABY2GFAANqAABogQACaABogwAAaYEAAGWFAAFjaIMAAGqAAARmamsAZ4YAB2cAWmljAABehAAAZ4IADmsAZGRpAF8AYABmX2kAZ4EAAF+FAAJqaGmCAABmgwAAaIEABWYAAGkAZoEABGwAAGhoggAAY4MAAmhnZ4AAAWhkgwAAaYQABWMAAGgAZIYAGGQAAGkAAGdnAGNdAGVqaGBnAGFkAGYAAF+HAARhAGAAYIEAAGmAAAFkaYIAC2FhZWdlAGZmY18AYIYABWMAAGRjZoUAAGOJ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",
+   "alerts": [],
+   "peopleMemo": {
+    "displaced": [
+     0,
+     0,
+     0
+    ],
+    "young": [
+     356,
+     660,
+     992
+    ],
+    "vacHigh": 0,
+    "needs": [
+     0.696334023941068,
+     0.5991303962213298,
+     0.696334023941068,
+     0.5768824306472919,
+     0.48737705939308934,
+     0.5768824306472919,
+     0.59265555786268,
+     0.5308090429483132,
+     0.59265555786268,
+     0.696334023941068
+    ],
+    "vacancies": [
+     0,
+     0,
+     0
+    ],
+    "unemployed": [
+     4207,
+     15525,
+     10212
+    ],
+    "jobs": [
+     13510,
+     9803,
+     3909
+    ]
+   },
+   "marketMemo": {
+    "surplus": [
+     29603.769192861924,
+     -114422.44908436731
+    ],
+    "lowMonths": [
+     0,
+     0,
+     6,
+     4,
+     12
+    ],
+    "sat": 59.59322025052583,
+    "visitors": 0,
+    "bedDemand": 1131.706037703849,
+    "attrQ": 169.6081035665319,
+    "pull": 122.25745789973213,
+    "shopAppeal": 623.4182028752534
+   },
+   "civicMemo": {
+    "revenue": 8434717,
+    "spending": 2415394,
+    "deputyRaised": 0,
+    "zonedDay": -1,
+    "zonedToday": 0,
+    "paused": [],
+    "check": {
+     "tier": 5,
+     "met": 1,
+     "items": 1
+    },
+    "mood": 59.21890704010179,
+    "talk": [
+     [
+      "jobs",
+      47
+     ],
+     [
+      "schools",
+      21
+     ],
+     [
+      "homes",
+      21
+     ],
+     [
+      "safety",
+      11
+     ]
+    ],
+    "wants": [
+     {
+      "key": "talk.jobs",
+      "severity": 149505.90000000002
+     },
+     {
+      "key": "talk.schools",
+      "severity": 68439.67027991182
+     },
+     {
+      "key": "talk.homes",
+      "severity": 65769.8113692983
+     }
+    ],
+    "advisors": [
+     "mo.jobsWanted",
+     "mo.schools",
+     "mo.primarySeats"
+    ],
+    "peak": 107576,
+    "struggling": false
+   }
+  }
+ },
+ "county": {
+  "name": "Kingsport County",
+  "sites": [
+   {
+    "index": 0,
+    "kind": "coast",
+    "terrainSeed": 3749217620,
+    "owner": null
+   },
+   {
+    "index": 1,
+    "kind": "river",
+    "terrainSeed": 1872384030,
+    "owner": null
+   },
+   {
+    "index": 2,
+    "kind": "forest",
+    "terrainSeed": 3746801690,
+    "owner": 0
+   },
+   {
+    "index": 3,
+    "kind": "hills",
+    "terrainSeed": 3372699117,
+    "owner": null
+   },
+   {
+    "index": 4,
+    "kind": "flatland",
+    "terrainSeed": 3948409096,
+    "owner": null
+   },
+   {
+    "index": 5,
+    "kind": "hills",
+    "terrainSeed": 2855114832,
+    "owner": null
+   }
+  ],
+  "kingsport": {
+   "seat": "kingsport",
+   "name": "Kingsport",
+   "avatar": "kingsport",
+   "flag": 0,
+   "tier": 4,
+   "pop": 55000,
+   "faces": [],
+   "stars": [
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60,
+    60
+   ],
+   "taxes": {
+    "homes": [
+     0,
+     0,
+     0
+    ],
+    "business": 0,
+    "sales": 0,
+    "hotel": 0
+   },
+   "holiday": false,
+   "archived": false,
+   "inFortnight": false,
+   "skyline": "",
+   "mayor": "",
+   "linked": []
+  },
+  "links": [],
+  "offers": [],
+  "contracts": [],
+  "pacts": [],
+  "market": {
+   "goods": {
+    "p": 0.95,
+    "band": [
+     0.8,
+     1.25
+    ]
+   },
+   "food": {
+    "p": 1.05,
+    "band": [
+     0.8,
+     1.25
+    ]
+   }
+  },
+  "flowsSummary": {
+   "commutersIn": 0,
+   "commutersOut": 0,
+   "shoppersIn": 0,
+   "shoppersOut": 0,
+   "dayTrips": 0,
+   "touristShare": 0.291388385341566
+  },
+  "greatWork": null,
+  "goals": {
+   "week": 0,
+   "goals": []
+  },
+  "council": {
+   "question": null,
+   "options": [],
+   "myVote": null,
+   "totals": null
+  },
+  "awards": {
+   "week": 0,
+   "recent": []
+  },
+  "fund": 0,
+  "bulletin": [
+   {
+    "key": "bulletin.steady",
+    "data": {
+     "pop": 107576
+    }
+   },
+   {
+    "key": "bulletin.quiet",
+    "data": {}
+   },
+   {
+    "key": "bulletin.tomorrow",
+    "data": {
+     "event": "rainySpell"
+    }
+   }
+  ]
+ },
+ "visiting": null,
+ "towns": [
+  {
+   "seat": "s1",
+   "name": "Kestrelhaven",
+   "avatar": "badger",
+   "flag": 2,
+   "tier": 4,
+   "pop": 114459,
+   "faces": [
+    32769,
+    10759,
+    51289,
+    15486,
+    4156
+   ],
+   "stars": [
+    33.5900572420684,
+    44.40996360369968,
+    66.66294999732568,
+    7.715713747774061,
+    47.29484433961227,
+    56.37129559712865,
+    95.62589046340001,
+    79.18658798521429,
+    94.61648057033848,
+    70.08673915233578,
+    38.4336789788349
+   ],
+   "taxes": {
+    "homes": [
+     800,
+     800,
+     800
+    ],
+    "business": 400,
+    "sales": 200,
+    "hotel": 500
+   },
+   "holiday": false,
+   "archived": false,
+   "inFortnight": false,
+   "skyline": "AQQEgAOABQYDAwEFBQQDgAIGAwUCBQUEBIEFDAQFBAIABAUEAwMCAgSAAgcDAgIBBAMEBIACgAUNBAQDAwIBBQUEBQMAAgKAAwgEAwIDBAUCBASAAgkFBQMFBQMFBAMFgAMOBQQDAwQCAwUDBQUDAgQFgQIIAwUDAgQDBQQDgAUFAgQDBQIFgAQFBQQFAgIBgAUGBAMEBQICBYAEBgUFBAUDBQKABQkEBQUBBQUDAgMEgAUXAwUDAQIDBQIEBAIDAgIFAQIFAwECAwMBgAIOAwUDAwQABAUDBQMEBAAFgAM9AgUDBAIBBAMEAwUDAgIFBQQCBQUCAgMEBQEFBQQABAABBAQFBQQDAgMCBQAEAwAFAwIEAQQEAAUBBAUBAwSABQ8EAQUCBAIAAwMFBAEEAgQFgAQDBQQBA4AFBAECBQQCgAUBAwOBBRUEAwMEBAUEAwQFBAUDAgMDBQQFAQUEgAJaAwQDBQICBAMEAgUCAgQEAwIEBAUABQMCAgQEAwUDBQIDBAMFBQMFAgMEAQICBQUCBQUEAwQFAAQDAAMCAwEDBAIFBAUEAgUABAUBBQEDBAQDAQUCAwMEAwMBAoADgAUQBAECAwMEBAMFAgUFBAMDBQOABQkEBQQFAwIDBAEFgAQMAwQEAwEABQQFBQQDBYAEBAUCAQUDgAUWAwACAAIDBAUABAEBAwAFBAAFAQUBAACBAhsDBQAEAwUBBAUDBQUEAwQEAwQFBQMBBAQFBAEFgQIABYAECQMDBAUEAwIDAgKBBSQDBAQBAwMEBQIFAAICAQQDBQUDBQIDAwQDBAQDBAUCBQAFAwIFgAQLAgQEBQUEAwMCBQMEgAINAwUFBAIFAwQDBQMFAwWABAACgAQABYAEAwUDAgKABBwCAgACBAMBAAUDAQQDAgIFAwUCBQQCAgUBBQUEBIAFBwICAwUEBAUDgQQBAgSAA0EFAwQFBAMEAwUFAwMABQQCAgMEAgUEAAQEBQIBBQQDAgIEAAUFAAIABAICBQMDBAMDBAUCBAUDAgAFAQUDAgQFAwOABA8FBAIFBAIFAgQFBAUCBQIFgAQMBQQFAwQDBAUEBQMFBIEFJgQCAgUEAgQFAwMBBAMCBAQFBQMCBAQCAQICBQQEAQIDBQIFBAUEBYAEEwIFAgQEAwQFAgMFBQIDBQQEBQIDggULBAMDBAIDAAMDBAQBgAQkAgQFAgMAAQMCAwADAgIEBAUCBQIEBQQFAwQCBQMEAwUBBQIEBYEERgMEBAICAwQFAgUDBQUABAQBBQEEAgUEAwQCBQUDBAAFBQACAQIEBQIEBQUDBAACAgMDBQQAAwQCBAUEBAIEAwIFBAIABAQD",
+   "mayor": "Mayor",
+   "linked": []
+  }
+ ]
+}

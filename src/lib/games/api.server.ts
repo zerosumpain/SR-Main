@@ -22,17 +22,19 @@ import {
   createGame,
   ensureRoom,
   flush,
+  gameOf,
   hydrateFor,
   inviteTo,
   invitesFor,
   noteParent,
   roomFor,
+  roomStage,
   roomsFor,
   subscribe,
 } from './rooms.server';
 import { pushInvites } from './invite-push.server';
 import { GameError, isDifficulty, MAX_PLAYERS } from './tap-duel';
-import { GAMES, isGameId, type GameId, type Pace } from './catalogue';
+import { GAMES, isGameId, type Pace } from './catalogue';
 import { cleanTopic, isAudience, isClean } from './quiz-night';
 import { subjectFor } from './gcse';
 import { reserveUsage } from '$lib/jkai/chat-access.server';
@@ -45,21 +47,42 @@ export const QUIZ_DAILY = 10;
 export type GameRole = 'owner' | 'member';
 
 /**
- * Games only a parent (or the owner) may host: Manhunt sends children out
- * into the real world, so the person who draws the circle and starts the
- * clock is a grown-up in the family roles (`family:admin`).
+ * Games only a parent (or the owner) may host, by the title their refusal
+ * names, with the set-up actions each checks against the caller's role.
+ * Manhunt sends children out into the real world, so the person who draws
+ * the circle and starts the clock is a grown-up in the family roles
+ * (`family:admin`). A Hometowns county runs for months on the family's
+ * phones, so starting it, pausing it and changing its settings (the rivalry,
+ * the Regional Day's hour, a child's seat) are a parent's too (spec
+ * 2026-10-24 Hometowns §10.12 F6). Keyed by id rather than `GameId` so an
+ * entry can wait here for its game to be registered.
  */
-const PARENT_HOSTED: ReadonlySet<GameId> = new Set<GameId>(['manhunt']);
-/** The host's set-up actions in those games: each is checked against the caller's role. */
-const PARENT_ACTIONS: ReadonlySet<string> = new Set(['start', 'again', 'area', 'runner']);
+const PARENT_HOSTED: ReadonlyMap<string, { title: string; actions: ReadonlySet<string> }> = new Map([
+  ['manhunt', { title: 'Manhunt', actions: new Set(['start', 'again', 'area', 'runner']) }],
+  ['hometowns', { title: 'Hometowns', actions: new Set(['start', 'again', 'pause', 'settings']) }],
+]);
+
+/** Every parent-hosted game's set-up actions, so an ordinary move never looks its room up. */
+const SET_UP_ACTIONS: ReadonlySet<string> = new Set([...PARENT_HOSTED.values()].flatMap((g) => [...g.actions]));
+
+/**
+ * The room's game when this action needs the caller's family role checked
+ * (a set-up action, or a `join` that may hand a parent the host seat) and
+ * the game is parent-hosted; null otherwise.
+ */
+function setUpGame(id: string, playerId: string, action: string): string | null {
+  if (!SET_UP_ACTIONS.has(action) && action !== 'join') return null;
+  const game = asHttp(() => gameOf(id, playerId));
+  return PARENT_HOSTED.has(game) ? game : null;
+}
 
 async function isParent(caller: GameCaller): Promise<boolean> {
   const role = caller.role === 'owner' ? { parent: true } : await familyRole(caller.email);
   return role?.parent === true;
 }
 
-async function assertParent(caller: GameCaller): Promise<void> {
-  if (!(await isParent(caller))) error(403, 'Only a parent can host Manhunt.');
+async function assertParent(caller: GameCaller, game: string): Promise<void> {
+  if (!(await isParent(caller))) error(403, `Only a parent can host ${PARENT_HOSTED.get(game)?.title ?? 'this game'}.`);
 }
 
 /** Who is calling, however they authenticated. */
@@ -127,7 +150,8 @@ const stringIds = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x 
  * Categories `categoryCount`/`seconds`, Liar's Dice `dice`, Draw & Guess
  * `turnsEach`/`seconds`, Odd Artist Out `rounds`, Manhunt `lat`/`lng`/`radius`/`minutes`;
  * for a durable game `pace` ('live' | 'async') with `deadlineHours` (12 | 24 | 48),
- * and Homestead's `island`).
+ * Homestead's `island`, and Hometowns' `county`: `{ name, rivalry, regionalHour,
+ * mishaps, devTickMs }`).
  */
 export async function startGame(
   event: Pick<RequestEvent, 'locals'>,
@@ -140,7 +164,7 @@ export async function startGame(
   const ids = stringIds(body.invite);
   const cap = GAMES[game].maxPlayers ?? MAX_PLAYERS;
   if (ids.length > cap - 1) error(400, `Up to ${cap} players.`);
-  if (PARENT_HOSTED.has(game)) await assertParent(caller);
+  if (PARENT_HOSTED.has(game)) await assertParent(caller, game);
 
   const me = await playerFor(caller.email);
   const invite = await resolveInvitees(ids);
@@ -193,6 +217,10 @@ export async function startGame(
     pace: body.pace,
     deadlineHours: body.deadlineHours,
     island: body.island,
+    // Hometowns: the county's name, rivalry, Regional Day hour, mishaps and
+    // (local stack only, behind HOMETOWNS_DEV_CLOCK) its dev tick; the game
+    // reads and bounds each field itself.
+    county: body.county,
   };
   const room = asHttp(() => createGame({ game, host: { id: me.id, name: me.name }, invite, difficulty, options }));
   // A durable room is answered once it is saved (or after FLUSH_MS, the write retrying on).
@@ -223,6 +251,11 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
   const me = await playerFor(caller.email);
   await loaded(id);
   if (action === 'invite') {
+    // A game only a parent may host takes a late invite (into a room already
+    // under way, `joinRunning`) only from a parent: the host role can have
+    // passed to a child since the room was made. The lobby is as before.
+    const stage = roomStage(id);
+    if (stage && stage.phase !== 'lobby' && PARENT_HOSTED.has(stage.game)) await assertParent(caller, stage.game);
     // Resolved against the same roster a new game's invites are, so nobody
     // without games access — or without anywhere to open it — can be named.
     const ids = stringIds(body.invite);
@@ -236,14 +269,14 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
   // Setting up a game whose host must be a parent is checked against the
   // caller's family role here, not only when the room was made: the host
   // role can pass to somebody else when the first host leaves mid-game.
-  const parentHosted =
-    (PARENT_ACTIONS.has(action) || action === 'join') &&
-    PARENT_HOSTED.has((asHttp(() => roomFor(id, me.id)) as { game?: GameId }).game as GameId);
-  if (parentHosted && PARENT_ACTIONS.has(action)) await assertParent(caller);
-  const room = asHttp(() => act(id, me.id, action, body));
+  const game = setUpGame(id, me.id, action);
+  if (game !== null && PARENT_HOSTED.get(game)!.actions.has(action)) await assertParent(caller, game);
+  let room = asHttp(() => act(id, me.id, action, body));
   // A parent who joins may inherit the host seat if the host leaves, so the
   // room never ends up hosted by a child who cannot set up the next game.
-  if (parentHosted && action === 'join' && (await isParent(caller))) asHttp(() => noteParent(id, me.id));
+  // A game that stores what a parent may do (Hometowns' adult seat) answers
+  // the join with the view after it, and has it written before the answer.
+  if (game !== null && action === 'join' && (await isParent(caller))) room = asHttp(() => noteParent(id, me.id)) ?? room;
   await flush(id);
   // "Play again" re-invites everybody; their phones are rung afresh.
   if (action === 'again') void pushInvites(id);
