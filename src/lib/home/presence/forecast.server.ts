@@ -21,6 +21,7 @@ export interface ForecastRead {
   insights: PresenceInsights;
   homeIds: string[];
   homeId: string | null;
+  cal: SchoolCalendar;
 }
 
 export async function homePlaceIds(): Promise<Set<string>> {
@@ -82,5 +83,5 @@ export async function loadForecast(viewer: PeopleViewer, days = 28, person: stri
     forecastCorrections(days, now), loadSchoolCalendar(),
   ]);
   const homeId = home?.id ?? null;
-  return { forecast: buildForecast(insights, homes, now, homeId, corrections, cal), insights, homeIds: [...homes], homeId };
+  return { forecast: buildForecast(insights, homes, now, homeId, corrections, cal), insights, homeIds: [...homes], homeId, cal };
 }

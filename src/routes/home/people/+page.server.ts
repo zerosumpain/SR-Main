@@ -90,9 +90,9 @@ export const load: PageServerLoad = async (event) => {
   // it is the owner's calendar credential, and it names where people will be.
   const agenda = isOwner
     ? read
-        .then(async ({ insights, homeId }) => {
+        .then(async ({ insights, homeId, forecast, cal }) => {
           const { loadAgenda } = await import('$lib/home/presence/agenda.server');
-          return loadAgenda({ routes: insights.routes, live: insights.live, homeId });
+          return loadAgenda({ routes: insights.routes, live: insights.live, homeId, routines: forecast.routines, cal });
         })
         .catch((err) => {
           console.error('[home/people] agenda failed:', errMsg(err));

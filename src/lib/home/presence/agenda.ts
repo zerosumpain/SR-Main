@@ -14,7 +14,8 @@
 // geocoded distance; a routed time says it is routed.
 
 import { metresBetween } from './cluster';
-import { learnedTravel, type TravelEstimate } from './forecast';
+import { hhmm } from './stats';
+import { learnedTravel, localClock, NO_SCHOOL_CALENDAR, OVERDUE_MIN_SHARE, correctedShare, offForHoliday, runsOn, type Routine, type SchoolCalendar, type TravelEstimate } from './forecast';
 import type { LiveState, RouteInsight } from './insights';
 
 const MINUTE = 60_000;
@@ -80,10 +81,10 @@ export interface AgendaItem {
   assignedBy: 'calendar' | 'title' | 'owner';
   /** Where it is: a known place, or a geocoded point, or null when the location could not be placed. */
   place: { id: string | null; label: string; lat: number; lon: number } | null;
-  origin: { id: string | null; label: string; lat: number; lon: number; why: 'previous' | 'now' | 'home' } | null;
+  origin: { id: string | null; label: string; lat: number; lon: number; why: 'previous' | 'now' | 'routine' | 'home' } | null;
   travel: TravelEstimate | null;
   leaveBy: string | null;
-  issue: { kind: 'tight' | 'overlap' | 'unplaced'; text: string } | null;
+  issue: { kind: 'tight' | 'overlap' | 'unplaced' | 'early'; text: string } | null;
 }
 
 // ── Assignment ──────────────────────────────────────────────────────────────
@@ -176,6 +177,30 @@ export interface AgendaInput {
   ownerSubject: string;
   calendarMap: CalendarMap;
   now: Date;
+  /** The forecast's routines, to say where someone will be when no calendar entry or live position does. */
+  routines?: Routine[];
+  cal?: SchoolCalendar;
+}
+
+/**
+ * Where someone's dependable routines put them at an instant: the place the
+ * last routine of that day to arrive by then took them to, and when they
+ * usually leave it again. Null when no routine says. PURE.
+ */
+export function routinePlaceAt(
+  routines: Routine[], subject: string, at: number, cal: SchoolCalendar = NO_SCHOOL_CALENDAR,
+): { placeId: string; place: string; arrived: Routine; leaves: Routine | null } | null {
+  const clock = localClock(at);
+  const today = routines.filter((r) => r.subject === subject && runsOn(r, clock) && !offForHoliday(r, cal, clock.date)
+    && correctedShare(r) >= OVERDUE_MIN_SHARE);
+  const arrived = today
+    .filter((r) => r.departureMin + r.minutes.median <= clock.minute)
+    .sort((a, b) => b.departureMin - a.departureMin)[0];
+  if (!arrived) return null;
+  const leaves = today
+    .filter((r) => r.fromId === arrived.toId && r.departureMin > clock.minute - 0)
+    .sort((a, b) => a.departureMin - b.departureMin)[0] ?? null;
+  return { placeId: arrived.toId, place: arrived.to, arrived, leaves };
 }
 
 /** How far back a previous engagement still decides where someone sets off from. */
@@ -216,10 +241,14 @@ export function planAgenda(input: AgendaInput): { items: AgendaItem[]; requests:
       && +new Date(i.end) <= start && start - +new Date(i.end) <= PREVIOUS_WITHIN_MINS * MINUTE);
     const state = live.find((l) => l.subject === lead);
     let origin: AgendaItem['origin'] = null;
+    let usual: ReturnType<typeof routinePlaceAt> = null;
     if (previous?.place) origin = { ...previous.place, why: 'previous' };
     else if (state?.placeId && start - +now <= NOW_WITHIN_MINS * MINUTE && byId.get(state.placeId)) {
       const p = byId.get(state.placeId)!;
       origin = { id: p.id, label: title(p), lat: p.lat, lon: p.lon, why: 'now' };
+    } else if ((usual = routinePlaceAt(input.routines ?? [], lead, start, input.cal)) && byId.get(usual.placeId)) {
+      const p = byId.get(usual.placeId)!;
+      origin = { id: p.id, label: title(p), lat: p.lat, lon: p.lon, why: 'routine' };
     } else if (home) origin = { id: home.id, label: title(home), lat: home.lat, lon: home.lon, why: 'home' };
 
     let travel: TravelEstimate | null = null;
@@ -241,6 +270,14 @@ export function planAgenda(input: AgendaInput): { items: AgendaItem[]; requests:
       const gap = (start - +new Date(previous.end)) / MINUTE;
       if (travel && travel.p80 > gap) {
         issue = { kind: 'tight', text: `${Math.round(gap)} min after “${previous.title}” ends; the trip usually needs ${Math.ceil(travel.p80)}.` };
+      }
+    }
+    // Leaving a routine place earlier than they usually do is worth saying:
+    // the school will not let them go just because the diary says so.
+    if (!issue && origin?.why === 'routine' && usual?.leaves && leaveBy) {
+      const leaveMin = localClock(+new Date(leaveBy)).minute;
+      if (leaveMin < usual.leaves.departureMin) {
+        issue = { kind: 'early', text: `Has to leave ${usual.place} by ${hhmm(leaveMin)}, before the usual ${usual.leaves.departure}.` };
       }
     }
     const overlapping = items.find((i) => i.subjects.some((s) => subjects.includes(s)) && i.end && +new Date(i.end) > start
@@ -269,7 +306,7 @@ export interface PhoneAgendaItem {
   leaveBy: string | null;
   from: string | null;
   travel: { source: 'person' | 'household' | 'routed'; median: number; p80: number; samples: number; mode: string } | null;
-  issue: { kind: 'tight' | 'overlap' | 'unplaced'; text: string } | null;
+  issue: { kind: 'tight' | 'overlap' | 'unplaced' | 'early'; text: string } | null;
 }
 
 /**

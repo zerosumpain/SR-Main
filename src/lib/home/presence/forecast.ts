@@ -326,7 +326,7 @@ function ranToday(r: Routine, today: string): boolean {
 }
 
 /** Today is a day this routine runs on: its day type, and one of its weekdays if it keeps to some. */
-function runsOn(r: Routine, clock: { weekday: number }): boolean {
+export function runsOn(r: Routine, clock: { weekday: number }): boolean {
   return r.dayType === dayTypeOf(clock.weekday) && (!r.weekdays || r.weekdays.includes(clock.weekday));
 }
 
