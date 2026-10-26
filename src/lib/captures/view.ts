@@ -25,9 +25,9 @@ export function speakersOf(row: Pick<Capture, 'speakers'>): CaptureSpeaker[] {
   return arr<CaptureSpeaker>(row.speakers).filter((s) => s && typeof s.label === 'string');
 }
 
-/** The name to show for one speaker: confirmed, else a guess, else the label. */
+/** The name to show for one speaker: confirmed, else a guess, else "You" for the recorder, else the label. */
 export function speakerName(s: CaptureSpeaker): string {
-  return s.confirmed?.name || s.guess?.name || s.label;
+  return s.confirmed?.name || s.guess?.name || (s.isOwner ? 'You' : s.label);
 }
 
 export function screenOf(row: Pick<Capture, 'screen'>): CaptureScreen | null {

@@ -25,6 +25,7 @@
 import type { Capture, CaptureAction } from '$lib/db/schema';
 import { enqueueIntelJob } from '$lib/intel-client/outbox';
 import { rememberRefId, updateAction } from './store.server';
+import { speakerName, speakersOf } from './view';
 import type {
   CalendarActionParams,
   CaptureActionKind,
@@ -144,7 +145,10 @@ export async function executeCaptureAction(a: CaptureAction, c: Capture, now = n
         return await remind(a, c, fireAt, a.detail || a.title, now);
       }
       case 'todo_other': {
-        return { state: 'done', refKind: 'draft', refId: null, params: { ...(a.params ?? {}), draft: draftFor(a) } };
+        // `who` is often a speaker label ("S2"); greet the name the owner confirmed or the guess.
+        const named = speakersOf(c).find((s) => s.label === a.who);
+        const who = named ? speakerName(named) : a.who;
+        return { state: 'done', refKind: 'draft', refId: null, params: { ...(a.params ?? {}), draft: draftFor({ ...a, who }) } };
       }
       case 'remember': {
         const p = a.params as unknown as RememberActionParams;

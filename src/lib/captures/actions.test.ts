@@ -157,6 +157,20 @@ describe('runApprovedAction', () => {
   });
 });
 
+describe('todo_other greeting', () => {
+  it('greets the confirmed name, not the speaker label', async () => {
+    const cap = {
+      ...CAP,
+      speakers: [
+        { label: 'S1', guess: null, confirmed: null, isOwner: true },
+        { label: 'S2', guess: { name: 'Sam', confidence: 0.6, evidence: [] }, confirmed: { name: 'Sarah Jones' }, isOwner: false },
+      ],
+    } as unknown as Capture;
+    const out = await executeCaptureAction(action('todo_other', {}, { who: 'S2', title: 'Send the map' }), cap, NOW);
+    expect((out.params as { draft: string }).draft.startsWith('Hi Sarah,')).toBe(true);
+  });
+});
+
 describe('draftFor', () => {
   it('writes words, not a send', () => {
     expect(draftFor({ who: null, title: 'Book the hall', detail: 'For Saturday' })).toBe('Hi,\n\nBook the hall\nFor Saturday\n\nThanks');
