@@ -7,7 +7,7 @@
 // Pure types and one constant: nothing here touches the database.
 
 /** Which pipeline ingested something. `intel_notes.metadata.autoKind`. */
-export type AutoKind = 'file' | 'research' | 'chat' | 'daydream' | 'note';
+export type AutoKind = 'file' | 'research' | 'chat' | 'daydream' | 'note' | 'capture';
 
 export interface ExtractedEntity {
   name: string;
@@ -101,6 +101,26 @@ export interface FileChangedJob {
   text: string;
   contentHash: string;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * The `derived-delete` job's payload: Core's `deleteDerivedIntel(kind, refId,
+ * spaceId)`. Removes the notes an upstream row produced (matched on
+ * `metadata.autoKind` + `metadata.refId`) and every entity, relationship and
+ * timeline event only they asserted. Queued when the upstream row is deleted —
+ * a capture, today — so its entities do not outlive it in the graph.
+ */
+export interface DerivedDeleteJob {
+  kind: AutoKind;
+  refId: string;
+  spaceId: string;
+}
+
+/** What Core writes back onto a `derived-delete` row. */
+export interface DerivedDeleteJobResult {
+  notesDeleted: number;
+  entitiesRemoved: number;
+  relationshipsRemoved: number;
 }
 
 /**

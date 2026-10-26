@@ -16,6 +16,7 @@
 //   extract        caller ref           ExtractJob         { status, noteId, entityCount }
 //   note           caller ref           NoteJob            { noteId }
 //   mail-purge     Gmail account id     { email, spaceId } { notes, entities, embeddings, files }
+//   derived-delete caller ref           DerivedDeleteJob   { notesDeleted, entitiesRemoved, relationshipsRemoved }
 //
 // Core claims each row with FOR UPDATE SKIP LOCKED, awaits the work, and writes
 // `result`. An unknown kind or a malformed payload is marked once and never
@@ -24,7 +25,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { driveIntelOutbox } from '$lib/db/schema';
-import type { ExtractJob, FileChangedJob, NoteJob } from './types';
+import type { DerivedDeleteJob, ExtractJob, FileChangedJob, NoteJob } from './types';
 
 export const INTEL_JOB_KINDS = [
   'file-changed',
@@ -33,6 +34,7 @@ export const INTEL_JOB_KINDS = [
   'extract',
   'note',
   'mail-purge',
+  'derived-delete',
 ] as const;
 export type IntelJobKind = (typeof INTEL_JOB_KINDS)[number];
 
@@ -46,6 +48,7 @@ type Payloads = {
   extract: ExtractJob;
   note: NoteJob;
   'mail-purge': { email: string; spaceId: string };
+  'derived-delete': DerivedDeleteJob;
 };
 
 /**

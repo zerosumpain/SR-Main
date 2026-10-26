@@ -204,6 +204,11 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   daydream_capabilities: { decided_by: 'kept: owner-only (daydream)' },
   daydream_commissions: { principal_id: 'kept: owner-only commissioning; reserved owner principal, never a member' },
   daydream_commission_commands: { principal_id: 'kept: owner-only commissioning command receipts' },
+  // Captures are owner-only (`withDevice`): a member's phone cannot record one
+  // yet, so these hold the owner's space and nobody else's. When members can
+  // record, their captures must be erased here WITH a `derived-delete` job each.
+  capture: { space_id: 'kept: owner-only (captures, withDevice); members cannot record yet' },
+  capture_action: { space_id: 'cascade' },
 };
 
 export interface EraseTarget {

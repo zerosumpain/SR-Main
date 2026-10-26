@@ -155,6 +155,17 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     minIntervalSeconds: 0,
   },
   {
+    id: 'captures',
+    label: 'Captures',
+    description: 'A recording from the phone has been analysed and is ready to review.',
+    // Phone only: the review screen is on the phone, and a capture is the
+    // owner's own action, not news he needs chasing on WhatsApp. One raise per
+    // capture (keyed by its id), so no floor.
+    whatsapp: false,
+    native: true,
+    minIntervalSeconds: 0,
+  },
+  {
     id: 'system',
     label: 'Everything else',
     description: 'Anything that has not been given a category of its own yet.',

@@ -39,6 +39,13 @@
 /api/mcp/local
 /api/native/account
 /api/native/app-update
+/api/native/captures
+/api/native/captures/[id]
+/api/native/captures/[id]/actions/[actionId]
+/api/native/captures/[id]/audio
+/api/native/captures/[id]/screen
+/api/native/captures/entities/[entityId]
+/api/native/captures/search
 /api/native/chat/attachments
 /api/native/chat/attachments/[id]
 /api/native/chat/conversations
