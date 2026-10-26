@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
   shareCalls: [] as [string, string][],
   shareVisits: [] as unknown[],
   shareCounted: [] as boolean[],
+  deviceLive: true,
+  deviceAsked: [] as [string, string][],
 }));
 
 vi.mock('$lib/db', () => {
@@ -87,7 +89,15 @@ vi.mock('$lib/access/catalogue', async (importOriginal) => {
   };
 });
 
+vi.mock('$lib/server/native-auth', () => ({
+  isDeviceLive: async (id: string, email: string) => { state.deviceAsked.push([id, email]); return state.deviceLive; },
+}));
+
 const { POST } = await import('./+server');
+const { signAppWebSession } = await import('$lib/server/app-web-session');
+const DEVICE = '0b9d8c1e-1111-4a2b-9c3d-123456789abc';
+const appCookie = (email = 'owner@x.test', audience = 'sr-wildmind') =>
+  `sr_app_session=${signAppWebSession('s'.repeat(40), { audience, email, deviceId: DEVICE }).value}`;
 
 function call(audience: string, key: string, extra: Record<string, string> = {}) {
   const request = new Request('http://127.0.0.1/api/internal/session', {
@@ -112,6 +122,8 @@ beforeEach(() => {
   state.shareCalls.length = 0;
   state.shareVisits.length = 0;
   state.shareCounted.length = 0;
+  state.deviceLive = true;
+  state.deviceAsked.length = 0;
 });
 
 describe('session authority claims', () => {
@@ -331,5 +343,33 @@ describe('session authority claims', () => {
     expect(body.claims.project.key).toBe('policy-engine');
     state.queue.push(new Error('db down'));
     expect((await call('sr-policy-engine', 'p'.repeat(40))).status).toBe(503);
+  });
+
+  it('the app\'s web-view cookie is the owner, to Wildmind only, while the phone is paired', async () => {
+    state.queue.push([]);
+    const body = await (await call('sr-wildmind', 'w'.repeat(40), { cookie: appCookie() })).json();
+    expect(body.email).toBe('owner@x.test');
+    expect(body.viewingAs).toBeNull();
+    expect(body.claims.project.access).toBe('owner');
+    expect(state.deviceAsked).toEqual([[DEVICE, 'owner@x.test']]);
+
+    // Another audience presented the same cookie: nobody.
+    const drive = await (await call('sr-drive', 'd'.repeat(40), { cookie: appCookie() })).json();
+    expect(drive.email).toBeNull();
+
+    // The phone was revoked: nobody.
+    state.deviceLive = false;
+    state.queue.push([]);
+    expect((await (await call('sr-wildmind', 'w'.repeat(40), { cookie: appCookie() })).json()).email).toBeNull();
+  });
+
+  it('the app cookie never makes a non-owner anyone, and a browser session comes first', async () => {
+    state.queue.push([]);
+    expect((await (await call('sr-wildmind', 'w'.repeat(40), { cookie: appCookie('ada@x.test') })).json()).email).toBeNull();
+    expect(state.deviceAsked).toHaveLength(0);
+
+    state.email = 'bo@x.test';
+    state.queue.push([]);
+    expect((await (await call('sr-wildmind', 'w'.repeat(40), { cookie: appCookie() })).json()).email).toBe('bo@x.test');
   });
 });

@@ -6,6 +6,8 @@ import { verifyViewAs } from '$lib/server/view-as';
 import { DRIVE_AUDIENCE, driveClaimsFor } from '$lib/server/session-claims';
 import { projectAccessFor, projectKeyForAudience } from '$lib/projects/access-claim';
 import { readShareVisit } from '$lib/projects/share-visitor';
+import { appWebSessionCookie, verifyAppWebSession } from '$lib/server/app-web-session';
+import { isDeviceLive } from '$lib/server/native-auth';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -16,7 +18,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!env.AUTH_SECRET) return json({ error: 'Session authority unavailable' }, { status: 503, headers });
   const cookie = request.headers.get('cookie') ?? '';
   if (cookie.length > 32768) return json({ error: 'Cookie too large' }, { status: 400, headers });
-  const sessionEmail = await browserSessionEmail(cookie, env.AUTH_SECRET);
+  const sessionEmail = (await browserSessionEmail(cookie, env.AUTH_SECRET)) ?? (await appSessionEmail(audience as string, cookie, env.AUTH_SECRET));
   const email = sessionEmail && (await isEmailAllowedToSignIn(sessionEmail)) ? sessionEmail : null;
   let viewingAs: string | null = null;
   if (email) {
@@ -56,3 +58,14 @@ export const POST: RequestHandler = async ({ request }) => {
   }
   return json({ email, viewingAs, claims }, { headers });
 };
+
+/**
+ * The owner behind the iPhone app's web-view cookie ($lib/server/app-web-session),
+ * when there is no browser session: signed for this audience, unexpired, from a
+ * phone still paired, and still an owner's. No view-as rides on it.
+ */
+async function appSessionEmail(audience: string, cookie: string, secret: string): Promise<string | null> {
+  const session = verifyAppWebSession(secret, audience, appWebSessionCookie(cookie));
+  if (!session || !isOwnerEmail(session.email)) return null;
+  return (await isDeviceLive(session.deviceId, session.email)) ? session.email : null;
+}
