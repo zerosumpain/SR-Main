@@ -71,6 +71,7 @@ export const SURFACE_COPY: Record<string, { label: string; plain: string }> = {
 export const AREA_COPY: Record<string, string> = {
   'app-update': 'whether a newer copy of an /app install is ready',
   account: 'the signed-in person and their access',
+  captures: 'recordings from the phone, what they were about, and the follow-ups to approve',
   chat: 'the assistant, streamed',
   'companion-pair': 'pairing the background companion',
   'companion-policy': 'what the companion may collect',
