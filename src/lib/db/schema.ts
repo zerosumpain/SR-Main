@@ -7861,3 +7861,90 @@ export const tripJob = pgTable(
   },
   (t) => [index('trip_job_owner_idx').on(t.ownerEmail, t.startedAt)],
 );
+
+// ==========================================
+// Captures (2026-10-26)
+// ==========================================
+//
+// A dictation or a recorded conversation from the iPhone app: the audio and an
+// optional screenshot (both in the chat media store, `jkai_attachments`), the
+// phone's transcript and diarized turns, and what the analysis pass made of
+// them. Owner-only to start (`withDevice`), but every row carries the
+// recorder's intel `space_id` so family can be added without a migration.
+// Wire contract: SR-Main docs are the plan's CONTRACT.md (captures).
+// A new table: scripts/migrations/2026-10-26-captures-runtime-grant.sql.
+export const capture = pgTable(
+  'capture',
+  {
+    /** `cap_<random>` */
+    id: text('id').primaryKey(),
+    /** The recorder's intel space — `OWNER_SPACE` for now. */
+    spaceId: text('space_id').notNull(),
+    /** The recorder's email, from the device credential. */
+    principal: text('principal').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    durationS: doublePrecision('duration_s'),
+    /** `jkai_attachments.id` of the audio, once it has arrived. */
+    audioUploadId: text('audio_upload_id'),
+    transcript: text('transcript').notNull().default(''),
+    /** 'phone' | 'server' */
+    transcriptSource: text('transcript_source').notNull().default('phone'),
+    /** CaptureTurn[] */
+    turns: jsonb('turns').$type<unknown[]>().notNull().default([]),
+    /** CaptureSpeaker[] */
+    speakers: jsonb('speakers').$type<unknown[]>().notNull().default([]),
+    screenUploadId: text('screen_upload_id'),
+    /** CaptureScreen | null */
+    screen: jsonb('screen').$type<Record<string, unknown> | null>(),
+    /** { lat, lon, name? } | null */
+    place: jsonb('place').$type<Record<string, unknown> | null>(),
+    title: text('title'),
+    summary: text('summary'),
+    /** CaptureFlowItem[] */
+    flow: jsonb('flow').$type<unknown[]>().notNull().default([]),
+    /** CaptureEntity[] */
+    entities: jsonb('entities').$type<unknown[]>().notNull().default([]),
+    /** What the phone said it would upload and how it was started: { audio, screenshot, source, speakerCount, ownerSpeaker, appHint }. */
+    intake: jsonb('intake').$type<Record<string, unknown>>().notNull().default({}),
+    /** 'received' | 'analysing' | 'ready' | 'failed' */
+    status: text('status').notNull().default('received'),
+    error: text('error'),
+    /** Null when the spend is unknown (an unpriced or subscription model) — never a measured zero. */
+    analysisCostUsd: numeric('analysis_cost_usd', { precision: 12, scale: 6 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('capture_space_started_idx').on(t.spaceId, t.startedAt)],
+);
+
+export type Capture = typeof capture.$inferSelect;
+export type NewCapture = typeof capture.$inferInsert;
+
+/** One follow-up the analysis proposed for a capture. Nothing runs without a tap. */
+export const captureAction = pgTable(
+  'capture_action',
+  {
+    id: text('id').primaryKey(),
+    captureId: text('capture_id').notNull().references(() => capture.id, { onDelete: 'cascade' }),
+    spaceId: text('space_id').notNull(),
+    /** 'todo_me' | 'todo_other' | 'research' | 'calendar' | 'followup' | 'remember' */
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    detail: text('detail'),
+    /** A speaker label or a name, for `todo_other`. */
+    who: text('who'),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
+    /** 'proposed' | 'approved' | 'dismissed' | 'done' | 'failed' | 'refused' */
+    state: text('state').notNull().default('proposed'),
+    refKind: text('ref_kind'),
+    refId: text('ref_id'),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+  (t) => [index('capture_action_capture_idx').on(t.captureId)],
+);
+
+export type CaptureAction = typeof captureAction.$inferSelect;
