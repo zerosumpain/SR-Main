@@ -315,6 +315,29 @@ export async function identifyDevice(request: Request): Promise<NativeIdentity |
   };
 }
 
+/**
+ * Whether device `id` is still a live, unrevoked credential of `ownerEmail` —
+ * for a web session the phone was given (`app-web-session.ts`), which must end
+ * when the phone is revoked even though it carries no token of its own.
+ */
+export async function isDeviceLive(id: string, ownerEmail: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return false;
+  const [row] = await db
+    .select({ id: nativeCredentials.id })
+    .from(nativeCredentials)
+    .where(
+      and(
+        eq(nativeCredentials.id, id),
+        eq(nativeCredentials.kind, 'device'),
+        eq(nativeCredentials.ownerEmail, ownerEmail.trim().toLowerCase()),
+        gt(nativeCredentials.expiresAt, new Date()),
+        isNull(nativeCredentials.revokedAt),
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
 /** A phone's row is stamped at most this often; the uses in between ride on the next stamp. */
 export const TOUCH_EVERY_MS = 60_000;
 const touched = new Map<string, { at: number; uses: number; said: string }>();

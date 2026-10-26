@@ -202,6 +202,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/wildmind/inventions': phone('app/surfaces', 'Everything invented in the valley, and the ideas the referee refused'),
   '/api/native/wildmind/whispers': phone('app/api', 'Whether JKai has heard a whisper yet, and what he thought next'),
   '/api/native/wildmind/whisper': phone('app/api', 'Whisper a thought to JKai from the phone'),
+  '/api/native/wildmind/web-session': phone('app/api', 'Sign the phone’s web view in to the Wildmind valley, to walk the world itself'),
   '/api/native/review-demo': { hidden: 'Exists only for the App Store’s reviewers, so they never see real family data.' },
 };
 

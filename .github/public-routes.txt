@@ -132,6 +132,7 @@
 /api/native/wildmind/chronicle
 /api/native/wildmind/inventions
 /api/native/wildmind/talk
+/api/native/wildmind/web-session
 /api/native/wildmind/whisper
 /api/native/wildmind/whispers
 /api/platform/backlog/intake
