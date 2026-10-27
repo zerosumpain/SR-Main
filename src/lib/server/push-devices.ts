@@ -127,14 +127,20 @@ const ALARM_PRIVATE: Record<string, { title: string; body: string }> = {
   // the site which build when it opens.
   'app-update': { title: 'A new version of SR', body: 'Open SR to install it.' },
 };
+/** The Bat phone (a `family-alarm` of kind `quiet`): discreet, and still says it is urgent. */
+const BAT_PHONE_PRIVATE = { title: 'Bat phone', body: 'Someone in the family needs you. Open the app to see who and where.' };
 const ALARM_KEYS = ['alarmId', 'kind', 'at', 'messageId'] as const;
 
 /** Keep names, counts, locations and arbitrary metadata off private previews. */
 export function privatePush(message: PushMessage): PushMessage {
+  // A silent background push shows nothing on the lock screen, so there is no
+  // preview to keep private — and turning it into an alert would make it ring.
+  if (message.background) return message;
   const userInfo: Record<string, string | number | null> = {};
   if (message.userInfo?.category) userInfo.category = message.userInfo.category;
   if (message.userInfo?.url) userInfo.url = message.userInfo.url;
-  const alarm = message.category ? ALARM_PRIVATE[message.category] : undefined;
+  const batPhone = message.category === 'family-alarm' && message.userInfo?.kind === 'quiet';
+  const alarm = batPhone ? BAT_PHONE_PRIVATE : message.category ? ALARM_PRIVATE[message.category] : undefined;
   if (alarm) {
     for (const key of ALARM_KEYS) if (message.userInfo?.[key] != null) userInfo[key] = message.userInfo[key];
     return { ...alarm, category: message.category, threadId: message.threadId, collapseId: message.collapseId,

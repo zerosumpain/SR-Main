@@ -6,13 +6,18 @@ import { db } from '$lib/db';
 import { familyAlarm } from '$lib/db/schema';
 import { getOwnerEmails, isOwnerEmail } from '$lib/server/access';
 import { pushToEmails } from '$lib/server/push-devices';
+import { livePositions } from '$lib/home/presence/household';
 import { familyId, familyPersonFor, familyRoster } from './roster.server';
+import { recordMessage, senderSubjects } from './messages.server';
 import {
   ACTIVE_MS,
   alarmPush,
   alarmRecipients,
   cancelPush,
   decideRaise,
+  driveMinutesByEmail,
+  quietMessageBody,
+  quietPushes,
   samePerson,
   type AlarmInput,
   type AlarmRecord,
@@ -34,6 +39,47 @@ export type RaiseResult =
   | { kind: 'new' | 'existing'; alarm: AlarmRecord; pushed: number; recipients: number }
   | { kind: 'limited'; retryAfterSeconds: number };
 
+/** How long the Bat phone waits for positions before it goes without the drive. */
+const POSITIONS_WAIT_MS = 3_000;
+
+/**
+ * Each recipient's drive to the alarm, from their last fix on the household
+ * trail (`livePositions`: sharing people only). A failed or slow read is no
+ * estimate — the push goes without that part rather than late, and the app
+ * works the ETA out on open.
+ */
+async function driveMinutes(emails: readonly string[], alarm: AlarmRecord, now: Date): Promise<Map<string, number>> {
+  if (alarm.lat === null || alarm.lon === null || !emails.length) return new Map();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const read = Promise.all([senderSubjects(), livePositions()]);
+    const slow = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), POSITIONS_WAIT_MS);
+      timer.unref?.();
+    });
+    const got = await Promise.race([read, slow]);
+    if (!got) {
+      console.warn(`[family] alarm ${alarm.id}: positions too slow, pushing without the drive`);
+      read.catch(() => {});
+      return new Map();
+    }
+    return driveMinutesByEmail(emails, alarm, got[0], got[1], now);
+  } catch (error) {
+    console.error(`[family] alarm ${alarm.id}: positions unreadable`, (error as Error).message);
+    return new Map();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The Bat phone's pushes: per recipient, each with the drive from THEM (`quietPushes`). */
+async function pushQuiet(emails: readonly string[], alarm: AlarmRecord, fromId: string, now: Date, push: typeof pushToEmails): Promise<number> {
+  const minutes = await driveMinutes(emails, alarm, now);
+  let sent = 0;
+  for (const p of quietPushes(emails, alarm, fromId, criticalAlertsEnabled(), minutes)) sent += (await push(p.emails, p.message)).sent;
+  return sent;
+}
+
 /**
  * Raise an alarm for `email`, or answer with the one already sounding.
  *
@@ -41,6 +87,9 @@ export type RaiseResult =
  * presses arriving together make ONE alarm, not two that each ring everyone.
  * The push happens after the commit: the row is the floor the pull reads, and
  * it must exist even when Apple is unreachable.
+ *
+ * A Bat phone (kind `quiet`) is pushed per recipient, and also written into
+ * "msg family" — without a second push — so the family's history shows it.
  */
 export async function raiseAlarm(
   email: string,
@@ -64,7 +113,7 @@ export async function raiseAlarm(
       .where(inArray(familyAlarm.fromEmail, senderEmails))
       .orderBy(desc(familyAlarm.createdAt))
       .limit(1);
-    const decision = decideRaise(latest ?? null, now);
+    const decision = decideRaise(latest ?? null, now, input.kind);
     if (decision.kind !== 'new') return decision;
     const [row] = await tx
       .insert(familyAlarm)
@@ -76,6 +125,8 @@ export async function raiseAlarm(
         lat: input.position?.lat ?? null,
         lon: input.position?.lon ?? null,
         accuracy: input.position?.accuracy ?? null,
+        battery: input.battery,
+        place: input.place,
         recipientCount: people,
         createdAt: now,
       })
@@ -92,11 +143,18 @@ export async function raiseAlarm(
   const alarm = decided.alarm;
   let pushed = 0;
   try {
-    const outcome = await push(emails, alarmPush(alarm, alarmFromId(sender), criticalAlertsEnabled()));
-    pushed = outcome.sent;
+    pushed =
+      alarm.kind === 'quiet'
+        ? await pushQuiet(emails, alarm, alarmFromId(sender), now, push)
+        : (await push(emails, alarmPush(alarm, alarmFromId(sender), criticalAlertsEnabled()))).sent;
     await db.update(familyAlarm).set({ pushedCount: pushed }).where(eq(familyAlarm.id, alarm.id));
   } catch (error) {
     console.error(`[family] alarm ${alarm.id}: push failed`, (error as Error).message);
+  }
+  if (alarm.kind === 'quiet') {
+    await recordMessage(sender, person.name, quietMessageBody(alarm), { recipients: people, pushed }, now).catch((error) =>
+      console.error(`[family] alarm ${alarm.id}: msg family record failed`, (error as Error).message),
+    );
   }
   console.warn(`[family] alarm ${alarm.id} raised (${alarm.kind}): ${people} people, ${pushed} phones`);
   return { kind: 'new', alarm: { ...alarm, pushedCount: pushed }, pushed, recipients: people };

@@ -128,6 +128,9 @@ describe('every native route gates itself', () => {
         // Family steps and tasks: the owner or a family:circle/admin grant,
         // checked by `familyCaller` in each handler; everyone else 403s.
         '/family/steps/+server.ts',
+        // "Ask everyone's phone" from the steps screen: the same audience;
+        // a silent wake to the rest of the family, throttled family-wide.
+        '/family/steps/ask/+server.ts',
         // Landgrab beside the steps board: the same audience, `familyCaller`
         // in each handler; SR-Health computes it over the service lane.
         '/family/landgrab/+server.ts',
@@ -136,6 +139,11 @@ describe('every native route gates itself', () => {
         '/family/messages/+server.ts',
         '/family/messages/[id]/+server.ts',
         '/family/messages/[id]/replies/+server.ts',
+        // Family photos: the same audience, `familyCaller` in each handler;
+        // a member sets or clears only their own (PUT/DELETE /family/photo).
+        '/family/photo/+server.ts',
+        '/family/photos/+server.ts',
+        '/family/photos/[id]/+server.ts',
         '/family/tasks/+server.ts',
         '/family/tasks/[id]/+server.ts',
         '/games/+server.ts',

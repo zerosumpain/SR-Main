@@ -44,6 +44,13 @@ describe('deliver', () => {
   });
 });
 
+describe('privatePush — a silent background push', () => {
+  it('stays silent: nothing on the lock screen to hide, and it must not become an alert', () => {
+    const message = { title: '', body: '', background: true, category: 'family-report', ttlSeconds: 120, userInfo: { category: 'family-report', reason: 'steps' } };
+    expect(privatePush(message)).toEqual(message);
+  });
+});
+
 describe('privatePush — the family alarm', () => {
   it('still rings loudly, but keeps the name, message and position off the lock screen', () => {
     const message = {
@@ -55,5 +62,19 @@ describe('privatePush — the family alarm', () => {
     expect(p).toMatchObject({ title: 'Family alarm', level: 'critical', sound: message.sound, collapseId: 'alarm-a1', ttlSeconds: 1800 });
     expect(p.userInfo).toEqual({ category: 'family-alarm', alarmId: 'a1', kind: 'siren', at: '2026-10-02T12:00:00.000Z' });
     expect(JSON.stringify(p)).not.toMatch(/Sam|Private Place|51\.5/);
+  });
+});
+
+describe('privatePush — the Bat phone', () => {
+  it('rings as an urgent family alert, without where, battery or who', () => {
+    const message = {
+      title: 'Bat phone — Sam', body: 'At Private Place · battery 23% · about 14 min drive from you', category: 'family-alarm',
+      threadId: 'family-alarm', level: 'time-sensitive' as const, sound: 'default', collapseId: 'alarm-a1', ttlSeconds: 1800,
+      userInfo: { category: 'family-alarm', alarmId: 'a1', kind: 'quiet', name: 'Sam', place: 'Private Place', battery: 0.23, lat: 51.5, lon: -0.1, at: '2026-10-27T12:00:00.000Z' },
+    };
+    const p = privatePush(message);
+    expect(p).toMatchObject({ title: 'Bat phone', level: 'time-sensitive', sound: 'default', collapseId: 'alarm-a1', category: 'family-alarm' });
+    expect(p.userInfo).toEqual({ category: 'family-alarm', alarmId: 'a1', kind: 'quiet', at: '2026-10-27T12:00:00.000Z' });
+    expect(JSON.stringify(p)).not.toMatch(/Sam|Private Place|23|51\.5/);
   });
 });

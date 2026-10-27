@@ -10,6 +10,7 @@ import { alarmRecipients, samePerson } from './alarm';
 import { familyPersonFor, familyRoster } from './roster.server';
 import { listMembers } from '$lib/home/presence/members';
 import {
+  BODY_MAX,
   LIST_DAYS,
   LIST_LIMIT,
   messagePush,
@@ -95,6 +96,33 @@ export async function sendMessage(
 
   const pushed = await pushAndRecord(message, emails, messagePush(message), push);
   return { kind: 'sent', message: { ...message, pushedCount: pushed }, pushed, recipients: people };
+}
+
+/**
+ * Store a message WITHOUT pushing it: the family's record of something that
+ * was already pushed another way (a Bat phone alarm). `recipients` and
+ * `pushed` are that push's, so the list reads as it was delivered. Not
+ * rate-limited — the push it records was.
+ */
+export async function recordMessage(
+  email: string,
+  fromName: string,
+  body: string,
+  counts: { recipients: number; pushed: number },
+  now = new Date(),
+): Promise<MessageRecord> {
+  const [message] = await db
+    .insert(familyMessage)
+    .values({
+      fromEmail: email.trim().toLowerCase(),
+      fromName,
+      body: body.slice(0, BODY_MAX),
+      recipientCount: counts.recipients,
+      pushedCount: counts.pushed,
+      createdAt: now,
+    })
+    .returning();
+  return message;
 }
 
 /** Store a reply to `message` and push it to the message's sender (not to themselves). */

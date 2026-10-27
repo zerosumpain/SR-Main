@@ -7233,12 +7233,15 @@ export const familyAlarm = pgTable(
     fromEmail: text('from_email').notNull(),
     /** The name shown at the time, so the list reads without the roster. */
     fromName: text('from_name').notNull(),
-    /** 'siren' | 'morse' — which sound the phones ring with. */
+    /** 'siren' | 'morse' — which sound the phones ring with; 'quiet' — the Bat phone (default sound, per-recipient text). */
     kind: text('kind').notNull(),
     message: text('message'),
     lat: doublePrecision('lat'),
     lon: doublePrecision('lon'),
     accuracy: doublePrecision('accuracy'),
+    /** The sender's battery when pressed, 0–1, and where they said they were — both optional. */
+    battery: doublePrecision('battery'),
+    place: text('place'),
     /** People (not phones) it was addressed to, and phones Apple accepted it for. */
     recipientCount: integer('recipient_count').notNull().default(0),
     pushedCount: integer('pushed_count').notNull().default(0),
@@ -7277,6 +7280,25 @@ export const familyMessage = pgTable(
 );
 
 export type FamilyMessage = typeof familyMessage.$inferSelect;
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
+
+// A family member's photo of themselves, shown in place of their initials
+// circle on the iPhone app's steps board, messages and map. One row a person,
+// keyed by lower-cased email — the owner's addresses are one person, stored
+// under the first allow-listed one. A JPEG of at most 300 KB (checked by
+// `$lib/family/photos`); `version` is a short hash of the bytes, so a phone
+// re-downloads only when it changes.
+export const familyPhoto = pgTable('family_photo', {
+  email: text('email').primaryKey(),
+  image: bytea('image').notNull(),
+  version: text('version').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 // "That's wrong" on a family forecast's next move — a long press in the app
 // ("Katie isn't going to the station"). `$lib/home/presence/forecast` reads

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { buildPayload, pushHeaders } from '$lib/server/apns';
 import {
+  ASK_GAP_MS,
+  askThrottled,
+  dethroneBaseline,
   dethroneDecision,
   dethroneText,
   leaderOf,
@@ -8,6 +12,7 @@ import {
   previousDay,
   rankBoard,
   standingsText,
+  stepsAskPush,
   todaysSteps,
   type BoardRow,
 } from './steps';
@@ -148,5 +153,28 @@ describe('the 4pm standings', () => {
     expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 101].map(ordinal)).toEqual([
       '1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '101st',
     ]);
+  });
+});
+
+describe('ask everyone’s phone', () => {
+  it('allows one round a minute, family-wide', () => {
+    const t = Date.parse('2026-10-27T12:00:00Z');
+    expect(askThrottled(null, t)).toBe(false);
+    expect(askThrottled(t, t)).toBe(true);
+    expect(askThrottled(t, t + ASK_GAP_MS - 1)).toBe(true);
+    expect(askThrottled(t, t + ASK_GAP_MS)).toBe(false);
+  });
+
+  it('is a silent background push saying what it wants', () => {
+    const push = stepsAskPush();
+    expect(JSON.parse(buildPayload(push))).toEqual({ category: 'family-report', reason: 'steps', aps: { 'content-available': 1 } });
+    expect(pushHeaders(push)).toMatchObject({ 'apns-push-type': 'background', 'apns-priority': '5' });
+  });
+
+  it('compares the next poll against the leader before a silent re-read, that day only', () => {
+    expect(dethroneBaseline(null, '2026-10-27', 'b@x')).toBe('b@x');
+    expect(dethroneBaseline({ day: '2026-10-27', leader: 'a@x' }, '2026-10-27', 'b@x')).toBe('a@x');
+    expect(dethroneBaseline({ day: '2026-10-27', leader: null }, '2026-10-27', 'b@x')).toBeNull();
+    expect(dethroneBaseline({ day: '2026-10-26', leader: 'a@x' }, '2026-10-27', 'b@x')).toBe('b@x');
   });
 });

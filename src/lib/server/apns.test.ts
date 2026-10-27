@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { generateKeyPairSync } from 'node:crypto';
-import { buildPayload, isDeadToken, isDeviceToken, resetApnsForTests, sendPush, apnsConfig } from './apns';
+import { buildPayload, isDeadToken, isDeviceToken, pushHeaders, resetApnsForTests, sendPush, apnsConfig } from './apns';
 
 afterEach(() => {
   for (const k of ['APNS_KEY_ID', 'APNS_TEAM_ID', 'APNS_BUNDLE_ID', 'APNS_KEY_BASE64', 'APNS_ENV']) delete process.env[k];
@@ -41,6 +41,47 @@ describe('buildPayload', () => {
   it('stays under Apple\'s 4 KB limit however long the text', () => {
     const p = buildPayload({ title: 'x'.repeat(5000), body: 'y'.repeat(5000), userInfo: { a: 'z'.repeat(2500) } });
     expect(Buffer.byteLength(p)).toBeLessThanOrEqual(4096);
+  });
+});
+
+describe('background (silent) pushes', () => {
+  const silent = {
+    title: 'ignored',
+    body: 'ignored',
+    category: 'family-report',
+    level: 'time-sensitive' as const,
+    sound: 'sr-siren.caf',
+    background: true,
+    ttlSeconds: 120,
+    userInfo: { category: 'family-report', reason: 'steps' },
+  };
+
+  it('carries content-available and the app keys, and nothing that shows or sounds', () => {
+    expect(JSON.parse(buildPayload(silent))).toEqual({ category: 'family-report', reason: 'steps', aps: { 'content-available': 1 } });
+  });
+
+  it('is push type background at priority 5', () => {
+    const now = Date.parse('2026-10-27T12:00:00Z');
+    expect(pushHeaders(silent, now)).toEqual({
+      'apns-push-type': 'background',
+      'apns-priority': '5',
+      'apns-expiration': String(now / 1000 + 120),
+    });
+  });
+
+  it('leaves an ordinary push as it was: alert, 10 (5 when passive), an hour by default', () => {
+    const now = Date.parse('2026-10-27T12:00:00Z');
+    expect(pushHeaders({ title: 't', body: 'b', collapseId: 'c1' }, now)).toEqual({
+      'apns-push-type': 'alert',
+      'apns-priority': '10',
+      'apns-expiration': String(now / 1000 + 3600),
+      'apns-collapse-id': 'c1',
+    });
+    expect(pushHeaders({ title: 't', body: 'b', level: 'passive', ttlSeconds: 0 }, now)).toMatchObject({
+      'apns-push-type': 'alert',
+      'apns-priority': '5',
+      'apns-expiration': '0',
+    });
   });
 });
 

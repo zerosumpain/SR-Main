@@ -47,7 +47,7 @@ vi.mock('$lib/family/alarm.server', () => ({
 function alarm(over: Partial<AlarmRecord> = {}): AlarmRecord {
   return {
     id: 'a-kid', fromEmail: 'kid@example.test', fromName: 'Kid', kind: 'siren', message: 'Help', lat: 51.5, lon: -0.1,
-    accuracy: 10, recipientCount: 2, pushedCount: 2, createdAt: new Date('2026-10-02T12:00:00Z'), cancelledAt: null,
+    accuracy: 10, battery: null, place: null, recipientCount: 2, pushedCount: 2, createdAt: new Date('2026-10-02T12:00:00Z'), cancelledAt: null,
     cancelledByEmail: null, ...over,
   };
 }
@@ -95,7 +95,9 @@ describe('family alarm — who gets in', () => {
     const res = await call(route.POST, { method: 'POST', body: { kind: 'morse', message: ' Help ' } });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ alarmId: 'a-new', pushed: 3, recipients: 2, existing: false });
-    expect(h.raised).toEqual([{ email: 'kid@example.test', input: { kind: 'morse', message: 'Help', position: null } }]);
+    expect(h.raised).toEqual([
+      { email: 'kid@example.test', input: { kind: 'morse', message: 'Help', position: null, battery: null, place: null } },
+    ]);
   });
 });
 
@@ -115,6 +117,17 @@ describe('POST /api/native/family/alarm', () => {
     expect(await res.json()).toMatchObject({ retryAfter: 17 });
   });
 
+  it('raises a Bat phone with the battery and place', async () => {
+    const res = await call(route.POST, {
+      method: 'POST',
+      body: { kind: 'quiet', battery: 0.23, place: 'Elton Parade, Darlington', position: { lat: 54.52, lon: -1.55, accuracy: 9 } },
+    });
+    expect(res.status).toBe(200);
+    expect(h.raised[0].input).toEqual({
+      kind: 'quiet', message: null, position: { lat: 54.52, lon: -1.55, accuracy: 9 }, battery: 0.23, place: 'Elton Parade, Darlington',
+    });
+  });
+
   it('is 400 for an unknown kind', async () => {
     expect((await call(route.POST, { method: 'POST', body: { kind: 'klaxon' } })).status).toBe(400);
     expect(h.raised).toEqual([]);
@@ -126,7 +139,9 @@ describe('GET /api/native/family/alarm', () => {
     asMember('kid@example.test', ['family:circle']);
     const body = await (await call(route.GET)).json();
     expect(body.alarms.map((a: { alarmId: string }) => a.alarmId)).toEqual(['a-owner']);
-    expect(body.alarms[0]).toMatchObject({ from: 'f_owner', name: 'Owner', kind: 'siren', at: '2026-10-02T12:00:00.000Z', cancelledAt: null });
+    expect(body.alarms[0]).toMatchObject({
+      from: 'f_owner', name: 'Owner', kind: 'siren', battery: null, place: null, at: '2026-10-02T12:00:00.000Z', cancelledAt: null,
+    });
     expect(JSON.stringify(body)).not.toContain('@');
   });
 
