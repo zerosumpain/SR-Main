@@ -16,6 +16,7 @@
   import SectionHead from './hub/SectionHead.svelte';
   import StatDeck from './hub/StatDeck.svelte';
   import RollupGrid from './hub/RollupGrid.svelte';
+  import BriefingFactors from './BriefingFactors.svelte';
   import type { DeckTile } from './hub/types';
   import {
     briefingFactSections,
@@ -383,6 +384,13 @@
         <p class="field-label">What it was composed from</p>
         <RollupGrid cells={rollup} min={190} />
       </div>
+
+      {#if detail?.factors?.length || detail?.connections?.length}
+        <div class="section-gap">
+          <p class="field-label">19 factors</p>
+          <BriefingFactors factors={detail.factors ?? []} connections={detail.connections ?? []} />
+        </div>
+      {/if}
 
       <div class="section-gap">
         <SectionHead
