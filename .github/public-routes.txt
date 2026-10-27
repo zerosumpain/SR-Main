@@ -74,6 +74,7 @@
 /api/native/family/hold
 /api/native/family/landgrab
 /api/native/family/landgrab/changes
+/api/native/family/landgrab/explored
 /api/native/family/messages
 /api/native/family/messages/[id]
 /api/native/family/messages/[id]/replies

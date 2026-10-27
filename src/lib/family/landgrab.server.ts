@@ -15,10 +15,11 @@
 // Health until somebody decides the phone may have it.
 //
 // Cross-repo dependency: SR-Main calls these SR-Health paths, pinned by
-// `landgrab.test.ts`. Renaming or removing either in SR-Health breaks the app's
+// `landgrab.test.ts`. Renaming or removing any in SR-Health breaks the app's
 // Landgrab section (the route degrades to 502, never a crash):
 //   GET /api/health/landgrab/family/weeks?subjects=…&weeks=N
 //   GET /api/health/landgrab/family/changes?week=YYYY-MM-DD&subjects=…
+//   GET /api/health/landgrab/family/explored?subjects=…   (2026-10-27)
 //
 // Contract: landgrab-app-contract (2026-10-04), the SR-Main section, with what
 // SR-Health actually shipped: `subjects` is required; a subject the ledger has
@@ -35,6 +36,7 @@ import { familyChangeId, familyId, familySubjectId } from './roster.server';
 
 export const LANDGRAB_WEEKS_PATH = '/api/health/landgrab/family/weeks';
 export const LANDGRAB_CHANGES_PATH = '/api/health/landgrab/family/changes';
+export const LANDGRAB_EXPLORED_PATH = '/api/health/landgrab/family/explored';
 
 export const WEEKS_DEFAULT = 6;
 export const WEEKS_MAX = 12;
@@ -380,4 +382,217 @@ export async function getFamilyLandgrabChanges(week: string, now = new Date()): 
     timeoutMs: TIMEOUT_MS,
   });
   return projectChanges(upstream, people);
+}
+
+// ——— the family's explored ground (all time, as one) ————————————————————————
+
+/**
+ * What the explored view calls the household: "The Kellys have explored
+ * 18.4 km²". Sent from here because the app's repository is public and names
+ * nobody; the surname is already public on this site (its privacy page).
+ */
+export const FAMILY_TITLE = 'The Kellys';
+
+/**
+ * A drawing larger than this is not sent. Health holds a shape to 16,000
+ * vertices, about 80 KB of encoded polyline, so this is a guard against a
+ * fault rather than a limit anything should meet.
+ */
+export const SHAPE_MAX_CHARS = 400_000;
+
+interface Figure {
+  cells: number;
+  km2: number;
+}
+
+interface UpstreamShape {
+  zoom: number;
+  vertices: number;
+  truncated: boolean;
+  polygons: Array<{ outer: string; holes: string[] }>;
+}
+
+export interface UpstreamExplored {
+  updatedAt: string | null;
+  since: string | null;
+  today: string;
+  weekStart: string;
+  total: Figure;
+  todayNew: Figure;
+  weekNew: Figure;
+  people: Array<{ subject: string; colour: string; cells: number; km2: number; firsts: number; today: number }>;
+  places: Array<{
+    lat: number;
+    lon: number;
+    cells: number;
+    km2: number;
+    bounds: { minLat: number; minLon: number; maxLat: number; maxLon: number };
+    first: string;
+    last: string;
+    home: boolean;
+  }>;
+  otherPlaces: Figure & { count: number };
+  shape: UpstreamShape;
+  fresh: (Figure & { day: string; shape: UpstreamShape }) | null;
+  focus?: { lat: number; lon: number; radiusM: number } | null;
+}
+
+export interface NativeLandgrabExplored {
+  family: string;
+  updatedAt: string | null;
+  since: string | null;
+  today: string;
+  weekStart: string;
+  total: Figure;
+  todayNew: Figure;
+  weekNew: Figure;
+  people: Array<{
+    id: string;
+    name: string;
+    me: boolean;
+    colour: string;
+    cells: number;
+    km2: number;
+    firsts: number;
+    today: number;
+  }>;
+  places: UpstreamExplored['places'];
+  otherPlaces: Figure & { count: number };
+  shape: UpstreamShape;
+  fresh: (Figure & { day: string; shape: UpstreamShape }) | null;
+  focus: { lat: number; lon: number; radiusM: number } | null;
+}
+
+const count = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n) : 0);
+const km2Of = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0);
+const figureOf = (f: Partial<Figure> | null | undefined): Figure => ({ cells: count(f?.cells), km2: km2Of(f?.km2) });
+const dayOf = (d: unknown): string | null => (typeof d === 'string' && isWeekShape(d) ? d : null);
+/** An encoded polyline is printable ASCII from `?` to `~` and nothing else. */
+const POLYLINE = /^[?-~]+$/;
+
+function shapeOf(raw: Partial<UpstreamShape> | null | undefined, budget: { chars: number }): UpstreamShape {
+  const polygons: UpstreamShape['polygons'] = [];
+  let truncated = raw?.truncated === true;
+  for (const p of Array.isArray(raw?.polygons) ? raw.polygons : []) {
+    if (typeof p?.outer !== 'string' || !POLYLINE.test(p.outer)) continue;
+    const holes = (Array.isArray(p.holes) ? p.holes : []).filter((h): h is string => typeof h === 'string' && POLYLINE.test(h));
+    const size = p.outer.length + holes.reduce((n, h) => n + h.length, 0);
+    if (size > budget.chars) {
+      truncated = true;
+      continue;
+    }
+    budget.chars -= size;
+    polygons.push({ outer: p.outer, holes });
+  }
+  const zoom = typeof raw?.zoom === 'number' && Number.isInteger(raw.zoom) && raw.zoom >= 0 && raw.zoom <= 22 ? raw.zoom : 19;
+  return { zoom, vertices: count(raw?.vertices), truncated, polygons };
+}
+
+const inRange = (n: unknown, lo: number, hi: number): n is number =>
+  typeof n === 'number' && Number.isFinite(n) && n >= lo && n <= hi;
+
+/**
+ * Health's explored ground, keyed for the phone. Every person becomes the
+ * steps board's id with a name and the caller marked; a person Main did not
+ * ask for is dropped. Places carry no subject and pass through field by field,
+ * a malformed one dropped. Each object is rebuilt, so nothing Health adds
+ * later reaches the phone until somebody decides it may.
+ */
+export function projectExplored(
+  upstream: UpstreamExplored,
+  people: LandgrabPerson[],
+  callerEmail: string,
+): NativeLandgrabExplored {
+  const map = bySubject(people);
+  const me = callerEmail.trim().toLowerCase();
+  const budget = { chars: SHAPE_MAX_CHARS };
+  const shape = shapeOf(upstream.shape, budget);
+  const fresh = upstream.fresh && dayOf(upstream.fresh.day)
+    ? { day: upstream.fresh.day, ...figureOf(upstream.fresh), shape: shapeOf(upstream.fresh.shape, budget) }
+    : null;
+  return {
+    family: FAMILY_TITLE,
+    updatedAt: typeof upstream.updatedAt === 'string' ? upstream.updatedAt : null,
+    since: dayOf(upstream.since),
+    today: dayOf(upstream.today) ?? '',
+    weekStart: dayOf(upstream.weekStart) ?? '',
+    total: figureOf(upstream.total),
+    todayNew: figureOf(upstream.todayNew),
+    weekNew: figureOf(upstream.weekNew),
+    people: (upstream.people ?? []).flatMap((p) => {
+      const person = map.get(p.subject);
+      if (!person) return [];
+      return [
+        {
+          id: person.id,
+          name: person.name,
+          me: person.email !== null && person.email === me,
+          colour: typeof p.colour === 'string' ? p.colour : '',
+          cells: count(p.cells),
+          km2: km2Of(p.km2),
+          firsts: count(p.firsts),
+          today: count(p.today),
+        },
+      ];
+    }),
+    places: (upstream.places ?? []).flatMap((p) => {
+      const b = p?.bounds;
+      if (!inRange(p?.lat, -90, 90) || !inRange(p?.lon, -180, 180) || !b) return [];
+      if (!inRange(b.minLat, -90, 90) || !inRange(b.maxLat, -90, 90) || !inRange(b.minLon, -180, 180) || !inRange(b.maxLon, -180, 180)) return [];
+      const first = dayOf(p.first);
+      const last = dayOf(p.last);
+      if (!first || !last) return [];
+      return [
+        {
+          lat: p.lat,
+          lon: p.lon,
+          cells: count(p.cells),
+          km2: km2Of(p.km2),
+          bounds: { minLat: b.minLat, minLon: b.minLon, maxLat: b.maxLat, maxLon: b.maxLon },
+          first,
+          last,
+          home: p.home === true,
+        },
+      ];
+    }),
+    otherPlaces: { count: count(upstream.otherPlaces?.count), ...figureOf(upstream.otherPlaces) },
+    shape,
+    fresh,
+    focus: focusOf(upstream.focus),
+  };
+}
+
+/** Nothing explored: an empty household, or one Health has never seen. */
+export function emptyExplored(now = new Date()): NativeLandgrabExplored {
+  const today = now.toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  const none = { cells: 0, km2: 0 };
+  return {
+    family: FAMILY_TITLE,
+    updatedAt: null,
+    since: null,
+    today,
+    weekStart: d.toISOString().slice(0, 10),
+    total: none,
+    todayNew: none,
+    weekNew: none,
+    people: [],
+    places: [],
+    otherPlaces: { count: 0, ...none },
+    shape: { zoom: 19, vertices: 0, truncated: false, polygons: [] },
+    fresh: null,
+    focus: null,
+  };
+}
+
+export async function getFamilyLandgrabExplored(callerEmail: string, now = new Date()): Promise<NativeLandgrabExplored> {
+  const people = await landgrabPeople();
+  // Health requires `subjects`; an empty household has explored nothing.
+  if (people.length === 0) return emptyExplored(now);
+  const query = new URLSearchParams({ subjects: people.map((p) => p.subject).join(',') });
+  const upstream = await getFromExtracted<UpstreamExplored>('health', `${LANDGRAB_EXPLORED_PATH}?${query}`, {
+    timeoutMs: TIMEOUT_MS,
+  });
+  return projectExplored(upstream, people, callerEmail);
 }
