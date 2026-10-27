@@ -7233,12 +7233,15 @@ export const familyAlarm = pgTable(
     fromEmail: text('from_email').notNull(),
     /** The name shown at the time, so the list reads without the roster. */
     fromName: text('from_name').notNull(),
-    /** 'siren' | 'morse' — which sound the phones ring with. */
+    /** 'siren' | 'morse' — which sound the phones ring with; 'quiet' — the Bat phone (default sound, per-recipient text). */
     kind: text('kind').notNull(),
     message: text('message'),
     lat: doublePrecision('lat'),
     lon: doublePrecision('lon'),
     accuracy: doublePrecision('accuracy'),
+    /** The sender's battery when pressed, 0–1, and where they said they were — both optional. */
+    battery: doublePrecision('battery'),
+    place: text('place'),
     /** People (not phones) it was addressed to, and phones Apple accepted it for. */
     recipientCount: integer('recipient_count').notNull().default(0),
     pushedCount: integer('pushed_count').notNull().default(0),

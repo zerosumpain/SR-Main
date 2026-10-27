@@ -64,3 +64,17 @@ describe('privatePush — the family alarm', () => {
     expect(JSON.stringify(p)).not.toMatch(/Sam|Private Place|51\.5/);
   });
 });
+
+describe('privatePush — the Bat phone', () => {
+  it('rings as an urgent family alert, without where, battery or who', () => {
+    const message = {
+      title: 'Bat phone — Sam', body: 'At Private Place · battery 23% · about 14 min drive from you', category: 'family-alarm',
+      threadId: 'family-alarm', level: 'time-sensitive' as const, sound: 'default', collapseId: 'alarm-a1', ttlSeconds: 1800,
+      userInfo: { category: 'family-alarm', alarmId: 'a1', kind: 'quiet', name: 'Sam', place: 'Private Place', battery: 0.23, lat: 51.5, lon: -0.1, at: '2026-10-27T12:00:00.000Z' },
+    };
+    const p = privatePush(message);
+    expect(p).toMatchObject({ title: 'Bat phone', level: 'time-sensitive', sound: 'default', collapseId: 'alarm-a1', category: 'family-alarm' });
+    expect(p.userInfo).toEqual({ category: 'family-alarm', alarmId: 'a1', kind: 'quiet', at: '2026-10-27T12:00:00.000Z' });
+    expect(JSON.stringify(p)).not.toMatch(/Sam|Private Place|23|51\.5/);
+  });
+});

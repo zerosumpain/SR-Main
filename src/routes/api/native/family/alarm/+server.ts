@@ -8,14 +8,18 @@ import { alarmView, parseAlarmInput, samePerson } from '$lib/family/alarm';
 
 /**
  * POST /api/native/family/alarm — "raise the alarm" from the app's Family tab:
- * `{ kind: 'siren'|'morse', message?, position?: { lat, lon, accuracy? } }`.
+ * `{ kind: 'siren'|'morse'|'quiet', message?, position?: { lat, lon, accuracy? },
+ * battery?: 0–1, place?: string }`.
  *
  * Every OTHER family member's site-paired phone is pushed (time-sensitive, or
- * critical when APNS_CRITICAL_ALERTS=1) with the kind's bundled sound. Pressing
- * again while the alarm is still active answers with that alarm (`existing:
- * true`) and rings nobody twice; a NEW alarm within 30 s of the sender's last
- * is 429 with `retryAfter`. A "View as" look is refused by the gate: it is a
- * write.
+ * critical when APNS_CRITICAL_ALERTS=1) with the kind's bundled sound. `quiet`
+ * is the Bat phone: the default sound, and a text per recipient — where the
+ * sender is, their battery, roughly how far a drive from THEM — also written
+ * into "msg family" without a second push. Pressing again while the alarm is
+ * still active answers with that alarm (`existing: true`) and rings nobody
+ * twice — except the siren or morse pressed during a Bat phone, which is a new
+ * alarm at once; a NEW alarm within 30 s of the sender's last is 429 with
+ * `retryAfter`. A "View as" look is refused by the gate: it is a write.
  *
  * Answers `{ alarmId, pushed, recipients, existing }` — `pushed` counts phones
  * Apple accepted, `recipients` the people it was addressed to.
