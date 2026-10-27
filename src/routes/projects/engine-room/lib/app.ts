@@ -69,6 +69,7 @@ export const SURFACE_COPY: Record<string, { label: string; plain: string }> = {
 
 /** The native API, by first path segment. Every area the route manifest reports needs a line. */
 export const AREA_COPY: Record<string, string> = {
+  'app-release': 'which build the family get, chosen from the owner’s phone',
   'app-update': 'whether a newer copy of an /app install is ready',
   account: 'the signed-in person and their access',
   captures: 'recordings from the phone, what they were about, and the follow-ups to approve',
