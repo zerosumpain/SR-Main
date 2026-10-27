@@ -41,11 +41,24 @@ export function previousDay(day: string): string {
   return new Date(Date.parse(`${day}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
 }
 
+/** A phone's local day may begin this long before London's: UTC+14 is the
+ *  furthest any clock runs ahead. */
+export const AHEAD_OF_LONDON_S = 14 * 3600;
+
 /**
  * Today's count from the pilot's step records. The pilot keeps ONE cumulative
  * record per local day, so this picks, never sums: the largest value among the
  * records that START inside today's window. Null when there is none — no
  * steps today is not the same as zero steps recorded.
+ *
+ * "Inside" reaches back `AHEAD_OF_LONDON_S` before London's midnight, because a
+ * record starts at the PHONE's midnight. On the family's Rome trip (from 26 Oct
+ * 2026, with the clocks just gone back) Rome's midnight was 23:00 London time,
+ * every phone's day began before the window, and the board counted nobody — the
+ * counts dropped out one by one as each phone landed and took Rome time. The
+ * pilot already answers with every record that overlaps the window; the
+ * yesterday of a phone behind London ends inside it but STARTS before this
+ * reach (UTC-1 or later begins after London's midnight), so it is never taken.
  */
 export function todaysSteps(
   records: ReadonlyArray<{ value: number; start: string; end: string }>,
@@ -54,7 +67,7 @@ export function todaysSteps(
   let best: number | null = null;
   for (const r of records) {
     const at = Date.parse(r.start) / 1000;
-    if (!Number.isFinite(at) || at < window.from || at >= window.to) continue;
+    if (!Number.isFinite(at) || at < window.from - AHEAD_OF_LONDON_S || at >= window.to) continue;
     if (!Number.isFinite(r.value) || r.value < 0) continue;
     const v = Math.round(r.value);
     if (best === null || v > best) best = v;

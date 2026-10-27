@@ -67,6 +67,29 @@ describe('todaysSteps — pick, never sum', () => {
   it('keeps raw values (no ×100 scaling) and rounds', () => {
     expect(todaysSteps([{ value: 8412.4, start: '2026-09-28T06:00:00Z', end: '2026-09-28T09:00:00Z' }], w)).toBe(8412);
   });
+
+  // 27 Oct 2026, the family in Rome with the clocks just gone back: a phone's
+  // day starts at Rome's midnight, 23:00 London time — before London's day.
+  const rome = londonWindow(at('2026-10-27T18:00:00Z'));
+
+  it('counts a phone whose day began before London’s — away in Rome', () => {
+    expect(todaysSteps([{ value: 14_210, start: '2026-10-26T23:00:00Z', end: '2026-10-27T23:00:00Z' }], rome)).toBe(14_210);
+  });
+
+  it('late on, keeps today’s total over the next local day just begun', () => {
+    const late = londonWindow(at('2026-10-27T23:30:00Z'));
+    const records = [
+      { value: 18_900, start: '2026-10-26T23:00:00Z', end: '2026-10-27T23:00:00Z' },
+      { value: 120, start: '2026-10-27T23:00:00Z', end: '2026-10-28T23:00:00Z' },
+    ];
+    expect(todaysSteps(records, late)).toBe(18_900);
+  });
+
+  it('never takes the yesterday of a phone behind London, though it overlaps today', () => {
+    // New York: its 26 Oct runs 04:00Z 26th → 04:00Z 27th.
+    const records = [{ value: 9_000, start: '2026-10-26T04:00:00Z', end: '2026-10-27T04:00:00Z' }];
+    expect(todaysSteps(records, rome)).toBeNull();
+  });
 });
 
 describe('rankBoard and leaderOf', () => {
