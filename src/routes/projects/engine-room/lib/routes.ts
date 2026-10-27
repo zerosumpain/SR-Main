@@ -130,6 +130,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/news': phone('app/api', 'The news desk, sized for a phone'),
   '/api/native/news/actions': phone('app/api', 'Favourite, keep, note or research a story'),
   '/api/native/news/story/[source]/[id]': phone('app/api', 'Read one story'),
+  '/api/native/briefing': phone('daydream/inbox', 'The Morning report: one day’s briefing with its factor cards'),
   '/api/native/daydream': phone('daydream/inbox', 'Daydream notes on the phone, including the Health tab’s strip'),
   '/api/native/daydream/feedback': phone('daydream/inbox', 'Rate a note, or rule it right or wrong with a reason'),
   '/api/native/daydream/act': phone('daydream/inbox', 'Do it for me: carry out a note’s step, or take it back'),

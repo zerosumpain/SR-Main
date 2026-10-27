@@ -11,6 +11,7 @@
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import FactList from '$lib/components/jkai/daydream/hub/FactList.svelte';
+  import BriefingFactors from '$lib/components/jkai/daydream/BriefingFactors.svelte';
   import {
     briefingFactRows,
     briefingFactSections,
@@ -27,6 +28,12 @@
   const gaps = $derived(detail?.gaps ?? []);
   const sources = $derived(detail?.sources ?? []);
   const factCount = $derived(detail?.facts?.length ?? 0);
+  // The 19 factor cards and their connections (records from 2026-10-27 on).
+  const factors = $derived(Array.isArray(detail?.factors) ? detail.factors : []);
+  const connections = $derived(Array.isArray(detail?.connections) ? detail.connections : []);
+  const hasFactors = $derived(factors.length > 0 || connections.length > 0);
+  // B is the factor band when there is one; everything after shifts along.
+  const shift = $derived(hasFactors ? 1 : 0);
 
   const dateLabel = $derived(detail?.dateLabel || briefing.title || briefing.id);
   const titleLines = $derived(
@@ -35,11 +42,11 @@
 
   const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const letter = (i: number) => ALPHABET[i % ALPHABET.length];
-  // A is the rollup; the fact sections take B onwards, and the three closing
-  // bands carry on from wherever they stop.
-  const sentLetter = $derived(letter(sections.length + 1));
-  const healthLetter = $derived(letter(sections.length + 2));
-  const stripLetter = $derived(letter(sections.length + 3));
+  // A is the rollup, B the factors when present; the fact sections follow, and
+  // the three closing bands carry on from wherever they stop.
+  const sentLetter = $derived(letter(sections.length + shift + 1));
+  const healthLetter = $derived(letter(sections.length + shift + 2));
+  const stripLetter = $derived(letter(sections.length + shift + 3));
 
   const STATUS_LABEL: Record<BriefingSourceRow['status'], string> = {
     ok: 'reported',
@@ -83,11 +90,24 @@
   </div>
 </section>
 
-{#each sections as section, i (section.slug)}
-  <section class="band anchored" class:sunken={i % 2 === 1} id="sec-{section.slug}">
+{#if hasFactors}
+  <section class="band anchored" id="sec-factors">
     <div class="inner">
       <SectionHead
-        kicker="{letter(i + 1)} / Fact sheet"
+        kicker="B / 19 factors"
+        title={['The morning,', 'factor by factor']}
+        strap="What the composer saw across the {factors.length} factors it watches, and the connections it drew between them. Open a card for the facts behind its line."
+      />
+      <BriefingFactors {factors} {connections} />
+    </div>
+  </section>
+{/if}
+
+{#each sections as section, i (section.slug)}
+  <section class="band anchored" class:sunken={(i + shift) % 2 === 1} id="sec-{section.slug}">
+    <div class="inner">
+      <SectionHead
+        kicker="{letter(i + shift + 1)} / Fact sheet"
         title={[section.section]}
         strap="{section.facts.length} fact{section.facts.length === 1 ? '' : 's'} from {section
           .facts[0]?.source ?? 'the composer'}."
@@ -97,7 +117,7 @@
   </section>
 {/each}
 
-<section class="band anchored" class:sunken={sections.length % 2 === 1} id="sec-as-sent">
+<section class="band anchored" class:sunken={(sections.length + shift) % 2 === 1} id="sec-as-sent">
   <div class="inner">
     <SectionHead
       kicker="{sentLetter} / As sent"
@@ -128,7 +148,7 @@
   </div>
 </section>
 
-<section class="band anchored" class:sunken={sections.length % 2 === 0} id="sec-run-health">
+<section class="band anchored" class:sunken={(sections.length + shift) % 2 === 0} id="sec-run-health">
   <div class="inner">
     <SectionHead
       kicker="{healthLetter} / Run health"
@@ -173,7 +193,7 @@
   </div>
 </section>
 
-<section class="band" class:sunken={sections.length % 2 === 1}>
+<section class="band" class:sunken={(sections.length + shift) % 2 === 1}>
   <div class="inner">
     <SectionHead
       kicker="{stripLetter} / The archive"

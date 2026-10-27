@@ -74,6 +74,7 @@ export const HOOK_BYPASSES: string[] = [
   // the same credential, so neither needs its own copy of the daydream or
   // backlog code. Named one at a time; /api/platform is not a tree.
   '/api/platform/daydream/briefing', // GET only, same credential
+  '/api/platform/briefing/context', // GET only, same credential; trip and family summary
   '/api/platform/backlog/intake', // POST only, same credential; trace ideas only
   // The model-plumbing lane for the extracted applications: per-application
   // MODEL_SERVICE_TOKEN_<APP> Bearer, constant-time compared, refused when unset
@@ -198,6 +199,7 @@ export const BYPASS_GUARDS: Record<string, string> = {
     'POST only · JKAI_INVOKE_TOKEN; destructive tools need JKAI_INVOKE_DESTRUCTIVE_TOKEN, unset by default',
   '/api/platform/tools/catalogue': 'GET only · JKAI_INVOKE_TOKEN; tool names and their destructive flag',
   '/api/platform/daydream/briefing': "GET only · JKAI_INVOKE_TOKEN; yesterday's daydream section for the morning briefing",
+  '/api/platform/briefing/context': 'GET only · JKAI_INVOKE_TOKEN; today\'s trip and the family summary for the morning briefing',
   '/api/platform/backlog/intake': 'POST only · JKAI_INVOKE_TOKEN; trace findings into the build backlog intake',
   '/api/platform/models/config': 'GET only · MODEL_SERVICE_TOKEN_<APP>; an extracted app reads its model settings (secrets filtered)',
   '/api/platform/models/usage': 'POST only · MODEL_SERVICE_TOKEN_<APP>; an extracted app records LLM usage in the cost ledger',

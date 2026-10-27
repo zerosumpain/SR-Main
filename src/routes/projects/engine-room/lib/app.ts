@@ -72,6 +72,7 @@ export const AREA_COPY: Record<string, string> = {
   'app-release': 'which build the family get, chosen from the owner’s phone',
   'app-update': 'whether a newer copy of an /app install is ready',
   account: 'the signed-in person and their access',
+  briefing: 'the Morning report: one day’s briefing and its factor cards',
   captures: 'recordings from the phone, what they were about, and the follow-ups to approve',
   chat: 'the assistant, streamed',
   'companion-pair': 'pairing the background companion',

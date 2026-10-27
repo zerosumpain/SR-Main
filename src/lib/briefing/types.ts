@@ -98,6 +98,61 @@ export interface BriefingDetail {
   daydreamsText?: string;
   /** The local day that block describes, `YYYY-MM-DD`. */
   daydreamsDay?: string | null;
+  /**
+   * The 19 factor cards, in display order (from 2026-10-27). Absent on older
+   * records — every reader treats a missing list as empty.
+   */
+  factors?: FactorCard[];
+  /** Cross-factor observations, most salient first (0–6). Absent on older records. */
+  connections?: BriefingConnection[];
+}
+
+export const FACTOR_GROUPS = ['Place', 'Body', 'Day', 'Home & family', 'Intelligence', 'Systems'] as const;
+export type FactorGroup = (typeof FACTOR_GROUPS)[number];
+
+export type FactorKey =
+  | 'location' | 'weather-here' | 'weather-home' | 'air' | 'daylight' | 'trip'
+  | 'sleep' | 'readiness' | 'activity'
+  | 'calendar' | 'email' | 'todos'
+  | 'family' | 'house'
+  | 'news' | 'policy' | 'local' | 'intel'
+  | 'systems';
+
+export type FactorStatus = 'ok' | 'stale' | 'empty' | 'failed' | 'off';
+
+export interface FactorFact {
+  label: string;
+  value: string;
+  assessment?: string;
+  /** Relative (`/jkai/...`) or absolute (a news story). */
+  href?: string | null;
+  action?: boolean;
+}
+
+/** One of the briefing's 19 factors, as SR-Workflows' composer writes it. */
+export interface FactorCard {
+  key: FactorKey;
+  /** 1..19, display order. */
+  n: number;
+  label: string;
+  group: FactorGroup;
+  /** An SF Symbol name; the web maps it to a glyph. */
+  icon: string;
+  status: FactorStatus;
+  /** One code-written line; '' when failed or off. */
+  headline: string;
+  /** 0–100, the max of its facts. */
+  salience: number;
+  facts: FactorFact[];
+  /** The source ledger's one-liner (the reason when not ok). */
+  detail: string;
+}
+
+export interface BriefingConnection {
+  text: string;
+  factors: FactorKey[];
+  salience: number;
+  action?: boolean;
 }
 
 export interface BriefingData {
