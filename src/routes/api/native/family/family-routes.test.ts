@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   tasks: new Map<string, TaskRecord>(),
   notified: [] as Array<{ kind: string; actor: string; doer?: string | null }>,
   created: [] as Array<Record<string, unknown>>,
+  asked: [] as string[],
 }));
 
 vi.mock('$lib/server/native-handler', () => ({
@@ -31,6 +32,10 @@ vi.mock('$lib/family/roster.server', () => ({
 }));
 
 vi.mock('$lib/family/steps.server', () => ({
+  askForSteps: async (email: string) => {
+    h.asked.push(email);
+    return h.asked.length > 1 ? { asked: 0, people: 0, throttled: true } : { asked: 3, people: 2, throttled: false };
+  },
   stepsBoard: async () => ({
     window: { day: '2026-09-28', from: 0, to: 0, tz: -60 },
     checkedAt: new Date('2026-09-28T10:15:00Z'),
@@ -75,6 +80,7 @@ function base(over: Partial<TaskRecord> = {}): TaskRecord {
 }
 
 const steps = await import('./steps/+server');
+const ask = await import('./steps/ask/+server');
 const list = await import('./tasks/+server');
 const one = await import('./tasks/[id]/+server');
 
@@ -100,6 +106,7 @@ beforeEach(() => {
   h.tasks = new Map([['t1', base()]]);
   h.notified = [];
   h.created = [];
+  h.asked = [];
 });
 
 describe('family routes — who gets in', () => {
@@ -109,6 +116,21 @@ describe('family routes — who gets in', () => {
     expect((await call(list.GET)).status).toBe(403);
     expect((await call(list.POST, { method: 'POST', body: { title: 'x' } })).status).toBe(403);
     expect((await call(one.PATCH, { method: 'PATCH', body: { action: 'done' } })).status).toBe(403);
+    expect((await call(ask.POST, { method: 'POST', body: {} })).status).toBe(403);
+    expect(h.asked).toEqual([]);
+  });
+});
+
+describe('POST /api/native/family/steps/ask', () => {
+  it('asks for the caller, and answers 200 whether or not the minute is up', async () => {
+    asMember('kid@example.test', ['family:circle']);
+    const first = await call(ask.POST, { method: 'POST', body: {} });
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ asked: 3, people: 2, throttled: false });
+    const second = await call(ask.POST, { method: 'POST', body: {} });
+    expect(second.status).toBe(200);
+    expect(await second.json()).toEqual({ asked: 0, people: 0, throttled: true });
+    expect(h.asked).toEqual(['kid@example.test', 'kid@example.test']);
   });
 });
 

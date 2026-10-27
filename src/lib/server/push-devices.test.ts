@@ -44,6 +44,13 @@ describe('deliver', () => {
   });
 });
 
+describe('privatePush — a silent background push', () => {
+  it('stays silent: nothing on the lock screen to hide, and it must not become an alert', () => {
+    const message = { title: '', body: '', background: true, category: 'family-report', ttlSeconds: 120, userInfo: { category: 'family-report', reason: 'steps' } };
+    expect(privatePush(message)).toEqual(message);
+  });
+});
+
 describe('privatePush — the family alarm', () => {
   it('still rings loudly, but keeps the name, message and position off the lock screen', () => {
     const message = {

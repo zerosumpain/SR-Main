@@ -1,9 +1,11 @@
 // The family steps board — storage, the pilot poll and the pushes.
 //
-// The poll (`refreshAndCheck`) is the ONLY writer: the `family-steps` heartbeat
+// The poll (`refreshAndCheck`) is the main writer: the `family-steps` heartbeat
 // runs it every 15 minutes through the day, and `family-steps-4pm` runs it
-// once more before telling everyone their place. The phone's GET reads the
-// stored rows and never waits on the pilot.
+// once more before telling everyone their place. The other is `refreshRows`,
+// the same read without the push, run twice after "ask everyone's phone"
+// (`askForSteps`). The phone's GET reads the stored rows and never waits on
+// the pilot.
 //
 // Spec: docs/superpowers/specs/2026-09-28-family-steps-and-tasks.md
 
@@ -13,8 +15,13 @@ import { familyStepsDay, familyStepsEvent } from '$lib/db/schema';
 import { pilotSteps } from '$lib/home/presence/companion-accounts';
 import { pushToEmails } from '$lib/server/push-devices';
 import type { PushMessage } from '$lib/server/apns';
+import { getOwnerEmails, isOwnerEmail } from '$lib/server/access';
+import { alarmRecipients } from './alarm';
 import { familyRoster, nameFromEmail, type FamilyPerson } from './roster.server';
 import {
+  ASK_REREAD_MS,
+  askThrottled,
+  dethroneBaseline,
   dethroneDecision,
   dethroneText,
   leaderOf,
@@ -22,6 +29,7 @@ import {
   previousDay,
   rankBoard,
   standingsText,
+  stepsAskPush,
   todaysSteps,
   type BoardRow,
   type Ranked,
@@ -134,18 +142,35 @@ function serial<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * Who the poll asks the pilot about: family on the app who share their steps.
+ * Rows of anyone else are purged as well as filtered out of reads; an empty
+ * or unknown consent list removes all.
+ */
+async function boardPeople(now: Date): Promise<FamilyPerson[]> {
+  const people = (await familyRoster(now.getTime())).filter((p) => p.pilot && p.stepsSharing === true);
+  const permitted = people.map(p => p.email);
+  await db.delete(familyStepsDay).where(permitted.length ? notInArray(familyStepsDay.email, permitted) : sql`true`);
+  await db.delete(familyStepsEvent).where(permitted.length ? notInArray(familyStepsEvent.email, permitted) : sql`true`);
+  return people;
+}
+
+/**
+ * Who led before the first silent re-read (`refreshRows`) since the last
+ * heartbeat poll — see `dethroneBaseline`. In memory: a restart forgets it,
+ * which costs at most one "knocked off the top" push.
+ */
+let rememberedLeader: { day: string; leader: string | null } | null = null;
+
+/**
  * Poll everyone on the board, then push whoever lost the top spot — unless it
  * is the day's first poll, they are only level, or they have had two today.
  */
 export function refreshAndCheck(now = new Date(), fetchImpl: typeof fetch = fetch, push = pushToEmails): Promise<RefreshResult> {
   return serial(async () => {
     const window = londonWindow(now);
-    const people = (await familyRoster(now.getTime())).filter((p) => p.pilot && p.stepsSharing === true);
-    const permitted = people.map(p => p.email);
-    // Purge old copies as well as filtering reads. Empty/unknown consent removes all.
-    await db.delete(familyStepsDay).where(permitted.length ? notInArray(familyStepsDay.email, permitted) : sql`true`);
-    await db.delete(familyStepsEvent).where(permitted.length ? notInArray(familyStepsEvent.email, permitted) : sql`true`);
-    const before = leaderOf(await rowsFor(window.day));
+    const people = await boardPeople(now);
+    const before = dethroneBaseline(rememberedLeader, window.day, leaderOf(await rowsFor(window.day)));
+    rememberedLeader = null;
     const { written, failed } = await refresh(people, window, now, fetchImpl);
     const after = await rowsFor(window.day);
     const counts = await eventCounts(window.day, 'dethroned');
@@ -163,6 +188,78 @@ export function refreshAndCheck(now = new Date(), fetchImpl: typeof fetch = fetc
     }
     return { day: window.day, asked: people.length, written, failed, pushed };
   });
+}
+
+/**
+ * Read everyone's count from the pilot and store it — the poll WITHOUT its
+ * push. What a re-read after "ask everyone's phone" runs: the board catches
+ * the counts the woken phones just uploaded, and nobody is pushed from here.
+ * The leader before it is remembered for the next heartbeat poll.
+ */
+export function refreshRows(now = new Date(), fetchImpl: typeof fetch = fetch): Promise<Omit<RefreshResult, 'pushed'>> {
+  return serial(async () => {
+    const window = londonWindow(now);
+    const people = await boardPeople(now);
+    if (rememberedLeader?.day !== window.day) {
+      rememberedLeader = { day: window.day, leader: leaderOf(await rowsFor(window.day)) };
+    }
+    const { written, failed } = await refresh(people, window, now, fetchImpl);
+    return { day: window.day, asked: people.length, written, failed };
+  });
+}
+
+export interface AskResult {
+  /** Phones Apple accepted the silent push for. */
+  asked: number;
+  /** People it was addressed to (the owner's addresses count once). */
+  people: number;
+  throttled: boolean;
+}
+
+/** When the last round of silent pushes went, family-wide (this process). */
+let lastAskAt: number | null = null;
+
+/** For tests. */
+export function resetStepsAsk(): void {
+  lastAskAt = null;
+  rememberedLeader = null;
+}
+
+function rereadLater(ms: number): void {
+  const timer = setTimeout(() => {
+    refreshRows().catch((error) => console.error('[family] steps re-read after an ask failed', (error as Error).message));
+  }, ms);
+  timer.unref?.();
+}
+
+/**
+ * "Ask everyone's phone", sent when anyone opens the steps screen: a silent
+ * push to every OTHER family member's phones, waking the app to upload
+ * today's steps (and a fresh fix) to the pilot, then two re-reads of the
+ * pilot (+25 s, +60 s) so the board the phone is polling catches them. At
+ * most one round a minute for the whole family; inside that it asks nobody.
+ */
+export async function askForSteps(
+  callerEmail: string,
+  now = new Date(),
+  push = pushToEmails,
+  later: (ms: number) => void = rereadLater,
+): Promise<AskResult> {
+  if (askThrottled(lastAskAt, now.getTime())) return { asked: 0, people: 0, throttled: true };
+  const previous = lastAskAt;
+  lastAskAt = now.getTime();
+  let emails: string[];
+  let people: number;
+  try {
+    const roster = await familyRoster(now.getTime());
+    ({ emails, people } = alarmRecipients(callerEmail, roster.map((p) => p.email), getOwnerEmails(), isOwnerEmail));
+  } catch (error) {
+    lastAskAt = previous;
+    throw error;
+  }
+  const asked = emails.length ? (await push(emails, stepsAskPush())).sent : 0;
+  for (const ms of ASK_REREAD_MS) later(ms);
+  return { asked, people, throttled: false };
 }
 
 export interface BoardPerson extends BoardRow {

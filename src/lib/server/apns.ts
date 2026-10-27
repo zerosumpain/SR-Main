@@ -70,6 +70,14 @@ export interface PushMessage {
   ttlSeconds?: number;
   /** Server-only current consent check. Never serialized into APNs payloads. */
   authorizeTargets?: (emails: readonly string[]) => Promise<readonly string[]>;
+  /**
+   * A SILENT background push: nothing on the lock screen — no alert, sound or
+   * badge — just `aps: { content-available: 1 }` and `userInfo`, sent as push
+   * type `background` at priority 5 (Apple refuses 10 for one). iOS wakes the
+   * app briefly to act on it, when it judges it can. `title`, `body`, `sound`,
+   * `level`, `category` and `threadId` are ignored.
+   */
+  background?: boolean;
 }
 
 export interface ApnsResult {
@@ -156,6 +164,7 @@ function providerToken(config: ApnsConfig, now = Date.now()): string {
  * and a notification that is cut short is better than one that never arrives.
  */
 export function buildPayload(message: PushMessage): string {
+  if (message.background) return JSON.stringify({ ...(message.userInfo ?? {}), aps: { 'content-available': 1 } });
   const aps: Record<string, unknown> = {
     alert: { title: message.title.slice(0, 200), body: message.body.slice(0, 1000) },
     sound: message.sound ?? (message.level === 'passive' ? undefined : 'default'),
@@ -208,23 +217,29 @@ function sessionFor(env: ApnsEnv): ClientHttp2Session {
   return session;
 }
 
+/** The APNs headers for one push (bar auth and topic). PURE. */
+export function pushHeaders(message: PushMessage, now = Date.now()): Record<string, string> {
+  const passive = message.level === 'passive';
+  const headers: Record<string, string> = {
+    'apns-push-type': message.background ? 'background' : 'alert',
+    // 5 lets iOS batch a passive one with the next wake; 10 is "now". A
+    // background push must be 5.
+    'apns-priority': message.background || passive ? '5' : '10',
+    'apns-expiration': String(
+      message.ttlSeconds === 0 ? 0 : Math.floor(now / 1000) + (message.ttlSeconds ?? 3600),
+    ),
+  };
+  if (message.collapseId) headers['apns-collapse-id'] = message.collapseId.slice(0, 64);
+  return headers;
+}
+
 /** Send one push. Never throws. */
 export async function sendPush(
   deviceToken: string,
   message: PushMessage,
   env?: ApnsEnv | null,
 ): Promise<ApnsResult> {
-  const passive = message.level === 'passive';
-  const headers: Record<string, string> = {
-    'apns-push-type': 'alert',
-    // 5 lets iOS batch a passive one with the next wake; 10 is "now".
-    'apns-priority': passive ? '5' : '10',
-    'apns-expiration': String(
-      message.ttlSeconds === 0 ? 0 : Math.floor(Date.now() / 1000) + (message.ttlSeconds ?? 3600),
-    ),
-  };
-  if (message.collapseId) headers['apns-collapse-id'] = message.collapseId.slice(0, 64);
-  return post(deviceToken, headers, buildPayload(message), env, '');
+  return post(deviceToken, pushHeaders(message), buildPayload(message), env, '');
 }
 
 /**

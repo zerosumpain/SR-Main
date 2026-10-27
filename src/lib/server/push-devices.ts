@@ -131,6 +131,9 @@ const ALARM_KEYS = ['alarmId', 'kind', 'at', 'messageId'] as const;
 
 /** Keep names, counts, locations and arbitrary metadata off private previews. */
 export function privatePush(message: PushMessage): PushMessage {
+  // A silent background push shows nothing on the lock screen, so there is no
+  // preview to keep private — and turning it into an alert would make it ring.
+  if (message.background) return message;
   const userInfo: Record<string, string | number | null> = {};
   if (message.userInfo?.category) userInfo.category = message.userInfo.category;
   if (message.userInfo?.url) userInfo.url = message.userInfo.url;

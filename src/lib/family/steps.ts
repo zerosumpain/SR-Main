@@ -4,6 +4,7 @@
 //
 // Spec: docs/superpowers/specs/2026-09-28-family-steps-and-tasks.md
 
+import type { PushMessage } from '$lib/server/apns';
 import { localDayStart } from '$lib/home/presence/types';
 
 export const FAMILY_TZ = 'Europe/London';
@@ -170,4 +171,49 @@ export function standingsText(board: ReadonlyArray<Ranked<BoardRow & { name: str
   const leader = board[0];
   const place = `${level.length ? 'joint ' : ''}${ordinal(me.rank)}`;
   return `You're ${place} of ${n} with ${formatSteps(me.steps)} steps — ${formatSteps(leader.steps - me.steps)} behind ${leader.name}.`;
+}
+
+// ── "Ask everyone's phone" (opening the steps screen) ─────────────────────
+
+/** The silent push's category: the app reports what it was asked for. */
+export const REPORT_CATEGORY = 'family-report';
+/** At most one round of silent pushes per this long, across the whole family. */
+export const ASK_GAP_MS = 60_000;
+/** When the pilot is read again after a round: woken phones upload in seconds, slow ones in a minute. */
+export const ASK_REREAD_MS = [25_000, 60_000] as const;
+
+/** Whether a round asked at `lastAt` (or never) still covers `now`. */
+export function askThrottled(lastAt: number | null, now: number): boolean {
+  return lastAt !== null && now - lastAt >= 0 && now - lastAt < ASK_GAP_MS;
+}
+
+/**
+ * The silent push that wakes a family phone to upload today's steps (and a
+ * fresh fix) to the pilot. Nothing on the lock screen. Apple holds it two
+ * minutes for a phone that is off: after that the board has moved on.
+ */
+export function stepsAskPush(): PushMessage {
+  return {
+    title: '',
+    body: '',
+    background: true,
+    category: REPORT_CATEGORY,
+    ttlSeconds: 120,
+    userInfo: { category: REPORT_CATEGORY, reason: 'steps' },
+  };
+}
+
+/**
+ * The leader the heartbeat's poll compares against. A re-read after an ask
+ * stores fresh counts WITHOUT pushing; it remembers who led before it, so the
+ * next poll still sees a change at the top the re-read stored, and the
+ * dethroned person still hears. A remembered leader from another day is
+ * ignored.
+ */
+export function dethroneBaseline(
+  remembered: { day: string; leader: string | null } | null,
+  day: string,
+  stored: string | null,
+): string | null {
+  return remembered && remembered.day === day ? remembered.leader : stored;
 }
