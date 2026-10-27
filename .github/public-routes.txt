@@ -90,6 +90,7 @@
 /api/native/games/[id]
 /api/native/games/[id]/stream
 /api/native/games/leaderboard
+/api/native/games/offline-results
 /api/native/games/suggestions
 /api/native/health/activities
 /api/native/health/activities/[id]

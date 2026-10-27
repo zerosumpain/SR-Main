@@ -10,6 +10,7 @@
 // best-of number is called something else says so with `GameRules.resultScore`.
 
 import type { GameId, GameRules, RoomBase } from './catalogue';
+import { isOfflineGame, offlineBoardTitle } from './offline-results';
 
 export const FAMILY_TZ = 'Europe/London';
 
@@ -232,8 +233,15 @@ export interface BoardRow {
   played: number;
 }
 
+/**
+ * A board's game: a site game, or one played with no internet and filed
+ * later (`offline:<slug>`, `./offline-results`) — a board of its own, since
+ * an offline game can share a name with an online one and score differently.
+ */
+export type BoardGame = GameId | `offline:${string}`;
+
 export interface GameBoard {
-  game: GameId;
+  game: BoardGame;
   title: string;
   /** False for a game with no numeric score: it has no best column and ranks by wins. */
   scored: boolean;
@@ -280,7 +288,10 @@ function ranked<T>(list: T[], same: (a: T, b: T) => boolean): Array<T & { rank: 
 /**
  * The boards for one window, from its recorded rows. A person's name is the
  * one on their latest row. Games come in `order` (the catalogue's), and only
- * games somebody has played in the window appear.
+ * games somebody has played in the window appear. Offline games come after
+ * the catalogue's, each its own board titled from its latest row as
+ * "<title> (offline)"; their wins and games count in the overall board like
+ * any other (a win over computer players alone was never filed as one).
  */
 export function buildLeaderboard(
   rows: readonly Stored[],
@@ -296,6 +307,14 @@ export function buildLeaderboard(
     if (!seen || at >= seen.at) latestName.set(r.playerId, { at, name: r.playerName });
   }
   const nameOf = (id: string) => latestName.get(id)?.name ?? 'Someone';
+  // An offline game has no catalogue title: the phone's own, from its latest row.
+  const offlineTitle = new Map<string, { at: number; title: unknown }>();
+  for (const r of rows) {
+    if (!isOfflineGame(r.game)) continue;
+    const at = r.finishedAt.getTime();
+    const seen = offlineTitle.get(r.game);
+    if (!seen || at >= seen.at) offlineTitle.set(r.game, { at, title: r.options?.title });
+  }
 
   type Acc = { playerId: string; best: number | null; bestAt: number; bestRow: Stored | null; wins: number; played: number };
   const perGame = new Map<string, Map<string, Acc>>();
@@ -322,7 +341,7 @@ export function buildLeaderboard(
 
   const known = new Set<string>(order);
   const games: GameBoard[] = [];
-  for (const game of [...order, ...[...perGame.keys()].filter((g) => !known.has(g)).sort()] as GameId[]) {
+  for (const game of [...order, ...[...perGame.keys()].filter((g) => !known.has(g)).sort()] as BoardGame[]) {
     const byPlayer = perGame.get(game);
     if (!byPlayer) continue;
     const list = [...byPlayer.values()];
@@ -337,7 +356,8 @@ export function buildLeaderboard(
     );
     games.push({
       game,
-      title: titles[game] ?? game,
+      title:
+        titles[game as GameId] ?? (isOfflineGame(game) ? offlineBoardTitle(game, offlineTitle.get(game)?.title) : game),
       scored,
       rows: withRank.map((a) => ({
         rank: a.rank,
