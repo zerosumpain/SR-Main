@@ -38,6 +38,7 @@
 /api/mcp
 /api/mcp/local
 /api/native/account
+/api/native/app-release
 /api/native/app-update
 /api/native/captures
 /api/native/captures/[id]
