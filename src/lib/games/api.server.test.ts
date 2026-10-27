@@ -347,3 +347,52 @@ describe('a Hometowns county is set up by a parent', () => {
     expect(await refusal(roomAct(sam, room.id, { action: 'pause', on: true }))).toEqual({ status: 400, message: 'Unknown action.' });
   });
 });
+
+describe('a parent closes a lobby left open', () => {
+  it('lists every open lobby to a parent, and none to anybody else', async () => {
+    const room = await startGame(event, owner, { game: 'tap-duel', difficulty: 'easy', invite: [playerId(sam.email)] });
+    h.grants.set(kit.email, ['games:self', 'family:circle', 'family:admin']);
+    const parentView = await lobbyFor(kit);
+    expect(parentView.parent).toBe(true);
+    expect(parentView.openLobbies?.map((l) => [l.id, l.hostName, l.invited, l.mine])).toEqual([[room.id, 'Owner', ['Sam'], false]]);
+
+    h.grants.set(sam.email, ['games:self', 'family:circle']);
+    const child = await lobbyFor(sam);
+    expect(child.parent).toBe(false);
+    expect(child.openLobbies).toBeUndefined();
+  });
+
+  it('closes somebody else’s lobby for everyone in it, and says who', async () => {
+    const room = await startGame(event, owner, { game: 'tap-duel', difficulty: 'easy', invite: [playerId(sam.email)] });
+    await roomAct(sam, room.id, { action: 'join' });
+    h.grants.set(kit.email, ['games:self', 'family:circle', 'family:admin']);
+
+    // Kit is not in the room: the answer only says it closed.
+    expect(await roomAct(kit, room.id, { action: 'close' })).toMatchObject({ id: room.id, phase: 'closed' });
+    const seen = (await roomView(sam, room.id)) as unknown as { phase: string; closedBy?: string };
+    expect(seen.phase).toBe('closed');
+    expect(seen.closedBy).toBe('Kit');
+    expect((await lobbyFor(sam)).rooms).toEqual([]);
+    expect((await lobbyFor(kit)).openLobbies).toEqual([]);
+  });
+
+  it('refuses a child, and a game already under way', async () => {
+    const room = await startGame(event, owner, { game: 'tap-duel', difficulty: 'easy', invite: [playerId(sam.email)] });
+    await roomAct(sam, room.id, { action: 'join' });
+    h.grants.set(sam.email, ['games:self', 'family:circle']);
+    expect(await refusal(roomAct(sam, room.id, { action: 'close' }))).toEqual({
+      status: 403,
+      message: 'Only a parent can close a lobby.',
+    });
+
+    await roomAct(owner, room.id, { action: 'start' });
+    expect(await refusal(roomAct(owner, room.id, { action: 'close' }))).toEqual({
+      status: 409,
+      message: 'That game has already started.',
+    });
+  });
+
+  it('404s a room that is not there', async () => {
+    expect((await refusal(roomAct(owner, 'g_nope', { action: 'close' }))).status).toBe(404);
+  });
+});

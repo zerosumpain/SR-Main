@@ -209,6 +209,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/games/[id]': phone('app/api', 'One game room, and making a move'),
   '/api/native/games/[id]/stream': phone('app/api', 'A game room, live'),
   '/api/native/games/leaderboard': phone('app/api', 'The family’s games boards'),
+  '/api/native/games/suggestions': phone('app/api', 'Games the family would like to see one day'),
   '/api/native/wildmind': phone('app/surfaces', 'The Wildmind valley, its people and their family tree, drawn natively'),
   '/api/native/wildmind/talk': phone('app/surfaces', 'What the Wildmind people said, thought and wrote, newest first'),
   '/api/native/wildmind/chronicle': phone('app/surfaces', 'One Wildmind life so far: its timeline, its diary and where it stands now'),
