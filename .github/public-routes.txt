@@ -40,6 +40,7 @@
 /api/native/account
 /api/native/app-release
 /api/native/app-update
+/api/native/briefing
 /api/native/captures
 /api/native/captures/[id]
 /api/native/captures/[id]/actions/[actionId]
@@ -149,6 +150,7 @@
 /api/native/wildmind/whisper
 /api/native/wildmind/whispers
 /api/platform/backlog/intake
+/api/platform/briefing/context
 /api/platform/daydream/briefing
 /api/platform/models/config
 /api/platform/models/usage
