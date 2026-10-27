@@ -36,6 +36,26 @@ vi.mock('$lib/server/extracted-app', () => ({
   getFromExtracted: vi.fn(async (_app: string, path: string) => {
     h.calls.push(path);
     if (h.fail) throw h.fail;
+    if (path.startsWith('/api/health/landgrab/family/explored')) {
+      return {
+        updatedAt: '2026-10-27T14:00:00.000Z',
+        since: '2025-01-01',
+        today: '2026-10-27',
+        weekStart: '2026-10-26',
+        total: { cells: 100, km2: 0.2 },
+        todayNew: { cells: 10, km2: 0.02 },
+        weekNew: { cells: 20, km2: 0.04 },
+        people: [
+          { subject: 'kid', colour: '#336699', cells: 60, km2: 0.12, firsts: 50, today: 10 },
+          { subject: 'gran', colour: '#996633', cells: 50, km2: 0.1, firsts: 50, today: 0 },
+        ],
+        places: [],
+        otherPlaces: { count: 0, cells: 0, km2: 0 },
+        shape: { zoom: 19, vertices: 4, truncated: false, polygons: [{ outer: '_ulwFvhbbMoAAAoA', holes: [] }] },
+        fresh: null,
+        focus: null,
+      };
+    }
     if (path.startsWith('/api/health/landgrab/family/weeks')) {
       return {
         updatedAt: '2026-10-04T08:00:00.000Z',
@@ -57,6 +77,7 @@ vi.mock('$lib/server/extracted-app', () => ({
 const { familyChangeId, familyId, familySubjectId } = await import('$lib/family/roster.server');
 const weeksRoute = await import('./+server');
 const changesRoute = await import('./changes/+server');
+const exploredRoute = await import('./explored/+server');
 
 type Handler = (e: unknown) => Promise<Response>;
 function call(handler: unknown, query = '') {
@@ -80,7 +101,7 @@ beforeEach(() => {
 describe('who gets in', () => {
   it('refuses a member with no family grant on both routes, without asking Health', async () => {
     asMember('guest@example.test', ['games:self']);
-    for (const [handler, q] of [[weeksRoute.GET, ''], [changesRoute.GET, '?week=2026-09-28']] as const) {
+    for (const [handler, q] of [[weeksRoute.GET, ''], [changesRoute.GET, '?week=2026-09-28'], [exploredRoute.GET, '']] as const) {
       const res = await call(handler, q);
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual({ error: 'Steps and tasks are for the family.' });
@@ -172,6 +193,37 @@ describe('GET /api/native/family/landgrab/changes', () => {
     for (const fail of [new Error('… returned 404'), new Error('… returned 500'), new Error('… timed out after 15000ms')]) {
       h.fail = fail;
       const res = await call(changesRoute.GET, '?week=2026-09-28');
+      expect(res.status).toBe(502);
+      expect(await res.json()).toEqual({ error: 'landgrab unavailable' });
+    }
+    errors.mockRestore();
+  });
+});
+
+describe('GET /api/native/family/landgrab/explored', () => {
+  it('answers a family member with the family’s ground, ids for subjects and the caller marked', async () => {
+    asMember('kid@example.test', ['family:circle']);
+    const res = await call(exploredRoute.GET);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.family).toBe('The Kellys');
+    expect(body.total).toEqual({ cells: 100, km2: 0.2 });
+    expect(body.people).toEqual([
+      { id: familyId('kid@example.test'), name: 'Kid', me: true, colour: '#336699', cells: 60, km2: 0.12, firsts: 50, today: 10 },
+      { id: familySubjectId('gran'), name: 'Gran', me: false, colour: '#996633', cells: 50, km2: 0.1, firsts: 50, today: 0 },
+    ]);
+    expect(body.shape.polygons).toHaveLength(1);
+    const text = JSON.stringify(body);
+    expect(text).not.toMatch(/example\.test/);
+    for (const subject of ['subject', '"pat"', '"kid"', '"gran"']) expect(text, subject).not.toContain(subject);
+    expect(h.calls[0]).toBe('/api/health/landgrab/family/explored?subjects=pat%2Ckid%2Cgran');
+  });
+
+  it('is a 502 with no stack when Health fails, or has not shipped the endpoint', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    for (const fail of [new Error('… returned 404'), new Error('… returned 500'), new Error('… timed out after 15000ms')]) {
+      h.fail = fail;
+      const res = await call(exploredRoute.GET);
       expect(res.status).toBe(502);
       expect(await res.json()).toEqual({ error: 'landgrab unavailable' });
     }
