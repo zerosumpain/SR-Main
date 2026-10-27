@@ -243,6 +243,35 @@ describe('the boards', () => {
     expect(board.from).toBe(new Date(T0).toISOString());
   });
 
+  it('gives an offline game its own board after the site games, titled from its latest row', () => {
+    const offline = 'offline:maths-sprint' as GameId;
+    const board = buildLeaderboard(
+      [
+        row({ game: 'maths-sprint', playerId: 'p_john', score: 9, won: true }),
+        row({ game: offline, roomId: 'offline-a-1', playerId: 'p_sam', playerName: 'Sam', score: 140, difficulty: '', options: { title: 'Sprint', label: 'streak 7' } }),
+        row({ game: offline, roomId: 'offline-b-1', playerId: 'p_sam', playerName: 'Sam', score: 90, won: true, difficulty: '', finishedAt: at(2), options: { title: 'Maths Sprint' } }),
+      ],
+      'week',
+      new Date(T0),
+      ['maths-sprint'],
+      { 'maths-sprint': 'Maths Sprint' },
+    );
+    expect(board.games.map((g) => [g.game, g.title])).toEqual([
+      ['maths-sprint', 'Maths Sprint'],
+      ['offline:maths-sprint', 'Maths Sprint (offline)'],
+    ]);
+    // The offline best is not mixed into the online board, and its detail is its label.
+    expect(board.games[0].rows.map((r) => r.best)).toEqual([9]);
+    expect(board.games[1].rows).toEqual([
+      { rank: 1, playerId: 'p_sam', name: 'Sam', best: 140, bestLabel: 'streak 7', wins: 1, played: 2 },
+    ]);
+    // Offline wins and games count overall like any other.
+    expect(board.overall.map((o) => [o.playerId, o.wins, o.played])).toEqual([
+      ['p_john', 1, 1],
+      ['p_sam', 1, 2],
+    ]);
+  });
+
   it('ranks a game with no numeric score by wins, with no best', () => {
     const board = buildLeaderboard(
       [

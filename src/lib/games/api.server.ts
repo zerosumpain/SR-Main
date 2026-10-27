@@ -19,6 +19,7 @@ import {
   asHttp,
   canCreate,
   canCreateDurable,
+  closeLobby,
   createGame,
   ensureRoom,
   flush,
@@ -27,6 +28,7 @@ import {
   inviteTo,
   invitesFor,
   noteParent,
+  openLobbies,
   roomFor,
   roomStage,
   roomsFor,
@@ -101,6 +103,9 @@ export async function lobbyFor(caller: GameCaller) {
   // Durable rooms this player is in come back into memory first (after a
   // restart, or an async game evicted while idle), so they list like any other.
   await hydrateFor(me.id);
+  // A parent (or the owner) sees every lobby not yet started, to close one
+  // left open; everybody else sees only their own invites and rooms.
+  const parent = await isParent(caller);
   return {
     me: { id: me.id, name: me.name },
     players,
@@ -108,6 +113,8 @@ export async function lobbyFor(caller: GameCaller) {
     rooms: roomsFor(me.id),
     // The games a host may play over days: the app offers a pace picker for these.
     paces: gamePaces(),
+    parent,
+    ...(parent ? { openLobbies: openLobbies(me.id) } : {}),
     serverNow: Date.now(),
   };
 }
@@ -241,7 +248,8 @@ export async function roomView(caller: GameCaller, id: string) {
 /**
  * `{ action, …the move's fields }`: a lobby verb (join | decline | leave |
  * start | again), `invite` {invite: [playerId]} from the host while the lobby
- * is open, or the game's own move. Answers with the room after it; a `since`
+ * is open, `close` from a parent on any lobby not yet started, or the game's
+ * own move. Answers with the room after it; a `since`
  * in the body (Draw & Guess's drawing revision) is read by `act` and asks for
  * the drawing as the changes after it.
  */
@@ -250,6 +258,15 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
   if (typeof action !== 'string') error(400, 'Unknown action.');
   const me = await playerFor(caller.email);
   await loaded(id);
+  if (action === 'close') {
+    // A parent closes a lobby left open — theirs or anybody's, in it or not
+    // (`closeLobby`). Checked before anything reads the room as a player's,
+    // since a parent closing somebody else's lobby is not sitting in it.
+    if (!(await isParent(caller))) error(403, 'Only a parent can close a lobby.');
+    asHttp(() => closeLobby(id, me.name));
+    await flush(id);
+    return closedView(id, me.id);
+  }
   if (action === 'invite') {
     // A game only a parent may host takes a late invite (into a room already
     // under way, `joinRunning`) only from a parent: the host role can have
@@ -281,6 +298,20 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
   // "Play again" re-invites everybody; their phones are rung afresh.
   if (action === 'again') void pushInvites(id);
   return room;
+}
+
+/**
+ * What closing a lobby answers: the room as the parent sees it when they are
+ * in it, else just that it is closed — a parent outside the room is not
+ * shown its players' view.
+ */
+function closedView(id: string, playerId: string) {
+  try {
+    return roomFor(id, playerId);
+  } catch (err) {
+    if (err instanceof GameError) return { id, phase: 'closed' as const, serverNow: Date.now() };
+    throw err;
+  }
 }
 
 const KEEPALIVE_MS = 15_000;

@@ -152,6 +152,13 @@ describe('every native route gates itself', () => {
         '/games/[id]/stream/+server.ts',
         // The family games leaderboard: names and hashed player ids, games:self.
         '/games/leaderboard/+server.ts',
+        // Games played with no internet, filed later: games:self; each result
+        // is filed for the caller alone (their own player id), and View as is
+        // refused by the gate because it is a write.
+        '/games/offline-results/+server.ts',
+        // Game ideas the family would like one day: games:self, then the
+        // family (owner, circle or parent) in the handler; names only.
+        '/games/suggestions/+server.ts',
         '/me/+server.ts',
         // A member's phone registers its APNs token here so their game
         // invites and household departures can be pushed to it. It stores a

@@ -125,6 +125,12 @@ interface Live {
   finishedAt: number | null;
   /** The size of the row last written, in bytes (0 until the first write), for the settle guard. */
   rowBytes: number;
+  /**
+   * The parent who closed this lobby (`closeLobby`), by name, so the players'
+   * phones can say why it went. Memory only: a closed room is forgotten
+   * within a minute, and a stored one is never read back to show it.
+   */
+  closedBy: string | null;
 }
 
 /** Writes a finished round and says who set a record; `results.server` unless a test swaps it. */
@@ -148,10 +154,13 @@ function wire(live: Live, playerId: string, now = Date.now(), since: number | nu
     durable?: true;
     pace?: Pace;
     version?: number;
+    closedBy?: string;
   };
   // A finished room says who set a new family high score, once the recorder has answered.
   if (live.room.phase === 'finished' && live.records) out = { ...out, records: live.records };
   if (live.durable) out = { ...out, durable: true, pace: live.room.pace ?? 'live', version: live.version };
+  // A lobby a parent closed says who, so the phones waiting in it can say why it went.
+  if (live.room.phase === 'closed' && live.closedBy) out = { ...out, closedBy: live.closedBy };
   if (!Array.isArray(out.players)) return out;
   return { ...out, players: out.players.map((p) => ({ ...p, sawInvite: live.sawInvite.has(p.id) })) } as WireRoom;
 }
@@ -362,6 +371,7 @@ function makeLive(room: RoomBase, rules: GameRules, optionKeys: string[]): Live 
     touchedAt: now,
     finishedAt: null,
     rowBytes: 0,
+    closedBy: null,
   };
   live.emitter.setMaxListeners(20);
   return live;
@@ -1278,6 +1288,80 @@ export function roomsFor(playerId: string): RoomSummary[] {
     });
   }
   return out;
+}
+
+/** One open lobby in the family, as a parent's "close it" list shows it. */
+export interface OpenLobby {
+  id: string;
+  game: GameId;
+  hostName: string;
+  /** Who has joined, host first. */
+  players: string[];
+  /** Who has been asked and not answered. */
+  invited: string[];
+  /** When the lobby closes on its own, server epoch ms; null for one with no clock. */
+  expiresAt: number | null;
+  /** The caller is sitting in it (joined or invited). */
+  mine: boolean;
+}
+
+/**
+ * Every lobby not yet started, across the family — what a parent may close
+ * (`closeLobby`). Names only, like an invite: never an email. A durable lobby
+ * that is stored but not in memory is not listed; the lobby poll brings each
+ * player's own rooms back in, so one somebody is waiting in is.
+ */
+export function openLobbies(playerId: string, now = Date.now()): OpenLobby[] {
+  const out: OpenLobby[] = [];
+  for (const live of rooms.values()) {
+    if (live.dead) continue;
+    // A lobby whose clock ran out is closed by its next settle; it is not offered.
+    const { room } = live;
+    if (room.phase !== 'lobby') continue;
+    if (room.phaseEndsAt !== null && room.phaseEndsAt <= now) continue;
+    const host = room.players.find((p) => p.id === room.hostId);
+    const joined = room.players.filter((p) => p.status === 'joined');
+    out.push({
+      id: room.id,
+      game: room.game,
+      hostName: host?.name ?? 'Someone',
+      players: [...joined.filter((p) => p.id === room.hostId), ...joined.filter((p) => p.id !== room.hostId)].map((p) => p.name),
+      invited: room.players.filter((p) => p.status === 'invited').map((p) => p.name),
+      expiresAt: room.phaseEndsAt ?? null,
+      mine: room.players.some((p) => p.id === playerId && (p.status === 'joined' || p.status === 'invited')),
+    });
+  }
+  return out;
+}
+
+/**
+ * A parent closes a lobby that has not started (the API has checked they are
+ * one; they need not be in it). The room goes to `closed` exactly as a host
+ * cancelling it does, so every phone in it — over its stream or its next
+ * read — sees it end, with `closedBy` saying who. A room under way is
+ * refused: closing a game somebody is playing is not what the button is for.
+ */
+export function closeLobby(id: string, byName: string): void {
+  const live = get(id);
+  const now = Date.now();
+  // Catch the room up first: a lobby whose clock ran out, or that its host
+  // started a moment ago, is answered as it is now.
+  const moved = advanceRoom(live, now);
+  const { room } = live;
+  if (room.phase === 'closed') {
+    settle(live, moved);
+    throw new GameError(409, 'That lobby has already closed.');
+  }
+  if (room.phase !== 'lobby') {
+    settle(live, moved);
+    throw new GameError(409, 'That game has already started.');
+  }
+  room.phase = 'closed';
+  room.phaseEndsAt = null;
+  // Every game's room keeps an `updatedAt`; `RoomBase` does not name it.
+  if ('updatedAt' in room) (room as RoomBase & { updatedAt: number }).updatedAt = now;
+  live.closedBy = byName;
+  settle(live, true);
 }
 
 /**
