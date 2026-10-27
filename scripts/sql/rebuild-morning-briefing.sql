@@ -107,4 +107,6 @@ INSERT INTO workflow_edges (id, workflow_id, source_node_id, target_node_id) VAL
 INSERT INTO workflow_edges (id, workflow_id, source_node_id, target_node_id) VALUES ('ab23212c-ce4e-5c2f-9d98-752f51442fc8', '0ad09fa0-5e17-40c2-9438-0604d6071a22', 'dc7493f0-96f7-5c38-8358-d89e45f0be89', 'bdcf0f99-b7f1-5f8b-b671-ac70ff2047cf');
 INSERT INTO workflow_edges (id, workflow_id, source_node_id, target_node_id) VALUES ('51682011-6522-5455-a30b-f16ceb6493d5', '0ad09fa0-5e17-40c2-9438-0604d6071a22', '5efde8cc-d689-5711-9be7-5929032b9a53', 'bdcf0f99-b7f1-5f8b-b671-ac70ff2047cf');
 INSERT INTO workflow_edges (id, workflow_id, source_node_id, target_node_id) VALUES ('9581981e-2f19-5a13-98a6-ace157b543ed', '0ad09fa0-5e17-40c2-9438-0604d6071a22', 'bdcf0f99-b7f1-5f8b-b671-ac70ff2047cf', '037b85f4-3707-5c5a-8592-df2b8873ecdf');
+-- The location reaches the composer directly (it used to ride along with the retired intel-query branch).
+INSERT INTO workflow_edges (id, workflow_id, source_node_id, target_node_id) VALUES ('5015b873-e737-5ad4-a715-98723ba92652', '0ad09fa0-5e17-40c2-9438-0604d6071a22', 'd707b28a-d73a-5cc3-9e6a-ec9fb43450b4', 'a953ebe6-261a-5060-8286-b7d17786cb72');
 COMMIT;
