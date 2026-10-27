@@ -7278,6 +7278,25 @@ export const familyMessage = pgTable(
 
 export type FamilyMessage = typeof familyMessage.$inferSelect;
 
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
+
+// A family member's photo of themselves, shown in place of their initials
+// circle on the iPhone app's steps board, messages and map. One row a person,
+// keyed by lower-cased email — the owner's addresses are one person, stored
+// under the first allow-listed one. A JPEG of at most 300 KB (checked by
+// `$lib/family/photos`); `version` is a short hash of the bytes, so a phone
+// re-downloads only when it changes.
+export const familyPhoto = pgTable('family_photo', {
+  email: text('email').primaryKey(),
+  image: bytea('image').notNull(),
+  version: text('version').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // "That's wrong" on a family forecast's next move — a long press in the app
 // ("Katie isn't going to the station"). `$lib/home/presence/forecast` reads
 // these back: the move is not offered again that day, and each such day

@@ -51,6 +51,7 @@ import {
   familyStepsEvent,
   familyAlarm,
   familyMessage,
+  familyPhoto,
   forecastFeedback,
   familyTask,
   familyBacklogItem,
@@ -137,6 +138,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   // for somebody else stays, without their address.
   family_alarm: { from_email: 'erase', cancelled_by_email: 'scrub' },
   family_message: { from_email: 'erase' },
+  // The photo of themselves the family's phones show in place of their initials.
+  family_photo: { email: 'erase' },
   forecast_feedback: { reporter_email: 'erase' },
   family_task: {
     assignee_email: 'scrub',
@@ -291,6 +294,8 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     // Their family messages and replies (replies under their messages go too).
     const sent = await tx.delete(familyMessage).where(inArray(familyMessage.fromEmail, addrs)).returning({ id: familyMessage.id });
     if (sent.length) await tx.delete(familyMessage).where(inArray(familyMessage.replyTo, sent.map((m) => m.id)));
+    // Their photo, in place of their initials on the family's phones.
+    await tx.delete(familyPhoto).where(inArray(familyPhoto.email, addrs));
     // Their "that's wrong" corrections on the forecast.
     await tx.delete(forecastFeedback).where(inArray(forecastFeedback.reporterEmail, addrs));
 
