@@ -46,16 +46,10 @@ vi.mock('$lib/db', () => ({
 }));
 vi.mock('$lib/jkai/chat/followup-queue', () => ({ notifySubscribers: () => {} }));
 vi.mock('$lib/server/notify', () => ({ notifyOwner: async () => ({}), deliveryReport: () => ({ raised: true, whatsapp: 'skipped', channels: '' }) }));
-vi.mock('$lib/tools/llm-tools', () => {
-  const def = (name: string) => ({ type: 'function', function: { name, description: name, parameters: {} } });
-  const sets: Record<string, string[]> = {
-    followups: ['followup_status'],
-    heartbeat: ['list_heartbeat_actions'],
-    schedule: ['schedule_reply_at'],
-    home: ['ha_call_service', 'ha_query_state'],
-  };
-  return { getToolsetDefinitions: async (ts: string) => (sets[ts] ?? []).map(def) };
-});
+// The REAL toolset definitions, not a stub: a tool added to followups,
+// heartbeat, schedule or home is offered to heartbeat turns the day it lands,
+// so this test must see it (and fail if it is something a heartbeat must not
+// run).
 vi.mock('$lib/jkai/chat/turn', async (orig) => {
   const real = await orig<typeof import('$lib/jkai/chat/turn')>();
   return {
@@ -68,7 +62,10 @@ vi.mock('$lib/jkai/chat/turn', async (orig) => {
   };
 });
 
-const { runHeartbeatTurn, HeartbeatSkipped } = await import('./llm');
+const { runHeartbeatTurn, HeartbeatSkipped, heartbeatToolNames } = await import('./llm');
+const { getTools } = await import('$lib/tools/registry');
+const { declaredTier } = await import('$lib/tools/declared-tier');
+const HEARTBEAT_SETS = ['followups', 'heartbeat', 'schedule', 'home'];
 const { fireCallback, DEFER_GRACE_MS } = await import('$lib/scheduled/executor');
 const { ExtractedAppError } = await import('$lib/server/extracted-app');
 
@@ -94,7 +91,8 @@ describe('heartbeat turns run as jkai, through Core, on the offered tools only',
     const { options, input } = h.calls[0];
     expect(options.envelope).toEqual({ surface: 'heartbeat' });
     expect(options.activity).toBe('heartbeat');
-    expect(options.toolWhitelist).toEqual(['followup_status', 'list_heartbeat_actions', 'schedule_reply_at', 'ha_call_service', 'ha_query_state']);
+    expect(options.toolWhitelist).toEqual(await heartbeatToolNames());
+    expect(options.toolWhitelist).toEqual(expect.arrayContaining(['ha_call_service', 'ha_query_state', 'schedule_reply_at']));
     expect(options.maxRounds).toBe(4);
     expect(input.text).toContain('Turn the lounge light off');
     expect(input.text).toContain('[Heartbeat instruction]');
@@ -110,6 +108,19 @@ describe('heartbeat turns run as jkai, through Core, on the offered tools only',
     const offered = h.calls[0].options.toolWhitelist as string[];
     expect(offered).not.toContain('gmail_send');
     expect(offered).not.toContain('build_create');
+    expect(offered).not.toContain('ha_fire_event');
+    const byName = new Map(getTools().map((t) => [t.name, t]));
+    expect(offered.length).toBeGreaterThan(5);
+    for (const name of offered) {
+      const t = byName.get(name);
+      expect(t, name).toBeDefined();
+      expect(HEARTBEAT_SETS, name).toContain(t!.toolset);
+      const tier = declaredTier(t!);
+      expect(tier.effect === 'destructive' || tier.confirm === 'always' || tier.lane !== 'standard', name).toBe(false);
+    }
+    // Everything in the four sets is offered except what is deliberately held back.
+    const expected = getTools().filter((t) => HEARTBEAT_SETS.includes(t.toolset) && t.name !== 'ha_fire_event').map((t) => t.name);
+    expect([...offered].sort()).toEqual([...new Set(expected)].sort());
   });
 
   it('offers nothing at all on a tool-less pulse', async () => {
