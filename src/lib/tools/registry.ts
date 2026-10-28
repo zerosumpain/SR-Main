@@ -54,7 +54,6 @@ import './tools/node-call';
 import './tools/custom-tool-admin';
 import './tools/web';
 import './tools/news';
-import './tools/daydream';
 import './tools/briefing';
 import './tools/datastore';
 import './tools/apis';

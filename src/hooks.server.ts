@@ -1,5 +1,7 @@
 import { privacyMaintenance } from '$lib/people/privacy-maintenance';
 import { building } from '$app/environment';
+// Daydream registers its chat toolset itself; see $lib/daydream/chat-tools.
+import '$lib/daydream/chat-tools';
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
   startDependencyMonitor,

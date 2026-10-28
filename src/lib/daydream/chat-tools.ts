@@ -9,13 +9,17 @@
 //
 // Owner-only: not member-safe, not on the WhatsApp list, not offered to the
 // heartbeat, and refused in the handler for any other principal.
+//
+// Registered from daydream's side (src/hooks.server.ts imports this module at
+// boot) rather than imported by $lib/tools/registry: daydream already reaches
+// the tool executor, so the registry importing daydream back would be a cycle.
 
-import { register } from '../registry-internal';
+import { register } from '$lib/tools/registry-internal';
 import { loadDaydreamSummary } from '$lib/daydream/summary.server';
 import { loadFeedNote } from '$lib/daydream/think/notes.server';
 import { STAGE_LABEL } from '$lib/daydream/think/explain';
 import { noteHref } from '$lib/daydream/think/notes';
-import { refuseUnlessOwner } from './owner-only';
+import { refuseUnlessOwner } from '$lib/tools/tools/owner-only';
 
 const DERIVED = 'daydream (derived): something jkai noticed from what it read, not a confirmed fact';
 

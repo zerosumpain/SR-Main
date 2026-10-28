@@ -41,7 +41,7 @@ vi.mock('$lib/today/today.server', () => ({
 }));
 
 const { tools } = await import('../registry-internal');
-await import('./daydream');
+await import('$lib/daydream/chat-tools');
 await import('./briefing');
 const { MEMBER_CHAT_TOOLS, MEMBER_FORBIDDEN_TOOLSETS } = await import('$lib/jkai/member-chat/policy');
 const { WHATSAPP_READ_TOOLS } = await import('$lib/integrations/whatsapp/tool-whitelist');
