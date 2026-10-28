@@ -39,6 +39,17 @@ export interface InvokeContext {
 	 * before. A member call with no `allowedTools` is refused by `executeTool`.
 	 */
 	principalId?: string;
+	/**
+	 * Where the turn came from (`TurnEnvelope.surface`). A LABEL, never a
+	 * grant: what a call may do is the principal's to decide, not this. Absent
+	 * from an older caller, which is read exactly as before.
+	 */
+	surface?: TurnSurface;
+	/**
+	 * The paired phone the turn arrived on. Set by the chat process from the
+	 * credential it verified (`identifyDevice`), never from a client body.
+	 */
+	deviceId?: string;
 }
 
 export interface InvokeRequest {
@@ -115,8 +126,138 @@ export function coerceInvokeRequest(body: unknown): InvokeRequest {
 	if (typeof raw.principalId === 'string' && raw.principalId.length > 0) {
 		context.principalId = raw.principalId;
 	}
+	// Known words only: an unrecognised surface is dropped, not passed on.
+	if (isTurnSurface(raw.surface)) context.surface = raw.surface;
+	if (typeof raw.deviceId === 'string' && ID_PATTERN.test(raw.deviceId)) context.deviceId = raw.deviceId;
 
 	return { name, args, context };
+}
+
+// ── The turn envelope ────────────────────────────────────────────────────────
+
+/**
+ * Where a chat turn came from and what came with it.
+ *
+ * One shape for every producer — the web composer, the iPhone app, Main's
+ * WhatsApp bridge and follow-up queue — so that the persona's length and
+ * format, the thread's channel label and hand-overs ("ask jkai about this
+ * note") all read the same fact. Additive on the wire: a receiver that finds
+ * no envelope carries on exactly as before, and a producer may send one to a
+ * receiver that ignores it.
+ *
+ * `client.deviceId` is the one field a client never supplies. The chat
+ * process sets it from the credential it verified; `coerceTurnEnvelope` drops
+ * whatever a body claims and takes only the `server` argument.
+ */
+export const TURN_SURFACES = [
+	'web',
+	'ios',
+	'watch',
+	'siri',
+	'whatsapp',
+	'followup',
+	'heartbeat',
+	'daydream',
+	'briefing',
+	'canvas',
+] as const;
+export type TurnSurface = (typeof TURN_SURFACES)[number];
+
+export const TURN_REF_KINDS = ['daydream_note', 'trip', 'capture', 'build', 'entity', 'health_day'] as const;
+export type TurnRefKind = (typeof TURN_REF_KINDS)[number];
+
+export interface TurnRef {
+	kind: TurnRefKind;
+	id: string;
+}
+
+export interface TurnEnvelope {
+	surface?: TurnSurface;
+	client?: { app?: string; build?: string; deviceId?: string };
+	/** BCP 47, e.g. `en-GB`. */
+	locale?: string;
+	/** IANA, e.g. `Europe/London`. */
+	tz?: string;
+	refs?: TurnRef[];
+	/** Client-tool names the device can run now. Empty means none. */
+	capabilities?: string[];
+	requestId?: string;
+}
+
+export const MAX_TURN_REFS = 5;
+const MAX_CAPABILITIES = 20;
+const ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+const LOCALE_PATTERN = /^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8}){0,3}$/;
+const TZ_PATTERN = /^(?:UTC|[A-Za-z][A-Za-z_]*(?:\/[A-Za-z0-9_+-]+){1,2})$/;
+const LABEL_PATTERN = /^[A-Za-z0-9 _.+()-]{1,40}$/;
+const CAPABILITY_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isTurnSurface(value: unknown): value is TurnSurface {
+	return typeof value === 'string' && (TURN_SURFACES as readonly string[]).includes(value);
+}
+
+/**
+ * Read an envelope, keeping only what is well-formed. Never throws: an
+ * envelope is context, and a malformed one costs its bad fields, not the turn.
+ * `server.deviceId` is the verified device, and the only source of that field.
+ */
+export function coerceTurnEnvelope(raw: unknown, server: { deviceId?: string | null } = {}): TurnEnvelope {
+	const out: TurnEnvelope = {};
+	const body = isPlainObject(raw) ? raw : {};
+	if (isTurnSurface(body.surface)) out.surface = body.surface;
+
+	const client: NonNullable<TurnEnvelope['client']> = {};
+	const rawClient = isPlainObject(body.client) ? body.client : {};
+	if (typeof rawClient.app === 'string' && LABEL_PATTERN.test(rawClient.app)) client.app = rawClient.app;
+	if (typeof rawClient.build === 'string' && LABEL_PATTERN.test(rawClient.build)) client.build = rawClient.build;
+	if (typeof server.deviceId === 'string' && ID_PATTERN.test(server.deviceId)) client.deviceId = server.deviceId;
+	if (Object.keys(client).length) out.client = client;
+
+	if (typeof body.locale === 'string' && body.locale.length <= 35 && LOCALE_PATTERN.test(body.locale)) out.locale = body.locale;
+	if (typeof body.tz === 'string' && body.tz.length <= 64 && TZ_PATTERN.test(body.tz)) out.tz = body.tz;
+
+	if (Array.isArray(body.refs)) {
+		const seen = new Set<string>();
+		const refs: TurnRef[] = [];
+		for (const r of body.refs) {
+			if (!isPlainObject(r) || typeof r.kind !== 'string' || typeof r.id !== 'string') continue;
+			if (!(TURN_REF_KINDS as readonly string[]).includes(r.kind) || !ID_PATTERN.test(r.id)) continue;
+			const key = `${r.kind}:${r.id}`;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			refs.push({ kind: r.kind as TurnRefKind, id: r.id });
+			if (refs.length >= MAX_TURN_REFS) break;
+		}
+		if (refs.length) out.refs = refs;
+	}
+	// A list that arrives stays a list, even empty: [] means "can run none".
+	if (Array.isArray(body.capabilities)) {
+		out.capabilities = body.capabilities
+			.filter((c): c is string => typeof c === 'string' && CAPABILITY_PATTERN.test(c))
+			.slice(0, MAX_CAPABILITIES);
+	}
+	if (typeof body.requestId === 'string' && UUID_PATTERN.test(body.requestId)) out.requestId = body.requestId;
+	return out;
+}
+
+/**
+ * The label a message carries in a thread: `metadata.channel` where the row
+ * was stamped, else the thread's own source (rows from before stamping). A
+ * message typed on the web inside the WhatsApp thread reads 'web', because
+ * its row says so.
+ */
+export function messageChannel(metadata: unknown, conversationSource: string | null | undefined): string {
+	const stamped = isPlainObject(metadata) ? metadata.channel : undefined;
+	if (isTurnSurface(stamped)) return stamped;
+	if (conversationSource === 'whatsapp' || conversationSource === 'whatsapp-continuation') return 'whatsapp';
+	if (conversationSource === 'app') return 'ios';
+	return 'web';
+}
+
+/** The two-value label the existing clients draw ('via WhatsApp' or nothing). */
+export function messageSource(metadata: unknown, conversationSource: string | null | undefined): 'whatsapp' | 'web' {
+	return messageChannel(metadata, conversationSource) === 'whatsapp' ? 'whatsapp' : 'web';
 }
 
 export function wantsNdjson(accept: string | null | undefined): boolean {

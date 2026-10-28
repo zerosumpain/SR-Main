@@ -107,6 +107,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		jobId: context.jobId,
 		conversationId: context.conversationId,
 		allowedTools: context.allowedTools,
+		surface: context.surface,
+		deviceId: context.deviceId,
 	});
 
 	/**
@@ -240,6 +242,10 @@ function execContextFrom(context: InvokeContext, emit: (text: string) => void): 
 				})
 			: undefined,
 		thinkingLevel: isThinkingLevel(context.thinkingLevel) ? context.thinkingLevel : null,
+		// The turn envelope's labels (already checked by the contract reader).
+		// Informational: nothing in the registry grants or refuses on them.
+		...(context.surface ? { surface: context.surface } : {}),
+		...(context.deviceId ? { deviceId: context.deviceId } : {}),
 		emit,
 	};
 }

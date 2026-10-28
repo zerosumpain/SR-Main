@@ -33,6 +33,9 @@ export interface InvocationRecord {
 	jobId?: string;
 	conversationId?: string;
 	allowedTools?: readonly string[];
+	/** From the turn envelope, when the caller sent one. */
+	surface?: string;
+	deviceId?: string;
 }
 
 interface Pending {
@@ -64,6 +67,8 @@ export function stampFor(entry: Pick<Pending, 'firstAt' | 'lastAt' | 'calls'>, s
 			jobId: c.jobId,
 			allowedTools: c.allowedTools,
 			conversationSource: source,
+			surface: c.surface,
+			deviceId: c.deviceId,
 		});
 		const key = principalKey(p);
 		const g = grouped.get(key) ?? { ...p, calls: {} };

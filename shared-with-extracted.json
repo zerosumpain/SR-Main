@@ -253,6 +253,20 @@
         "zerosumpain/SR-Workflows"
       ],
       "sha256": "29c1db7b98f696728cd371a1e421255158eab9edafecc01d77445cb6fc3a8f76"
+    },
+    "src/lib/tools/invoke-contract.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "fe212849e1a5543cb3c29f01174b4bfe70724c54e98fe1b89274e1448c127ff5"
+    },
+    "src/lib/tools/registry-internal.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "d8a73ec2c4f9987a44cde592186b9e9c35f9a3894095e81f1cee1ff69683a242"
     }
   }
 }

@@ -40,6 +40,8 @@ describe('OrchestratorBridge', () => {
     expect(h.turns[0].options.toolWhitelist).toEqual([...WHATSAPP_TOOL_WHITELIST]);
     expect(h.turns[0].options.toolWhitelist).not.toContain('build_create');
     expect(h.turns[0].options.toolWhitelist).not.toContain('ha_call_service');
+    // The envelope tells Core which overlay to answer in: plain and short.
+    expect(h.turns[0].options.envelope).toEqual({ surface: 'whatsapp' });
     expect(sent).toEqual(['hello']);
   });
 });

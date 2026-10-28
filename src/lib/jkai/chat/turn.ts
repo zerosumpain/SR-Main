@@ -9,7 +9,13 @@
 //   POST /api/jkai/service/turn
 //   Authorization: Bearer <JKAI_INVOKE_TOKEN>
 //   { input: { text, attachmentIds? }, history: [{ role, content, createdAt, attachmentIds? }], options }
-//   → 200 { response, memory }
+//   → 200 { response, memory, identityVersion? }
+//
+// `options.envelope` says where the turn came from ({ surface: 'whatsapp' } or
+// { surface: 'followup' }); Core picks the persona's length and format from it
+// and reports which soul answered (`identityVersion`), which the caller stamps
+// on the assistant row beside `metadata.channel`. An older Core ignores the
+// envelope and sends no version, and the caller stamps only the channel.
 //
 // Core's gateway passes the path through without a session and the route checks
 // the invoke token, as it does for chat-context. The turn is owner-grade: Core
@@ -25,6 +31,7 @@ import type { JkaiAttachment } from '$lib/db/schema';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import type { ThinkingLevel } from '$lib/models/thinking';
 import type { MemoryTurnStamp } from '$lib/jkai/memory/contracts';
+import type { TurnEnvelope } from '$lib/tools/invoke-contract';
 
 /**
  * A history message as the callers hold it. Declared here rather than imported
@@ -64,7 +71,10 @@ export interface RemoteTurnOptions {
   toolWhitelist?: string[];
   maxRounds?: number;
   useIntelContext?: boolean;
+  /** Kept beside `envelope.surface: 'followup'` for a Core that predates the envelope. */
   origin?: 'followup';
+  /** Where the turn came from. No deviceId: these turns have no phone. */
+  envelope?: Pick<TurnEnvelope, 'surface' | 'locale' | 'tz' | 'refs'>;
   /** Cost-attribution tag Core wraps the turn in, e.g. 'delegation'. */
   activity?: string;
 }
@@ -73,6 +83,8 @@ export interface RemoteTurn {
   response: string;
   /** Core's memory stamp for the turn, stored on the assistant row as-is. */
   memory: MemoryTurnStamp | null;
+  /** Which soul answered, from Core; null from a Core that predates it. */
+  identityVersion: string | null;
 }
 
 /** A turn can run tools for minutes — `workflow_run` alone may wait 600s. */
@@ -85,12 +97,17 @@ export async function chatTurn(
   opts: { timeoutMs?: number; port?: number } = {},
 ): Promise<RemoteTurn> {
   const attachmentIds = (input.attachments ?? []).map((a) => a.id);
-  const res = await postToExtracted<{ response?: unknown; memory?: unknown }>(
+  const res = await postToExtracted<{ response?: unknown; memory?: unknown; identityVersion?: unknown }>(
     'jkai-core',
     '/api/jkai/service/turn',
     { input: { text: input.text, ...(attachmentIds.length ? { attachmentIds } : {}) }, history: history.map(toWire), options },
     { timeoutMs: opts.timeoutMs ?? TIMEOUT_MS, port: opts.port },
   );
   if (typeof res?.response !== 'string') throw new Error('chat turn: Core returned no response');
-  return { response: res.response, memory: (res.memory as MemoryTurnStamp | null) ?? null };
+  return {
+    response: res.response,
+    memory: (res.memory as MemoryTurnStamp | null) ?? null,
+    identityVersion: typeof res.identityVersion === 'string' && res.identityVersion ? res.identityVersion.slice(0, 120) : null,
+  };
 }
+

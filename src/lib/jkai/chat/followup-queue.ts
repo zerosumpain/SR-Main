@@ -6,6 +6,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, conversations } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { chatTurn } from '$lib/jkai/chat/turn';
+import { assistantTurnMetadata } from '$lib/jkai/chat/turn-metadata';
 import type { HistoryMessage } from './conversation-history';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
@@ -283,14 +284,16 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
     }
 
     // Run by SR-Jkai-Core, which owns chat; this queue only decides when.
-    const { response, memory: turnMemory } = await chatTurn({ text: followUpMessage }, recentHistory, {
+    const turn = await chatTurn({ text: followUpMessage }, recentHistory, {
       conversationId: item.conversationId,
       modelContext,
       sessionModel,
       thinkingLevel,
       priceSnapshot,
       origin: 'followup',
+      envelope: { surface: 'followup' },
     });
+    const response = turn.response;
 
     // Save to DB
     // Stamped like the web route, so the inspector's Memory mode can read this turn.
@@ -298,7 +301,7 @@ async function deliverFollowUp(item: FollowUp, check: FollowUpCheck) {
       conversationId: item.conversationId,
       role: 'assistant',
       content: response,
-      metadata: turnMemory ? { memory: turnMemory } : undefined,
+      metadata: assistantTurnMetadata(turn, 'followup'),
     });
     await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, item.conversationId));
 
@@ -329,7 +332,7 @@ async function deliverTimeout(item: FollowUp) {
   const message = `I was tracking a ${item.taskType} task (${item.taskId}) but it hasn't completed after ${Math.round((Date.now() - item.createdAt) / 60000)} minutes. You may want to check on it manually.`;
 
   try {
-    await db.insert(orchestratorChats).values({ conversationId: item.conversationId, role: 'assistant', content: message });
+    await db.insert(orchestratorChats).values({ conversationId: item.conversationId, role: 'assistant', content: message, metadata: { channel: 'followup' } });
     await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, item.conversationId));
     notifySubscribers(item.conversationId, { role: 'assistant', content: message, source: 'followup' });
   } catch (err) {

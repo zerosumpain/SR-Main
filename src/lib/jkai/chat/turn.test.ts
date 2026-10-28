@@ -17,7 +17,7 @@ describe('chatTurn', () => {
       [{ role: 'user', content: 'earlier', createdAt: new Date('2026-10-01T10:00:00.000Z'), attachments: [{ id: 'h1', diskPath: '/x' } as never] }],
       { conversationId: 'c1', modelContext, priceSnapshot: null },
     );
-    expect(out).toEqual({ response: 'hi', memory: { k: 1 } });
+    expect(out).toEqual({ response: 'hi', memory: { k: 1 }, identityVersion: null });
     const [app, path, body] = post.mock.calls[0];
     expect(app).toBe('jkai-core');
     expect(path).toBe('/api/jkai/service/turn');
@@ -26,6 +26,13 @@ describe('chatTurn', () => {
       history: [{ role: 'user', content: 'earlier', createdAt: '2026-10-01T10:00:00.000Z', attachmentIds: ['h1'] }],
       options: { conversationId: 'c1', modelContext, priceSnapshot: null },
     });
+  });
+
+  it('sends the envelope and reads back which soul answered', async () => {
+    post.mockResolvedValue({ response: 'ok', identityVersion: 'v3:abc' });
+    const out = await chatTurn({ text: 't' }, [], { modelContext, priceSnapshot: null, envelope: { surface: 'whatsapp' } });
+    expect(post.mock.calls[0][2].options.envelope).toEqual({ surface: 'whatsapp' });
+    expect(out.identityVersion).toBe('v3:abc');
   });
 
   it('omits attachmentIds when there are none', async () => {

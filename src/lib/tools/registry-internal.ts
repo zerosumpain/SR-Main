@@ -67,6 +67,15 @@ export interface ToolExecContext {
   modelContext?: import('$lib/server/models/types').ModelContext;
   /** The session's reasoning effort, carried for the same reason. */
   thinkingLevel?: import('$lib/models/thinking').ThinkingLevel | null;
+  /**
+   * Where the turn came from — `TurnEnvelope.surface` ('web', 'ios',
+   * 'whatsapp', …). A label for logs and formatting, never a grant: who may
+   * run what is the principal's question. Absent for callers that predate the
+   * envelope, and for headless ones.
+   */
+  surface?: import('./invoke-contract').TurnSurface;
+  /** The paired phone, from the verified credential only. */
+  deviceId?: string;
 }
 
 /**

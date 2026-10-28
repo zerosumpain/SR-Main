@@ -16,9 +16,11 @@
  *
  * A live jobId is the only sign of someone attached to answer a gate; the
  * service turn (WhatsApp, follow-ups, delegation) and workflow callers send
- * none. A phone turn cannot yet be told from a browser one — Core keeps
- * `locals.device` to itself until the envelope ships — so a jobbed turn is
- * logged 'session' with `device-unknown` in its basis, never claimed as one.
+ * none. Since the turn envelope (slice 5) Core forwards the turn's `surface`
+ * and, for a paired phone, the `deviceId` it took from the verified
+ * credential; a jobbed turn with a device is logged 'device'. A jobbed turn
+ * with neither is still logged 'session' with `device-unknown` in its basis,
+ * never claimed as one. Siri and Watch turns are never attended (principle 6).
  *
  * PURE: `record.server.ts` does the I/O.
  */
@@ -39,6 +41,10 @@ export interface TurnPrincipal {
   allowedToolCount: number | null;
   /** The facts this was inferred from, e.g. ['jobId', 'source:web', 'device-unknown']. */
   basis: string[];
+  /** The envelope's surface, when the caller sent one. */
+  surface?: string;
+  /** The paired phone, when Core verified one. */
+  deviceId?: string;
 }
 
 export interface InvokePrincipalInput {
@@ -48,22 +54,35 @@ export interface InvokePrincipalInput {
   allowedTools?: readonly string[];
   /** `jkai_conversations.source`, when the call names a thread that exists. */
   conversationSource?: string | null;
+  /** `TurnEnvelope.surface`, forwarded by Core. */
+  surface?: string;
+  /** The verified device, forwarded by Core. */
+  deviceId?: string;
 }
 
 const WHATSAPP_SOURCES = new Set(['whatsapp', 'whatsapp-continuation']);
+const PHONE_SURFACES = new Set(['ios', 'watch', 'siri']);
+/** Hands-free: a person may be there, but cannot answer a gate (principle 6). */
+const UNATTENDED_SURFACES = new Set(['watch', 'siri']);
 
 export function computeInvokePrincipal(input: InvokePrincipalInput): TurnPrincipal {
   const id = input.principalId || 'owner';
   const basis: string[] = [`lane:${input.lane}`];
   if (input.principalId) basis.push('principalId');
   if (input.conversationSource) basis.push(`source:${input.conversationSource}`);
+  if (input.surface) basis.push(`surface:${input.surface}`);
+  if (input.deviceId) basis.push('deviceId');
 
   let via: PrincipalVia;
-  if (input.conversationSource && WHATSAPP_SOURCES.has(input.conversationSource)) {
+  if (input.surface === 'whatsapp' || (input.conversationSource && WHATSAPP_SOURCES.has(input.conversationSource))) {
     via = 'whatsapp';
+  } else if (input.surface === 'heartbeat') {
+    via = 'heartbeat';
   } else if (input.jobId) {
     basis.push('jobId');
-    if (input.conversationSource === 'app') via = 'device';
+    if (input.deviceId || (input.surface && PHONE_SURFACES.has(input.surface))) via = 'device';
+    else if (input.surface === 'web') via = 'session';
+    else if (input.conversationSource === 'app') via = 'device';
     else {
       via = 'session';
       basis.push('device-unknown');
@@ -77,15 +96,18 @@ export function computeInvokePrincipal(input: InvokePrincipalInput): TurnPrincip
     kind: id === 'owner' ? 'owner' : 'member',
     id,
     via,
-    attended: !!input.jobId && (via === 'session' || via === 'device'),
+    attended:
+      !!input.jobId && (via === 'session' || via === 'device') && !(input.surface && UNATTENDED_SURFACES.has(input.surface)),
     lane: input.lane,
     toolScope: input.allowedTools ? 'listed' : 'unrestricted',
     allowedToolCount: input.allowedTools ? input.allowedTools.length : null,
     basis,
+    ...(input.surface ? { surface: input.surface } : {}),
+    ...(input.deviceId ? { deviceId: input.deviceId } : {}),
   };
 }
 
 /** Same principal, ignoring basis order — the key calls are grouped under. */
 export function principalKey(p: TurnPrincipal): string {
-  return [p.kind, p.id, p.via, p.attended, p.lane, p.toolScope, p.allowedToolCount].join('|');
+  return [p.kind, p.id, p.via, p.attended, p.lane, p.toolScope, p.allowedToolCount, p.surface ?? '', p.deviceId ?? ''].join('|');
 }

@@ -7,6 +7,7 @@ import { getConversationMessages } from '$lib/jkai/queries';
 import { clampLimit, withNativeAccess } from '$lib/server/native-handler';
 import { requireConversation } from '$lib/jkai/chat-access.server';
 import { nativeArtifacts, nativePanel, nativeSources } from '$lib/jkai/native-rich';
+import { messageChannel, messageSource } from '$lib/tools/invoke-contract';
 
 /**
  * GET /api/native/chat/conversations/[id]/messages — one thread's history.
@@ -69,9 +70,12 @@ export const GET: RequestHandler = withNativeAccess('jkai.chat', async (event, _
         content: message.content,
         createdAt: message.createdAt.toISOString(),
         // A WhatsApp turn reads differently from one typed on the web, and the
-        // thread can hold both. The web endpoint stamps this per message off the
-        // conversation's own source; so does this one.
-        source: conversation.source === 'whatsapp' ? 'whatsapp' : 'web',
+        // thread can hold both. Each row now says which channel it came in on
+        // (`metadata.channel`); a row from before that falls back to the
+        // thread's own source, as both endpoints always did. So a message
+        // typed at the desk inside the WhatsApp thread is no longer 'whatsapp'.
+        source: messageSource(metadata, conversation.source),
+        channel: messageChannel(metadata, conversation.source),
         toolSteps: steps.map((step) => {
           const entry = (step ?? {}) as Record<string, unknown>;
           return {

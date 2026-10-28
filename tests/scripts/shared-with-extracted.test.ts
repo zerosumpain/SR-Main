@@ -77,6 +77,7 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/file-shares.ts',
       'src/lib/file-store/storage.ts',
       'src/lib/health-sync/types.ts',
+      'src/lib/jkai/jkai-theme.svelte.ts',
       'src/lib/jkai/panel/schema.ts',
       'src/lib/llm/client.ts',
       'src/lib/llm/keys.ts',
@@ -99,6 +100,10 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/server/owner.ts',
       'src/lib/server/rate-limit.ts',
       'src/lib/server/ssrf-guard.ts',
+      // The tool wire and ToolExecContext. Core and Workflows hold them at
+      // src/lib/workflows/site-tools/ (SR-Infra mainPathOverrides).
+      'src/lib/tools/invoke-contract.ts',
+      'src/lib/tools/registry-internal.ts',
     ]);
   });
 

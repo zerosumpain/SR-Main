@@ -217,6 +217,10 @@
     </div>
   {/if}
 
+  <!-- Hands jkai the note's id, not its text: Core reads the note itself
+       (daydream_note_get) and grounds the turn on it, with the citation. -->
+  <p class="discuss"><a href={`/jkai?new=1&ref=${encodeURIComponent(`daydream_note:${n.id}`)}`}>Discuss with jkai →</a></p>
+
   {#if n.build}
     <p class="build">
       <span class="build-k">Build queue</span>
@@ -526,6 +530,11 @@
   }
   .build {
     margin: 12px 0 0;
+    font-size: var(--fs-body-sm);
+  }
+
+  .discuss {
+    margin: 10px 0 0;
     font-size: var(--fs-body-sm);
   }
   .build-k {

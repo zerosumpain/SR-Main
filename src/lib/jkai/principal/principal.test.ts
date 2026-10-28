@@ -52,6 +52,32 @@ describe('computeInvokePrincipal', () => {
   });
 });
 
+describe('computeInvokePrincipal with the turn envelope', () => {
+  it('reads a jobbed turn from a verified phone as a device, and says so in the basis', () => {
+    const p = computeInvokePrincipal({ lane: 'standard', principalId: 'owner', jobId: 'j', conversationSource: 'web', surface: 'ios', deviceId: 'dev_1' });
+    expect(p).toMatchObject({ via: 'device', attended: true, surface: 'ios', deviceId: 'dev_1' });
+    expect(p.basis).toEqual(expect.arrayContaining(['surface:ios', 'deviceId', 'jobId']));
+    expect(p.basis).not.toContain('device-unknown');
+  });
+
+  it('reads a web turn as a session without guessing at a device', () => {
+    const p = computeInvokePrincipal({ lane: 'standard', jobId: 'j', conversationSource: 'whatsapp-continuation', surface: 'web' });
+    // The thread is WhatsApp's, and that still wins: the label is not a grant.
+    expect(p.via).toBe('whatsapp');
+    expect(computeInvokePrincipal({ lane: 'standard', jobId: 'j', surface: 'web' })).toMatchObject({ via: 'session', attended: true });
+    expect(computeInvokePrincipal({ lane: 'standard', jobId: 'j', surface: 'web' }).basis).not.toContain('device-unknown');
+  });
+
+  it('never reads a Siri or Watch turn as attended', () => {
+    expect(computeInvokePrincipal({ lane: 'standard', jobId: 'j', surface: 'siri', deviceId: 'dev_1' })).toMatchObject({ via: 'device', attended: false });
+  });
+
+  it('reads a WhatsApp or heartbeat surface as that lane, whatever the thread says', () => {
+    expect(computeInvokePrincipal({ lane: 'standard', surface: 'whatsapp', conversationSource: 'web' }).via).toBe('whatsapp');
+    expect(computeInvokePrincipal({ lane: 'standard', surface: 'heartbeat' })).toMatchObject({ via: 'heartbeat', attended: false });
+  });
+});
+
 describe('stampFor', () => {
   it('groups a turn\'s calls by principal and counts them per tool', () => {
     const calls = [
