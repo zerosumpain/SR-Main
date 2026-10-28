@@ -10,12 +10,20 @@ import {
   definitionsForBuild,
   manifestForBuild,
   invokeTool,
+  BRIDGE_MUTATES,
+  buildWriteRefusal,
 } from './tool-bridge';
 import { getTool } from '$lib/tools/registry';
+import { declaredTier } from '$lib/tools/declared-tier';
 
 beforeAll(async () => {
-  // Populate the registry — the toolset helpers read from it.
+  // Populate the registry — the toolset helpers read from it — including the
+  // domains hooks.server.ts registers in production.
   await import('$lib/tools/registry');
+  await import('$lib/daydream/chat-tools');
+  await import('$lib/owner-data/chat-tools');
+  await import('$lib/trips/chat-tools');
+  await import('$lib/captures/chat-tools');
 });
 
 describe('bridge tokens', () => {
@@ -88,5 +96,49 @@ describe('destructive tools are not on the bridge', () => {
     await expect(invokeTool('publish_page', { slug: 'x', content: 'y' })).rejects.toThrow(
       /destructive tool and is not available to builds/,
     );
+  });
+});
+
+describe('the bridge offers reads and only the reviewed build mutates', () => {
+  // An unattended 'bridge' principal: a build's toolsets ('all' by default)
+  // used to put every non-destructive mutate on its list, forget_memory and
+  // notify_owner included.
+  it('pins the mutate list', () => {
+    expect([...BRIDGE_MUTATES]).toEqual(['build_write_file']);
+  });
+
+  it('offers no other tool that changes anything, whatever the toolsets', async () => {
+    for (const sets of [['all'], ['memory', 'whatsapp', 'home', 'schedule', 'builds']]) {
+      const names = (await definitionsForBuild(sets)).map((d) => d.function.name);
+      const changers = names.filter((n) => {
+        const tier = declaredTier(getTool(n)!);
+        return tier.effect !== 'read' || tier.confirm !== 'never';
+      });
+      for (const n of changers) expect(BRIDGE_MUTATES as readonly string[], n).toContain(n);
+    }
+    expect((await definitionsForBuild(['builds'])).map((d) => d.function.name)).toContain('build_write_file');
+  });
+
+  it.each([
+    'forget_memory', 'save_memory', 'notify_owner', 'gmail_modify_labels', 'ha_call_service',
+    'update_credential', 'request_credential', 'followup_schedule', 'schedule_tool_call_at',
+    'register_heartbeat_action', 'datastore_save', 'register_chat_build', 'build_create', 'workflow_run',
+  ])('refuses %s to the bridge', async (name) => {
+    expect(getTool(name), name).toBeDefined();
+    expect(await isBridgeable(name)).toBe(false);
+    const manifestNames = (await manifestForBuild(['all'])).flatMap((t) => t.tools.map((x) => x.name));
+    expect(manifestNames).not.toContain(name);
+    await expect(invokeTool(name, {}, [name], { buildId: 'build-abc' })).rejects.toThrow(/not available to builds/);
+  });
+
+  it('holds build_write_file to the calling build and its dev space', async () => {
+    expect(buildWriteRefusal({ buildId: 'build-abc', path: 'a', content: 'b' }, 'build-abc')).toBeNull();
+    expect(buildWriteRefusal({ buildId: 'build-abc', space: 'dev' }, 'build-abc')).toBeNull();
+    expect(buildWriteRefusal({ buildId: 'build-other' }, 'build-abc')).toMatch(/own workspace/);
+    expect(buildWriteRefusal({ buildId: 'build-abc' }, undefined)).toMatch(/own workspace/);
+    expect(buildWriteRefusal({ buildId: 'build-abc', space: 'live' }, 'build-abc')).toMatch(/dev space/);
+    await expect(
+      invokeTool('build_write_file', { buildId: 'build-other', path: 'x', content: 'y' }, ['build_write_file'], { buildId: 'build-abc' }),
+    ).rejects.toThrow(/own workspace/);
   });
 });

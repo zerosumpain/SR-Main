@@ -46,7 +46,54 @@ function bridgeable(reg: Registry, name: string): boolean {
   // The declared tier, failing closed: no effect is destructive, and anything
   // that always confirms or rides the commission lane needs a human too.
   const tier = declaredTier(tool);
-  return tier.effect !== 'destructive' && tier.confirm !== 'always' && tier.lane === 'standard';
+  if (tier.effect === 'destructive' || tier.confirm === 'always' || tier.lane !== 'standard') return false;
+  // Reads, plus only the reviewed build mutates. A tool that changes anything
+  // else (memory, notifications, mail, the house, credentials, schedules) is
+  // never offered to a build, whatever its toolsets say.
+  if (tier.effect === 'read' && tier.confirm === 'never') return true;
+  return (BRIDGE_MUTATES as readonly string[]).includes(name);
+}
+
+/**
+ * The mutates a build may call over the bridge, reviewed by hand. Everything
+ * else that changes something is off the bridge.
+ *
+ * A build is an unattended 'bridge' principal running a coding agent for up to
+ * two hours. It edits its own workspace with the agent's file and shell tools
+ * and is published by a person from the builds page, so it needs very little
+ * from the site that changes anything:
+ *
+ * - `build_write_file`: writing into the workspace through the site, which the
+ *   agent can already do locally. Held to the calling build's own workspace
+ *   and its 'dev' space (`buildWriteRefusal`), never another build's or the
+ *   published 'live' copy.
+ *
+ * Deliberately left off, though a toolset may name them: `register_chat_build`
+ * and `build_create`/`build_tweak`/`build_control`/`studio_build` (a build
+ * starting, replacing or publishing builds, which spends and can overwrite
+ * another app); `research_*` and `generate_*`/`write_document` (spend, and the
+ * output lands in the owner's library, not the workspace); `browser_*` (the
+ * owner's signed-in browser); and every personal-data mutate: memory,
+ * `notify_owner`, mail labels, Home Assistant, credentials and API
+ * registrations, follow-ups, schedules and heartbeat actions, datastore,
+ * monitors, workflows, trips and daydream rulings. No build uses any of them:
+ * delivery builds already keep to `developmentTools` (reads only) and app
+ * builds publish through a person.
+ */
+export const BRIDGE_MUTATES = ['build_write_file'] as const;
+
+/**
+ * `build_write_file` takes any build id and either space. On the bridge it is
+ * held to the calling build and its dev space, or the sentence saying why not.
+ */
+export function buildWriteRefusal(args: Record<string, unknown>, buildId: string | undefined): string | null {
+  if (!buildId || args.buildId !== buildId) {
+    return 'build_write_file on the bridge writes only to this build\'s own workspace.';
+  }
+  if (args.space !== undefined && args.space !== 'dev') {
+    return 'build_write_file on the bridge writes only to the dev space; a person publishes the live copy.';
+  }
+  return null;
 }
 
 export async function isBridgeable(name: string): Promise<boolean> {
@@ -57,19 +104,32 @@ export async function invokeTool(name: string, args: unknown, allowedTools?: str
   const reg = await loadToolRegistry();
   if (!reg.getTool(name)) throw new Error(`unknown tool: ${name}`);
   if (!bridgeable(reg, name)) {
+    const tier = declaredTier(reg.getTool(name)!);
+    if (tier.effect === 'mutate' && tier.confirm !== 'always' && tier.lane === 'standard') {
+      throw new Error(
+        `${name} changes the owner's things outside this build and is not available to builds. ` +
+          `Report what you wanted to do in ## Evaluation instead.`,
+      );
+    }
     throw new Error(
       `${name} is a destructive tool and is not available to builds. It needs a human to ` +
         `confirm it, and no human is attached to a build. Report what you wanted to do in ` +
         `## Evaluation instead.`,
     );
   }
+  const input = (args ?? {}) as Record<string, unknown>;
+  if (name === 'build_write_file') {
+    const refusal = buildWriteRefusal(input, attribution?.buildId);
+    if (refusal) throw new Error(refusal);
+  }
   // Through the executor seam rather than `reg.executeTool`, so there stays
   // exactly one place that knows how to reach the catalogue.
-  const result = await executeSiteTool(name, (args ?? {}) as Record<string, unknown>, {
+  const result = await executeSiteTool(name, input, {
     emit: () => {},
     allowedTools,
     // Never attended: no human is attached to a build. Its list is the build's
-    // toolsets, so mutate build tools stay usable and destructive ones do not.
+    // toolsets narrowed by `bridgeable`, so only the reviewed BRIDGE_MUTATES
+    // change anything.
     principal: unattendedPrincipal('build-bridge', allowedTools ?? [], 'bridge'),
     ...attribution,
   });
