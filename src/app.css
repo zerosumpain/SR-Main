@@ -1343,6 +1343,22 @@ html[data-jkai-theme='night'],
   --elev-pop: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -18px rgba(0, 0, 0, 0.7);
 }
 
+/* Main's ink bands — the masthead, the phone tab bar, the daydream and notes
+   covers, decks and feet — are drawn `background: var(--text-primary);
+   color: var(--bg)` with everything inside written for a dark ground. Night
+   swaps what those two tokens mean, which would turn a band cream with
+   cream-on-cream copy, so inside a band they are put back: the band stays the
+   dark chrome step and its type and fields read as they do on paper. Inverted chips (a
+   picked button) are left alone — cream with dark type reads fine at night. */
+html[data-jkai-theme='night'] :is(.hub-hdr, .tab-bar, .ds-cover, .ds-foot, .guide.open, .source-summary, .ds-vocab .band.ink, .cover, .engine-deck, .foot),
+.jkai-night :is(.hub-hdr, .tab-bar, .ds-cover, .ds-foot, .guide.open, .source-summary, .ds-vocab .band.ink, .cover, .engine-deck, .foot) {
+  --text-primary: var(--chrome-bg);
+  --bg: var(--chrome-ink);
+  /* Fields set into a band (Develop's commission form) are paper on ink. */
+  --surface-elevated: var(--chrome-ink);
+  --line-strong: rgba(43, 29, 14, 0.16);
+}
+
 /* The jkai night theme lives on a wrapper, so the canvas behind it — <html>
    and <body>, seen for a frame during an overscroll and behind every portalled
    modal's scrim — would stay cream. The signal attribute paints them too. */
