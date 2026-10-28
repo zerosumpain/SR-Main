@@ -8,6 +8,7 @@ import { saveBuffer } from '$lib/jkai/media/storage';
 import { extensionForMime } from '$lib/jkai/media/mime';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
+import { WHATSAPP_TOOL_WHITELIST } from './tool-whitelist';
 
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
 type SendAttachmentFn = (to: string, att: JkaiAttachment, caption?: string) => Promise<WhatsAppSendResult>;
@@ -143,7 +144,10 @@ export class OrchestratorBridge {
 			const { response: responseText, memory: turnMemory } = await chatTurn(
 				{ text: displayText, attachments: attachment ? [attachment] : [] },
 				priorHistory,
-				{ modelContext, priceSnapshot: null, conversationId: convId },
+				// The explicit WhatsApp list (./tool-whitelist): reads only until
+				// reply-code confirms exist. Here and not inside chatTurn, which the
+				// follow-up queue shares for web threads.
+				{ modelContext, priceSnapshot: null, conversationId: convId, toolWhitelist: [...WHATSAPP_TOOL_WHITELIST] },
 			);
 
 			// Stop typing, save and send

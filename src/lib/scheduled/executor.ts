@@ -162,7 +162,7 @@ async function fireOrchestratorTurn(row: ScheduledCallback): Promise<FireResult>
     userText: payload.message,
     activityName: row.name,
     instruction:
-      'You are responding to a scheduled re-engagement of this conversation. Treat the message above as a system reminder. Be concise and concrete. You may call tools (system + home toolsets are available) to actually do things — e.g. turn off lights, send messages — not just narrate.',
+      'You are responding to a scheduled re-engagement of this conversation. Treat the message above as a system reminder. Be concise and concrete. You may call the tools offered (follow-ups, heartbeat, schedule and home) to actually do things — e.g. turn off lights or set a scene — not just narrate. Nothing else can be called from here.',
     maxTokens: 800,
     toolsEnabled: true,
   });

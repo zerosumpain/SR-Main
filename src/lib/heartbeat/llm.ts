@@ -138,6 +138,10 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
     } catch { /* home toolset may not exist in dev */ }
   }
 
+  // The names this turn offers, and so the only names it may run. Home stays
+  // in on purpose: a scheduled "lights off at 11" lands here.
+  const offered = new Set((toolDefs ?? []).map((t) => t.function.name));
+
   // No `activity` here: `runHeartbeatTurn` already wraps the whole turn, and a
   // second wrap would only shadow it with the same tag.
   const loop = await runToolLoop({
@@ -150,10 +154,21 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
     maxTokens: opts.maxTokens ?? 600,
     forceFinal: false,
     execute: async (tc) => {
+      // Only what this turn OFFERED. The model can name any tool it has ever
+      // seen in the thread's history — gmail_send, build_create — and this used
+      // to run it, unattended, with the owner's reach. `allowedTools` carries
+      // the same list into the executor so a nested call cannot widen it.
+      if (!offered.has(tc.name)) {
+        return JSON.stringify({ success: false, error: `${tc.name} is not available to a heartbeat turn.` });
+      }
       const { executeSiteTool, isRegisteredTool } = await import('$lib/tools/executor');
       let result: unknown = { error: 'tool not registered' };
       if (await isRegisteredTool(tc.name)) {
-        result = await executeSiteTool(tc.name, tc.args, { emit: () => {}, conversationId: conversationId });
+        result = await executeSiteTool(tc.name, tc.args, {
+          emit: () => {},
+          conversationId: conversationId,
+          allowedTools: [...offered],
+        });
       }
       return JSON.stringify(result).slice(0, 4000);
     },
