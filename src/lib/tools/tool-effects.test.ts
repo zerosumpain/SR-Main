@@ -164,6 +164,6 @@ describe('the unattended lists against the declared tiers', () => {
 			{ name: 'later', tool_name: 'api_call', args: {}, in_seconds: 60 },
 			{ emit: () => {}, principal: { principalId: 'owner', via: 'session', attended: true, jobId: 'j' } },
 		);
-		expect(d.error).toMatch(/destructive action/);
+		expect(d.error).toMatch(/needs confirming at call time/);
 	});
 });

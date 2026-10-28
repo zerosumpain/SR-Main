@@ -151,7 +151,9 @@ register({
   effect: 'mutate',
   confirm: 'never',
   description:
-    'Schedule a direct call to a registered site-tool at a specific time. No LLM round at fire time — the tool runs with the args you provide right now. Use for deferred actions: "turn off the lights in 90 seconds", "send an email at 9am".',
+    'Schedule a direct call to a registered site-tool at a specific time. No LLM round at fire time — the tool runs with the args you provide right now. ' +
+    'Only tools that never need confirming can be deferred this way (reads, quiet bookkeeping); anything that would show a confirmation card is refused. ' +
+    'For a timed change such as "turn off the lights in 90 seconds", use schedule_orchestrator_turn_at instead.',
   parameters: {
     type: 'object',
     properties: {
@@ -174,18 +176,23 @@ register({
     if (!toolNameArg.ok) return { success: false, error: toolNameArg.error };
     const toolName = toolNameArg.value;
     // Gate-bypass guard: a deferred call fires with no LLM round and no
-    // confirmation UI, so it must not be allowed to run a destructive tool
-    // behind the confirmation gate. Refuse to schedule those — the caller
-    // should invoke them directly (so they can be confirmed) or defer a
-    // reply / orchestrator-turn instead.
+    // confirmation UI, so it may only defer a tool that never confirms, judged
+    // on THESE arguments (`callTier`: `ha_call_service` on a lock is 'always').
+    // Anything that would have shown a card — light or destructive — is
+    // refused; a timed action that needs judging goes through
+    // `schedule_orchestrator_turn_at`, whose turn meets the gate again.
     const { getTool } = await import('../registry');
-    const { declaredTier } = await import('../declared-tier');
+    const { callTier } = await import('../declared-tier');
     const target = getTool(toolName);
-    const tier = target ? declaredTier(target) : null;
-    if (target?.destructive || (tier && (tier.effect === 'destructive' || tier.confirm === 'always' || tier.lane !== 'standard'))) {
+    if (!target) return { success: false, error: `Unknown tool "${toolName}".` };
+    const toolArgs = (args.args as Record<string, unknown>) ?? {};
+    const tier = callTier(target, toolArgs);
+    if (target.destructive || tier.effect === 'destructive' || tier.confirm !== 'never' || tier.lane !== 'standard') {
       return {
         success: false,
-        error: `Cannot defer "${toolName}" — it is a destructive action that must be confirmed at call time. Call it directly, or schedule a reply/orchestrator-turn instead.`,
+        error:
+          `Cannot defer "${toolName}" with these arguments: it needs confirming at call time (${tier.confirm}), and a deferred call has nobody to confirm it. ` +
+          `Call it directly, or schedule an orchestrator turn (schedule_orchestrator_turn_at) to do it at that time.`,
       };
     }
     // The deferred call fires unattended with only this tool on its list
@@ -196,7 +203,6 @@ register({
     if (!caller.attended && !caller.allowedTools?.includes(toolName)) {
       return { success: false, error: `Cannot defer "${toolName}" from an unattended ${caller.via} turn: it is not on that turn's own tool list.` };
     }
-    const toolArgs = (args.args as Record<string, unknown>) ?? {};
     const conv = await resolveConversation(args, ctx, { required: false });
     if (!conv.ok) return { success: false, error: conv.error };
     const conversationId = conv.id;
@@ -219,7 +225,9 @@ register({
 register({
   name: 'schedule_orchestrator_turn_at',
   effect: 'mutate',
-  confirm: 'never',
+  // A scheduled turn acts later with the home tools and nobody watching:
+  // one tap when attended, and unattended callers only when they list it.
+  confirm: 'light',
   description:
     'Schedule a re-engagement of this conversation at a specific time. At fire time the LLM runs a focused turn with the synthetic user message you provide; this lets you say "in 30 seconds I want to re-think this with fresh context" without writing a fixed reply.',
   parameters: {
