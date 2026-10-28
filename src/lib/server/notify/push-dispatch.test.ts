@@ -17,6 +17,15 @@ const row = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('messageFor', () => {
+  it('groups a reply-ready push per thread, with no buttons (slice 8)', () => {
+    const m = messageFor(row({ title: 'jkai replied', body: 'Your answer is ready.', data: { kind: 'reply', conversationId: 'conv-9', budget: 'sent' } }));
+    expect(m.category).toBe('sr.alert');
+    expect(m.threadId).toBe('chat:conv-9');
+    expect(m.userInfo).toMatchObject({ conversationId: 'conv-9', category: 'chat' });
+    expect(m.userInfo?.gate).toBeUndefined();
+    const stopped = messageFor(row({ title: 'That turn stopped', data: { kind: 'stopped', conversationId: 'conv-9' } }));
+    expect(stopped.threadId).toBe('chat:conv-9');
+  });
   it('carries a commissioned build and its links, grouped by build (slice 6b)', () => {
     const m = messageFor(row({ category: 'build', title: 'Pull request needs you', url: '/jkai/develop/b1',
       data: { kind: 'delivery', buildId: 'b1', prUrl: 'https://github.com/x/pull/9', previewUrl: 'https://p.example', conversationId: 'conv-1', budget: 'sent' } }));

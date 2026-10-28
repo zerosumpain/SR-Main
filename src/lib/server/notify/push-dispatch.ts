@@ -122,6 +122,26 @@ export function messageFor(row: LedgerRow): PushMessage {
     };
   }
 
+  // "Reply ready" (overhaul slice 8, the one new push on by default, decision
+  // 16): a turn started on the phone finished while the phone was away. Plain
+  // text, no buttons (still no sending from a locked phone), grouped per
+  // thread so a busy conversation stacks rather than floods, and the thread id
+  // rides along so a tap opens that thread. Core raises it under its budget.
+  const replyConversation = row.category === 'chat' && (data.kind === 'reply' || data.kind === 'stopped') ? str(data.conversationId) : undefined;
+  if (replyConversation) {
+    userInfo.conversationId = replyConversation;
+    return {
+      title: row.title,
+      body: row.body,
+      category: 'sr.alert',
+      threadId: `chat:${replyConversation}`,
+      level: 'active',
+      relevance: 0.6,
+      collapseId: row.id,
+      userInfo,
+    };
+  }
+
   const connections = row.category === 'connections';
   const loud = row.severity === 'alert' || connections;
   const level: InterruptionLevel = loud ? 'active' : 'passive';

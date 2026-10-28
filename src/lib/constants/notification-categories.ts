@@ -44,7 +44,10 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   {
     id: 'chat',
     label: 'jkai',
-    description: 'A turn that finished while you were away, or one waiting on you.',
+    // The reply-ready budget (decision 16) is stated here because this is the
+    // line the phone's settings screen shows; keep it in step with Core's
+    // REPLY_PUSH_BUDGET_LINE in $lib/workflows/chat/reply-push (a test pins it).
+    description: 'A turn that finished while you were away, or one waiting on you. Reply-ready pushes for turns sent from the phone: at most 5 a day, one per thread per 10 minutes; the rest wait in the thread.',
     // NOT WhatsApp by default, and this is the one default that is not simply
     // "keep today's behaviour". These alerts previously reached NOTHING — the
     // push shim they went through was empty — and chat already escalates to
