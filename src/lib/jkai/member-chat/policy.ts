@@ -66,6 +66,8 @@ export const MEMBER_FORBIDDEN_TOOLSETS = [
   'activity',
   'blog',
   'diagnostics',
+  'daydream',
+  'briefing',
 ] as const;
 
 /** A turn restricted to one principal and a closed tool list. */

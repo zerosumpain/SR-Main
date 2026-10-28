@@ -54,6 +54,8 @@ import './tools/node-call';
 import './tools/custom-tool-admin';
 import './tools/web';
 import './tools/news';
+import './tools/daydream';
+import './tools/briefing';
 import './tools/datastore';
 import './tools/apis';
 import './tools/api-integrations';
@@ -155,6 +157,8 @@ export function getToolsetManifest(): Array<{
     recall: 'Continuity across conversations — search what was actually said before (session_search), search stored facts about the user (memory_search), and pin a new one (memory_remember)',
     monitors: 'Natural-language monitors — create a "watch X, tell me when Y" scheduled workflow and list active monitors (manage/pause on /jkai/daydreams/watches)',
     'codegraph': 'Build-history GRAPH for this repo — what changing a file has taught us before. Seed a query with file:PATH, fingerprint:<error class>, gate:NAME or topic:"text", then pipe | hops 1 | lessons | episodes. Returns the rules that apply to those files and what happened the last time they changed, each with a verdict (verified/landed/repaired). Use for "how do I change X here", "why is it done this way", "has this broken before" — where intel-graph answers about the WORLD, this answers about the CODE.',
+    daydream: 'Daydream notes — what the daydream loop noticed, what is waiting on John (double-checks, reports back, drafted follow-ups) and one note with its sources. Read-only; notes are derived, not facts',
+    briefing: 'The morning briefing and Today — one day\'s briefing with its factor readings, and the day at a glance (what needs John, health, alerts). Read-only',
     'intel-graph': 'Intel knowledge GRAPH structure — find entities, walk their N-hop neighbourhood, trace how two things are connected, and read what the graph noticed on its own (brokers, unexpected links, likely-missing links). Use when the question is about how things RELATE, where knowledge_search answers what is known ABOUT a thing.',
   };
 
