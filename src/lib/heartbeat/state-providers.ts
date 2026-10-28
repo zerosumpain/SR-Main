@@ -1,6 +1,7 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, researchSessions, workflowRuns, workflows, nodeExecutions } from '$lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
+import { publishedLabel, publishedLink } from '$lib/builds/published-link';
 
 /**
  * Pluggable per-task-kind state providers. Each entry is responsible for:
@@ -49,7 +50,12 @@ const providers: Record<string, TaskStateProvider> = {
       `  updated_at:        ${b.updatedAt}`,
     ];
     if (b.failure) lines.push(`  failure:           ${JSON.stringify(b.failure).slice(0, 200)}`);
-    if (b.publishedSlug) lines.push(`  published:         /${b.publishedSlug}`);
+    // published_slug also holds a change request's PR URL or a compare ref, so
+    // it is resolved rather than prefixed: a bare `/${slug}` printed
+    // `/https://github.com/…/pull/416` into the heartbeat prompt.
+    const published = publishedLink(b.publishedSlug);
+    const publishedText = published?.href ?? publishedLabel(b.publishedSlug);
+    if (publishedText) lines.push(`  published:         ${publishedText}`);
     return {
       contextBlock: lines.join('\n'),
       terminal: TERMINAL_BUILD_STATUSES.has(b.status),
