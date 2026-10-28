@@ -65,8 +65,8 @@ export interface ReplyCodeDeps {
   store: ReplyCodeStore;
   /** Whether `from` is John's own number. */
   isOwner(from: string): boolean;
-  /** Whether this tool may be confirmed by code now (list and tier). */
-  eligible(tool: string): Promise<boolean>;
+  /** Whether this call may be confirmed by code now (list, and its per-call tier). */
+  eligible(tool: string, args: Record<string, unknown>): Promise<boolean>;
   now?: () => number;
 }
 
@@ -164,7 +164,7 @@ export async function issueReplyCode(
   const notDone = `I couldn't ask you to confirm that here, so I haven't done it. It can be done from /jkai.`;
   try {
     const sender = ownerSender(input.from, deps.isOwner);
-    if (!sender || !(await deps.eligible(input.call.tool))) return notDone;
+    if (!sender || !(await deps.eligible(input.call.tool, input.call.args))) return notDone;
     const now = deps.now?.() ?? Date.now();
     const gateKey = `${REPLY_CODE_KIND}:${randomUUID()}`;
     const code = generateReplyCode();
@@ -215,7 +215,7 @@ export async function answerReplyCode(
     conversationId: input.conversationId,
     text: input.text,
     now,
-    eligible: await deps.eligible(rec.tool),
+    eligible: await deps.eligible(rec.tool, rec.args),
   });
   if (verdict.kind === 'ignore') return { handled: false };
   if (verdict.kind === 'decline') {

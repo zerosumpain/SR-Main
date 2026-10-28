@@ -143,6 +143,14 @@ export interface ToolDefinition {
   effect?: import('./invoke-contract').ToolEffect;
   confirm?: import('./invoke-contract').ToolConfirm;
   lane?: import('./invoke-contract').ToolLane;
+  /**
+   * A per-call refinement of the declared tier, read from this call's
+   * arguments (e.g. `ha_call_service` on `lock` confirms 'always'). It can
+   * only RAISE the tier (`callTier` ratchets), and `executeTool` holds the
+   * call to the refined tier, so an unattended or reply-code caller that lists
+   * the tool still cannot reach the dangerous arguments. PURE.
+   */
+  tierForCall?: (args: Record<string, unknown>) => Partial<Pick<import('./invoke-contract').ToolTier, 'effect' | 'confirm'>> | null;
   handler: (
     args: Record<string, unknown>,
     ctx?: ToolExecContext,

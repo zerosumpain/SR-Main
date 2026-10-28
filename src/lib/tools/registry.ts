@@ -8,7 +8,7 @@ export { register } from './registry-internal';
 export type { ToolDefinition, ToolResult } from './registry-internal';
 import { ownerPhone } from '$lib/config/owner';
 import { tools, getToolsByToolset, getAvailableToolsets, isRegisteredTool } from './registry-internal';
-import { declaredTier } from './declared-tier';
+import { callTier } from './declared-tier';
 import type { ToolResult } from './registry-internal';
 import { normalisePrincipal, principalRefusal } from './invoke-contract';
 import { isCustomTool } from './custom-tools-enabled';
@@ -174,8 +174,9 @@ export async function executeTool(
   if (!ctx?.principal) warnUnlabelled(name);
   // The commission lane also needs the credential that carried the call, which
   // only the invoke route sets; in-process callers never can. A tool with no
-  // declared effect is destructive here (`declaredTier` fails closed).
-  const refusal = principalRefusal(principal, { name, tier: declaredTier(tool) }, { commissionCredential: ctx?.credentialLane === 'commission' });
+  // declared effect is destructive here (`declaredTier` fails closed), and a
+  // tool may raise its tier for these arguments (`callTier`: a lock, a script).
+  const refusal = principalRefusal(principal, { name, tier: callTier(tool, args) }, { commissionCredential: ctx?.credentialLane === 'commission' });
   if (refusal) return { success: false, error: refusal };
   // Re-enabled custom tools (plan P2-0a) are for the owner in an attended
   // chat only: never WhatsApp, heartbeat, the bridge, a workflow node or any

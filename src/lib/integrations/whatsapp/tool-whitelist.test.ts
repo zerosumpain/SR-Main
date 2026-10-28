@@ -90,7 +90,11 @@ describe('WHATSAPP_CONFIRM_BY_CODE', () => {
 
   it('is refused for every destructive, always-confirm or commission tool by the live eligibility check', async () => {
     const { replyCodeEligible } = await import('./reply-code.server');
-    for (const name of WHATSAPP_CONFIRM_BY_CODE) expect(await replyCodeEligible(name), name).toBe(true);
+    // A representative call each; ha_call_service is eligible only in its safe domains.
+    const sample: Record<string, Record<string, unknown>> = { ha_call_service: { domain: 'light', service: 'turn_off' } };
+    for (const name of WHATSAPP_CONFIRM_BY_CODE) expect(await replyCodeEligible(name, sample[name] ?? {}), name).toBe(true);
+    expect(await replyCodeEligible('ha_call_service', { domain: 'lock', service: 'unlock' })).toBe(false);
+    expect(await replyCodeEligible('ha_call_service', {})).toBe(false);
     const never = getTools().filter((t) => {
       const tier = declaredTier(t);
       return tier.effect === 'destructive' || tier.confirm === 'always' || tier.lane !== 'standard';

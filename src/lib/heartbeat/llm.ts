@@ -51,6 +51,12 @@ export class HeartbeatSkipped extends Error {
 const MAX_TOOL_ROUNDS = 3;
 /** The toolsets a tooled turn is offered. Home on purpose: "lights off at 11". */
 const HEARTBEAT_TOOLSETS = ['followups', 'heartbeat', 'schedule', 'home'] as const;
+/**
+ * Names in those toolsets a heartbeat is never offered. `ha_fire_event` fires
+ * an arbitrary event, which can start any automation in the house; there is
+ * no per-call way to tell a harmless one from a dangerous one.
+ */
+const HEARTBEAT_NEVER_OFFERED: readonly string[] = ['ha_fire_event'];
 
 /**
  * The names a tooled heartbeat turn offers, and so the only names it may run.
@@ -64,7 +70,9 @@ export async function heartbeatToolNames(): Promise<string[]> {
   const names = new Set<string>();
   for (const toolset of HEARTBEAT_TOOLSETS) {
     try {
-      for (const t of await getToolsetDefinitions(toolset)) names.add(t.function.name);
+      for (const t of await getToolsetDefinitions(toolset)) {
+        if (!HEARTBEAT_NEVER_OFFERED.includes(t.function.name)) names.add(t.function.name);
+      }
     } catch {
       /* a toolset may not exist in dev (home without Home Assistant) */
     }

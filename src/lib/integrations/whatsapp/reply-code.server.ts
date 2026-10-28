@@ -2,7 +2,7 @@ import { sql, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
 import { isOwnerNumber } from '$lib/config/owner-number';
-import { declaredTier } from '$lib/tools/declared-tier';
+import { callTier } from '$lib/tools/declared-tier';
 import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import type { FrozenCall } from '$lib/jkai/chat/turn';
 import { WHATSAPP_CONFIRM_BY_CODE } from './tool-whitelist';
@@ -62,15 +62,17 @@ export const sqlReplyCodeStore: ReplyCodeStore = {
 
 /**
  * On the confirm-by-code list AND still a mutate on the standard lane that
- * does not always confirm, read from the live catalogue: a tool whose tier was
+ * does not always confirm FOR THESE ARGUMENTS, read from the live catalogue: a tool whose tier was
  * raised after the code was issued is no longer run by it.
  */
-export async function replyCodeEligible(tool: string): Promise<boolean> {
+export async function replyCodeEligible(tool: string, args: Record<string, unknown> = {}): Promise<boolean> {
   if (!(WHATSAPP_CONFIRM_BY_CODE as readonly string[]).includes(tool)) return false;
   const { loadToolRegistry } = await import('$lib/tools/load-registry');
   const def = (await loadToolRegistry()).getTool(tool);
   if (!def) return false;
-  const tier = declaredTier(def);
+  // The per-call tier: `ha_call_service` on a lock is 'always', so no code
+  // is ever issued (or honoured) for it.
+  const tier = callTier(def, args);
   return tier.effect === 'mutate' && tier.confirm !== 'always' && tier.lane === 'standard';
 }
 
