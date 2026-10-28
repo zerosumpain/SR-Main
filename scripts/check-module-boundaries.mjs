@@ -149,14 +149,8 @@ const rank = (layer) => LAYERS.indexOf(layer);
 // Each line is the debt, not the design. Fix one and delete the line.
 // ---------------------------------------------------------------------------
 const BASELINE_LAYER = [
-  // The tool registry ($lib/tools, formerly $lib/workflows/site-tools), which
-  // the platform layer reaches up for. It is a registry of DOMAIN capabilities,
-  // so the fix is to invert it: let the domain register its tools with the
-  // platform rather than the platform importing the catalogue. Renamed from
-  // 'routing -> workflows' on 2026-10-02 when the registry left the workflows
-  // folder; 'llm -> workflows' disappeared with it.
-  'routing -> tools',
-
+  // Empty since 2026-10-28: 'routing -> tools' went when the routing alert
+  // stopped sending through `whatsapp_send` and used the notification ledger.
 ];
 
 // R4 exceptions: API routes reusing a project page's lib. Each of these four is

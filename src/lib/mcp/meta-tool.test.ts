@@ -249,7 +249,9 @@ describe('jkai_extended meta-tool', () => {
     it('routes essential invocation to the same input validation', async () => {
       const result = (await dispatchMetaTool(
         { operation: 'invoke', name: 'save_memory', args: { fact: 'x' } },
-        fakeCtx,
+        // save_memory is a mutate: an attended owner reaches its validation,
+        // a context with no principal is refused before it (phase 2).
+        { ...fakeCtx, principal: { principalId: 'owner', via: 'session', attended: true, jobId: 'job_meta' } },
       )) as { error?: string };
       expect(result.error).toBe('invalid_arguments');
     });

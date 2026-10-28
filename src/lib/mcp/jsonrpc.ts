@@ -17,6 +17,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { listMcpTools, todayLine } from './server';
 import { executeTool } from '$lib/tools/registry';
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { publishToolStep, requestToolConfirmation } from '$lib/jkai/tool-step-bus';
 import { isDestructive, describeDestructiveAction } from '$lib/jkai/chat/confirmation-gate';
 import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/jkai/chat/tool-summary';
@@ -372,6 +373,12 @@ export async function dispatchJsonRpc(
             // their SSE/requester channel by this key, not by conversationId —
             // on a canvas chat the two differ.
             busKey: busKey || undefined,
+            // A bus with a chat subscriber has someone to answer the gate above
+            // (the destructive confirmer is keyed by it); without one the MCP
+            // client is headless and runs reads only.
+            principal: busKey
+              ? { principalId: 'owner', via: 'session' as const, attended: true, jobId: `mcp:${busKey}`.slice(0, 128), purpose: 'mcp' }
+              : unattendedPrincipal('mcp'),
             emit: (msg: string) => {
               // Heavyweight tools (workflow_create, generateWorkflow's internal
               // loop) can run for minutes. The Streamable HTTP transport buffers

@@ -2,7 +2,6 @@
 // assignments + run → WhatsApp confirm. Mirrors briefing/run.ts (single-flight
 // guard, best-effort notify, never throws into the caller). Kill switch honoured.
 import { randomUUID } from 'crypto';
-import { ownerPhone } from '$lib/config/owner';
 import { refreshOpenRouterCatalogue } from '$lib/server/models/openrouter-catalogue';
 import { refreshCodexCatalogue } from '$lib/server/models/codex-discovery';
 import { selectModels } from './select';
@@ -39,9 +38,21 @@ function buildWhatsapp(a: RoutingAssignments): string {
 
 async function notify(a: RoutingAssignments): Promise<boolean> {
   try {
-    const { executeTool } = await import('$lib/tools/registry');
-    await executeTool('whatsapp_send', { to: ownerPhone() ?? '', message: buildWhatsapp(a) });
-    return true;
+    // The site telling its owner that routing changed: a system notice, not an
+    // agent's send, so it goes through the owner-notification ledger with
+    // WhatsApp named, rather than `whatsapp_send`, which an unattended caller
+    // may not run (principal phase 2).
+    const { notifyOwner } = await import('$lib/server/notify');
+    const text = buildWhatsapp(a);
+    const raised = await notifyOwner({
+      category: 'system',
+      title: 'Model routing updated',
+      body: text,
+      url: '/admin/ai/model-routing',
+      whatsappText: text,
+      channels: { whatsapp: true },
+    });
+    return raised.raised;
   } catch (err) {
     console.error('[routing] whatsapp notify failed:', errMsg(err));
     return false;

@@ -1,3 +1,4 @@
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { db } from '$lib/db';
 import { orchestratorChats, scheduledCallbacks } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -125,6 +126,10 @@ async function fireTool(row: ScheduledCallback): Promise<FireResult> {
   const ctx = {
     emit: () => {},
     conversationId: row.conversationId ?? undefined,
+    // The one tool this callback names, unattended. `schedule_tool_call_at`
+    // already refuses to defer a destructive tool; this refuses it again here.
+    allowedTools: [payload.toolName],
+    principal: unattendedPrincipal('scheduled', [payload.toolName], 'heartbeat'),
   };
   const out = await executeSiteTool(payload.toolName, payload.args ?? {}, ctx);
 

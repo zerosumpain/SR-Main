@@ -65,13 +65,16 @@ vi.mock('$lib/jkai/principal/record.server', () => ({
 
 const { POST } = await import('./+server');
 const { invokeRemoteTool, RemoteInvokeError } = await import('$lib/tools/remote');
+const { sealPrincipal } = await import('$lib/tools/principal-seal');
 
 const STANDARD = 's'.repeat(48);
+const KEY = 'k'.repeat(40);
 const DESTRUCTIVE = 'd'.repeat(48);
 const mutableEnv = env as Record<string, string | undefined>;
 const original = {
   standard: env.JKAI_INVOKE_TOKEN,
   destructive: env.JKAI_INVOKE_DESTRUCTIVE_TOKEN,
+  key: env.JKAI_PRINCIPAL_KEY,
 };
 
 let server: http.Server;
@@ -112,16 +115,25 @@ afterAll(async () => {
   else mutableEnv.JKAI_INVOKE_TOKEN = original.standard;
   if (original.destructive === undefined) delete mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN;
   else mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN = original.destructive;
+  if (original.key === undefined) delete mutableEnv.JKAI_PRINCIPAL_KEY;
+  else mutableEnv.JKAI_PRINCIPAL_KEY = original.key;
 });
 
 beforeEach(() => {
   calls = [];
   principals.recorded = [];
   mutableEnv.JKAI_INVOKE_TOKEN = STANDARD;
+  mutableEnv.JKAI_PRINCIPAL_KEY = KEY;
   delete mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN;
 });
 
-const target = () => ({ url: base, token: STANDARD });
+const target = () => ({ url: base, token: STANDARD, audience: 'sr-main' as const });
+const OWNER_SESSION = { principalId: 'owner', via: 'session' as const, attended: true, jobId: 'job-1' };
+/** A body for `raw`, sealed for its tool as Core would seal it. */
+const sealed = (name: string, principal: Parameters<typeof sealPrincipal>[0] = OWNER_SESSION, extra: Record<string, unknown> = {}) => ({
+  name,
+  context: { principal: sealPrincipal(principal, { key: KEY, aud: 'sr-main', tool: name }), ...extra },
+});
 
 /** A curl-equivalent, for the plain-JSON path the client never takes. */
 async function raw(body: unknown, init: { token?: string; accept?: string } = {}) {
@@ -252,7 +264,16 @@ describe('POST /api/platform/tools/invoke', () => {
         target(),
       );
       expect(principals.recorded).toEqual([
-        { tool: 'site_blog_list', lane: 'standard', principalId: 'owner', jobId: 'job-1', conversationId: 'conv-1', allowedTools: ['site_blog_list'] },
+        {
+          tool: 'site_blog_list',
+          lane: 'standard',
+          principalId: 'owner',
+          jobId: 'job-1',
+          conversationId: 'conv-1',
+          allowedTools: ['site_blog_list'],
+          // A context with no principal is sealed as an unattended service call.
+          signed: { via: 'service', attended: false },
+        },
       ]);
     });
 
@@ -276,7 +297,7 @@ describe('POST /api/platform/tools/invoke', () => {
     it('runs it once the second credential is configured and presented', async () => {
       mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN = DESTRUCTIVE;
       await expect(
-        invokeRemoteTool('gmail_send', { to: 'x' }, undefined, { url: base, token: DESTRUCTIVE }),
+        invokeRemoteTool('gmail_send', { to: 'x' }, undefined, { url: base, token: DESTRUCTIVE, audience: 'sr-main' as const }),
       ).resolves.toEqual({ success: true, data: 'sent' });
       expect(calls).toHaveLength(1);
     });
@@ -293,8 +314,85 @@ describe('POST /api/platform/tools/invoke', () => {
     it('lets the destructive credential run ordinary tools too', async () => {
       mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN = DESTRUCTIVE;
       await expect(
-        invokeRemoteTool('site_blog_list', {}, undefined, { url: base, token: DESTRUCTIVE }),
+        invokeRemoteTool('site_blog_list', {}, undefined, { url: base, token: DESTRUCTIVE, audience: 'sr-main' as const }),
       ).resolves.toEqual({ success: true, data: ['a', 'b'] });
+    });
+  });
+
+  describe('principal phase 2 (the seal)', () => {
+    it('401s a call with no principal, without running it', async () => {
+      const res = await raw({ name: 'site_blog_list' }, { token: STANDARD });
+      expect(res.status).toBe(401);
+      expect(res.body).toMatch(/principal missing/);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('503s every call when JKAI_PRINCIPAL_KEY is unset: there is no unsigned mode', async () => {
+      delete mutableEnv.JKAI_PRINCIPAL_KEY;
+      expect((await raw(sealed('site_blog_list'), { token: STANDARD })).status).toBe(503);
+      mutableEnv.JKAI_PRINCIPAL_KEY = 'short';
+      expect((await raw(sealed('site_blog_list'), { token: STANDARD })).status).toBe(503);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('401s a seal made with another key', async () => {
+      const forged = { name: 'site_blog_list', context: { principal: sealPrincipal(OWNER_SESSION, { key: 'f'.repeat(40), aud: 'sr-main', tool: 'site_blog_list' }) } };
+      const res = await raw(forged, { token: STANDARD });
+      expect(res.status).toBe(401);
+      expect(res.body).toMatch(/signature/);
+    });
+
+    it('401s a seal whose claims were edited after signing', async () => {
+      const good = sealPrincipal({ principalId: 'u_member', via: 'session', attended: true, jobId: 'j', allowedTools: ['render_table'] }, { key: KEY, aud: 'sr-main', tool: 'site_blog_list' })!;
+      const [body, mac] = good.split('.');
+      const claims = JSON.parse(Buffer.from(body, 'base64url').toString());
+      const edited = Buffer.from(JSON.stringify({ ...claims, principalId: 'owner', allowedTools: undefined })).toString('base64url');
+      expect((await raw({ name: 'site_blog_list', context: { principal: `${edited}.${mac}` } }, { token: STANDARD })).status).toBe(401);
+    });
+
+    it('401s an expired seal', async () => {
+      const old = sealPrincipal(OWNER_SESSION, { key: KEY, aud: 'sr-main', tool: 'site_blog_list', now: Date.now() - 10 * 60_000 });
+      const res = await raw({ name: 'site_blog_list', context: { principal: old } }, { token: STANDARD });
+      expect(res.status).toBe(401);
+      expect(res.body).toMatch(/expired/);
+    });
+
+    it('401s a seal for another receiver or another tool', async () => {
+      const workflows = sealPrincipal(OWNER_SESSION, { key: KEY, aud: 'sr-workflows', tool: 'site_blog_list' });
+      expect((await raw({ name: 'site_blog_list', context: { principal: workflows } }, { token: STANDARD })).body).toMatch(/audience/);
+      const other = sealPrincipal(OWNER_SESSION, { key: KEY, aud: 'sr-main', tool: 'site_blog_list' });
+      expect((await raw({ name: 'gmail_send', context: { principal: other } }, { token: STANDARD })).body).toMatch(/principal tool/);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('opens a seal once: a replay is refused', async () => {
+      const body = sealed('site_blog_list');
+      expect((await raw(body, { token: STANDARD })).status).toBe(200);
+      const again = await raw(body, { token: STANDARD });
+      expect(again.status).toBe(401);
+      expect(again.body).toMatch(/replay/);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('takes who the call is for from the seal, never from the body', async () => {
+      const member = { principalId: 'u_member', via: 'session' as const, attended: true, jobId: 'job-9', allowedTools: ['render_table'] };
+      await raw(sealed('site_blog_list', member, { principalId: 'owner', allowedTools: ['site_blog_list', 'gmail_send'] }), { token: STANDARD });
+      const ctx = calls[0].ctx!;
+      expect(ctx.principalId).toBe('u_member');
+      // The body list could only narrow the sealed one: nothing in common, nothing allowed.
+      expect(ctx.allowedTools).toEqual([]);
+      expect(ctx.principal).toMatchObject({ principalId: 'u_member', via: 'session', attended: true, jobId: 'job-9' });
+    });
+
+    it('recomputes attended: a hands-free surface or a service via is never attended', async () => {
+      await raw(sealed('site_blog_list', { ...OWNER_SESSION, surface: 'siri' }), { token: STANDARD });
+      await raw(sealed('site_blog_list', { principalId: 'owner', via: 'whatsapp', attended: true, jobId: 'j' }), { token: STANDARD });
+      expect(calls.map((c) => c.ctx!.principal!.attended)).toEqual([false, false]);
+    });
+
+    it('401s a seal for a different job than the call names', async () => {
+      const res = await raw(sealed('site_blog_list', OWNER_SESSION, { jobId: 'someone-elses-job' }), { token: STANDARD });
+      expect(res.status).toBe(401);
     });
   });
 
@@ -337,7 +435,7 @@ describe('POST /api/platform/tools/invoke', () => {
 
   describe('the plain-JSON default', () => {
     it('answers a single JSON object when NDJSON is not asked for', async () => {
-      const res = await raw({ name: 'site_blog_list' }, { token: STANDARD });
+      const res = await raw(sealed('site_blog_list'), { token: STANDARD });
       expect(res.status).toBe(200);
       expect(JSON.parse(res.body)).toEqual({ success: true, data: ['a', 'b'] });
     });
@@ -345,7 +443,7 @@ describe('POST /api/platform/tools/invoke', () => {
     // Same tool, both shapes: the emits simply go nowhere, which is what the
     // 137 tools that never emit get anyway.
     it('runs an emitting tool fine and drops its captions', async () => {
-      const res = await raw({ name: 'scraper_run' }, { token: STANDARD });
+      const res = await raw(sealed('scraper_run'), { token: STANDARD });
       expect(JSON.parse(res.body)).toEqual({ success: true, data: 'scraped' });
     });
   });

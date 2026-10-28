@@ -14,6 +14,7 @@
 // hidden count comes back with the events so a filtered diary can never pass
 // for an empty one.
 
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { ExclusionSet, NO_EXCLUSIONS } from './exclusions';
 
 /** One occurrence, with the fields the tool actually returns. */
@@ -86,7 +87,10 @@ export async function readCalendar(
     // static import of the registry boots platform services — WhatsApp
     // included — in any test that touches this module.
     const { executeTool } = await import('$lib/tools/registry');
-    const res = await executeTool('apple_calendar_list', args);
+    const res = await executeTool('apple_calendar_list', args, {
+      emit: () => {},
+      principal: unattendedPrincipal('calendar-read', ['apple_calendar_list']),
+    });
     const data = res?.data as
       | { events?: unknown[]; truncated?: unknown; unavailable?: unknown[] }
       | undefined;

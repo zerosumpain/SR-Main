@@ -9,6 +9,16 @@ export type { ToolDefinition, ToolResult } from './registry-internal';
 import { ownerPhone } from '$lib/config/owner';
 import { tools, getToolsByToolset, getAvailableToolsets, isRegisteredTool } from './registry-internal';
 import type { ToolResult } from './registry-internal';
+import { principalRefusal, tierOf } from './invoke-contract';
+import { fallbackPrincipal } from './in-process-principal';
+
+const unlabelledSeen = new Set<string>();
+/** Once per tool per process: which callers still run without a principal. */
+function warnUnlabelled(name: string): void {
+  if (unlabelledSeen.has(name) || unlabelledSeen.size > 500) return;
+  unlabelledSeen.add(name);
+  console.warn(`[principal] ${name} called in-process with no principal; treated as unattended service`);
+}
 
 // --- Load all domain modules (each calls register() on import) ---
 import './tools/evidence';
@@ -188,6 +198,14 @@ export async function executeTool(
   if ((ctx?.depth ?? 0) > 5) return { success: false, error: 'Nested capability depth exceeded' };
   const tool = tools.find((t) => t.name === name);
   if (!tool) return { success: false, error: `Unknown tool: ${name}` };
+  // Principal phase 2: the effect tiers, enforced here so every path — the
+  // invoke route, heartbeat, daydream, the bridge, MCP — meets one policy.
+  // A call with no principal is an unattended service call held to its own
+  // list; nested calls inherit the caller's through `currentExecution`.
+  const principal = ctx?.principal ?? fallbackPrincipal(ctx);
+  if (!ctx?.principal) warnUnlabelled(name);
+  const refusal = principalRefusal(principal, { name, tier: tierOf(tool) });
+  if (refusal) return { success: false, error: refusal };
   args = dropEmptyOptionalArguments(tool.parameters, args);
   const issues = validateArguments(tool.parameters, args);
   if (issues.length) return { success: false, error: 'invalid_arguments', data: { issues, inputSchema: tool.parameters } };

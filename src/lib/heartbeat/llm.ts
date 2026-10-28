@@ -1,3 +1,4 @@
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
@@ -168,6 +169,9 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
           emit: () => {},
           conversationId: conversationId,
           allowedTools: [...offered],
+          // Unattended, held to what it offered: the home tools (mutates)
+          // run because they are listed; nothing destructive can.
+          principal: unattendedPrincipal('heartbeat', [...offered], 'heartbeat'),
         });
       }
       return JSON.stringify(result).slice(0, 4000);

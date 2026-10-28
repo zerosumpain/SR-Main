@@ -1,3 +1,4 @@
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { loadToolRegistry } from '$lib/tools/load-registry';
 import { executeSiteTool } from '$lib/tools/executor';
 
@@ -58,7 +59,14 @@ export async function invokeTool(name: string, args: unknown, allowedTools?: str
   }
   // Through the executor seam rather than `reg.executeTool`, so there stays
   // exactly one place that knows how to reach the catalogue.
-  const result = await executeSiteTool(name, (args ?? {}) as Record<string, unknown>, { emit: () => {}, allowedTools, ...attribution });
+  const result = await executeSiteTool(name, (args ?? {}) as Record<string, unknown>, {
+    emit: () => {},
+    allowedTools,
+    // Never attended: no human is attached to a build. Its list is the build's
+    // toolsets, so mutate build tools stay usable and destructive ones do not.
+    principal: unattendedPrincipal('build-bridge', allowedTools ?? [], 'bridge'),
+    ...attribution,
+  });
   if (!result.success) {
     throw new Error(result.error ?? 'tool execution failed');
   }

@@ -11,6 +11,7 @@
 // exists to stop a model writing on its own initiative, and here the owner
 // pressed the button.
 
+import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { daydreamThoughts, gmailAccounts } from '$lib/db/schema';
@@ -59,7 +60,8 @@ async function tool(name: string, args: Record<string, unknown>) {
   // Dynamic for the reason `calendar/read.ts` gives: the registry boots
   // platform services on import.
   const { executeTool } = await import('$lib/tools/registry');
-  return executeTool(name, args);
+  // The owner's own press on a sign-off: the press answers the gate.
+  return executeTool(name, args, { emit: () => {}, principal: ownerActionPrincipal('daydream-act') });
 }
 
 const why = (res: { error?: unknown } | null | undefined) => String(res?.error ?? 'no reason given').slice(0, 200);

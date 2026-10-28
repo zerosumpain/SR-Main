@@ -58,7 +58,12 @@ describe('executeCaptureAction', () => {
   it('research → research_start, recording the session', async () => {
     h.executeTool.mockResolvedValueOnce({ success: true, data: { id: 'rs_9' } });
     const out = await executeCaptureAction(action('research', { question: 'Heat pump grants in 2026' }), CAP, NOW);
-    expect(h.executeTool).toHaveBeenCalledWith('research_start', expect.objectContaining({ topic: 'Heat pump grants in 2026', depth: 'brief' }));
+    expect(h.executeTool).toHaveBeenCalledWith(
+      'research_start',
+      expect.objectContaining({ topic: 'Heat pump grants in 2026', depth: 'brief' }),
+      // The owner's approval press, attended (principal phase 2).
+      expect.objectContaining({ principal: expect.objectContaining({ attended: true, purpose: 'capture-approval' }) }),
+    );
     expect(out).toEqual({ state: 'done', refKind: 'research', refId: 'rs_9' });
   });
 

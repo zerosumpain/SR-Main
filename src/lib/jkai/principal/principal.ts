@@ -58,6 +58,8 @@ export interface InvokePrincipalInput {
   surface?: string;
   /** The verified device, forwarded by Core. */
   deviceId?: string;
+  /** Phase 2: the verified seal's via and attended, used instead of inferring. */
+  signed?: { via: PrincipalVia; attended: boolean };
 }
 
 const WHATSAPP_SOURCES = new Set(['whatsapp', 'whatsapp-continuation']);
@@ -92,12 +94,17 @@ export function computeInvokePrincipal(input: InvokePrincipalInput): TurnPrincip
     basis.push('no-job');
   }
 
+  if (input.signed) {
+    via = input.signed.via;
+    basis.push('signed');
+  }
   return {
     kind: id === 'owner' ? 'owner' : 'member',
     id,
     via,
-    attended:
-      !!input.jobId && (via === 'session' || via === 'device') && !(input.surface && UNATTENDED_SURFACES.has(input.surface)),
+    attended: input.signed
+      ? input.signed.attended
+      : !!input.jobId && (via === 'session' || via === 'device') && !(input.surface && UNATTENDED_SURFACES.has(input.surface)),
     lane: input.lane,
     toolScope: input.allowedTools ? 'listed' : 'unrestricted',
     allowedToolCount: input.allowedTools ? input.allowedTools.length : null,

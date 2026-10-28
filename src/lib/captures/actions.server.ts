@@ -22,6 +22,7 @@
 //
 // Never throws: a failure is the row's `failed` state, with the reason.
 
+import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
 import type { Capture, CaptureAction } from '$lib/db/schema';
 import { enqueueIntelJob } from '$lib/intel-client/outbox';
 import { rememberRefId, updateAction } from './store.server';
@@ -49,7 +50,8 @@ const DEFAULT_REMINDER_HOUR = '09:00';
 async function tool(name: string, args: Record<string, unknown>) {
   // Dynamic: the registry boots platform services on import.
   const { executeTool } = await import('$lib/tools/registry');
-  return executeTool(name, args);
+  // The owner's own press on a sign-off: the press answers the gate.
+  return executeTool(name, args, { emit: () => {}, principal: ownerActionPrincipal('capture-approval') });
 }
 
 const why = (res: { error?: unknown } | null | undefined) => String(res?.error ?? 'no reason given').slice(0, 300);

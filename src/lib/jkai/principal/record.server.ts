@@ -36,6 +36,8 @@ export interface InvocationRecord {
 	/** From the turn envelope, when the caller sent one. */
 	surface?: string;
 	deviceId?: string;
+	/** Phase 2: what the verified seal said, which beats the inference. */
+	signed?: { via: TurnPrincipal['via']; attended: boolean };
 }
 
 interface Pending {
@@ -69,6 +71,7 @@ export function stampFor(entry: Pick<Pending, 'firstAt' | 'lastAt' | 'calls'>, s
 			conversationSource: source,
 			surface: c.surface,
 			deviceId: c.deviceId,
+			signed: c.signed,
 		});
 		const key = principalKey(p);
 		const g = grouped.get(key) ?? { ...p, calls: {} };

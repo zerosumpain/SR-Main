@@ -10,6 +10,7 @@
 // here would close a module cycle (the same reason `queueBuildNotes` lives in
 // the heartbeat activity).
 
+import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
 import { eq, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { daydreamThoughts, gmailAccounts, jkaiBuilds, researchSessions } from '$lib/db/schema';
@@ -458,7 +459,8 @@ export async function discardGmailDraft(thoughtId: string, now = new Date()): Pr
 
 async function tool(name: string, args: Record<string, unknown>) {
   const { executeTool } = await import('$lib/tools/registry');
-  return executeTool(name, args);
+  // The owner's own press on a sign-off: the press answers the gate.
+  return executeTool(name, args, { emit: () => {}, principal: ownerActionPrincipal('daydream-follow') });
 }
 
 /** Look now at what is unavailable. Read-only; he picks from the list. */

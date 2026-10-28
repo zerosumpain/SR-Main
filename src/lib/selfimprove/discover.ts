@@ -7,6 +7,7 @@
 // go through the site-tool registry — `api_search`/`api_register` operate as
 // actor `jkai` internally, which has catalogue write access.
 
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { errMsg, type QuestionInsights, type RunAction, type SeedApiEntry } from './types';
 import type { Budget } from './run';
 
@@ -94,7 +95,10 @@ export async function discoverApis(
     .slice(0, MAX_NEEDS);
   if (needs.length === 0) return actions;
 
-  const { executeTool } = await import('$lib/tools/registry');
+  const { executeTool: run } = await import('$lib/tools/registry');
+  // The nightly loop, unattended, held to the three tools it uses.
+  const executeTool = (name: string, args: Record<string, unknown>) =>
+    run(name, args, { emit: () => {}, principal: unattendedPrincipal('selfimprove-discover', ['api_search', 'research_web_search', 'api_register']) });
 
   for (const need of needs) {
     try {

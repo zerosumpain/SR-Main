@@ -15,6 +15,9 @@ import { recordInvocationPrincipal } from '$lib/jkai/principal/record.server';
 import type { InvokeContext } from '$lib/tools/invoke-contract';
 import type { ToolExecContext, ToolResult } from '$lib/tools/registry-internal';
 import { coerceModelContext } from '$lib/constants/default-models';
+import { env } from '$env/dynamic/private';
+import { createNonceLedger, openPrincipal } from '$lib/tools/principal-seal';
+import { tierOf, type PrincipalClaims } from '$lib/tools/invoke-contract';
 import { isThinkingLevel } from '$lib/models/thinking';
 import type { RequestHandler } from './$types';
 
@@ -43,6 +46,9 @@ import type { RequestHandler } from './$types';
  *
  * Spec: `docs/superpowers/specs/2026-09-17-jkai-tool-invoke-contract.md`.
  */
+/** Seals seen by this process, kept until they expire: one seal, one call. */
+const nonces = createNonceLedger();
+
 export const POST: RequestHandler = async ({ request }) => {
 	const lane = invokeLaneFor(request);
 	if (lane === 'none') throw error(401, 'invalid token');
@@ -84,8 +90,24 @@ export const POST: RequestHandler = async ({ request }) => {
 		throw error(400, 'body must be JSON');
 	}
 	const { name, args, context } = parsed;
+
+	/**
+	 * Principal phase 2: the call must carry a seal from `JKAI_PRINCIPAL_KEY`,
+	 * for this receiver and this tool, unexpired and never seen before. The
+	 * body's `principalId`, `allowedTools`, `jobId`, `surface` and `deviceId`
+	 * are not trusted on their own any more; the claims replace them, and a body
+	 * list can only narrow the sealed one. Unset key: the lane does not exist.
+	 */
+	const verdict = openPrincipal(context.principal, { key: env.JKAI_PRINCIPAL_KEY, aud: 'sr-main', tool: name, ledger: nonces });
+	if (!verdict.ok) {
+		if (verdict.reason === 'unconfigured') throw error(503, 'principal key is not configured');
+		throw error(401, `principal ${verdict.reason}`);
+	}
+	const claims = verdict.claims;
+	if (claims.jobId && context.jobId && claims.jobId !== context.jobId) throw error(401, 'principal does not match the call');
+
 	if (name === '__daydream_commission_v1') {
-		if (lane !== 'destructive' || context.principalId !== 'owner') throw error(403, 'Commission runtime requires the owner service lane');
+		if (lane !== 'destructive' || claims.principalId !== 'owner') throw error(403, 'Commission runtime requires the owner service lane');
 		const { invokeCommissionOperation } = await import('$lib/daydream/commission-executor.server');
 		const framed = wantsNdjson(request.headers.get('accept'));
 		let result: ToolResult;
@@ -103,12 +125,13 @@ export const POST: RequestHandler = async ({ request }) => {
 	recordInvocationPrincipal({
 		tool: name,
 		lane,
-		principalId: context.principalId,
-		jobId: context.jobId,
+		principalId: claims.principalId,
+		jobId: claims.jobId ?? context.jobId,
 		conversationId: context.conversationId,
-		allowedTools: context.allowedTools,
-		surface: context.surface,
-		deviceId: context.deviceId,
+		allowedTools: claims.allowedTools,
+		surface: claims.surface,
+		deviceId: claims.deviceId,
+		signed: { via: claims.via, attended: claims.attended },
 	});
 
 	/**
@@ -140,7 +163,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	 * failure and lose the sentence.
 	 */
 	if (lane !== 'destructive') {
-		if (registry.getTool(name)?.destructive === true) {
+		const declared = registry.getTool(name);
+		if (declared && tierOf(declared).lane === 'destructive') {
 			return single({
 				success: false,
 				error:
@@ -171,7 +195,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		// that will not serialise throws in `json()`. The framed path already
 		// turned both into a failed result; the debug path should not answer 500
 		// where it answers cleanly.
-		return single(await runTool(registry, name, args, execContextFrom(context, () => {})));
+		return single(await runTool(registry, name, args, execContextFrom(context, claims, () => {})));
 	}
 
 	const encoder = new TextEncoder();
@@ -193,7 +217,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				registry,
 				name,
 				args,
-				execContextFrom(context, (text) => write(statusLine(text))),
+				execContextFrom(context, claims, (text) => write(statusLine(text))),
 			);
 			write(resultLine(result));
 			if (!closed) controller.close();
@@ -224,17 +248,33 @@ export const POST: RequestHandler = async ({ request }) => {
  * it write it onto a row that a sidecar picks up hours later, so a bad value
  * would surface a long way from here.
  */
-function execContextFrom(context: InvokeContext, emit: (text: string) => void): ToolExecContext {
+function execContextFrom(context: InvokeContext, claims: PrincipalClaims, emit: (text: string) => void): ToolExecContext {
 	const raw = context.modelContext;
 	const modelId = typeof raw?.modelId === 'string' ? raw.modelId : '';
+	// The sealed list is the limit; a body list can only narrow it.
+	const allowedTools = claims.allowedTools
+		? context.allowedTools
+			? claims.allowedTools.filter((t) => context.allowedTools!.includes(t))
+			: claims.allowedTools
+		: context.allowedTools;
 	return {
 		conversationId: context.conversationId,
 		workflowId: context.workflowId,
-		jobId: context.jobId,
-		allowedTools: context.allowedTools,
-		// Whose turn: a member's call must arrive as a member's, or the
-		// executor's fail-closed check (no allow-list ⇒ refuse) never fires.
-		principalId: context.principalId,
+		jobId: claims.jobId ?? context.jobId,
+		allowedTools,
+		// Whose turn, from the seal: a member's call arrives as a member's, so
+		// the executor's fail-closed checks fire.
+		principalId: claims.principalId,
+		principal: {
+			principalId: claims.principalId,
+			via: claims.via,
+			attended: claims.attended,
+			...(claims.jobId ? { jobId: claims.jobId } : {}),
+			...(claims.surface ? { surface: claims.surface } : {}),
+			...(claims.deviceId ? { deviceId: claims.deviceId } : {}),
+			...(allowedTools ? { allowedTools } : {}),
+			...(claims.purpose ? { purpose: claims.purpose } : {}),
+		},
 		modelContext: modelId
 			? coerceModelContext({
 					provider: typeof raw?.provider === 'string' ? raw.provider : undefined,
@@ -242,10 +282,9 @@ function execContextFrom(context: InvokeContext, emit: (text: string) => void): 
 				})
 			: undefined,
 		thinkingLevel: isThinkingLevel(context.thinkingLevel) ? context.thinkingLevel : null,
-		// The turn envelope's labels (already checked by the contract reader).
-		// Informational: nothing in the registry grants or refuses on them.
-		...(context.surface ? { surface: context.surface } : {}),
-		...(context.deviceId ? { deviceId: context.deviceId } : {}),
+		// From the seal, not the body: what the issuer verified.
+		...(claims.surface ? { surface: claims.surface } : {}),
+		...(claims.deviceId ? { deviceId: claims.deviceId } : {}),
 		emit,
 	};
 }
