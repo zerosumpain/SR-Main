@@ -34,6 +34,26 @@ const BATCH = 20;
 /** The chat gates a notification can answer, and the app category for each. */
 const GATES = new Set(['confirm', 'plan', 'clarify']);
 
+/**
+ * Whether a gate's push must be VIEW-ONLY: no Approve on the lock screen.
+ *
+ * The owner's decision (overhaul plan 2026-10-28, decision 1): destructive and
+ * commission confirms are answered on the website, so the lock screen agrees
+ * with the chat screen, which already sends them there. `notifyGate` carries
+ * the gate's `lane` and `effect` in `data`. Fails CLOSED: a confirm keeps its
+ * buttons only when it says it is a light `mutates` confirm outside the
+ * commission lane. Today every confirm Core raises is destructive and none
+ * says so yet, so every confirm push is view-only. Plan and clarify gates keep
+ * their buttons unless they ride the commission lane.
+ */
+export function isViewOnlyGate(gate: string, data: Record<string, unknown>): boolean {
+  if (data.lane === 'commission') return true;
+  if (gate !== 'confirm') return false;
+  return data.effect !== 'mutates';
+}
+
+const VIEW_ONLY_PREFIX = 'Answer this on the website.';
+
 type LedgerRow = Pick<
   typeof notificationEvents.$inferSelect,
   'id' | 'category' | 'title' | 'body' | 'url' | 'severity' | 'data'
@@ -46,7 +66,9 @@ function str(value: unknown): string | undefined {
 /**
  * The push for one ledger row. PURE.
  *
- * - A chat turn stopped at a gate wears `sr.gate.<gate>` — Approve and Reject
+ * - A destructive or commission confirm is VIEW-ONLY (`isViewOnlyGate`): it
+ *   wears `sr.alert`, says to answer on the website, and carries no gate ids.
+ * - Any other chat turn stopped at a gate wears `sr.gate.<gate>` — Approve and Reject
  *   buttons, or a reply field — and carries the ids the app answers it with.
  *   It is TIME-SENSITIVE: the turn is stalled until somebody answers.
  * - A lapsed connection wears `sr.connections` (no buttons; see the app).
@@ -60,6 +82,26 @@ export function messageFor(row: LedgerRow): PushMessage {
   if (row.url) userInfo.url = row.url;
   const commissionId = data.destination === 'daydream_commission' && data.schemaVersion === 1 ? str(data.commissionId) : undefined;
   if (commissionId) userInfo.commissionId = commissionId;
+
+  if (gate && GATES.has(gate) && str(data.jobId) && isViewOnlyGate(gate, data)) {
+    // `sr.alert`, a category the app already registers, with no gate ids: a tap
+    // opens the chat tab and nothing on the notification can answer the turn.
+    // A new category would need an app release and a noise budget (decision 16).
+    const conversationId = str(data.conversationId);
+    if (conversationId) userInfo.conversationId = conversationId;
+    userInfo.viewOnly = '1';
+    return {
+      title: row.title,
+      body: `${VIEW_ONLY_PREFIX} ${row.body}`.trim(),
+      category: 'sr.alert',
+      threadId: 'chat',
+      level: 'time-sensitive',
+      relevance: 1,
+      collapseId: row.id,
+      userInfo,
+      ttlSeconds: 30 * 60,
+    };
+  }
 
   if (gate && GATES.has(gate) && str(data.jobId)) {
     for (const key of ['gate', 'jobId', 'planId', 'confirmId', 'clarifyId', 'questionId', 'conversationId']) {
