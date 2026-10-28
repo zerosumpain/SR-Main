@@ -66,9 +66,10 @@ describe('WhatsAppService', () => {
 		expect(service.isAllowed('9999999999')).toBe(false);
 	});
 
-	it('allows all numbers when allowlist is empty', () => {
+	// Fail closed since the 28 Oct lane fix: an empty list is nobody, not everybody.
+	it('refuses every number when the allowlist is empty', () => {
 		service.setAllowedNumbers([]);
-		expect(service.isAllowed('447359228511')).toBe(true);
-		expect(service.isAllowed('anything')).toBe(true);
+		expect(service.isAllowed('447359228511')).toBe(false);
+		expect(service.isAllowed('anything')).toBe(false);
 	});
 });
