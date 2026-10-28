@@ -36,7 +36,16 @@ export type NativeArtifact =
       totalRows: number;
       caption: string | null;
     }
-  | { type: 'diagram'; code: string; caption: string | null };
+  | { type: 'diagram'; code: string; caption: string | null }
+  | {
+      type: 'map';
+      simple: true;
+      points: Array<{ lat: number; lon: number; label: string | null }>;
+      tracks: Array<Array<{ lat: number; lon: number }>>;
+      bounds: { south: number; west: number; north: number; east: number };
+      caption: string | null;
+    }
+  | { type: 'map'; simple: false; caption: string | null };
 
 export type NativeSource = {
   kind: 'file' | 'research';
@@ -140,6 +149,53 @@ function table(artifact: Extract<Artifact, { type: 'table' }>): NativeArtifact {
   return { type: 'table', columns, rows, totalRows: artifact.rows?.length ?? 0, caption: str(artifact.caption) };
 }
 
+/** A phone map past this many markers is a smear; the web draws the rest. */
+export const MAP_POINT_CAP = 200;
+/** Points across all of one map's tracks. */
+export const MAP_TRACK_POINT_CAP = 2000;
+
+const coord = (lat: unknown, lng: unknown): { lat: number; lon: number } | null =>
+  typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng) &&
+  Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+    ? { lat, lon: lng }
+    : null;
+
+/**
+ * A `render_map` artifact, as the phone can draw it with MapKit: markers and
+ * lines only. A heatmap (or a map with nothing plottable) is `simple: false`,
+ * and the phone offers the web — an app that predates maps reads any unknown
+ * kind as that same web card, so this is safe to send to every build.
+ */
+function map(artifact: Extract<Artifact, { type: 'map' }>): NativeArtifact {
+  const caption = str(artifact.caption);
+  const layers = Array.isArray(artifact.layers) ? artifact.layers : [];
+  if (layers.some((l) => l?.kind === 'heatmap')) return { type: 'map', simple: false, caption };
+  const points: Array<{ lat: number; lon: number; label: string | null }> = [];
+  const tracks: Array<Array<{ lat: number; lon: number }>> = [];
+  let trackPoints = 0;
+  for (const layer of layers) {
+    if (layer?.kind === 'points') {
+      for (const p of layer.points ?? []) {
+        const c = coord(p?.lat, p?.lng);
+        if (c && points.length < MAP_POINT_CAP) points.push({ ...c, label: str(p.label) });
+      }
+    } else if (layer?.kind === 'track') {
+      const line: Array<{ lat: number; lon: number }> = [];
+      for (const p of layer.points ?? []) {
+        const c = coord(p?.lat, p?.lng);
+        if (c && trackPoints < MAP_TRACK_POINT_CAP) { line.push(c); trackPoints++; }
+      }
+      if (line.length >= 2) tracks.push(line);
+    }
+  }
+  const all = [...points, ...tracks.flat()];
+  if (all.length === 0) return { type: 'map', simple: false, caption };
+  const lats = all.map((c) => c.lat);
+  const lons = all.map((c) => c.lon);
+  const bounds = { south: Math.min(...lats), west: Math.min(...lons), north: Math.max(...lats), east: Math.max(...lons) };
+  return { type: 'map', simple: true, points, tracks, bounds, caption };
+}
+
 /** Every artifact a turn's tool steps produced, in the order they ran. */
 export function nativeArtifacts(toolSteps: unknown): NativeArtifact[] {
   if (!Array.isArray(toolSteps)) return [];
@@ -151,9 +207,7 @@ export function nativeArtifacts(toolSteps: unknown): NativeArtifact[] {
     if (artifact.type === 'chart') out.push(chart(artifact));
     else if (artifact.type === 'table') out.push(table(artifact));
     else if (artifact.type === 'diagram') out.push({ type: 'diagram', code: artifact.code, caption: str(artifact.caption) });
-    // A map has no native projection yet: the iPhone app decodes only the three
-    // kinds above, so a map is left to the web chat rather than sent as a shape
-    // the app would reject. The turn's prose still says what the map shows.
+    else if (artifact.type === 'map') out.push(map(artifact));
   }
   return out;
 }
@@ -165,6 +219,33 @@ function clip(text: unknown): string {
 
 function basename(path: string): string {
   return path.split('/').filter(Boolean).pop() ?? path;
+}
+
+/** The schema's ceilings (`panel/schema.ts`, byte-shared with Core). */
+export const PANEL_SECTION_CAP = 12;
+export const PANEL_SECTION_BLOCK_CAP = 24;
+
+/**
+ * Trim a stored page to the schema's ceilings BEFORE the strict parse.
+ *
+ * Core's reducer used to cap only the page (40 blocks), while the schema caps a
+ * section at 24 blocks and a page at 12 sections, so a long turn could store a
+ * page the parse rejects — and the phone then showed no desk at all. Core's
+ * reducer now refuses the overflow; this keeps the pages already stored (and
+ * any written by an older Core) drawable, losing only the overflow. Leaves the
+ * byte-shared schema untouched, so no hash moves.
+ */
+export function clampPage(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { sections?: unknown }).sections)) return raw;
+  const page = raw as { sections: unknown[] };
+  return {
+    ...page,
+    sections: page.sections.slice(0, PANEL_SECTION_CAP).map((s) =>
+      s && typeof s === 'object' && Array.isArray((s as { blocks?: unknown }).blocks)
+        ? { ...(s as object), blocks: (s as { blocks: unknown[] }).blocks.slice(0, PANEL_SECTION_BLOCK_CAP) }
+        : s,
+    ),
+  };
 }
 
 /**
@@ -225,7 +306,7 @@ export function nativeSources(metadata: Record<string, unknown>): NativeSource[]
  * A section left empty is dropped; a page left empty is null.
  */
 export function nativePanel(metadata: Record<string, unknown>): PanelPage | null {
-  const page = parsePage(metadata.panel);
+  const page = parsePage(clampPage(metadata.panel));
   if (!page) return null;
   const keep = (b: PanelBlock): PanelBlock | null => {
     if (b.type === 'artifact') return null;
