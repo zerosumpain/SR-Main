@@ -154,6 +154,7 @@
 /api/platform/backlog/intake
 /api/platform/briefing/context
 /api/platform/daydream/briefing
+/api/platform/jkai/today
 /api/platform/models/config
 /api/platform/models/usage
 /api/platform/tools/catalogue

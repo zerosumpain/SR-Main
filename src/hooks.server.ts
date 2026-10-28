@@ -768,6 +768,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       (pathname === '/api/platform/tools/catalogue' && event.request.method === 'GET') ||
       (pathname === '/api/platform/daydream/briefing' && event.request.method === 'GET') ||
       (pathname === '/api/platform/briefing/context' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/jkai/today' && event.request.method === 'GET') ||
       (pathname === '/api/platform/backlog/intake' && event.request.method === 'POST')) &&
     invokeLaneFor(event.request) !== 'none'
   ) {
