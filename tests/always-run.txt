@@ -41,6 +41,7 @@ src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/verify.test.ts
 src/lib/server/jsdom.test.ts
 src/lib/server/native-auth.test.ts
+src/lib/tools/tools/builds.sidecar.test.ts
 src/lib/trips/solver/cases.test.ts
 src/lib/wildmind/owner-boundary.test.ts
 src/lib/workflows-client/owner-rows.test.ts

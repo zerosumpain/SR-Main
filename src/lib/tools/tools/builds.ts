@@ -122,6 +122,11 @@ function describeShape(v: unknown): string {
 // Existing Tools (renamed)
 // ==========================================
 
+// Every build tool below drives the builder sidecar through `builderClient`,
+// never `$lib/jkai/orchestrator` in-process. The web app runs as `sr-main`,
+// which cannot write the build workspace, so an in-process loop failed every
+// iteration in milliseconds and retried past its cap (2026-10-03, build
+// 915fae11: 36 zero-token iterations while chat reported "iteration 13").
 register({
   name: 'build_create',
   description:
@@ -162,7 +167,7 @@ register({
   toolset: 'builds',
   producesLongRunningTask: { kind: 'build', idPath: 'id', cadenceSeconds: 30 },
   handler: async (args, toolCtx) => {
-    const { orchestrator } = await import('$lib/jkai/orchestrator');
+    const { builderClient } = await import('$lib/jkai/builder-client');
     const { resolveBuilderModel } = await import('$lib/server/models/workload-settings');
     // Read from the tool context, not from the ambient session store: the build
     // is started here and then runs for up to an hour in a sidecar with no async
@@ -177,6 +182,9 @@ register({
     const insertValues: Record<string, unknown> = {
       title: (args.title as string) || null,
       prompt: args.prompt as string,
+      // Stamped so a chat-started build is told apart from a /jkai one without
+      // falling back on conversation_id (they were all stored as 'manual').
+      origin: 'chat',
       budgetConfig: { ...DEFAULT_BUILD_BUDGET },
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
@@ -186,7 +194,7 @@ register({
     if (toolCtx?.conversationId) insertValues.conversationId = normaliseConversationId(toolCtx.conversationId);
     if (attachedWorkflowIds.length > 0) insertValues.attachedWorkflowIds = attachedWorkflowIds;
     const [build] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
-    await orchestrator.startBuild(build.id);
+    await builderClient.startBuild(build.id);
     return { success: true, data: build };
   },
 });
@@ -264,12 +272,12 @@ register({
   category: 'JKAI Builder',
   toolset: 'builds',
   handler: async (args) => {
-    const { orchestrator } = await import('$lib/jkai/orchestrator');
+    const { builderClient } = await import('$lib/jkai/builder-client');
     const action = args.action as string;
     const id = args.id as string;
-    if (action === 'pause') await orchestrator.pauseBuild(id);
-    else if (action === 'resume') await orchestrator.resumeBuild(id);
-    else if (action === 'stop') await orchestrator.stopBuild(id);
+    if (action === 'pause') await builderClient.pauseBuild(id);
+    else if (action === 'resume') await builderClient.resumeBuild(id);
+    else if (action === 'stop') await builderClient.stopBuild(id);
     else if (action === 'publish') {
       const { publishBuild } = await import('$lib/jkai/sandbox');
       const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id)).limit(1);
@@ -609,8 +617,8 @@ register({
   // build_create. Idempotent: re-arms the existing watch-build-<id> action.
   producesLongRunningTask: { kind: 'build', idPath: 'id', cadenceSeconds: 30 },
   handler: async (args) => {
-    const { orchestrator } = await import('$lib/jkai/orchestrator');
-    await orchestrator.continueBuild(args.id as string, args.instruction as string);
+    const { builderClient } = await import('$lib/jkai/builder-client');
+    await builderClient.continueBuild(args.id as string, args.instruction as string);
     return { success: true, data: { id: args.id, instruction: args.instruction } };
   },
 });
@@ -771,6 +779,16 @@ register({
         return {
           success: false,
           error: `build ${updateId} was made by the ${existing.origin} builder; this tool only replaces the files of a build it registered itself.`,
+        };
+      }
+      // build_create stamps origin 'chat' too, but its rows are the builder's
+      // work: replacing their files would overwrite a running or finished
+      // sandbox build and relabel it 'registered'. Only a row this tool filed
+      // (completed, never run by the builder) is replaceable.
+      if (existing.status !== 'completed' || (existing.outcome != null && existing.outcome !== 'registered')) {
+        return {
+          success: false,
+          error: `build ${updateId} was run by the builder (build_create); use build_tweak to change it, or register a new app without updateBuildId.`,
         };
       }
       const [updated] = await db

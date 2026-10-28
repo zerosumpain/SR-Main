@@ -279,9 +279,11 @@ export async function startPrototype(thoughtId: string, now = new Date()): Promi
     return { ok: true, message: 'Prototype started — capped at 45 minutes.', href: `/jkai/builds/${build.id}` };
   });
   if (res.ok && buildId) {
-    const { orchestrator } = await import('$lib/jkai/orchestrator');
+    // The sidecar, never the in-process orchestrator: the web app cannot write
+    // the build workspace (see tools/tools/builds.ts).
+    const { builderClient } = await import('$lib/jkai/builder-client');
     try {
-      await orchestrator.startBuild(buildId);
+      await builderClient.startBuild(buildId);
     } catch (err) {
       await db.update(jkaiBuilds).set({ status: 'failed' } as never).where(eq(jkaiBuilds.id, buildId));
       return { ok: false, reason: `The builder could not be reached: ${String(err instanceof Error ? err.message : err).slice(0, 160)}` };

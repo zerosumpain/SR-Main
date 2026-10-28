@@ -19,7 +19,7 @@ const mock = vi.hoisted(() => ({
 vi.mock('$env/dynamic/private', () => ({ env: process.env }));
 vi.mock('$lib/tools/registry', () => ({ executeTool: mock.tool }));
 vi.mock('$lib/deepdive/worker', () => ({ startResearch: mock.startResearch }));
-vi.mock('$lib/jkai/orchestrator', () => ({ orchestrator: { startBuild: mock.startBuild } }));
+vi.mock('$lib/jkai/builder-client', () => ({ builderClient: { startBuild: mock.startBuild } }));
 vi.mock('../budget', async (orig) => ({ ...(await orig<typeof import('../budget')>()), readQuotaMark: mock.quota }));
 vi.mock('$lib/monitors/monitors.server', () => ({ createMonitor: mock.createMonitor, deleteMonitor: mock.deleteMonitor }));
 vi.mock('$lib/llm/client', () => ({ getLLMClient: async () => ({ client: {}, model: 'stub' }) }));
