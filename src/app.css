@@ -1233,7 +1233,9 @@ html[data-reading-theme='sepia'] {
   --line-strong: rgba(43, 29, 14, 0.16);
 }
 
-html[data-reading-theme='night'] {
+html[data-reading-theme='night'],
+html[data-jkai-theme='night'],
+.jkai-night {
   --bg: #14100c;
   --bg-base: #14100c;
   --surface-elevated: #1e1913;
@@ -1272,10 +1274,88 @@ html[data-reading-theme='night'] {
   --medal-bronze-line: rgba(205, 141, 92, 0.45);
 }
 
+/* The scales SR-Jkai-Core's night adds to the reading palette, so Main's
+   /jkai rooms paint Core's ground; the blog's reading theme is unchanged. */
+html[data-jkai-theme='night'],
+.jkai-night {
+  color-scheme: dark;
+
+  /* The scales the paper values were written against, relit for the ground:
+     tints of the LIFTED accents, and hairlines in cream rather than ink. */
+  --accent-tint-04: rgba(224, 123, 42, 0.05);
+  --accent-tint-08: rgba(224, 123, 42, 0.1);
+  --accent-tint-14: rgba(224, 123, 42, 0.17);
+  --accent-tint-20: rgba(224, 123, 42, 0.24);
+  --accent-tint-25: rgba(224, 123, 42, 0.3);
+  --accent-tint-35: rgba(224, 123, 42, 0.42);
+  --accent-tint-50: rgba(224, 123, 42, 0.58);
+  --accent-ink-tint-06: rgba(63, 163, 176, 0.08);
+  --accent-ink-tint-12: rgba(63, 163, 176, 0.14);
+  --accent-ink-tint-22: rgba(63, 163, 176, 0.24);
+  --accent-ink-tint-35: rgba(63, 163, 176, 0.38);
+  --line-hair: rgba(236, 227, 214, 0.1);
+  --line: rgba(236, 227, 214, 0.14);
+  --line-strong: rgba(236, 227, 214, 0.2);
+  --surface-card: #231d16;
+  --surface-sunken: rgba(236, 227, 214, 0.04);
+  /* Chrome stays dark: a step BELOW the night ground, so the masthead still
+     reads as a band rather than dissolving into the page. */
+  --chrome-bg: #0b0806;
+  --chrome-ink: #ece3d6;
+}
+
+/* jkai's night — the reading-night palette above plus the app-shell tokens
+   only jkai leans on. Kept out of the shared block so the blog's reading theme
+   does not pick up a shell ladder it never asked for.
+
+   Two hooks. `.jkai-night` sits on `.jkai-root`, so the SERVER renders the
+   right ground on first paint. `html[data-jkai-theme='night']` is stamped by
+   the /jkai layout once mounted, so modals that portal to <body> — outside
+   `.jkai-root` — inherit it too, and so tokens that :root defines in terms of
+   other tokens (--info, --status-ok, --line-title) resolve against the night
+   values. Those aliases are restated here for the first paint, where only the
+   class exists and an alias computed at :root would still hold the paper
+   value. */
+html[data-jkai-theme='night'],
+.jkai-night {
+  --surface-shell: #0f0c09;
+  --surface-rail: #1a1510;
+  --surface-rail-deep: #1c1712;
+  --surface-overlay: rgba(236, 227, 214, 0.05);
+  --good: #8a9a5b;
+  --good-line: rgba(138, 154, 91, 0.6);
+  --code-border: rgba(236, 227, 214, 0.2);
+  --info-bg: var(--accent-ink-tint-06);
+  --info-border: var(--accent-ink-tint-35);
+  --success-bg: rgba(94, 179, 108, 0.1);
+  --success-border: rgba(94, 179, 108, 0.5);
+  --warn-bg: rgba(212, 171, 74, 0.1);
+  --warn-border: rgba(212, 171, 74, 0.5);
+  --error-bg: rgba(224, 106, 106, 0.1);
+  --error-border: rgba(224, 106, 106, 0.5);
+  --error-hover: #f08585;
+  --status-ok: var(--accent-ink);
+  --status-run: var(--accent);
+  --status-fail: #e06a6a;
+  --status-error: var(--error);
+  --status-success: var(--success);
+  --line-title: var(--text-primary);
+  --elev-pop: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -18px rgba(0, 0, 0, 0.7);
+}
+
+/* The jkai night theme lives on a wrapper, so the canvas behind it — <html>
+   and <body>, seen for a frame during an overscroll and behind every portalled
+   modal's scrim — would stay cream. The signal attribute paints them too. */
+html[data-jkai-theme='night'],
+html[data-jkai-theme='night'] body {
+  background: #14100c;
+}
+
 /* The grain is a paper texture. On the night ground it reads as noise on a
    screen rather than tooth on a page, so it is dialled back rather than kept
    at the value that was chosen against cream. */
-html[data-reading-theme='night'] body::after {
+html[data-reading-theme='night'] body::after,
+html[data-jkai-theme='night'] body::after {
   opacity: 0.15;
 }
 
