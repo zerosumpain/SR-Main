@@ -17,7 +17,7 @@ describe('chatTurn', () => {
       [{ role: 'user', content: 'earlier', createdAt: new Date('2026-10-01T10:00:00.000Z'), attachments: [{ id: 'h1', diskPath: '/x' } as never] }],
       { conversationId: 'c1', modelContext, priceSnapshot: null },
     );
-    expect(out).toEqual({ response: 'hi', memory: { k: 1 }, identityVersion: null });
+    expect(out).toEqual({ response: 'hi', memory: { k: 1 }, identityVersion: null, confirm: null });
     const [app, path, body] = post.mock.calls[0];
     expect(app).toBe('jkai-core');
     expect(path).toBe('/api/jkai/service/turn');
@@ -33,6 +33,17 @@ describe('chatTurn', () => {
     const out = await chatTurn({ text: 't' }, [], { modelContext, priceSnapshot: null, envelope: { surface: 'whatsapp' } });
     expect(post.mock.calls[0][2].options.envelope).toEqual({ surface: 'whatsapp' });
     expect(out.identityVersion).toBe('v3:abc');
+  });
+
+  it('reads back a call Core froze for a reply code, strictly', async () => {
+    post.mockResolvedValue({ response: 'ok', confirm: { tool: 'ha_call_service', args: { domain: 'light' }, prompt: 'Turn it off?' } });
+    const out = await chatTurn({ text: 't' }, [], { modelContext, priceSnapshot: null, confirmByCode: ['ha_call_service'] });
+    expect(post.mock.calls[0][2].options.confirmByCode).toEqual(['ha_call_service']);
+    expect(out.confirm).toEqual({ tool: 'ha_call_service', args: { domain: 'light' }, prompt: 'Turn it off?' });
+    for (const confirm of [{ tool: 'x y', args: {} }, { tool: 'ha_call_service', args: [] }, { tool: 'ha_call_service' }, 'ha_call_service']) {
+      post.mockResolvedValue({ response: 'ok', confirm });
+      expect((await chatTurn({ text: 't' }, [], { modelContext, priceSnapshot: null })).confirm).toBeNull();
+    }
   });
 
   it('omits attachmentIds when there are none', async () => {

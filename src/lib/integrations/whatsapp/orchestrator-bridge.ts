@@ -9,7 +9,7 @@ import { saveBuffer } from '$lib/jkai/media/storage';
 import { extensionForMime } from '$lib/jkai/media/mime';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
-import { WHATSAPP_TOOL_WHITELIST } from './tool-whitelist';
+import { WHATSAPP_CONFIRM_BY_CODE, WHATSAPP_TOOL_WHITELIST } from './tool-whitelist';
 
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
 type SendAttachmentFn = (to: string, att: JkaiAttachment, caption?: string) => Promise<WhatsAppSendResult>;
@@ -149,20 +149,28 @@ export class OrchestratorBridge {
 			const turn = await chatTurn(
 				{ text: displayText, attachments: attachment ? [attachment] : [] },
 				priorHistory,
-				// The explicit WhatsApp list (./tool-whitelist): reads only until
-				// reply-code confirms exist. Here and not inside chatTurn, which the
-				// follow-up queue shares for web threads.
+				// The explicit WhatsApp list (./tool-whitelist): reads and thread
+				// outputs, plus the confirm-by-code mutates, which Core freezes for
+				// John's reply code rather than runs. Here and not inside chatTurn,
+				// which the follow-up queue shares for web threads.
 				{
 					modelContext,
 					priceSnapshot: null,
 					conversationId: convId,
 					toolWhitelist: [...WHATSAPP_TOOL_WHITELIST],
+					confirmByCode: [...WHATSAPP_CONFIRM_BY_CODE],
 					// Plain text, short: Core's WhatsApp overlay matches what
 					// format.ts can carry.
 					envelope: { surface: 'whatsapp' },
 				},
 			);
-			const responseText = turn.response;
+			let responseText = turn.response;
+			// A call Core froze for a reply code: ask for it under the reply,
+			// bound to this sender's number and this thread (./reply-code).
+			if (turn.confirm) {
+				const { askForReplyCode } = await import('./reply-code.server');
+				responseText = `${responseText.trim()}\n\n${await askForReplyCode(from, convId, turn.confirm)}`;
+			}
 
 			// Stop typing, save and send
 			await this.typingDoneFn?.(replyTo);

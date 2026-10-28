@@ -8,6 +8,10 @@ const mockDispatchWhatsAppWorkflow = vi.fn();
 vi.mock('$lib/integrations/whatsapp/approval-inbound', () => ({
   handleApprovalReply: (...args: unknown[]) => mockHandleApprovalReply(...args),
 }));
+const mockHandleReplyCode = vi.fn();
+vi.mock('$lib/integrations/whatsapp/reply-code.server', () => ({
+  handleReplyCode: (...args: unknown[]) => mockHandleReplyCode(...args),
+}));
 vi.mock('$lib/integrations/whatsapp/workflow-dispatch', () => ({
   dispatchWhatsAppWorkflow: (...args: unknown[]) => mockDispatchWhatsAppWorkflow(...args),
 }));
@@ -23,6 +27,26 @@ beforeEach(() => {
   emitted.length = 0;
   mockHandleApprovalReply.mockResolvedValue({ handled: false });
   mockDispatchWhatsAppWorkflow.mockResolvedValue({ dispatched: false });
+  mockHandleReplyCode.mockResolvedValue({ handled: false });
+});
+
+describe('the reply-code step', () => {
+  it('runs first for the owner and consumes a code it handled', async () => {
+    mockHandleReplyCode.mockResolvedValue({ handled: true, reply: 'Done: lights off.' });
+    expect(await interceptOwnerInbound('447359228511', '4831')).toEqual({ handled: true, reply: 'Done: lights off.' });
+    expect(mockHandleApprovalReply).not.toHaveBeenCalled();
+  });
+
+  it('is never asked about a stranger', async () => {
+    await interceptOwnerInbound('447700900999', '4831');
+    expect(mockHandleReplyCode).not.toHaveBeenCalled();
+  });
+
+  it('lets an unhandled message carry on to approvals and dispatch', async () => {
+    await interceptOwnerInbound('447359228511', 'hello');
+    expect(mockHandleReplyCode).toHaveBeenCalledWith('447359228511', 'hello');
+    expect(mockHandleApprovalReply).toHaveBeenCalled();
+  });
 });
 
 describe('interceptOwnerInbound (delegated-mode entry point for D2/D3)', () => {

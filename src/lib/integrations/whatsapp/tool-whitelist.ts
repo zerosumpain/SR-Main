@@ -10,10 +10,11 @@
  * plan 2026-10-28, decision 2) is reads plus mutates confirmed with a reply code;
  * no commissioning and no destructive tools.
  *
- * There is no reply-code confirm yet (it arrives with principal phase 2), so
- * the mutates half is EMPTY for now rather than unconfirmed. Being an explicit
- * list is the point: a new tool, including every private read the overhaul adds,
- * reaches WhatsApp only when someone writes its name here.
+ * The mutates half is `WHATSAPP_CONFIRM_BY_CODE`, kept OUT of this whitelist:
+ * those tools are sent to Core separately, offered, and frozen for John's reply
+ * code rather than run (`./reply-code.ts`). Being an explicit list is the
+ * point: a new tool, including every private read the overhaul adds, reaches
+ * WhatsApp only when someone writes its name here.
  *
  * Passed from `orchestrator-bridge.ts`, not inside `chatTurn`: the follow-up
  * queue shares `chatTurn` and runs on web threads, where it must keep its reach.
@@ -71,7 +72,7 @@ export const WHATSAPP_READ_TOOLS = [
 	'health_training_load',
 	'route_plan',
 	'route_target_suggest',
-	// Home reads (ha_call_service and ha_fire_event act, so they wait for reply codes)
+	// Home reads (ha_call_service acts, so it is confirm-by-code; ha_fire_event is not offered)
 	'ha_find',
 	'ha_query_state',
 	'ha_get_history',
@@ -116,16 +117,27 @@ export const WHATSAPP_READ_TOOLS = [
 export const WHATSAPP_THREAD_OUTPUTS = ['write_document', 'generate_image', 'generate_audio_tts'] as const;
 
 /**
- * Mutates a WhatsApp turn may run once the owner confirms with a reply code.
- * Empty until that confirm exists: an unconfirmed mutate is not what was agreed.
+ * Confirm-by-code: mutates a WhatsApp turn may ask for, which run only when
+ * John replies with the one-time code jkai sends (`./reply-code.ts`).
+ *
+ * NOT part of `WHATSAPP_TOOL_WHITELIST`. They travel to Core as
+ * `confirmByCode`, so a Core that predates reply codes never offers them, and
+ * the principal Core seals for the turn never lists them, so Main refuses one
+ * that reached it without a code. Each must be a mutate on the standard lane
+ * that does not always confirm (`tool-whitelist.test.ts` pins it); a
+ * destructive, always-confirm or commission-lane tool can never be here.
+ *
+ * - `ha_call_service`: lights, scenes, the heating. Not `ha_fire_event`, which
+ *   can start any automation.
+ * - `save_memory`: "remember that …". Not `forget_memory`.
+ * - `followup_schedule`: "tell me when the research finishes".
  */
-export const WHATSAPP_CONFIRMED_MUTATES = [] as const;
+export const WHATSAPP_CONFIRM_BY_CODE = ['ha_call_service', 'save_memory', 'followup_schedule'] as const;
 
 export const WHATSAPP_TOOL_WHITELIST: readonly string[] = [
 	...CORE_META,
 	...WHATSAPP_READ_TOOLS,
 	...WHATSAPP_THREAD_OUTPUTS,
-	...WHATSAPP_CONFIRMED_MUTATES,
 ];
 
 export const WHATSAPP_CORE_META_TOOLS: readonly string[] = CORE_META;

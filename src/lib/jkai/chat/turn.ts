@@ -69,6 +69,12 @@ export interface RemoteTurnOptions {
   priceSnapshot: PriceSnapshot | null;
   subagentDepth?: number;
   toolWhitelist?: string[];
+  /**
+   * WhatsApp only: mutates Core may offer but must freeze for John's reply code
+   * rather than run (`$lib/integrations/whatsapp/reply-code`). Kept apart from
+   * `toolWhitelist`, so a Core that predates reply codes never offers them.
+   */
+  confirmByCode?: string[];
   maxRounds?: number;
   useIntelContext?: boolean;
   /** Kept beside `envelope.surface: 'followup'` for a Core that predates the envelope. */
@@ -85,6 +91,25 @@ export interface RemoteTurn {
   memory: MemoryTurnStamp | null;
   /** Which soul answered, from Core; null from a Core that predates it. */
   identityVersion: string | null;
+  /** The one call Core froze for John's reply code (WhatsApp only), or null. */
+  confirm: FrozenCall | null;
+}
+
+/** A tool call Core did not run because it waits for John's reply code. */
+export interface FrozenCall {
+  tool: string;
+  args: Record<string, unknown>;
+  prompt: string;
+}
+
+/** Read strictly: anything malformed is no frozen call, so nothing is asked. */
+export function coerceFrozenCall(raw: unknown): FrozenCall | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.tool !== 'string' || !/^[A-Za-z0-9_.:-]{1,128}$/.test(r.tool)) return null;
+  if (!r.args || typeof r.args !== 'object' || Array.isArray(r.args)) return null;
+  const prompt = typeof r.prompt === 'string' && r.prompt.trim() ? r.prompt.trim().slice(0, 600) : `Proceed with ${r.tool}?`;
+  return { tool: r.tool, args: r.args as Record<string, unknown>, prompt };
 }
 
 /** A turn can run tools for minutes — `workflow_run` alone may wait 600s. */
@@ -97,7 +122,7 @@ export async function chatTurn(
   opts: { timeoutMs?: number; port?: number } = {},
 ): Promise<RemoteTurn> {
   const attachmentIds = (input.attachments ?? []).map((a) => a.id);
-  const res = await postToExtracted<{ response?: unknown; memory?: unknown; identityVersion?: unknown }>(
+  const res = await postToExtracted<{ response?: unknown; memory?: unknown; identityVersion?: unknown; confirm?: unknown }>(
     'jkai-core',
     '/api/jkai/service/turn',
     { input: { text: input.text, ...(attachmentIds.length ? { attachmentIds } : {}) }, history: history.map(toWire), options },
@@ -108,6 +133,7 @@ export async function chatTurn(
     response: res.response,
     memory: (res.memory as MemoryTurnStamp | null) ?? null,
     identityVersion: typeof res.identityVersion === 'string' && res.identityVersion ? res.identityVersion.slice(0, 120) : null,
+    confirm: coerceFrozenCall(res.confirm),
   };
 }
 

@@ -42,6 +42,16 @@ export async function interceptOwnerInbound(
     emitPlatformEvent('whatsapp.inbound', { from, text }, { source: 'whatsapp-inbound' });
   }
 
+  // A jkai reply code (`./reply-code.ts`) first: every owner message answers
+  // an open one, a matching code by running its frozen call and anything else
+  // by declining it (a non-code message then carries on below). Owner-only and
+  // number-only inside; lazy, because it reaches the tool catalogue.
+  if (isOwnerNumber(from)) {
+    const { handleReplyCode } = await import('./reply-code.server');
+    const code = await handleReplyCode(from, text ?? '');
+    if (code.handled) return { handled: true, reply: code.reply };
+  }
+
   // D2 — approval reply first (approve/deny/yes/no own these keywords).
   const { handleApprovalReply } = await import('./approval-inbound');
   const approval = await handleApprovalReply(from, text ?? '');
