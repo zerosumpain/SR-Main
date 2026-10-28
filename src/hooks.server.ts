@@ -2,6 +2,12 @@ import { privacyMaintenance } from '$lib/people/privacy-maintenance';
 import { building } from '$app/environment';
 // Daydream registers its chat toolset itself; see $lib/daydream/chat-tools.
 import '$lib/daydream/chat-tools';
+// Commissioning's quota reader and backlog intake, registered by the domains
+// that own them so $lib/jkai never imports them back (see $lib/jkai/commission/ports).
+import { registerCommissionQuota } from '$lib/daydream/commission-port';
+import { registerCommissionIntake } from '$lib/selfimprove/commission-port';
+registerCommissionQuota();
+registerCommissionIntake();
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
   startDependencyMonitor,

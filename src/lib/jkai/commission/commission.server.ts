@@ -29,6 +29,7 @@ import { CHANGE_REQUEST_BUDGET } from '../change-request';
 import { normaliseConversationId } from '../conversation-id';
 import { createDevelopmentDelivery, DevelopmentModelChoiceError, findBacklogDelivery } from '../development-create.server';
 import { mutateDelivery } from '../development-state.server';
+import { commissionPorts } from './ports';
 import { builderClient } from '../builder-client';
 import {
   commissionRefusal,
@@ -95,8 +96,7 @@ const inFlight = new Map<string, Promise<CommissionResult>>();
 /** The ChatGPT windows now, or null; never throws. */
 async function quotaMark(): Promise<{ fiveHourPct: number; weeklyPct: number } | null> {
   try {
-    const { readQuotaMark } = await import('$lib/daydream/budget');
-    return await readQuotaMark();
+    return await commissionPorts().quotaMark();
   } catch {
     return null;
   }
@@ -213,22 +213,18 @@ export async function commissionBuild(input: CommissionInput): Promise<Commissio
     let backlogSlug: string | undefined;
     if (input.source === 'chat' || input.source === 'phone') {
       try {
-        const { intakeIdeas } = await import('$lib/selfimprove/backlog');
-        const { slugifyIdea } = await import('$lib/selfimprove/types');
         const title = outcome.split('\n')[0].slice(0, 200);
-        const result = await intakeIdeas([
-          {
-            title,
-            // Quoted as data: the ask, in his words, is the record, not a brief
-            // for the engine to rewrite.
-            detail: `Commissioned from ${input.source}: "${outcome.slice(0, 1800)}"`,
-            kind: 'feature',
-            priority: 2,
-            source: input.source,
-            ref: conversationId ? `conversation:${conversationId}` : `commission:${operationKey}`,
-          },
-        ]);
-        backlogSlug = result.merged[0]?.into ?? result.added[0] ?? (result.outcomes[0] === 'capped' ? undefined : slugifyIdea(title));
+        const result = await commissionPorts().intake({
+          title,
+          // Quoted as data: the ask, in his words, is the record, not a brief
+          // for the engine to rewrite.
+          detail: `Commissioned from ${input.source}: "${outcome.slice(0, 1800)}"`,
+          kind: 'feature',
+          priority: 2,
+          source: input.source,
+          ref: conversationId ? `conversation:${conversationId}` : `commission:${operationKey}`,
+        });
+        backlogSlug = result.slug;
       } catch (err) {
         console.warn(`[commission] backlog intake failed, commissioning anyway: ${err instanceof Error ? err.message : String(err)}`);
       }

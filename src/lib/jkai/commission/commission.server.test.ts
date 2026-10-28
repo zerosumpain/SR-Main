@@ -36,14 +36,6 @@ vi.mock('$lib/db', () => {
   };
   return { db: { select: (fields: Record<string, unknown>) => chain(fields) } };
 });
-vi.mock('$lib/daydream/budget', () => ({ readQuotaMark: async () => h.mark }));
-vi.mock('$lib/selfimprove/backlog', () => ({
-  intakeIdeas: async (ideas: unknown[]) => {
-    h.intake.push(...ideas);
-    return { added: ['add-x-to-the-backlog-page'], merged: [], capped: 0, outcomes: ['added'] };
-  },
-}));
-vi.mock('$lib/selfimprove/types', () => ({ slugifyIdea: (t: string) => t.toLowerCase().replace(/\W+/g, '-') }));
 vi.mock('../development-create.server', () => {
   class DevelopmentModelChoiceError extends Error {}
   return {
@@ -72,6 +64,15 @@ vi.mock('../builder-client', () => ({
 }));
 
 const { commissionBuild, derivedOperationKey, quoteCommission } = await import('./commission.server');
+const { setCommissionPorts } = await import('./ports');
+// The two domain halves, as `src/hooks.server.ts` registers them (`./ports`).
+setCommissionPorts({
+  quotaMark: async () => h.mark,
+  intake: async (idea) => {
+    h.intake.push(idea);
+    return { slug: 'add-x-to-the-backlog-page' };
+  },
+});
 
 const OWNER: ToolPrincipal = { principalId: 'owner', via: 'session', attended: true, jobId: 'j' };
 const ask = (over: Record<string, unknown> = {}) =>

@@ -21,5 +21,5 @@ export const GET: RequestHandler = async ({ params }) => {
 /** The owner's web page: every action (`$lib/jkai/development-actions.server`). */
 export const POST: RequestHandler = async ({ params, request }) => {
   const body = await request.json().catch(() => null);
-  return runDevelopmentAction(params.id, body);
+  return runDevelopmentAction(params.id, body, { progress: developmentProgress });
 };

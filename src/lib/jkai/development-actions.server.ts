@@ -1,5 +1,4 @@
 import { resolveDevelopmentModel } from '$lib/jkai/development-models.server';
-import { developmentProgress } from '$lib/builds/development-progress.server';
 import { json, error } from '@sveltejs/kit';
 import { db } from '$lib/db';
 import { jkaiBuilds } from '$lib/db/schema';
@@ -34,7 +33,19 @@ export const DEVELOPMENT_ACTIONS = ['groom', 'brief', 'start', 'resume', 'pause'
   'close_preview', 'inspect_preview', 'preview', 'continue', 'autopilot', 'release_policy', 'release', 'reset_batch', 'release_check', 'accept', 'lesson'] as const;
 export type DevelopmentAction = (typeof DEVELOPMENT_ACTIONS)[number];
 
-export async function runDevelopmentAction(id: string, body: any, opts: { allowed?: readonly DevelopmentAction[] } = {}): Promise<Response> {
+export async function runDevelopmentAction(
+  id: string,
+  body: any,
+  opts: {
+    allowed?: readonly DevelopmentAction[];
+    /**
+     * The build's iterations, for `inspect_preview`. Passed in by the route
+     * (which already reads `$lib/builds`) rather than imported here: a
+     * `jkai -> builds` import would close a cycle (`builds` imports `jkai`).
+     */
+    progress?: (id: string) => Promise<{ iterations: Array<{ tokensUsed: number }> }>;
+  } = {},
+): Promise<Response> {
   if (!body || typeof body.action !== 'string') throw error(400, 'Action required');
   if (opts.allowed && !(opts.allowed as readonly string[]).includes(body.action)) return json({ error: 'That action is not available here.' }, { status: 403 });
   const delivery = await loadDelivery(id);
@@ -205,7 +216,8 @@ export async function runDevelopmentAction(id: string, body: any, opts: { allowe
       case 'inspect_preview': {
         if (['running', 'queued'].includes(build.status)) throw new Error('Pause the build before preparing an inspection preview.');
         if (!delivery.state.brief.acceptedAt || delivery.state.acceptedAt) throw new Error('Inspection needs an accepted brief that has not joined the batch.');
-        const progress = await developmentProgress(id);
+        if (!opts.progress) throw new Error('Inspection previews are prepared from the development page.');
+        const progress = await opts.progress(id);
         if (!progress.iterations.some(i => i.tokensUsed > 0) && !delivery.state.candidate) throw new Error('No saved implementation to inspect yet.');
         await mutateDelivery(id, 'inspection_requested', s => ({ ...s, preview: { ...s.preview, status: 'starting', detail: 'Snapshotting saved work for inspection; acceptance remains blocked.' } }), revision);
         try {
