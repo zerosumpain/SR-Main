@@ -190,6 +190,8 @@ export async function handleUpdateCredential(
 
 const def: ToolDefinition = {
   name: 'update_credential',
+  effect: 'mutate',
+  confirm: 'never',
   category: 'apis',
   toolset: 'apis',
   description:

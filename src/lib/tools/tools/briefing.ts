@@ -16,6 +16,7 @@ const MARKDOWN_CAP = 6000;
 
 register({
   name: 'briefing_get',
+  effect: 'read',
   description:
     "John's morning briefing for one day (default the newest): the headline, the factor cards with their one-line readings, the connections between them, the gaps it could not fill, and the full text. Use for \"what did my briefing say\" or a question about a past morning. Returns the page link. Read-only.",
   parameters: {
@@ -58,6 +59,7 @@ register({
 
 register({
   name: 'today_overview',
+  effect: 'read',
   description:
     "John's day at a glance, from the same loader as the /jkai desk and the phone's first screen: what needs him (double-checks waiting for his OK, daydream reports back, development features blocked on a question or a merge), the latest briefing's headline, health readiness, alert counts, connections needing attention and his last thread. Use for \"what needs me\", \"what's waiting on me\" or \"how's today looking\". Each section is null when it could not be read. Read-only.",
   parameters: { type: 'object', properties: {}, required: [] },

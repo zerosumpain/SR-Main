@@ -20,6 +20,7 @@ const loadRetrieve = () => import('$lib/codegraph/retrieve');
 
 register({
   name: 'codegraph_query',
+  effect: 'read',
   description:
     'Ask the build-history graph what this codebase has already learned. Use it before answering any "how do I change X", "why does X work that way", or "has this broken before" question about the repo, and whenever a build or gate error needs precedent. ' +
     'Query language (CGQL): start with a seed — file:src/lib/a.ts (commas for several, * allowed), fingerprint:typecheck:TS2345 (an error class), gate:svelte-check, or topic:"free text" — then optionally pipe stages: | hops 1 | lessons limit=5 | episodes verdict=verified,landed limit=3 | budget 4000. ' +

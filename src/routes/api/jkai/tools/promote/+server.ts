@@ -1,6 +1,7 @@
 // src/routes/api/jkai/tools/promote/+server.ts
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { executeSiteTool } from '$lib/tools/executor';
+import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
 
 type PromoteBody = {
   messageId?: string;
@@ -26,6 +27,11 @@ export const POST: RequestHandler = async ({ request }) => {
     name: body.name,
     description: body.description,
     toolset: body.toolset,
+  }, {
+    emit: () => {},
+    // The owner's "keep this tool" press (the route is owner-gated in
+    // hooks.server.ts): it IS the answer to the destructive gate.
+    principal: ownerActionPrincipal('promote-ephemeral-tool'),
   });
 
   if (!res.success) return json({ error: res.error ?? 'promotion failed' }, { status: 400 });

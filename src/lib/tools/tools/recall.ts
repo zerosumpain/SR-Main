@@ -18,6 +18,7 @@ import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 
 register({
   name: 'session_search',
+  effect: 'read',
   description:
     'Search what was actually said in past conversations, by keyword. Returns matching messages with their conversation title and date. Use when the user refers to something discussed before ("what did we decide about X") and it is not in the current thread.',
   parameters: {
@@ -81,6 +82,7 @@ register({
 
 register({
   name: 'memory_search',
+  effect: 'read',
   description:
     'Search stored long-term memories about the user — people, preferences, places, health, devices, situations. These are extracted automatically from past conversations. Use before asking the user something they may already have told you.',
   parameters: {

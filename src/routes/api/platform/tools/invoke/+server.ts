@@ -17,7 +17,8 @@ import type { ToolExecContext, ToolResult } from '$lib/tools/registry-internal';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { env } from '$env/dynamic/private';
 import { createNonceLedger, openPrincipal } from '$lib/tools/principal-seal';
-import { tierOf, type PrincipalClaims } from '$lib/tools/invoke-contract';
+import { type PrincipalClaims } from '$lib/tools/invoke-contract';
+import { declaredTier } from '$lib/tools/declared-tier';
 import { isThinkingLevel } from '$lib/models/thinking';
 import type { RequestHandler } from './$types';
 
@@ -173,7 +174,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	 */
 	const declaredLane = (() => {
 		const declared = registry.getTool(name);
-		return declared ? tierOf(declared).lane : null;
+		return declared ? declaredTier(declared).lane : null;
 	})();
 	if (lane === 'commission' && declaredLane !== 'commission') {
 		return single({ success: false, error: `The commission credential opens only commissioning tools, not ${name}.` });
@@ -189,7 +190,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	if (lane !== 'destructive') {
 		const declared = registry.getTool(name);
-		if (declared && tierOf(declared).lane === 'destructive') {
+		if (declared && declaredTier(declared).lane === 'destructive') {
 			return single({
 				success: false,
 				error:

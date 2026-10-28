@@ -14,6 +14,7 @@ function coerceSources(raw: unknown): KnowledgeSource[] | undefined {
 
 register({
   name: 'knowledge_search',
+  effect: 'read',
   description:
     'Unified recall across EVERYTHING JKai knows: intel notes, the intel entity graph, /drive file contents, deep-dive research facts, saved personal memory, and datastore records — in one call. ' +
     'Use this whenever the user asks "what do I know / have I got anything about X", or when a question could be answered from any of your own stores and you are not sure which. ' +

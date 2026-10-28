@@ -1,4 +1,5 @@
-import { tierOf, type CataloguePayload } from './invoke-contract';
+import { type CataloguePayload } from './invoke-contract';
+import { declaredTier } from './declared-tier';
 import { loadToolRegistry } from './load-registry';
 import { remoteCatalogue, remoteInvokeTarget } from './remote';
 
@@ -111,7 +112,10 @@ export async function isRegisteredTool(name: string): Promise<boolean> {
  */
 export async function isDestructiveTool(name: string): Promise<boolean> {
 	const reg = await local();
-	if (reg) return reg.getTool(name)?.destructive === true;
+	if (reg) {
+		const t = reg.getTool(name);
+		return t ? t.destructive === true || declaredTier(t).effect === 'destructive' : false;
+	}
 	try {
 		return (await payload()).tools.find((t) => t.name === name)?.destructive ?? true;
 	} catch {
@@ -127,7 +131,7 @@ export async function allTools(): Promise<Array<{ name: string; description: str
 			name: t.name,
 			description: t.description,
 			toolset: t.toolset,
-			destructive: t.destructive === true
+			destructive: t.destructive === true || declaredTier(t).effect === 'destructive'
 		}));
 	}
 	return (await payload()).tools;
@@ -156,8 +160,8 @@ export async function catalogueTools(): Promise<CataloguePayload['tools']> {
 			parameters: t.parameters,
 			toolset: t.toolset,
 			category: t.category,
-			destructive: t.destructive === true,
-			...tierOf(t)
+			destructive: t.destructive === true || declaredTier(t).effect === 'destructive',
+			...declaredTier(t)
 		}));
 	}
 	return (await payload()).tools;

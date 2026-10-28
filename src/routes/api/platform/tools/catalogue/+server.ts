@@ -2,7 +2,8 @@ import { json, error } from '@sveltejs/kit';
 import { invokeLaneFor } from '$lib/server/invoke-auth';
 import { loadToolRegistry } from '$lib/tools/load-registry';
 import { remoteInvokeTarget } from '$lib/tools/remote';
-import { tierOf, type CataloguePayload } from '$lib/tools/invoke-contract';
+import { type CataloguePayload } from '$lib/tools/invoke-contract';
+import { declaredTier } from '$lib/tools/declared-tier';
 import { renderSkillIndex } from '$lib/jkai/skills/registry';
 import { CAPABILITIES, CAPABILITIES_VERSION, isCustomToolset } from '$lib/capabilities/manifest';
 import type { RequestHandler } from './$types';
@@ -48,9 +49,10 @@ export const GET: RequestHandler = async ({ request, url }) => {
 				parameters: t.parameters,
 				toolset: t.toolset,
 				category: t.category,
-				destructive: t.destructive === true,
-				// Manifest M0: derived from `destructive` plus the explicit marks.
-				...tierOf(t)
+				destructive: t.destructive === true || declaredTier(t).effect === 'destructive',
+				// Manifest M0: every row carries an explicit tier; a tool that
+				// declared no effect is served as destructive (fails closed).
+				...declaredTier(t)
 			})),
 		toolsets: registry.getAvailableToolsets().filter(keep),
 		manifest: registry.getToolsetManifest().filter((m) => keep(m.toolset)),

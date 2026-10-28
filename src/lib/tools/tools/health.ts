@@ -27,6 +27,7 @@ const read = async (path: string) => ({
 
 register({
   name: 'health_stats',
+  effect: 'read',
   description: 'Get weekly health metrics (activity count, distance, duration, elevation, recovery score, sleep average) and all-time personal records',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
@@ -36,6 +37,7 @@ register({
 
 register({
   name: 'health_readiness',
+  effect: 'read',
   description: 'Get composite readiness score with recovery, HRV trend, sleep quality, load balance factors, zone classification, and recommendation',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
@@ -45,6 +47,7 @@ register({
 
 register({
   name: 'health_sleep',
+  effect: 'read',
   description: 'Get latest sleep analysis (duration, light/deep/REM percentages, performance score) and 14-day trend',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
@@ -54,6 +57,7 @@ register({
 
 register({
   name: 'health_training_load',
+  effect: 'read',
   description: 'Get training load analysis: acute/chronic load ratio, zone (optimal/caution/danger), 30-day history',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'Health Data',
@@ -63,6 +67,7 @@ register({
 
 register({
   name: 'health_timeline',
+  effect: 'read',
   description: 'Get paginated timeline of recent health events (activities, workouts, sleep, recovery)',
   parameters: {
     type: 'object',

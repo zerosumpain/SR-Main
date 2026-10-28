@@ -22,6 +22,7 @@ import type { ToolDefinition } from '$lib/tools/registry-internal';
 import { isEssentialUnderPolicy, isMetaToolEnabled } from './essentials';
 import { JKAI_EXTENDED_TOOL } from './meta-tool';
 import { isCustomToolset } from '$lib/capabilities/manifest';
+import { declaredTier } from '$lib/tools/declared-tier';
 import {
   describeWithPolicy,
   getActivePolicy,
@@ -54,7 +55,7 @@ function toolToMcp(def: ToolDefinition, policy: ToolPolicyVersion): McpTool {
       type: 'object',
       properties: {},
     },
-    ...(def.destructive ? { annotations: { destructiveHint: true } } : {}),
+    ...(def.destructive || declaredTier(def).effect === 'destructive' ? { annotations: { destructiveHint: true } } : {}),
   };
 }
 

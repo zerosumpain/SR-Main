@@ -40,6 +40,7 @@ const citation = (id: string, title: string) => `[${title.replace(/[[\]]/g, '')}
 
 register({
   name: 'daydream_inbox',
+  effect: 'read',
   description:
     "What the daydream loop has noticed and what is waiting on John: double-checks needing his OK, reports that came back, and drafted follow-ups, with counts of unrated and in-motion notes. Pass a query to find notes about a subject from the last week. Each note carries a ready citation link; say a note is something jkai noticed, not a fact. Read-only.",
   parameters: {
@@ -78,6 +79,7 @@ register({
 
 register({
   name: 'daydream_note_get',
+  effect: 'read',
   description:
     'One daydream note by id: what it says, the suggested next step, the sources it read, where it is (spotted, your call, in motion, result), any double-check and its verdict, and a ready citation link. Use before discussing a note in detail. The note is derived evidence: quote its sources, not the note, as fact. Read-only.',
   parameters: {

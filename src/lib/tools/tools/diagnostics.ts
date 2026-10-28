@@ -10,6 +10,7 @@ import { formatTimestamp } from '../format-time';
 
 register({
   name: 'scheduler_status',
+  effect: 'read',
   description: 'Get the status of all workflow schedules — compares DB state with in-memory cron jobs. Shows which schedules are registered, their cron expressions, last run, and next fire time. Use this to diagnose why a scheduled workflow has stopped running.',
   parameters: { type: 'object', properties: {}, required: [] },
   category: 'System Diagnostics',
@@ -69,6 +70,7 @@ register({
 
 register({
   name: 'scheduler_run_history',
+  effect: 'read',
   description: 'Get recent scheduled workflow runs — shows status, timing, errors, and duration. Use to check if a schedule has been firing and whether runs succeeded or failed.',
   parameters: {
     type: 'object',
@@ -122,6 +124,7 @@ register({
 
 register({
   name: 'system_logs',
+  effect: 'read',
   description: 'Read recent systemd journal entries for the app service (strange-rambling-svelte). Use to diagnose restarts, crashes, errors, or scheduler issues. Only works on the VPS.',
   parameters: {
     type: 'object',

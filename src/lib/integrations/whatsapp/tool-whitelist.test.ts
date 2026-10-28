@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { WHATSAPP_CORE_META_TOOLS, WHATSAPP_TOOL_WHITELIST } from './tool-whitelist';
+import { WHATSAPP_CORE_META_TOOLS, WHATSAPP_READ_TOOLS, WHATSAPP_THREAD_OUTPUTS, WHATSAPP_TOOL_WHITELIST } from './tool-whitelist';
+import { declaredTier } from '$lib/tools/declared-tier';
 
 /**
  * The WhatsApp list against the REAL catalogue: a renamed tool silently
@@ -14,6 +15,10 @@ const ACTS = [
   'save_memory', 'memory_remember', 'forget_memory', 'workflow_run', 'workflow_generate',
   'build_create', 'studio_build', 'request_change', 'notify_owner', 'monitor_create', 'datastore_save',
   'schedule_tool_call_at', 'schedule_orchestrator_turn_at', 'register_heartbeat_action', 'agent_spawn',
+  'followup_schedule', 'followup_cancel', 'complete_heartbeat_action', 'schedule_reply_at', 'cancel_scheduled_callback',
+  'update_tool', 'author_ephemeral_tool', 'promote_ephemeral_tool', 'blog_create', 'blog_update', 'blog_unpublish',
+  'browser_navigate', 'browser_click', 'browser_type', 'api_register', 'api_integration_save', 'datastore_update',
+  'datastore_create_collection', 'research_start', 'research_branch', 'research_control', 'request_credential', 'update_credential',
 ];
 
 describe('WHATSAPP_TOOL_WHITELIST', () => {
@@ -43,6 +48,18 @@ describe('WHATSAPP_TOOL_WHITELIST', () => {
   it('holds no canvas-editing tool', () => {
     const edits = WHATSAPP_TOOL_WHITELIST.filter((n) => byName.get(n)?.toolset === 'workflows' && !/^workflow_(list|inspect|get_run)$/.test(n));
     expect(edits).toEqual([]);
+  });
+
+  it('holds only declared reads, apart from the three thread outputs', () => {
+    for (const name of WHATSAPP_READ_TOOLS) {
+      expect(byName.get(name)?.effect, name).toBe('read');
+      expect(declaredTier(byName.get(name)!), name).toEqual({ effect: 'read', confirm: 'never', lane: 'standard' });
+    }
+    const nonReads = WHATSAPP_TOOL_WHITELIST.filter((n) => byName.has(n) && declaredTier(byName.get(n)!).effect !== 'read');
+    expect(nonReads.sort()).toEqual([...WHATSAPP_THREAD_OUTPUTS].sort());
+    for (const name of WHATSAPP_THREAD_OUTPUTS) {
+      expect(declaredTier(byName.get(name)!), name).toEqual({ effect: 'mutate', confirm: 'never', lane: 'standard' });
+    }
   });
 
   it('has no duplicates', () => {

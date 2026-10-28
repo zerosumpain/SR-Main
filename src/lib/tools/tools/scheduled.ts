@@ -18,6 +18,8 @@
 //                        message; the LLM will respond as if the user wrote it
 
 import { register, type ToolExecContext } from '../registry-internal';
+import { normalisePrincipal } from '../invoke-contract';
+import { fallbackPrincipal } from '../in-process-principal';
 import { requiredString, optionalString } from '../tool-args';
 import { normaliseConversationId } from '$lib/jkai/conversation-id';
 import { db } from '$lib/db';
@@ -95,6 +97,8 @@ function parseFireAt(args: Record<string, unknown>): Date | null {
 
 register({
   name: 'schedule_reply_at',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Schedule a fixed text reply to land in this conversation at a specific time. No LLM round at fire time — the message you provide is what gets posted. Use for simple time-based notifications: "remind me to leave at 17:30", "ping me in 90 seconds".',
   parameters: {
@@ -144,6 +148,8 @@ register({
 
 register({
   name: 'schedule_tool_call_at',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Schedule a direct call to a registered site-tool at a specific time. No LLM round at fire time — the tool runs with the args you provide right now. Use for deferred actions: "turn off the lights in 90 seconds", "send an email at 9am".',
   parameters: {
@@ -173,11 +179,22 @@ register({
     // should invoke them directly (so they can be confirmed) or defer a
     // reply / orchestrator-turn instead.
     const { getTool } = await import('../registry');
-    if (getTool(toolName)?.destructive) {
+    const { declaredTier } = await import('../declared-tier');
+    const target = getTool(toolName);
+    const tier = target ? declaredTier(target) : null;
+    if (target?.destructive || (tier && (tier.effect === 'destructive' || tier.confirm === 'always' || tier.lane !== 'standard'))) {
       return {
         success: false,
         error: `Cannot defer "${toolName}" — it is a destructive action that must be confirmed at call time. Call it directly, or schedule a reply/orchestrator-turn instead.`,
       };
+    }
+    // The deferred call fires unattended with only this tool on its list
+    // (`fireTool`), so a mutate there runs. An unattended caller (heartbeat,
+    // a scheduled turn) may only defer a tool its own list already names, or
+    // scheduling would launder a change it could not make directly.
+    const caller = normalisePrincipal(ctx?.principal ?? fallbackPrincipal(ctx));
+    if (!caller.attended && !caller.allowedTools?.includes(toolName)) {
+      return { success: false, error: `Cannot defer "${toolName}" from an unattended ${caller.via} turn: it is not on that turn's own tool list.` };
     }
     const toolArgs = (args.args as Record<string, unknown>) ?? {};
     const conv = await resolveConversation(args, ctx, { required: false });
@@ -201,6 +218,8 @@ register({
 
 register({
   name: 'schedule_orchestrator_turn_at',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Schedule a re-engagement of this conversation at a specific time. At fire time the LLM runs a focused turn with the synthetic user message you provide; this lets you say "in 30 seconds I want to re-think this with fresh context" without writing a fixed reply.',
   parameters: {
@@ -244,6 +263,8 @@ register({
 
 register({
   name: 'cancel_scheduled_callback',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Cancel a pending scheduled callback by name. Already-fired callbacks are not affected.',
   parameters: {
     type: 'object',
@@ -268,6 +289,7 @@ register({
 
 register({
   name: 'list_scheduled_callbacks',
+  effect: 'read',
   description: 'List pending scheduled callbacks, optionally filtered to one conversation.',
   parameters: {
     type: 'object',

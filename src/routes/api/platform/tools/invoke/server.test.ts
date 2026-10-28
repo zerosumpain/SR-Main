@@ -34,8 +34,9 @@ let calls: Recorded[] = [];
 
 const TOOLS: Record<string, { destructive?: boolean; lane?: string; effect?: string; run: (ctx?: ToolExecContext) => ToolResult }> = {
   develop_commission: { effect: 'mutate', lane: 'commission', run: () => ({ success: true, data: { buildId: 'b1' } }) },
-  site_blog_list: { run: () => ({ success: true, data: ['a', 'b'] }) },
+  site_blog_list: { effect: 'read', run: () => ({ success: true, data: ['a', 'b'] }) },
   scraper_run: {
+    effect: 'read',
     run: (ctx) => {
       ctx?.emit('decomposing');
       ctx?.emit('launching browser');
@@ -43,8 +44,10 @@ const TOOLS: Record<string, { destructive?: boolean; lane?: string; effect?: str
       return { success: true, data: 'scraped' };
     },
   },
-  gmail_send: { destructive: true, run: () => ({ success: true, data: 'sent' }) },
-  always_fails: { run: () => ({ success: false, error: 'the tool said no' }) },
+  gmail_send: { effect: 'destructive', destructive: true, run: () => ({ success: true, data: 'sent' }) },
+  always_fails: { effect: 'read', run: () => ({ success: false, error: 'the tool said no' }) },
+  // Declares no effect: fails closed onto the destructive lane.
+  undeclared_tool: { run: () => ({ success: true, data: 'ran' }) },
 };
 
 vi.mock('$lib/tools/load-registry', () => ({
@@ -315,6 +318,13 @@ describe('POST /api/platform/tools/invoke', () => {
       mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN = DESTRUCTIVE;
       const result = await invokeRemoteTool('gmail_send', { to: 'x' }, undefined, target());
       expect(result.success).toBe(false);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('treats a tool that declares no effect as destructive: refused on the standard credential, unrun', async () => {
+      const result = await invokeRemoteTool('undeclared_tool', {}, undefined, target());
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/needs confirming/i);
       expect(calls).toHaveLength(0);
     });
 

@@ -204,6 +204,7 @@ register({
 
 register({
   name: 'build_list',
+  effect: 'read',
   description:
     'List recent JKAI builds with status (pending/running/completed/failed) and `outcome` — `completed` alone does NOT mean it deployed: read `outcome` for delivered | pr_open | budget_cap | stopped_by_user | registered. `pr_open` means the builder proved a candidate and proposed it, not that CI merged or production serves it. ' +
     'Compact by default — returns only the identifying fields (id, title, status, publishedSlug, createdAt) to keep token usage low. ' +
@@ -352,6 +353,7 @@ const GATE_BUDGET_SECONDS = 1_200;
 
 register({
   name: 'build_inspect',
+  effect: 'read',
   description:
     'Full build overview — status, liveness, prompt, config, all iterations (number, status, goals, evaluation summary, duration, tokens), serve config, published URL. Judge progress from `liveness`, not by subtracting timestamps: you do not know the current time, and `updatedAt` only moves at iteration boundaries.',
   parameters: {
@@ -452,6 +454,7 @@ register({
 
 register({
   name: 'build_get_iteration',
+  effect: 'read',
   description: 'Deep dive into a specific build iteration — full plan, actions (commands + output), messages (LLM conversation), evaluation, next steps, tokens, duration',
   parameters: {
     type: 'object',
@@ -481,6 +484,7 @@ register({
 
 register({
   name: 'build_get_plan',
+  effect: 'read',
   description: 'Get the planning phase (iteration 0) — the proposer/critic/reviser debate, final plan, and goals',
   parameters: {
     type: 'object',
@@ -517,6 +521,7 @@ register({
 
 register({
   name: 'build_get_logs',
+  effect: 'read',
   description: 'Get recent logs for a build (types: thinking, text, code, output, error, system). Most recent first.',
   parameters: {
     type: 'object',
@@ -551,6 +556,7 @@ register({
 
 register({
   name: 'build_list_files',
+  effect: 'read',
   description: 'List files in a build workspace (dev or live space)',
   parameters: {
     type: 'object',
@@ -578,6 +584,7 @@ register({
 
 register({
   name: 'build_read_file',
+  effect: 'read',
   description: 'Read a specific file from a build workspace',
   parameters: {
     type: 'object',
@@ -634,6 +641,8 @@ register({
 
 register({
   name: 'build_write_file',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Write or update a file in a build workspace directly',
   parameters: {
     type: 'object',
@@ -663,6 +672,8 @@ register({
 
 register({
   name: 'register_chat_build',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Register an app you just built as a JKAI build, so it appears in the Archive tab on /jkai/develop and can be promoted to /projects/<slug>/. ' +
     'Use this whenever you finish a static web app (single-page or multi-page HTML/JS/CSS) in a conversation — typically WhatsApp or general chat. ' +
@@ -911,6 +922,7 @@ register({
 
 register({
   name: 'build_delete',
+  effect: 'destructive',
   destructive: true,
   description: 'Delete a build and all its iterations, logs, and workspace files',
   parameters: {

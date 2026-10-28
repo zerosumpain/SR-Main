@@ -70,6 +70,7 @@ function askerOf(ctx: ToolExecContext | undefined): { owner: boolean; attended: 
 
 register({
   name: 'skills_list',
+  effect: 'read',
   description:
     'List the available skills — curated playbooks for specific jobs (canvas, home assistant, research, blog, debugging, design...). Each entry is an id and what it covers. Use skill_view to read one. Optionally filter with a query.',
   parameters: {
@@ -107,6 +108,7 @@ register({
 
 register({
   name: 'skill_view',
+  effect: 'read',
   description:
     'Read a skill in full by id (from skills_list), e.g. "jkai-canvas" or "research/arxiv". Load a skill before doing the job it covers — it carries the specifics, constraints and traps that generic knowledge does not. Pass `reference` to read one of its reference documents instead.',
   parameters: {
@@ -152,6 +154,7 @@ register({
 
 register({
   name: 'tool_search',
+  effect: 'read',
   description:
     'Search every registered tool by keyword, across all toolsets — including ones not currently active — and the capability list, which says what is live, in preview, or not built yet. Use this before concluding something cannot be done: the capability usually exists under a name you did not guess. Set `requested: true` only when John himself asked for this capability: a not-built-yet hit is then filed on the backlog for him to rule on.',
   parameters: {
@@ -230,6 +233,7 @@ register({
 
 register({
   name: 'tool_describe',
+  effect: 'read',
   description:
     'Show one tool in full: its description, its toolset, and its exact parameter schema. Call this before using an unfamiliar tool rather than guessing at argument names.',
   parameters: {

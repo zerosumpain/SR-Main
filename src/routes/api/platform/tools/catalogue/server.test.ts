@@ -13,8 +13,8 @@ import { env } from '$env/dynamic/private';
 vi.mock('$lib/tools/load-registry', () => ({
   loadToolRegistry: async () => ({
     getTools: () => [
-      { name: 'site_blog_list', destructive: false, description: 'list posts', parameters: { type: 'object', properties: {} }, toolset: 'blog', category: 'content' },
-      { name: 'gmail_send', destructive: true, description: 'send mail', parameters: { type: 'object', properties: {} }, toolset: 'gmail', category: 'comms' },
+      { name: 'site_blog_list', effect: 'read', destructive: false, description: 'list posts', parameters: { type: 'object', properties: {} }, toolset: 'blog', category: 'content' },
+      { name: 'gmail_send', effect: 'destructive', destructive: true, description: 'send mail', parameters: { type: 'object', properties: {} }, toolset: 'gmail', category: 'comms' },
       { name: 'research_start' /* no flag at all */, description: 'start', parameters: { type: 'object', properties: {} }, toolset: 'research', category: 'research' },
       { name: 'f1_driver_standings', effect: 'read', description: 'standings', parameters: { type: 'object', properties: {} }, toolset: 'custom:sports', category: 'Custom Tool' },
     ],
@@ -80,12 +80,18 @@ describe('GET /api/platform/tools/catalogue', () => {
     expect(body.tools.map((t: { name: string; destructive: boolean }) => [t.name, t.destructive])).toEqual([
       ['site_blog_list', false],
       ['gmail_send', true],
-      // A tool that declares nothing is not destructive — asserted rather than
-      // assumed, because the flag crossing as `undefined` would read as "unknown"
-      // on the far side, where unknown fails CLOSED and would confirm everything.
-      ['research_start', false],
+      // A tool that declares no effect fails CLOSED: served as destructive,
+      // flag and tier both, never derived as a read.
+      ['research_start', true],
       ['f1_driver_standings', false],
     ]);
+  });
+
+  it('serves an explicit tier on every row, destructive for the undeclared one', async () => {
+    const { body } = await call(TOKEN);
+    for (const t of body.tools) expect(['read', 'mutate', 'destructive'], t.name).toContain(t.effect);
+    expect(body.tools.find((t: { name: string }) => t.name === 'research_start')).toMatchObject({ effect: 'destructive', confirm: 'always', lane: 'destructive' });
+    expect(body.tools.find((t: { name: string }) => t.name === 'site_blog_list')).toMatchObject({ effect: 'read', confirm: 'never', lane: 'standard' });
   });
 
   // Slice 7b: the manifest rides the catalogue, and a re-enabled custom tool

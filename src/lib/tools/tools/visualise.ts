@@ -21,6 +21,7 @@ function fail(error: string): ToolResult {
 
 register({
   name: 'render_table',
+  effect: 'read',
   description:
     'Render a structured table inline in the chat — sortable, and it does not bloat the reply the way a markdown table does. Prefer it over a markdown table whenever there are more than three rows of like-shaped records (metrics, comparisons, rankings).',
   toolset: 'visualise',
@@ -119,6 +120,7 @@ function summariseChart(spec: Record<string, unknown>, data: unknown[]): string 
 
 register({
   name: 'render_chart',
+  effect: 'read',
   description:
     'Render a chart inline in the chat using a Vega-Lite spec. Reach for it whenever the answer is a quantity over time, a comparison, or a distribution — three or more numbers you would otherwise narrate in prose is a chart, whether or not the user used the word. Supply the data either as the `data` argument or inside `spec.data.values`. Keep the spec minimal: colour, fonts, grid, legend and sorting come from the site design system underneath your spec, so do not set them.',
   toolset: 'visualise',
@@ -193,6 +195,7 @@ function summariseMap(layers: MapLayerArg[]): string {
 
 register({
   name: 'render_map',
+  effect: 'read',
   description:
     'Render an interactive map inline in the chat. Reach for it whenever the answer is somewhere on Earth — a location, a route, a spread of points — not only when the user asks for a map. Center/zoom auto-fit from point bounds if omitted.',
   toolset: 'visualise',
@@ -357,6 +360,7 @@ const DIAGRAM_KINDS = [
 
 register({
   name: 'render_diagram',
+  effect: 'read',
   description:
     'Render a Mermaid diagram inline in the chat — flowcharts, sequence, state, ER, class, gantt, timeline, mindmap. Use when the answer is a STRUCTURE or a PROCESS (how components relate, what order steps happen in, a state machine) rather than a quantity. For quantities use render_chart; for places use render_map.',
   toolset: 'visualise',

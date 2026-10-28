@@ -5,6 +5,7 @@ import { resolveEntityId, searchEntities, DEFAULT_LIMIT, MAX_LIMIT } from '$lib/
 
 register({
   name: 'ha_query_state',
+  effect: 'read',
   description: 'Get the current state and attributes of a Home Assistant entity',
   parameters: {
     type: 'object',
@@ -68,6 +69,7 @@ register({
 
 register({
   name: 'ha_fire_event',
+  effect: 'mutate',
   description: 'Fire a Home Assistant event to trigger automations',
   parameters: {
     type: 'object',
@@ -90,6 +92,7 @@ register({
 
 register({
   name: 'ha_get_history',
+  effect: 'read',
   description: 'Get historical state data for an entity over a time period',
   parameters: {
     type: 'object',
@@ -114,6 +117,7 @@ register({
 
 register({
   name: 'ha_render_template',
+  effect: 'read',
   description: 'Evaluate a Home Assistant Jinja2 template server-side',
   parameters: {
     type: 'object',
@@ -146,6 +150,7 @@ register({
  */
 register({
   name: 'ha_find',
+  effect: 'read',
   description:
     'Find Home Assistant entities by keyword, domain, area or current state — and get their live states in the SAME call. ' +
     'Use this INSTEAD of writing a Jinja template to search for entities, and instead of calling ha_query_state repeatedly to ' +

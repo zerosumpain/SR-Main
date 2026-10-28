@@ -55,6 +55,7 @@ const CAVEATS = [
 
 register({
   name: 'alexa_voice_summary',
+  effect: 'read',
   description:
     'Aggregate what the household said to Alexa over a window: total and the previous window for comparison, per day, per hour of day (0–23, Europe/London), per device/room, per recognised speaker, per topic, Amazon intents, the most repeated commands, and how often Alexa missed. Use for "how much do we use Alexa", "what do the kids ask", "when is it busiest". Defaults to the last 30 days.',
   parameters: {
@@ -91,6 +92,7 @@ register({
 
 register({
   name: 'alexa_voice_search',
+  effect: 'read',
   description:
     'Find individual things said to Alexa, newest first: the words, Alexa\'s reply, device, room, time, recognised speaker, topic and Amazon intent. Filter by text (matches command, reply or intent), device, person, topic, a date range, or only the ones Alexa missed. Use for "what did I ask Alexa about X", "what did Rory say last night", "what couldn\'t Alexa answer".',
   parameters: {
@@ -147,6 +149,7 @@ register({
 
 register({
   name: 'alexa_home_signals',
+  effect: 'read',
   description:
     'What the Echos sense and hold, beyond speech: the latest room temperature, light level and motion per device, hourly temperature over the window, when motion was last seen, alarms/timers/reminders pending right now and the ones that came up in the window, and what the Echos played (recent tracks, top artists, per device). Use for "how warm is the kitchen", "has there been movement in X", "what alarms are set", "what have the kids been listening to". Defaults to the last 7 days.',
   parameters: { type: 'object', properties: { days: { type: 'number', description: 'Window length ending now, 1–366. Default 7.' } }, required: [] },

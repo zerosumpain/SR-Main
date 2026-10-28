@@ -46,6 +46,7 @@ register({
 
 register({
   name: 'recall_memories',
+  effect: 'read',
   description: 'Search your memories about the user. Use when a question might benefit from past context. Can filter by query text and/or category.',
   parameters: {
     type: 'object',
@@ -91,6 +92,8 @@ register({
 
 register({
   name: 'forget_memory',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Remove a memory. Use when the user says to forget something or when a memory is wrong.',
   parameters: {
     type: 'object',

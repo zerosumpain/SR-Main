@@ -39,7 +39,7 @@ const probe = (name: string, extra: Record<string, unknown>) =>
 		},
 		...extra,
 	});
-probe(PROBES.read, {});
+probe(PROBES.read, { effect: 'read' });
 probe(PROBES.mutate, { effect: 'mutate' });
 probe(PROBES.quiet, { effect: 'mutate', confirm: 'never' });
 probe(PROBES.destructive, { destructive: true });

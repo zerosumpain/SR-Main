@@ -200,6 +200,7 @@ export async function handleIntegrationDelete(args: Record<string, unknown>): Pr
 export const apiIntegrationTools: ToolDefinition[] = [
   {
     name: 'api_integration_list',
+    effect: 'read',
     description:
       'List the recorded API integrations — the register of named, reusable API calls (each is one method + path + params + named outputs on a catalogued API). Use query to find a matching saved operation only when its key is not already known. If discovery already supplied a key and parameter schema, call api_integration_call directly. Pass detail:true for full param/output specs.',
     parameters: {
@@ -212,6 +213,8 @@ export const apiIntegrationTools: ToolDefinition[] = [
   },
   {
     name: 'api_integration_save',
+    effect: 'mutate',
+    confirm: 'never',
     description:
       'Record (or update) a reusable API operation against an already-catalogued API, so this call never has to be worked out again — it shows up in the register at /admin/ai/apis and in the no-code "API integration" canvas node. Give it named `outputs` so callers get e.g. {remaining: 18.2} instead of raw JSON. Register the API with api_register first (that is where the baseUrl and the auth handle live). Saving marks it draft; api_integration_test earns "verified".',
     parameters: {
@@ -235,6 +238,7 @@ export const apiIntegrationTools: ToolDefinition[] = [
   },
   {
     name: 'api_integration_test',
+    effect: 'destructive',
     description:
       'Run a recorded integration once to prove it works, and store the result as evidence (a pass marks it "verified" and is shown in the register). Returns the named outputs plus a trimmed raw sample so you can refine the output expressions against the real response shape. Use this immediately after api_integration_save.',
     parameters: {
@@ -254,6 +258,8 @@ export const apiIntegrationTools: ToolDefinition[] = [
   },
   {
     name: 'api_integration_call',
+    effect: 'destructive',
+    destructive: true,
     description:
       'Call a recorded integration and get its named outputs — the cheapest way to answer a question an integration already covers (no path/auth/JSON-shape reasoning needed). Use api_integration_list to find the key.',
     parameters: {
@@ -271,6 +277,7 @@ export const apiIntegrationTools: ToolDefinition[] = [
   },
   {
     name: 'api_integration_delete',
+    effect: 'destructive',
     description: 'Remove a recorded integration from the register. The catalogued API and any credentials are untouched.',
     parameters: {
       type: 'object',

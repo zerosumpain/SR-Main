@@ -1,4 +1,5 @@
 import { unattendedPrincipal } from '$lib/tools/in-process-principal';
+import { declaredTier } from '$lib/tools/declared-tier';
 import { loadToolRegistry } from '$lib/tools/load-registry';
 import { executeSiteTool } from '$lib/tools/executor';
 
@@ -40,7 +41,12 @@ type Registry = Awaited<ReturnType<typeof loadToolRegistry>>;
  * load.
  */
 function bridgeable(reg: Registry, name: string): boolean {
-  return reg.getTool(name)?.destructive !== true;
+  const tool = reg.getTool(name);
+  if (!tool || tool.destructive === true) return false;
+  // The declared tier, failing closed: no effect is destructive, and anything
+  // that always confirms or rides the commission lane needs a human too.
+  const tier = declaredTier(tool);
+  return tier.effect !== 'destructive' && tier.confirm !== 'always' && tier.lane === 'standard';
 }
 
 export async function isBridgeable(name: string): Promise<boolean> {

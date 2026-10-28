@@ -86,6 +86,8 @@ export async function handleWriteDocument(
 
 register({
   name: 'write_document',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Save text content (markdown, code, CSV, JSON, plain text) as a downloadable file attached to the conversation. Use for reports, exports, code snippets, and anything the user might want to reuse or share as a file.',
   toolset: 'media',

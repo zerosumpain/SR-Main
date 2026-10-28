@@ -3,6 +3,7 @@ import { fetchUrlContent, isUrlFetchError } from '$lib/jkai/extract/url';
 
 register({
 	name: 'fetch_url',
+	effect: 'read',
 	description:
 		'Fetch a public web URL and return its readable text content. Use this when the user shares a link you have not already been given the contents of, or when you need to look up information on a page you have referenced. ' +
 		'Public-internet HTTP/HTTPS only — refuses localhost, private/internal networks. HTML and plain-text pages only (no PDFs — use the files toolset for those).',

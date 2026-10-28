@@ -18,6 +18,7 @@ import { assertAgentMayShare, createFileShare, SHARE_TTL_DAYS } from '$lib/file-
 
 register({
   name: 'file_share_link',
+  effect: 'destructive',
   // Publishing bytes to an anonymous URL is a real-world side effect, so it
   // goes through the same confirmation gate as the other destructive tools.
   destructive: true,

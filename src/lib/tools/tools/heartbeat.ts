@@ -27,6 +27,8 @@ const RECENT_PULSES_PER_ACTION = 5;
 
 register({
   name: 'register_heartbeat_action',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Schedule a perpetual heartbeat action for this conversation. The engine will run it every cadence_seconds (≥30) until the task it watches reaches a terminal state. Use whenever you promise the user a follow-up or kick off any background task whose completion is asynchronous.',
   parameters: {
@@ -162,6 +164,8 @@ register({
 
 register({
   name: 'complete_heartbeat_action',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Mark a heartbeat action complete and remove it from the queue. Use when you\'ve delivered the outcome (or the task it watches is genuinely done). Accepts either the action\'s name or its id.',
   parameters: {
@@ -222,6 +226,7 @@ register({
 
 register({
   name: 'list_heartbeat_actions',
+  effect: 'read',
   description:
     'List heartbeat actions for the current conversation (or globally if no conversation_id), each with its most recent pulses. Check recentPulses before concluding a watch is healthy — a high totalRuns with every pulse erroring means the watch is broken, not busy.',
   parameters: {

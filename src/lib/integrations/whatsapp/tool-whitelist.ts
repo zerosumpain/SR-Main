@@ -28,7 +28,7 @@
 /** Core's own meta tools. Activation only loads; what is OFFERED is still this list. */
 const CORE_META = ['activate_toolset', 'jkai_help'] as const;
 
-/** Read-only tools: no side effect outside the turn's own thread. */
+/** Read-only tools (declared `effect: 'read'`): no side effect outside the turn's own thread. */
 export const WHATSAPP_READ_TOOLS = [
 	// Discovery
 	'tool_search',
@@ -107,6 +107,11 @@ export const WHATSAPP_READ_TOOLS = [
 /**
  * Outputs that land in the WhatsApp thread itself and are sent back as media by
  * the bridge — a document, an image, a voice note. No effect outside the thread.
+ *
+ * These are the ONLY non-reads on the list, and deliberately so: each declares
+ * `effect: 'mutate', confirm: 'never'` (it stores an attachment, two of them
+ * spend), and an unattended WhatsApp principal runs a mutate only because it is
+ * named here. `tool-whitelist.test.ts` pins that every other entry is a read.
  */
 export const WHATSAPP_THREAD_OUTPUTS = ['write_document', 'generate_image', 'generate_audio_tts'] as const;
 

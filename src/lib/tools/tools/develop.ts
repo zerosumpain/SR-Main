@@ -41,6 +41,7 @@ const RELEASE_POLICY_PARAM = {
 
 register({
   name: 'develop_quote',
+  effect: 'read',
   description:
     'What commissioning a build would cost, said plainly, before asking John: the repository (SR-Main), where it stops (preview only, or a draft pull request), the budget ("up to 25 rounds, 2 hours, $2"), the ChatGPT quota now, and how many commissioned builds are already running. Returns `refusal` when a commission would be refused right now (quota too full, two already running). Read-only.',
   parameters: {
@@ -195,6 +196,7 @@ function statusOf(r: Row) {
 
 register({
   name: 'develop_status',
+  effect: 'read',
   description:
     'Where a commissioned build (a /jkai/develop delivery) has got to: stage, criteria met, preview link, pull request link, whether it is waiting on John, and cost so far. Pass buildId for one; omit it for the commissioned deliveries, live ones first. Read-only.',
   parameters: {

@@ -134,6 +134,8 @@ export async function handleGenerateAudioTts(
 
 register({
   name: 'generate_audio_tts',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Synthesise spoken audio (MP3) from text. Uses ElevenLabs when configured and falls back to free local edge-tts otherwise. Saves as a conversation attachment. Use when the user asks you to speak, read aloud, or produce a voice note.',
   toolset: 'media',

@@ -75,6 +75,7 @@ function truncate(s: string, max = MAX_BODY_CHARS): string {
 
 register({
   name: 'gmail_list_accounts',
+  effect: 'read',
   description:
     'List connected Gmail accounts with id, email, status (active|auth_expired|disabled), and last error. Use this first to discover which mailbox to query, or to surface accounts that need re-connecting.',
   parameters: { type: 'object', properties: {} },
@@ -98,6 +99,7 @@ register({
 
 register({
   name: 'gmail_search',
+  effect: 'read',
   description:
     'Search Gmail messages using Gmail query syntax (from:, to:, subject:, label:, is:unread, newer_than:7d, has:attachment, etc.). Returns headers and snippets only — call gmail_get_message for full body. Defaults to the most recently used active account if accountId/email are omitted.',
   parameters: {
@@ -174,6 +176,7 @@ register({
 
 register({
   name: 'gmail_get_message',
+  effect: 'read',
   description:
     'Fetch a full Gmail message by id — headers, body text (truncated to ~4 KB), labels, and attachment metadata. bodyHtml is omitted to keep responses small.',
   parameters: {
@@ -230,6 +233,7 @@ register({
 
 register({
   name: 'gmail_get_thread',
+  effect: 'read',
   description:
     'Fetch all messages in a Gmail thread by threadId. Each message body is truncated to ~4 KB. Use after gmail_search to read the full conversation.',
   parameters: {
@@ -299,6 +303,7 @@ register({
 
 register({
   name: 'gmail_list_labels',
+  effect: 'read',
   description:
     'List Gmail labels for an account (system + user labels). Useful for finding the exact id/name to pass to gmail_search ("label:Foo") or gmail_modify_labels.',
   parameters: {
@@ -352,6 +357,7 @@ register({
 
 register({
   name: 'gmail_send',
+  effect: 'destructive',
   destructive: true,
   description:
     'Send a new Gmail message from a connected account. Destructive — orchestrator will prompt the user for confirmation before this runs.',
@@ -415,6 +421,7 @@ register({
 
 register({
   name: 'gmail_reply',
+  effect: 'destructive',
   destructive: true,
   description:
     'Reply on an existing Gmail thread. Threads via In-Reply-To/References + threadId so the reply appears in the same conversation. Destructive — orchestrator will prompt before sending.',
@@ -485,6 +492,8 @@ register({
 
 register({
   name: 'gmail_modify_labels',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Add and/or remove labels on a Gmail message. Use label ids from gmail_list_labels (e.g. "INBOX", "UNREAD", "STARRED", or a user label id). Cannot modify SENT/DRAFT/CHAT/CATEGORY_*.',
   parameters: {

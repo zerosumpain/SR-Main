@@ -918,6 +918,7 @@ export async function handleApiSecretsList(): Promise<ToolResult> {
 export const apiTools: ToolDefinition[] = [
   {
     name: 'api_search',
+    effect: 'read',
     description:
       'Find external APIs in the catalogue that can answer a data question. Ranks catalogued sources by relevance to your query/capabilities and returns the top matches with their baseUrl and example requests. Call this FIRST when a question is about current, factual, numeric or external data — then use api_call to fetch live data.',
     parameters: {
@@ -934,6 +935,8 @@ export const apiTools: ToolDefinition[] = [
   },
   {
     name: 'api_call',
+    effect: 'destructive',
+    destructive: true,
     description:
       'Call a catalogued external API to fetch live data. The url MUST extend the catalogue entry\'s baseUrl; requests are SSRF-guarded (no internal hosts) and auth is injected server-side from env-var references. Cite the API you used in your answer. Use api_search first to pick the right "api" key.',
     parameters: {
@@ -953,6 +956,7 @@ export const apiTools: ToolDefinition[] = [
   },
   {
     name: 'api_secrets_list',
+    effect: 'read',
     description:
       'List the credentials the owner has put in the secret registry — handles, the hosts/paths each one is allowed to authenticate, and whether it is currently available. Values are NEVER returned and you cannot read them. Call this when an API needs authentication: if a handle is bound to that host, catalogue the API with api_register auth {"kind":"secret","handle":"<handle>"} and the key is injected server-side.',
     parameters: { type: 'object', properties: {} },
@@ -962,6 +966,8 @@ export const apiTools: ToolDefinition[] = [
   },
   {
     name: 'api_register',
+    effect: 'mutate',
+    confirm: 'never',
     description:
       'Add or update an API in the catalogue so it can be searched and called later. For auth, prefer a secret-registry handle — auth {"kind":"secret","handle":"openrouter"} (see api_secrets_list); the value is injected server-side and only for the hosts the owner bound it to. Never put a raw secret in an entry. Use this when you discover a genuinely useful API that is not already catalogued, or to attach a credential to one that is.',
     parameters: {

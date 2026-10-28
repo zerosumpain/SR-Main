@@ -14,6 +14,8 @@ const SESSION_NOTE =
 
 register({
   name: 'browser_navigate',
+  effect: 'mutate',
+  confirm: 'never',
   description: `Open a URL in the real browser and return its title, final URL and HTTP status. ${SESSION_NOTE} Use this when a page needs JavaScript, a login, or anything a plain fetch cannot see.`,
   parameters: {
     type: 'object',
@@ -34,6 +36,7 @@ register({
 
 register({
   name: 'browser_snapshot',
+  effect: 'read',
   description: `Read the current page: its visible text and up to 100 links. ${SESSION_NOTE} Call this after navigate or click to see what is actually there before deciding what to do next.`,
   parameters: { type: 'object', properties: {} },
   category: 'Browser',
@@ -43,6 +46,7 @@ register({
 
 register({
   name: 'browser_console',
+  effect: 'read',
   description:
     'Return the browser console output for the current page — logs, warnings and uncaught page errors. The single most useful tool for working out why a page is misbehaving. Filter with `level` (e.g. "error").',
   parameters: {
@@ -60,6 +64,8 @@ register({
 
 register({
   name: 'browser_click',
+  effect: 'destructive',
+  destructive: true,
   description: `Click an element by CSS selector on the current page, then wait for it to settle. ${SESSION_NOTE}`,
   parameters: {
     type: 'object',
@@ -77,6 +83,8 @@ register({
 
 register({
   name: 'browser_type',
+  effect: 'destructive',
+  destructive: true,
   description: `Fill a field by CSS selector, optionally pressing Enter afterwards. ${SESSION_NOTE}`,
   parameters: {
     type: 'object',
@@ -95,6 +103,7 @@ register({
 
 register({
   name: 'browser_scroll',
+  effect: 'read',
   description: 'Scroll the current page vertically, for content that loads as you go.',
   parameters: {
     type: 'object',
@@ -108,6 +117,7 @@ register({
 
 register({
   name: 'browser_get_images',
+  effect: 'read',
   description: 'List the images on the current page with their source URLs, alt text and natural dimensions.',
   parameters: { type: 'object', properties: {} },
   category: 'Browser',
@@ -117,6 +127,7 @@ register({
 
 register({
   name: 'browser_close',
+  effect: 'read',
   description:
     'Close the browser session and free its memory. Call this when finished with a browsing task. Harmless if no session is open; one is reaped automatically after 15 minutes idle.',
   parameters: { type: 'object', properties: {} },

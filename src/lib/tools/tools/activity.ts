@@ -37,6 +37,7 @@ function stringArg(args: Record<string, unknown>, ...names: string[]): string | 
 
 register({
   name: 'activity_sources',
+  effect: 'read',
   description:
     'List the personal activity sources (Steam, archives, music) connected on /jkai/sources: status, freshness, which data classes jkai may read, and a coverage word. Call this first when asked about games played, listening, or "my activity" — an empty list means nothing is connected, not that nothing happened.',
   parameters: { type: 'object', properties: {}, required: [] },
@@ -62,6 +63,7 @@ register({
 
 register({
   name: 'activity_summary',
+  effect: 'read',
   description:
     'Aggregate the activity jkai may read over a window: counts by source, category and event type, the evidence mix (provider event / snapshot / inferred / archive), and the objects that recur most (game titles, tracks). Snapshot evidence records recency, never duration. Defaults to the last 30 days.',
   parameters: {
@@ -141,6 +143,7 @@ register({
 
 register({
   name: 'activity_search',
+  effect: 'read',
   description:
     'Search activity event metadata (titles and event types) across the sources jkai may read. Returns at most 25 rows, newest first, with evidence mode and provenance ids — never raw provider payloads.',
   parameters: {
@@ -197,6 +200,7 @@ register({
 
 register({
   name: 'activity_get',
+  effect: 'read',
   description:
     'Fetch one activity event by id with its provenance (provider object id, revision, adapter version, import id). Use after activity_search when the owner asks where a record came from.',
   parameters: {
