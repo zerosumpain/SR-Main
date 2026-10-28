@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { invokeLaneFor } from '$lib/server/invoke-auth';
+import { invokeLaneFor, presentsCommissionToken } from '$lib/server/invoke-auth';
 import {
 	coerceInvokeRequest,
 	InvokeContractError,
@@ -50,7 +50,10 @@ import type { RequestHandler } from './$types';
 const nonces = createNonceLedger();
 
 export const POST: RequestHandler = async ({ request }) => {
-	const lane = invokeLaneFor(request);
+	const serviceLane = invokeLaneFor(request);
+	// The commission credential is its own lane and opens nothing else (see
+	// `$lib/server/invoke-auth`); it is asked only when the service tokens fail.
+	const lane = serviceLane === 'none' && presentsCommissionToken(request) ? 'commission' : serviceLane;
 	if (lane === 'none') throw error(401, 'invalid token');
 
 	/**
@@ -162,6 +165,28 @@ export const POST: RequestHandler = async ({ request }) => {
 	 * the user what to do instead. A 403 would reach the caller as a transport
 	 * failure and lose the sentence.
 	 */
+	/**
+	 * The commission lane, both ways round, refused in the RESULT for the same
+	 * reason as the destructive one below. The commission token runs only a
+	 * commission-lane tool; a commission-lane tool runs only on that token
+	 * (and `executeTool` then also wants an attended owner browser session).
+	 */
+	const declaredLane = (() => {
+		const declared = registry.getTool(name);
+		return declared ? tierOf(declared).lane : null;
+	})();
+	if (lane === 'commission' && declaredLane !== 'commission') {
+		return single({ success: false, error: `The commission credential opens only commissioning tools, not ${name}.` });
+	}
+	if (declaredLane === 'commission' && lane !== 'commission') {
+		return single({
+			success: false,
+			error:
+				`${name} commissions a build, and the commission lane to this site is closed to this caller. ` +
+				`Commission it from /jkai in a browser, where the confirmation can be shown.`,
+		});
+	}
+
 	if (lane !== 'destructive') {
 		const declared = registry.getTool(name);
 		if (declared && tierOf(declared).lane === 'destructive') {
@@ -195,7 +220,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		// that will not serialise throws in `json()`. The framed path already
 		// turned both into a failed result; the debug path should not answer 500
 		// where it answers cleanly.
-		return single(await runTool(registry, name, args, execContextFrom(context, claims, () => {})));
+		return single(await runTool(registry, name, args, execContextFrom(context, claims, lane, () => {})));
 	}
 
 	const encoder = new TextEncoder();
@@ -217,7 +242,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				registry,
 				name,
 				args,
-				execContextFrom(context, claims, (text) => write(statusLine(text))),
+				execContextFrom(context, claims, lane, (text) => write(statusLine(text))),
 			);
 			write(resultLine(result));
 			if (!closed) controller.close();
@@ -248,7 +273,12 @@ export const POST: RequestHandler = async ({ request }) => {
  * it write it onto a row that a sidecar picks up hours later, so a bad value
  * would surface a long way from here.
  */
-function execContextFrom(context: InvokeContext, claims: PrincipalClaims, emit: (text: string) => void): ToolExecContext {
+function execContextFrom(
+	context: InvokeContext,
+	claims: PrincipalClaims,
+	lane: 'standard' | 'destructive' | 'commission',
+	emit: (text: string) => void,
+): ToolExecContext {
 	const raw = context.modelContext;
 	const modelId = typeof raw?.modelId === 'string' ? raw.modelId : '';
 	// The sealed list is the limit; a body list can only narrow it.
@@ -285,6 +315,9 @@ function execContextFrom(context: InvokeContext, claims: PrincipalClaims, emit: 
 		// From the seal, not the body: what the issuer verified.
 		...(claims.surface ? { surface: claims.surface } : {}),
 		...(claims.deviceId ? { deviceId: claims.deviceId } : {}),
+		// The credential this route checked, so `executeTool` can open the
+		// commission lane for exactly the calls that carried its token.
+		credentialLane: lane,
 		emit,
 	};
 }

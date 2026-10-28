@@ -43,7 +43,7 @@ import './tools/desk';
 import './tools/ephemeral-tools';
 import './tools/media-write-document';
 import './tools/publish-page';
-import './tools/request-change';
+import './tools/develop';
 import './tools/media-generate-image';
 import './tools/media-generate-audio-tts';
 import './tools/file-share';
@@ -137,7 +137,8 @@ export function getToolsetManifest(): Array<{
     health: 'Health & fitness data — weekly stats, readiness, sleep, training load, timeline',
     activity: 'Personal activity sources connected on /jkai/sources — games and playtime (Steam), listening, archives; grant-gated summaries, search and provenance',
     blog: 'Blog post management — list, create, update, publish/unpublish',
-    builds: 'JKAI autonomous builder — create, monitor, control, inspect, publish builds',
+    builds: 'App builds — the sandbox builder for self-contained apps (create, monitor, control, inspect, publish to /projects)',
+    develop: 'Commission a build of the site itself (SR-Main) from web chat — quote the card (develop_quote), commission it (develop_commission, confirmed, browser only) and follow it (develop_status). Stops at a preview or a draft pull request',
     research: 'Deep dive research — start sessions, get reports, query findings, web search',
     workflows: 'Workflow automation — create, inspect, edit nodes/edges/schedules, and amend an existing canvas in one atomic, audited change (workflow_amend)',
     home: 'Home Assistant smart home — query state, control devices, history, templates',
@@ -204,7 +205,9 @@ export async function executeTool(
   // list; nested calls inherit the caller's through `currentExecution`.
   const principal = ctx?.principal ?? fallbackPrincipal(ctx);
   if (!ctx?.principal) warnUnlabelled(name);
-  const refusal = principalRefusal(principal, { name, tier: tierOf(tool) });
+  // The commission lane also needs the credential that carried the call, which
+  // only the invoke route sets; in-process callers never can.
+  const refusal = principalRefusal(principal, { name, tier: tierOf(tool) }, { commissionCredential: ctx?.credentialLane === 'commission' });
   if (refusal) return { success: false, error: refusal };
   args = dropEmptyOptionalArguments(tool.parameters, args);
   const issues = validateArguments(tool.parameters, args);

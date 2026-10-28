@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { invokeLaneFor } from './invoke-auth';
+import { hasJkaiServiceToken, invokeLaneFor, presentsCommissionToken } from './invoke-auth';
 import { env } from '$env/dynamic/private';
 
 const STANDARD = 's'.repeat(48);
@@ -15,6 +15,8 @@ const DESTRUCTIVE = 'd'.repeat(48);
 const mutableEnv = env as Record<string, string | undefined>;
 const originalStandard = env.JKAI_INVOKE_TOKEN;
 const originalDestructive = env.JKAI_INVOKE_DESTRUCTIVE_TOKEN;
+const originalCommission = env.JKAI_INVOKE_COMMISSION_TOKEN;
+const COMMISSION = 'c'.repeat(48);
 
 function req(auth?: string): Request {
   return new Request('https://example.test/api/platform/tools/invoke', {
@@ -35,6 +37,7 @@ beforeEach(() => {
 afterEach(() => {
   restore('JKAI_INVOKE_TOKEN', originalStandard);
   restore('JKAI_INVOKE_DESTRUCTIVE_TOKEN', originalDestructive);
+  restore('JKAI_INVOKE_COMMISSION_TOKEN', originalCommission);
 });
 
 describe('invokeLaneFor', () => {
@@ -114,5 +117,37 @@ describe('invokeLaneFor', () => {
   it('fails closed when the configured token itself has stray whitespace', () => {
     mutableEnv.JKAI_INVOKE_TOKEN = `${STANDARD} `;
     expect(invokeLaneFor(req(`Bearer ${STANDARD}`))).toBe('none');
+  });
+});
+
+describe('the commission credential (slice 6b)', () => {
+  beforeEach(() => {
+    mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN = DESTRUCTIVE;
+    mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN = COMMISSION;
+  });
+
+  it('is recognised only as itself', () => {
+    expect(presentsCommissionToken(req(`Bearer ${COMMISSION}`))).toBe(true);
+    expect(presentsCommissionToken(req(`Bearer ${STANDARD}`))).toBe(false);
+    expect(presentsCommissionToken(req(`Bearer ${DESTRUCTIVE}`))).toBe(false);
+    expect(presentsCommissionToken(req())).toBe(false);
+  });
+
+  it('opens no service lane: every other platform route reads it as no token', () => {
+    expect(invokeLaneFor(req(`Bearer ${COMMISSION}`))).toBe('none');
+    expect(hasJkaiServiceToken(req(`Bearer ${COMMISSION}`))).toBe(false);
+  });
+
+  it('does not exist when unset or short', () => {
+    delete mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN;
+    expect(presentsCommissionToken(req(`Bearer ${COMMISSION}`))).toBe(false);
+    mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN = 'short';
+    expect(presentsCommissionToken(req('Bearer short'))).toBe(false);
+  });
+
+  it('stays shut for a string that is also another token (misconfiguration)', () => {
+    mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN = STANDARD;
+    expect(presentsCommissionToken(req(`Bearer ${STANDARD}`))).toBe(false);
+    expect(invokeLaneFor(req(`Bearer ${STANDARD}`))).toBe('standard');
   });
 });

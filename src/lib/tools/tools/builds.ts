@@ -148,10 +148,10 @@ register({
     'IT CANNOT CHANGE THE STRANGE RAMBLINGS SITE. No repo access, no branch, no pull request. ' +
     'Nothing it writes can become a page, route, API endpoint, component, workflow node or ' +
     'schema change on strangeramblings.com, and it cannot escalate itself once started — ' +
-    '`request_change` is destructive and therefore not on the build tool bridge. ' +
+    '`develop_commission` is on the commission lane and therefore never on the build tool bridge. ' +
     'So if the ask names an SR route, endpoint, component or schema, or just says "on the site" ' +
     'or "on strangeramblings.com", this is the WRONG tool and no amount of iterating fixes it: ' +
-    'use `request_change`, which branches the real repo, runs the gate and opens a PR. ' +
+    'use `develop_commission` (commission a build), which builds the real repo with a brief, criteria and a gate, and stops at a preview or a draft PR. ' +
     'Optionally attach primary workflows the build should foreground in its planning context.',
   parameters: {
     type: 'object',

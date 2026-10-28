@@ -94,6 +94,8 @@ export const SOURCE_COPY = {
   engine: 'the improvement engine',
   toolsmith: 'the old toolsmith (retired)',
   trace: 'a chat trace',
+  chat: 'a build I commissioned in chat',
+  phone: 'a build I commissioned on my phone',
   unattributed: 'from before sources were recorded',
 } satisfies Record<IdeaSource, string>;
 

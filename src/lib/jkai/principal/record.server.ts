@@ -28,7 +28,7 @@ const MAX_PENDING = 500;
 
 export interface InvocationRecord {
 	tool: string;
-	lane: 'standard' | 'destructive';
+	lane: 'standard' | 'destructive' | 'commission';
 	principalId?: string;
 	jobId?: string;
 	conversationId?: string;

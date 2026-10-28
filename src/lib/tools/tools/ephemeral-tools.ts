@@ -57,7 +57,7 @@ async function buildEphemeralPlatform(callerName: string): Promise<{ call: Platf
 register({
   name: 'author_ephemeral_tool',
   description:
-    'Create a new tool, capability or integration and run it immediately — the FAST way to add something the platform cannot yet do. Write the handler, call it once here to prove it works, then keep it with `promote_ephemeral_tool`: live in minutes, no build, no pull request, no deploy. Prefer this over `request_change` for anything shaped like "add a tool" or "give yourself the ability to…"; a change request costs 30-60 minutes and is only needed when the work must live in the repo. ' +
+    'Create a new tool, capability or integration and run it immediately — the FAST way to add something the platform cannot yet do. Write the handler, call it once here to prove it works, then keep it with `promote_ephemeral_tool`: live in minutes, no build, no pull request, no deploy. Prefer this over `develop_commission` for anything shaped like "add a tool" or "give yourself the ability to…"; a commissioned build takes up to two hours and is only needed when the work must live in the repo. ' +
     'Handler receives (args, fetch, platform). `platform.call(name, args)` invokes any registered tool, which is how a handler reaches authenticated services without ever seeing a credential — including `node_call` for capabilities that exist as canvas nodes. Return an ArtifactToolData envelope `{ artifact, summary }` for multimedia responses.',
   toolset: 'custom-tools',
   category: 'Visualise',

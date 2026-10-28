@@ -42,7 +42,7 @@ import { actAsDeviceMember, actAsDeviceOwner, memberDevice, nativeDevice, native
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
-import { invokeLaneFor, hasJkaiServiceToken } from '$lib/server/invoke-auth';
+import { invokeLaneFor, hasJkaiServiceToken, presentsCommissionToken } from '$lib/server/invoke-auth';
 import { modelServiceAppFor } from '$lib/server/model-service-auth';
 import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
@@ -774,6 +774,11 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       (pathname === '/api/platform/backlog/intake' && event.request.method === 'POST')) &&
     invokeLaneFor(event.request) !== 'none'
   ) {
+    return resolve(event);
+  }
+  // The commission credential reaches exactly one path and verb, and the route
+  // then opens only the commission lane with it (`presentsCommissionToken`).
+  if (pathname === '/api/platform/tools/invoke' && event.request.method === 'POST' && presentsCommissionToken(event.request)) {
     return resolve(event);
   }
 

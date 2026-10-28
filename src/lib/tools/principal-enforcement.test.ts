@@ -118,8 +118,20 @@ describe('the real catalogue', () => {
 		for (const t of getTools().filter((x) => x.destructive)) expect(tierOf(t), t.name).toEqual({ effect: 'destructive', confirm: 'always', lane: 'destructive' });
 	});
 
-	it('has no tool on the commission lane yet (slice 6b adds develop_commission)', () => {
-		expect(getTools().filter((t) => !t.name.startsWith('principal_probe_') && tierOf(t).lane === 'commission').map((t) => t.name)).toEqual([]);
+	it('puts exactly develop_commission and its request_change alias on the commission lane', () => {
+		expect(getTools().filter((t) => !t.name.startsWith('principal_probe_') && tierOf(t).lane === 'commission').map((t) => t.name).sort()).toEqual([
+			'develop_commission',
+			'request_change',
+		]);
+		for (const name of ['develop_commission', 'request_change']) {
+			expect(tierOf(byName.get(name)!), name).toEqual({ effect: 'mutate', confirm: 'always', lane: 'commission' });
+		}
+		expect(tierOf(byName.get('develop_quote')!).effect).toBe('read');
+		expect(tierOf(byName.get('develop_status')!).effect).toBe('read');
+	});
+
+	it('keeps the develop tools off the member-safe list', () => {
+		for (const name of ['develop_quote', 'develop_commission', 'develop_status', 'request_change']) expect(MEMBER_SAFE_TOOLS).not.toContain(name);
 	});
 
 	it('lists only registered read tools as member-safe', () => {
@@ -131,15 +143,39 @@ describe('the real catalogue', () => {
 });
 
 describe('executeTool enforces the principal', () => {
-	it('lets an attended owner reach every tier but the commission lane', async () => {
+	it('lets an attended owner reach every tier; the commission lane needs its credential too', async () => {
 		for (const name of [PROBES.read, PROBES.mutate, PROBES.destructive]) expect((await run(name, ctx(OWNER_ATTENDED))).ran, name).toBe(true);
 	});
 
-	it('refuses the commission lane to everyone, the attended owner included', async () => {
+	it('refuses the commission lane without its credential, the attended owner included', async () => {
 		for (const p of [OWNER_ATTENDED, unattendedPrincipal('t', [PROBES.commission]), ownerActionPrincipal('t')]) {
-			const r = await run(PROBES.commission, ctx(p));
-			expect(r.ran).toBe(false);
-			expect(r.error).toMatch(/commission lane/);
+			for (const credentialLane of [undefined, 'standard', 'destructive'] as const) {
+				const r = await run(PROBES.commission, ctx(p, credentialLane ? { credentialLane } : {}));
+				expect(r.ran, `${p.via} ${credentialLane}`).toBe(false);
+				expect(r.error).toMatch(/commission lane/);
+			}
+		}
+	});
+
+	it('opens the commission lane for the credential plus an attended owner browser session only', async () => {
+		const c = { credentialLane: 'commission' as const };
+		expect((await run(PROBES.commission, ctx(OWNER_ATTENDED, c))).ran).toBe(true);
+		const refused: Array<[string, ToolPrincipal]> = [
+			['paired phone without proof', { ...OWNER_ATTENDED, via: 'device', deviceId: 'dev_1' }],
+			['siri', { ...OWNER_ATTENDED, via: 'device', surface: 'siri' }],
+			['watch', { ...OWNER_ATTENDED, via: 'device', surface: 'watch' }],
+			['a session on siri', { ...OWNER_ATTENDED, surface: 'siri' }],
+			['session without a job', { ...OWNER_ATTENDED, jobId: undefined }],
+			['heartbeat', unattendedPrincipal('heartbeat', [PROBES.commission], 'heartbeat')],
+			['whatsapp', { principalId: 'owner', via: 'whatsapp', attended: true, jobId: 'j' }],
+			['the build bridge', unattendedPrincipal('build-bridge', [PROBES.commission], 'bridge')],
+			['the service turn', unattendedPrincipal('service-turn', [PROBES.commission])],
+			['a member', { principalId: 'u_kid', via: 'session', attended: true, jobId: 'j', allowedTools: [PROBES.commission] }],
+			['a list without it', { ...OWNER_ATTENDED, allowedTools: [PROBES.read] }],
+		];
+		for (const [label, p] of refused) {
+			const r = await run(PROBES.commission, ctx(p, c));
+			expect(r.ran, label).toBe(false);
 		}
 	});
 

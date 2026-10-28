@@ -85,6 +85,13 @@ export interface ToolExecContext {
    * through `currentExecution`.
    */
   principal?: import('./invoke-contract').ToolPrincipal;
+  /**
+   * Which invoke credential carried this call, set ONLY by the receiver that
+   * checked it (`/api/platform/tools/invoke`). 'commission' is the one thing
+   * that lets `principalRefusal` open the commission lane; in-process callers
+   * never set it, so nothing inside a process can commission a build.
+   */
+  credentialLane?: 'standard' | 'destructive' | 'commission';
 }
 
 /**

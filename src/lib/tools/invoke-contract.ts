@@ -159,7 +159,8 @@ export function coerceInvokeRequest(body: unknown): InvokeRequest {
  * - `confirm`: 'never', 'light' (a one-tap card, owner attended only), or
  *   'always' (the destructive card).
  * - `lane`: 'standard', 'destructive' (needs the destructive invoke token), or
- *   'commission' (closed everywhere until the commission token exists).
+ *   'commission' (needs the commission token AND an attended owner session in
+ *   a browser; see `principalRefusal`).
  */
 export const TOOL_EFFECTS = ['read', 'mutate', 'destructive'] as const;
 export type ToolEffect = (typeof TOOL_EFFECTS)[number];
@@ -353,7 +354,13 @@ export function coercePrincipalClaims(raw: unknown): PrincipalClaims | null {
  *
  * PURE, and the one policy every receiver applies (Main's `executeTool`):
  *
- * 1. The commission lane is closed. Slice 6b opens it with its own token.
+ * 1. The commission lane opens only for a call that arrived on the commission
+ *    credential (`opts.commissionCredential`, which only the receiver that saw
+ *    `JKAI_INVOKE_COMMISSION_TOKEN` may set) AND whose principal is the owner,
+ *    attended, in a browser session ('session'). A paired phone has no proof
+ *    of presence yet, and the bridge, heartbeat, WhatsApp, the service turn,
+ *    Siri and Watch never can. Nothing else opens it, the destructive token
+ *    included.
  * 2. A list, when there is one, is a hard limit.
  * 3. A member reaches only flagged read tools on the closed member list, and
  *    only with a list.
@@ -366,11 +373,27 @@ export function coercePrincipalClaims(raw: unknown): PrincipalClaims | null {
  * The credential lane (standard vs destructive token) is checked separately,
  * by the receiver that knows which token arrived.
  */
-export function principalRefusal(principal: ToolPrincipal, tool: { name: string; tier: ToolTier }): string | null {
+export function principalRefusal(
+	principal: ToolPrincipal,
+	tool: { name: string; tier: ToolTier },
+	opts: { commissionCredential?: boolean } = {},
+): string | null {
 	const p = normalisePrincipal(principal);
 	const { name, tier } = tool;
 	if (tier.lane === 'commission') {
-		return `${name} commissions work on the commission lane, which is not open yet.`;
+		if (opts.commissionCredential !== true) {
+			return `${name} commissions work on the commission lane, which this caller does not hold.`;
+		}
+		if (p.principalId !== 'owner' || p.via !== 'session' || !p.attended) {
+			return (
+				`${name} commissions a build, which is only open to John in /jkai in a browser — ` +
+				`not from ${p.via === 'device' ? 'the phone yet' : `a ${p.via} call`}.`
+			);
+		}
+		if (p.allowedTools && !p.allowedTools.includes(name)) {
+			return `Tool ${name} is outside this caller's capability scope`;
+		}
+		return null;
 	}
 	if (p.allowedTools && !p.allowedTools.includes(name)) {
 		return `Tool ${name} is outside this caller's capability scope`;

@@ -259,14 +259,14 @@
         "zerosumpain/SR-Jkai-Core",
         "zerosumpain/SR-Workflows"
       ],
-      "sha256": "455f89972dabfbfa09788532019744adfdc24d80fb2028bc50cb5534712ee509"
+      "sha256": "777ea8e5e1c0b005a1546786a628d00177d9db2a4a1b565643db2506166f029d"
     },
     "src/lib/tools/registry-internal.ts": {
       "peer": [
         "zerosumpain/SR-Jkai-Core",
         "zerosumpain/SR-Workflows"
       ],
-      "sha256": "9152b9f1e2ee6bb38e7e6ec0c775ca051f9e236cf7452f3c2654cca7aa64e75a"
+      "sha256": "eaa3c6bcaec0d865ce9106d5687c669f3b9dddd33e5cc9060c56bcd435712b7c"
     },
     "src/lib/tools/principal-seal.ts": {
       "peer": [

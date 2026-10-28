@@ -10,7 +10,7 @@
  * What Main can see at `/api/platform/tools/invoke` is thin, and `basis` says
  * which facts each answer rests on so nobody mistakes an inference for proof:
  *
- * - the credential's lane (standard or destructive);
+ * - the credential's lane (standard, destructive or commission);
  * - the wire context: `principalId`, `jobId`, `allowedTools`;
  * - the thread's `jkai_conversations.source`.
  *
@@ -35,7 +35,7 @@ export interface TurnPrincipal {
   /** True only with a live jobId on a session or device turn: someone could answer a gate. */
   attended: boolean;
   /** The credential lane the call arrived on. */
-  lane: 'standard' | 'destructive' | 'bridge' | 'in-process';
+  lane: 'standard' | 'destructive' | 'commission' | 'bridge' | 'in-process';
   /** 'listed' when the caller sent a closed tool list, else 'unrestricted'. */
   toolScope: 'listed' | 'unrestricted';
   allowedToolCount: number | null;
@@ -48,7 +48,7 @@ export interface TurnPrincipal {
 }
 
 export interface InvokePrincipalInput {
-  lane: 'standard' | 'destructive';
+  lane: 'standard' | 'destructive' | 'commission';
   principalId?: string;
   jobId?: string;
   allowedTools?: readonly string[];

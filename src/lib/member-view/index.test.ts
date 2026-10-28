@@ -57,6 +57,7 @@ describe('develop', () => {
       batch: SECRET, acceptedAt: null, releasePolicy: 'preview_only',
       autopilot: { enabled: true, rounds: 1, maxRounds: 6, startedAt: 's', stopReason: SECRET, veto: { reason: SECRET, evidence: SECRET, model: 'm', revision: 'r', at: 't' } },
       release: { revision: 'r', prUrl: 'https://github.com/pr/1', detail: SECRET, blocker: SECRET },
+      commission: { source: 'chat', conversationId: SECRET, operationKey: SECRET, requestedBy: 'owner', at: 't', quotaAtStart: null, refs: [{ kind: 'daydream_note', id: SECRET }], model: { provider: 'codex', modelId: SECRET, pinned: true } },
     } as unknown as DeliveryState;
     const out = memberDeliveryState(state);
     clean(out);
@@ -67,6 +68,8 @@ describe('develop', () => {
     expect(out.release?.prUrl).toBe('https://github.com/pr/1');
     expect(out.preview.url).toBeNull();
     expect(out.autopilot?.stopReason).toBe('Stopped');
+    // Who commissioned it, from which thread, is the owner's (slice 6b).
+    expect(out).not.toHaveProperty('commission');
   });
 });
 

@@ -99,7 +99,7 @@ register({
     if (!row) {
       return {
         success: false,
-        error: `No custom tool named "${name}". Call list_custom_tools to see what exists. Built-in tools live in code and cannot be updated this way — those need request_change.`,
+        error: `No custom tool named "${name}". Call list_custom_tools to see what exists. Built-in tools live in code and cannot be updated this way — those need a commissioned build (develop_commission).`,
       };
     }
 

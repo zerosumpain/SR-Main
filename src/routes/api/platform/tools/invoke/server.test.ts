@@ -32,7 +32,8 @@ import type { ToolExecContext, ToolResult } from '$lib/tools/registry-internal';
 type Recorded = { name: string; args: Record<string, unknown>; ctx?: ToolExecContext };
 let calls: Recorded[] = [];
 
-const TOOLS: Record<string, { destructive?: boolean; run: (ctx?: ToolExecContext) => ToolResult }> = {
+const TOOLS: Record<string, { destructive?: boolean; lane?: string; effect?: string; run: (ctx?: ToolExecContext) => ToolResult }> = {
+  develop_commission: { effect: 'mutate', lane: 'commission', run: () => ({ success: true, data: { buildId: 'b1' } }) },
   site_blog_list: { run: () => ({ success: true, data: ['a', 'b'] }) },
   scraper_run: {
     run: (ctx) => {
@@ -48,7 +49,8 @@ const TOOLS: Record<string, { destructive?: boolean; run: (ctx?: ToolExecContext
 
 vi.mock('$lib/tools/load-registry', () => ({
   loadToolRegistry: async () => ({
-    getTool: (name: string) => (TOOLS[name] ? { name, destructive: TOOLS[name].destructive } : undefined),
+    getTool: (name: string) =>
+      TOOLS[name] ? { name, destructive: TOOLS[name].destructive, effect: TOOLS[name].effect, lane: TOOLS[name].lane } : undefined,
     executeTool: async (name: string, args: Record<string, unknown>, ctx?: ToolExecContext) => {
       calls.push({ name, args, ctx });
       const tool = TOOLS[name];
@@ -70,10 +72,12 @@ const { sealPrincipal } = await import('$lib/tools/principal-seal');
 const STANDARD = 's'.repeat(48);
 const KEY = 'k'.repeat(40);
 const DESTRUCTIVE = 'd'.repeat(48);
+const COMMISSION = 'c'.repeat(48);
 const mutableEnv = env as Record<string, string | undefined>;
 const original = {
   standard: env.JKAI_INVOKE_TOKEN,
   destructive: env.JKAI_INVOKE_DESTRUCTIVE_TOKEN,
+  commission: env.JKAI_INVOKE_COMMISSION_TOKEN,
   key: env.JKAI_PRINCIPAL_KEY,
 };
 
@@ -115,6 +119,8 @@ afterAll(async () => {
   else mutableEnv.JKAI_INVOKE_TOKEN = original.standard;
   if (original.destructive === undefined) delete mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN;
   else mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN = original.destructive;
+  if (original.commission === undefined) delete mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN;
+  else mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN = original.commission;
   if (original.key === undefined) delete mutableEnv.JKAI_PRINCIPAL_KEY;
   else mutableEnv.JKAI_PRINCIPAL_KEY = original.key;
 });
@@ -125,6 +131,7 @@ beforeEach(() => {
   mutableEnv.JKAI_INVOKE_TOKEN = STANDARD;
   mutableEnv.JKAI_PRINCIPAL_KEY = KEY;
   delete mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN;
+  delete mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN;
 });
 
 const target = () => ({ url: base, token: STANDARD, audience: 'sr-main' as const });
@@ -316,6 +323,56 @@ describe('POST /api/platform/tools/invoke', () => {
       await expect(
         invokeRemoteTool('site_blog_list', {}, undefined, { url: base, token: DESTRUCTIVE, audience: 'sr-main' as const }),
       ).resolves.toEqual({ success: true, data: ['a', 'b'] });
+    });
+  });
+
+  describe('the commission lane (slice 6b)', () => {
+    const on = (token: string) => ({ url: base, token, audience: 'sr-main' as const });
+    const session = { emit: () => {}, jobId: 'job-1', principal: OWNER_SESSION };
+    beforeEach(() => {
+      mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN = DESTRUCTIVE;
+      mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN = COMMISSION;
+    });
+
+    it('carries develop_commission on the commission token, marked so executeTool can open the lane', async () => {
+      await expect(invokeRemoteTool('develop_commission', { outcome: 'x' }, session, on(COMMISSION))).resolves.toEqual({ success: true, data: { buildId: 'b1' } });
+      expect(calls).toHaveLength(1);
+      expect(calls[0].ctx?.credentialLane).toBe('commission');
+      expect(calls[0].ctx?.principal).toMatchObject({ principalId: 'owner', via: 'session', attended: true });
+    });
+
+    it('opens nothing else: a read and a destructive tool are refused on it, unrun', async () => {
+      for (const name of ['site_blog_list', 'gmail_send']) {
+        const result = await invokeRemoteTool(name, {}, session, on(COMMISSION));
+        expect(result.success, name).toBe(false);
+        expect(result.error).toMatch(/opens only commissioning/);
+      }
+      expect(calls).toHaveLength(0);
+    });
+
+    it('is not opened by the destructive or the standard token', async () => {
+      for (const token of [DESTRUCTIVE, STANDARD]) {
+        const result = await invokeRemoteTool('develop_commission', { outcome: 'x' }, session, on(token));
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/commission lane .* closed/);
+      }
+      expect(calls).toHaveLength(0);
+    });
+
+    it('401s a missing token and an unset lane', async () => {
+      expect((await raw(sealed('develop_commission'))).status).toBe(401);
+      delete mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN;
+      expect((await raw(sealed('develop_commission'), { token: COMMISSION })).status).toBe(401);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('still needs the seal: no principal is 401', async () => {
+      expect((await raw({ name: 'develop_commission' }, { token: COMMISSION })).status).toBe(401);
+    });
+
+    it('stamps the other lanes as what they are', async () => {
+      await invokeRemoteTool('site_blog_list', {}, session, target());
+      expect(calls[0].ctx?.credentialLane).toBe('standard');
     });
   });
 
