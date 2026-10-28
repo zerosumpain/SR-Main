@@ -84,11 +84,11 @@
 
 </script>
 
-<svelte:head><title>Improvement — JKAI</title></svelte:head>
+<svelte:head><title>Improvement — jkai</title></svelte:head>
 
 <DaydreamShell
   path="/jkai/develop/improvement"
-  kicker="JKAI · Build process · Improvement"
+  kicker="jkai · Build process · Improvement"
   title={['What it built', 'overnight']}
   standfirst="The nightly self-improvement run: what fired in the window and what it cost, whether anything it built is being used, and the loop from an idea arriving on the backlog to something shipped."
   readout={[

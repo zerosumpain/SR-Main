@@ -74,15 +74,15 @@
   }
 </script>
 
-<svelte:head><title>Sources — JKAI</title></svelte:head>
+<svelte:head><title>Sources — jkai</title></svelte:head>
 
 <main class="sources-shell source-surface">
   <header class="sources-head">
-    <p class="eyebrow">JKAI · Personal data</p>
+    <p class="eyebrow">jkai · Personal data</p>
     <div class="title-row">
       <div>
         <h1>Sources</h1>
-        <p class="lede">Connect accounts and archives once. Decide separately what JKAI, Daydream and workflows may learn from them.</p>
+        <p class="lede">Connect accounts and archives once. Decide separately what jkai, Daydream and workflows may learn from them.</p>
       </div>
       <div class="head-actions">
         <a class="primary-action" href="/jkai/sources/onboard?restart=1">Start guided setup →</a>
@@ -211,7 +211,7 @@
       <a href="/jkai/settings/data-access">Open data access →</a>
     </div>
     <div class="use-grid">
-      <div><strong>JKAI</strong><span>Searches bounded event metadata when your question needs it.</span></div>
+      <div><strong>jkai</strong><span>Searches bounded event metadata when your question needs it.</span></div>
       <div><strong>Daydream</strong><span>Receives daily aggregates with coverage and evidence quality.</span></div>
       <div><strong>Briefing</strong><span>May surface small changes without exposing raw account content.</span></div>
       <div><strong>Workflows & Intel</strong><span>Stay off until you explicitly grant a category and data class.</span></div>

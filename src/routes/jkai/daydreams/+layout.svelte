@@ -88,11 +88,11 @@
   ]);
 </script>
 
-<svelte:head><title>Daydreams — JKAI</title></svelte:head>
+<svelte:head><title>Daydreams — jkai</title></svelte:head>
 
 <DaydreamShell
   path="/jkai/daydreams"
-  kicker="JKAI · Daydream"
+  kicker="jkai · Daydream"
   title={['Spotted while', 'you were busy']}
   standfirst="Every 45 minutes jkai takes one corner of your life — health, home, mail, chats, diary, money, or something worth reading — and looks for one thing worth your attention. It only reads; it never acts on its own. You decide what happens next: keep it, have it double-checked, or tell it to stop."
   {readout}

@@ -70,7 +70,7 @@
   }
 </script>
 
-<svelte:head><title>Briefing {briefing.id} — JKAI</title></svelte:head>
+<svelte:head><title>Briefing {briefing.id} — jkai</title></svelte:head>
 
 <section class="band flush">
   <div class="inner">

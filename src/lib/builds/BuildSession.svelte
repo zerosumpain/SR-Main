@@ -447,7 +447,7 @@
 </script>
 
 <svelte:head>
-  <title>{build.title ?? build.prompt.slice(0, 50)} — JKAI build</title>
+  <title>{build.title ?? build.prompt.slice(0, 50)} — jkai build</title>
 </svelte:head>
 
 <div class="bs-shell">

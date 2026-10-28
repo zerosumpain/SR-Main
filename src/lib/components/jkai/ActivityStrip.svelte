@@ -44,7 +44,7 @@
 </script>
 
 {#if visible}
-  <a class="as" href="/jkai" title="JKai is working — open chat">
+  <a class="as" href="/jkai" title="jkai is working — open chat">
     <span class="as-dot"></span>
     <span class="as-label">{label}</span>
   </a>

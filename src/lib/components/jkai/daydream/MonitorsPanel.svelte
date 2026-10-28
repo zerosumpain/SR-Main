@@ -69,11 +69,11 @@
   }
 </script>
 
-<svelte:head><title>{embedded ? 'Daydreams · JKAI' : 'Monitors · JKAI'}</title></svelte:head>
+<svelte:head><title>{embedded ? 'Daydreams · jkai' : 'Monitors · jkai'}</title></svelte:head>
 
 <main class="mo" class:embedded>
   {#if !embedded}<header class="mo-hdr">
-    <div class="mo-kicker">JKAI · Watch</div>
+    <div class="mo-kicker">jkai · Watch</div>
     <h1>Monitors</h1>
     <p class="mo-sub">"Watch X, tell me when Y." Each monitor is a scheduled workflow that checks a source, keeps only new items, and messages you.</p>
     <a class="mo-back" href="/jkai">← back to jkai</a>

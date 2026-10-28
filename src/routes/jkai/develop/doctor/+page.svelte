@@ -1,4 +1,4 @@
-<svelte:head><title>Workflow Doctor — JKAI</title></svelte:head>
+<svelte:head><title>Workflow Doctor — jkai</title></svelte:head>
 <svelte:window onhashchange={openLinkedRun} />
 <script lang="ts">
   import { formatGbp } from '$lib/utils/cost-format';
@@ -169,7 +169,7 @@
 
 <DaydreamShell
   path="/jkai/develop/doctor"
-  kicker="JKAI · Build process · Workflow doctor"
+  kicker="jkai · Build process · Workflow doctor"
   title={['What broke', 'overnight']}
   standfirst={`Every failing canvas the nightly triage found, in plain English: the symptom, the cause, and the fix — applied, proposed, or refused. Runs at ${data.schedule.display}; what it cannot fix itself goes into the build backlog.`}
   readout={[

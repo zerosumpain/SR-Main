@@ -17,12 +17,12 @@
   }
 </script>
 
-<svelte:head><title>Data access — JKAI</title></svelte:head>
+<svelte:head><title>Data access — jkai</title></svelte:head>
 
 <main class="access-shell">
   <a class="back" href="/jkai/sources">← Sources</a>
   <header>
-    <p class="eyebrow">JKAI · Personal data</p>
+    <p class="eyebrow">jkai · Personal data</p>
     <h1>Data access</h1>
     <p>Every source has separate permissions for each consumer and data class. A connection-level change takes effect before background cleanup.</p>
   </header>
