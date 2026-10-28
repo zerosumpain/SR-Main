@@ -8,6 +8,7 @@ import type { ToolPrincipal } from '$lib/tools/invoke-contract';
  */
 const h = vi.hoisted(() => ({
   byKey: null as string | null,
+  byKeyStartError: null as string | null,
   live: [] as Array<{ state: unknown; outcome: string | null }>,
   thread: true,
   mark: null as { fiveHourPct: number; weeklyPct: number } | null,
@@ -23,7 +24,7 @@ vi.mock('$lib/db', () => {
   const chain = (fields: Record<string, unknown>) => {
     const keys = Object.keys(fields ?? {}).sort().join(',');
     const result = async () => {
-      if (keys === 'buildId') return h.byKey ? [{ buildId: h.byKey }] : [];
+      if (keys === 'buildId,startError') return h.byKey ? [{ buildId: h.byKey, startError: h.byKeyStartError }] : [];
       if (keys === 'outcome,state') return h.live;
       if (keys === 'id') return h.thread ? [{ id: 'conv-1' }] : [];
       return [];
@@ -78,7 +79,7 @@ const ask = (over: Record<string, unknown> = {}) =>
 
 beforeEach(() => {
   Object.assign(h, {
-    byKey: null, live: [], thread: true, mark: { fiveHourPct: 20, weeklyPct: 10 }, created: [], intake: [], backlogLive: null,
+    byKey: null, byKeyStartError: null, live: [], thread: true, mark: { fiveHourPct: 20, weeklyPct: 10 }, created: [], intake: [], backlogLive: null,
     capabilities: { persistentSessions: true, brokerConfigured: true }, mutated: [], badModel: false,
   });
 });
@@ -105,6 +106,12 @@ describe('commissionBuild', () => {
     expect(r).toMatchObject({ ok: true, buildId: 'build-existing', reused: true });
     expect(h.created).toHaveLength(0);
     expect(h.intake).toHaveLength(0);
+  });
+
+  it('says honestly that a reused delivery never reached the builder', async () => {
+    h.byKey = 'build-existing';
+    h.byKeyStartError = 'The builder sidecar could not be reached (ENOENT).';
+    expect(await ask({ operationKey: 'op-key-12345' })).toMatchObject({ ok: true, reused: true, started: false, note: expect.stringMatching(/could not be reached/) });
   });
 
   it('derives the same key for the same ask in the same thread', () => {

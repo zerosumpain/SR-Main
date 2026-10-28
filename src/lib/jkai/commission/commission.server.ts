@@ -139,14 +139,14 @@ export function derivedOperationKey(conversationId: string | undefined, outcome:
   return `chat:${hash}`;
 }
 
-/** The delivery a key already made, or null. */
-async function deliveryForKey(operationKey: string): Promise<string | null> {
+/** The delivery a key already made, and whether its start failed, or null. */
+async function deliveryForKey(operationKey: string): Promise<{ buildId: string; startError: string | null } | null> {
   const [row] = await db
-    .select({ buildId: jkaiBuildDeliveries.buildId })
+    .select({ buildId: jkaiBuildDeliveries.buildId, startError: sql<string | null>`${jkaiBuildDeliveries.state}->'commission'->>'startError'` })
     .from(jkaiBuildDeliveries)
     .where(sql`${jkaiBuildDeliveries.state}->'commission'->>'operationKey' = ${operationKey}`)
     .limit(1);
-  return row?.buildId ?? null;
+  return row ? { buildId: row.buildId, startError: row.startError ?? null } : null;
 }
 
 /** The owner's thread, normalised, if it exists; anything else is dropped. */
@@ -188,7 +188,16 @@ export async function commissionBuild(input: CommissionInput): Promise<Commissio
     // (2) Idempotency, before anything is counted or spent.
     const existing = await deliveryForKey(operationKey);
     if (existing) {
-      return { ok: true, buildId: existing, ...links(existing), reused: true, started: true, note: 'Already commissioned with this key; this is the same delivery.' };
+      return {
+        ok: true,
+        buildId: existing.buildId,
+        ...links(existing.buildId),
+        reused: true,
+        started: !existing.startError,
+        note: existing.startError
+          ? `Already commissioned with this key; this is the same delivery. When it was commissioned: ${existing.startError}`
+          : 'Already commissioned with this key; this is the same delivery.',
+      };
     }
 
     // (3) Cost guards. The nightly lane keeps its own one-a-night cap.
