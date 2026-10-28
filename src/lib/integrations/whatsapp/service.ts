@@ -69,7 +69,7 @@ export class WhatsAppService {
 	}
 
 	toJid(phoneNumber: string): string {
-		// Strip every non-digit so panel-formatted numbers (e.g. "+44 7359228511",
+		// Strip every non-digit so panel-formatted numbers (e.g. "+44 7700900123",
 		// "+44 (0) 7359 228511", "+44-7359-228511") all collapse to the
 		// digits-only form Baileys/WhatsApp expects. Leaving a space in here
 		// produces an invalid JID — the server silently drops the send and
