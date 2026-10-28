@@ -1,16 +1,14 @@
-import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { getLLMClient } from '$lib/llm/client';
-import { runToolLoop } from '$lib/llm/tool-loop';
 import { resolveHeartbeatModel } from '$lib/server/models/workload-settings';
-import { withActivity } from '$lib/context/activity';
 import { coerceModelContext } from '$lib/constants/default-models';
 import type { ModelContext } from '$lib/server/models/types';
 import { notifySubscribers } from '$lib/jkai/chat/followup-queue';
 import { normaliseConversationId } from '$lib/jkai/conversation-id';
 import { assertOwnerThread } from '$lib/jkai/owner-threads';
+import { chatTurn, isCoreUnreachable } from '$lib/jkai/chat/turn';
+import { assistantTurnMetadata } from '$lib/jkai/chat/turn-metadata';
 
 export interface RunHeartbeatTurnOpts {
   conversationId: string;
@@ -20,10 +18,10 @@ export interface RunHeartbeatTurnOpts {
   activityName: string;
   instruction: string;
   /**
-   * If true, the LLM gets the system-toolset tool defs and may call them.
-   * Used by orchestrator-turn callbacks (where the agent might need to
-   * actually do something, e.g. turn off lights). Off for cheap watcher
-   * pulses. Up to 3 rounds of tool calling are supported.
+   * If true, the turn is offered the background-task toolsets (follow-ups,
+   * heartbeat, schedule) and home, and may call them. Used by
+   * orchestrator-turn callbacks (where the agent might need to actually do
+   * something, e.g. turn off lights). Off for cheap watcher pulses.
    */
   toolsEnabled?: boolean;
 }
@@ -33,33 +31,65 @@ export interface HeartbeatTurnResult {
   promptTokens: number;
   completionTokens: number;
   messageId: string;
-  /** Names of any tools the LLM called during this turn. */
+  /** Names of any tools the LLM called during this turn (not reported by Core; empty). */
   toolsCalled: string[];
 }
 
 /**
- * Run a single LLM turn in the context of an existing conversation, on
- * behalf of the heartbeat engine. Persists both the synthetic user message
- * and the assistant reply with metadata.heartbeat so the UI can style them.
- *
- * Designed for short, focused turns (continuations, nudges, micro-summaries).
- * Not a substitute for the full general-chat pipeline — no tools, no plan
- * phase, no follow-up queue, no streaming. Cheaper and predictable.
+ * Core could not be reached, so the turn did not run and nothing was written.
+ * The caller tries again on its next tick; a heartbeat is never answered by a
+ * generic persona standing in for jkai.
  */
-const MAX_TOOL_ROUNDS = 3;
-
-/**
- * One heartbeat turn, tagged as the `heartbeat` workload.
- *
- * Wrapped at the turn rather than at each `create` because a turn is a tool
- * LOOP — up to MAX_TOOL_ROUNDS calls plus the final reply — and tagging some of
- * them would split one turn's spend across two rows.
- */
-export function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnResult> {
-  return withActivity('heartbeat', () => heartbeatTurn(opts));
+export class HeartbeatSkipped extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HeartbeatSkipped';
+  }
 }
 
-async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnResult> {
+/** Tool rounds a tooled heartbeat turn may take, plus the final reply. */
+const MAX_TOOL_ROUNDS = 3;
+/** The toolsets a tooled turn is offered. Home on purpose: "lights off at 11". */
+const HEARTBEAT_TOOLSETS = ['followups', 'heartbeat', 'schedule', 'home'] as const;
+
+/**
+ * The names a tooled heartbeat turn offers, and so the only names it may run.
+ * Core gets them as the turn's `toolWhitelist`, carries them on the sealed
+ * principal (`allowedTools`), and Main's `executeTool` holds the call to them:
+ * the home tools (mutates) run because they are listed; nothing destructive,
+ * no build, no mail can.
+ */
+export async function heartbeatToolNames(): Promise<string[]> {
+  const { getToolsetDefinitions } = await import('$lib/tools/llm-tools');
+  const names = new Set<string>();
+  for (const toolset of HEARTBEAT_TOOLSETS) {
+    try {
+      for (const t of await getToolsetDefinitions(toolset)) names.add(t.function.name);
+    } catch {
+      /* a toolset may not exist in dev (home without Home Assistant) */
+    }
+  }
+  return [...names];
+}
+
+/**
+ * Run one heartbeat turn in an existing conversation, as jkai.
+ *
+ * Slice 9: the turn is a chat turn run by SR-Jkai-Core (`chatTurn`, surface
+ * 'heartbeat'), so it has the soul, the owner facts, memory and the heartbeat
+ * overlay (the NEEDS-USER: rule lives there), on the unattended `heartbeat`
+ * principal. It used to build its own "heartbeat-driven assistant" prompt and
+ * tool loop here. The cost is tagged `heartbeat` by Core (`options.activity`).
+ *
+ * Main still writes both rows, stamped `metadata.heartbeat` (so the UI styles
+ * them) and `metadata.channel: 'heartbeat'`. Nothing is written until Core has
+ * answered: if Core is down the turn throws `HeartbeatSkipped` and the thread
+ * is untouched.
+ *
+ * NOT TO BE RELEASED WHILE JOHN IS TRAVELLING (Rome, until 30 Oct 2026): a
+ * heartbeat that misbehaves acts in his threads and his home unattended.
+ */
+export async function runHeartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnResult> {
   // Belt and braces: callers should hand us a bare uuid, but a `chat_`-prefixed
   // id here reads as "conversation not found" and writes here are rejected
   // outright by orchestrator_chats' FK. Normalise so no caller can reintroduce it.
@@ -70,12 +100,11 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
   // member's thread, whoever scheduled it.
   if (conv.principalId !== 'owner') throw new Error(`conversation ${conversationId} is not the owner's — heartbeat turn refused`);
 
-  const ctx = opts.model ?? (
+  const modelContext = opts.model ?? (
     conv.modelProvider && conv.modelId
       ? coerceModelContext({ provider: conv.modelProvider, modelId: conv.modelId })
       : await resolveHeartbeatModel()
   );
-  const { client, model } = await getLLMClient(ctx);
 
   // Newest 40, restored to chronological order. This was `asc(...).limit(40)`,
   // i.e. the OLDEST 40 — so on any thread longer than the window the heartbeat
@@ -90,111 +119,59 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
       .limit(40)
   ).reverse();
 
-  const messages: Array<Record<string, unknown>> = [
-    {
-      role: 'system',
-      content:
-        'You are a heartbeat-driven assistant continuing an existing conversation. ' +
-        'Be concise (≤120 words). If you can make progress autonomously, do so and report what changed. ' +
-        'If you genuinely need user input you do not have, prefix your reply with NEEDS-USER: and ask. ' +
-        opts.instruction,
-    },
-    ...history.map((m) => ({
-      role: m.role,
-      content: m.content,
-    })),
-    { role: 'user', content: opts.userText },
-  ];
+  // `[]` is "no tools", which Core honours; a tool-less pulse offers nothing.
+  const offered = opts.toolsEnabled ? await heartbeatToolNames() : [];
+  // The caller's instruction is this turn's, so it rides with the message;
+  // the persona and the NEEDS-USER: rule come from Core's heartbeat overlay.
+  const text = opts.instruction.trim()
+    ? `${opts.userText}\n\n[Heartbeat instruction] ${opts.instruction.trim()}`
+    : opts.userText;
 
-  // Persist the synthetic user message before the call so the conversation
-  // ordering is correct even if the LLM call fails.
+  let turn: Awaited<ReturnType<typeof chatTurn>>;
+  try {
+    turn = await chatTurn(
+      { text },
+      history.map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt })),
+      {
+        conversationId,
+        modelContext,
+        priceSnapshot: null,
+        toolWhitelist: offered,
+        maxRounds: opts.toolsEnabled ? MAX_TOOL_ROUNDS + 1 : 1,
+        envelope: { surface: 'heartbeat' },
+        activity: 'heartbeat',
+      },
+    );
+  } catch (err) {
+    if (isCoreUnreachable(err)) {
+      throw new HeartbeatSkipped(`jkai core unreachable, heartbeat turn skipped: ${err instanceof Error ? err.message : err}`);
+    }
+    throw err;
+  }
+  const finalReply = turn.response.trim();
+
   const [userMsg] = await db
     .insert(orchestratorChats)
     .values({
-      conversationId: conversationId,
+      conversationId,
       role: 'user',
       content: opts.userText,
-      metadata: { heartbeat: { activity: opts.activityName, kind: 'user-trigger' } },
+      metadata: { heartbeat: { activity: opts.activityName, kind: 'user-trigger' }, channel: 'heartbeat' },
     })
     .returning({ id: orchestratorChats.id });
-
-  // Optional tool surface. The background-task toolsets (heartbeat, schedule,
-  // followups) are always available when toolsEnabled=true. Kept tight —
-  // heartbeat agent turns shouldn't go on a tool shopping spree; they should
-  // act on what was asked. (Formerly a single 'system' toolset.)
-  let toolDefs: Array<{ type: 'function'; function: { name: string; description: string; parameters: unknown } }> | undefined;
-  if (opts.toolsEnabled) {
-    const { getToolsetDefinitions } = await import('$lib/tools/llm-tools');
-    toolDefs = [
-      ...(await getToolsetDefinitions('followups')),
-      ...(await getToolsetDefinitions('heartbeat')),
-      ...(await getToolsetDefinitions('schedule')),
-    ];
-    // Add 'home' if the conversation context already references it. The
-    // heartbeat shouldn't auto-load arbitrary toolsets, but home + system
-    // covers the bulk of "do X at time Y" cases (lights, scenes, etc.).
-    try {
-      const homeDefs = await getToolsetDefinitions('home');
-      toolDefs = [...toolDefs, ...homeDefs];
-    } catch { /* home toolset may not exist in dev */ }
-  }
-
-  // The names this turn offers, and so the only names it may run. Home stays
-  // in on purpose: a scheduled "lights off at 11" lands here.
-  const offered = new Set((toolDefs ?? []).map((t) => t.function.name));
-
-  // No `activity` here: `runHeartbeatTurn` already wraps the whole turn, and a
-  // second wrap would only shadow it with the same tag.
-  const loop = await runToolLoop({
-    client,
-    model,
-    messages,
-    tools: toolDefs,
-    maxRounds: opts.toolsEnabled ? MAX_TOOL_ROUNDS : 1,
-    temperature: 0.5,
-    maxTokens: opts.maxTokens ?? 600,
-    forceFinal: false,
-    execute: async (tc) => {
-      // Only what this turn OFFERED. The model can name any tool it has ever
-      // seen in the thread's history — gmail_send, build_create — and this used
-      // to run it, unattended, with the owner's reach. `allowedTools` carries
-      // the same list into the executor so a nested call cannot widen it.
-      if (!offered.has(tc.name)) {
-        return JSON.stringify({ success: false, error: `${tc.name} is not available to a heartbeat turn.` });
-      }
-      const { executeSiteTool, isRegisteredTool } = await import('$lib/tools/executor');
-      let result: unknown = { error: 'tool not registered' };
-      if (await isRegisteredTool(tc.name)) {
-        result = await executeSiteTool(tc.name, tc.args, {
-          emit: () => {},
-          conversationId: conversationId,
-          allowedTools: [...offered],
-          // Unattended, held to what it offered: the home tools (mutates)
-          // run because they are listed; nothing destructive can.
-          principal: unattendedPrincipal('heartbeat', [...offered], 'heartbeat'),
-        });
-      }
-      return JSON.stringify(result).slice(0, 4000);
-    },
-  });
-  const finalReply = loop.reply;
-  const promptTokens = loop.usage.prompt;
-  const completionTokens = loop.usage.completion;
-  const toolsCalled = loop.calls.map((c) => c.name);
 
   const [asstMsg] = await db
     .insert(orchestratorChats)
     .values({
-      conversationId: conversationId,
+      conversationId,
       role: 'assistant',
       content: finalReply || '(empty heartbeat reply)',
       metadata: {
+        ...assistantTurnMetadata(turn, 'heartbeat'),
         heartbeat: {
           activity: opts.activityName,
           kind: 'reply',
           replyToHeartbeatMessageId: userMsg.id,
-          tokens: { prompt: promptTokens, completion: completionTokens },
-          toolsCalled: toolsCalled.length > 0 ? toolsCalled : undefined,
         },
       },
     })
@@ -213,7 +190,9 @@ async function heartbeatTurn(opts: RunHeartbeatTurnOpts): Promise<HeartbeatTurnR
     metadata: { heartbeat: { activity: opts.activityName, kind: 'reply' } },
   });
 
-  return { reply: finalReply, promptTokens, completionTokens, messageId: asstMsg.id, toolsCalled };
+  // Tokens are Core's to count: the turn's spend is in the ledger under
+  // `heartbeat`, beside every other chat turn.
+  return { reply: finalReply, promptTokens: 0, completionTokens: 0, messageId: asstMsg.id, toolsCalled: [] };
 }
 
 /**

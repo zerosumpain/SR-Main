@@ -26,7 +26,7 @@
 //
 // Unlike chat-context this IS the reply, so a failure throws: each caller already
 // has its own answer for a turn that failed.
-import { postToExtracted } from '$lib/server/extracted-app';
+import { ExtractedAppError, postToExtracted } from '$lib/server/extracted-app';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import type { ThinkingLevel } from '$lib/models/thinking';
@@ -111,3 +111,14 @@ export async function chatTurn(
   };
 }
 
+
+/**
+ * Core is not there to answer: the lane is closed, the connection was refused
+ * or reset, or the gateway said 502/503/504. A caller that may wait (the
+ * heartbeat) skips and tries again later rather than answering in some other
+ * voice. A slow turn, a 4xx or a 500 is an answer, not an absence: false.
+ */
+export function isCoreUnreachable(err: unknown): boolean {
+  if (!(err instanceof ExtractedAppError)) return false;
+  return /service lane is closed|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENOTFOUND|EAI_AGAIN|socket hang up|returned 50[234]\b/.test(err.message);
+}

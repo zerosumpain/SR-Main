@@ -19,4 +19,9 @@ export interface FireResult {
   summary: string;
   costUsd?: number;
   error?: string;
+  /**
+   * Not fired: something it needs (jkai core) is down. The row stays pending
+   * and the next tick tries again, until DEFER_GRACE_MS past its fire time.
+   */
+  deferred?: boolean;
 }

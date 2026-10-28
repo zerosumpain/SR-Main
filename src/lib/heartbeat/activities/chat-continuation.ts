@@ -2,7 +2,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, heartbeatPulses, conversations } from '$lib/db/schema';
 import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { listChatJobs } from '$lib/jkai/chat/activity';
-import { runHeartbeatTurn, postHeartbeatNote } from '../llm';
+import { runHeartbeatTurn, postHeartbeatNote, HeartbeatSkipped } from '../llm';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'chat-continuation';
@@ -364,6 +364,11 @@ export const chatContinuation: ActivityHandler = {
         }
         actedCount++;
       } catch (err) {
+        // Core down: nothing was written; the next tick sees the same pause.
+        if (err instanceof HeartbeatSkipped) {
+          skippedReasons.coreDown = (skippedReasons.coreDown ?? 0) + 1;
+          continue;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[heartbeat] chat-continuation failed for conv ${convId}: ${msg}`);
         skippedReasons.error = (skippedReasons.error ?? 0) + 1;

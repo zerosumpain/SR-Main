@@ -19,6 +19,16 @@ npm run validate:change
 [deployment runbook](docs/deployment-runbook.md) for release checks and
 `npm run deploy:status` for the revision currently served by the site.
 
+### Release hold: the heartbeat on jkai core
+
+The JKai overhaul's slice 9 moves heartbeat turns (paused-thread continuations
+and scheduled "orchestrator-turn" callbacks, including scheduled light and
+scene actions) onto jkai core's chat turn (`src/lib/heartbeat/llm.ts`).
+**Do not release it while John is travelling** (he is away until 30 October
+2026). A misbehaving heartbeat acts in his threads and his home with nobody
+watching. Once released, check the heartbeat activity cost on
+`/admin/ops/costs` daily for a week.
+
 ## Documentation and ownership
 
 - [Current documentation](docs/README.md): operational guides, active contracts,
