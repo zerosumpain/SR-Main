@@ -43,7 +43,7 @@ describe('messageFor', () => {
     const expectViewOnly = (m: ReturnType<typeof messageFor>) => {
       // No category with an Approve action, and nothing an app could answer with.
       expect(m.category).toBe('sr.alert');
-      expect(m.category.startsWith('sr.gate.')).toBe(false);
+      expect((m.category ?? '').startsWith('sr.gate.')).toBe(false);
       for (const key of ['gate', 'jobId', 'confirmId', 'planId']) expect(m.userInfo).not.toHaveProperty(key);
       expect(m.body.startsWith('Answer this on the website.')).toBe(true);
       expect(m.userInfo).toMatchObject({ id: row().id, category: 'chat', url: '/jkai?c=conv-1', conversationId: 'conv-1', viewOnly: '1' });
