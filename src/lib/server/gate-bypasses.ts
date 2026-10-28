@@ -75,7 +75,6 @@ export const HOOK_BYPASSES: string[] = [
   // backlog code. Named one at a time; /api/platform is not a tree.
   '/api/platform/daydream/briefing', // GET only, same credential
   '/api/platform/briefing/context', // GET only, same credential; trip and family summary
-  '/api/platform/jkai/today', // GET only, same credential; the jkai desk's Today (owner)
   '/api/platform/backlog/intake', // POST only, same credential; trace ideas only
   // The model-plumbing lane for the extracted applications: per-application
   // MODEL_SERVICE_TOKEN_<APP> Bearer, constant-time compared, refused when unset
@@ -136,6 +135,7 @@ export const HOOK_BYPASSES: string[] = [
 export const HOOK_EXACT_BYPASSES: string[] = [
   '/api/internal/session', // POST only, audience-bound session authority key
   '/health', // the public health landing; every /health/* child is owner-only
+  '/api/platform/jkai/today', // GET only, service token; the jkai desk's Today (hooks match it with ===)
   // The two orchestrator paths a chat turn needs, opened to a paired iPhone's
   // device token as well as an owner session.
   //
