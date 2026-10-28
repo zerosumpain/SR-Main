@@ -75,7 +75,7 @@ else
   STATUSES="$(git -C "$HERE" diff --name-status "$MB" -- 2>/dev/null)" || { REASON="cannot diff against $BASE_REF"; emit; }
   # -F'\t' matters. --name-status emits `M<TAB>path` and `R100<TAB>old<TAB>new`,
   # and a path may legally contain spaces. Splitting on default whitespace made
-  # `data/prompts/99 override.md` arrive as `override.md` — root-level markdown,
+  # `data/skills/x/99 override.md` arrive as `override.md` — root-level markdown,
   # i.e. L1, for a file that is read at runtime and rsynced to the VPS. On a tab
   # the last field is the whole path, and stays the destination for a rename
   # (which forces L3 just below regardless).
@@ -111,9 +111,9 @@ is_wide() {
 }
 
 # ── documentation: tight, and deliberately NOT "any .md anywhere" ────────────
-# data/prompts/*.md is read at runtime by the prompts loader, covered by a test,
-# and rsynced to the VPS by the release. Treating it as documentation would ship
-# a prompt change with nothing checked at all. Only docs/ and root-level
+# data/skills/**/*.md is read at runtime, covered by tests, and rsynced to the
+# VPS by the release (as data/prompts/ was, before it moved to SR-Jkai-Core).
+# Treating it as documentation would ship a change with nothing checked at all. Only docs/ and root-level
 # markdown qualify.
 is_docs() {
   case "$1" in

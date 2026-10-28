@@ -14,8 +14,8 @@
 # One generator, three destinations, so they cannot drift apart again.
 #
 # /jkai CHAT IS NOT A DESTINATION HERE. Its voice used to be written into the
-# retired gateway's own SKILL.md on this box; it now lives in data/prompts/ in
-# this repo and ships with an ordinary deploy.
+# retired gateway's own SKILL.md on this box; it now lives in SR-Jkai-Core's data/prompts/,
+# not in this repo, and ships with Core's ordinary deploy.
 #
 # HOMESERV ONLY, and it needs no rsync line in ci-release.sh. Every destination
 # is a path on this box; nothing here runs on the VPS. (New scripts usually DO
@@ -167,7 +167,7 @@ fi
 if (( changed )); then
   echo
   echo "Commit the sr-docs page in ~/sr-docs."
-  echo "The CHAT voice is not synced here — it lives in data/prompts/ in this"
+  echo "The CHAT voice is not synced here — it lives in SR-Jkai-Core's data/prompts/, not this"
   echo "repo and ships with a normal deploy."
 else
   echo; echo "Nothing changed."

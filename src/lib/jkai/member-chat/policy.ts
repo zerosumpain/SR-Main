@@ -2,7 +2,7 @@
 // under. PURE: no imports that reach the owner's data.
 //
 // A member's turn is not the owner's turn with things hidden. The owner's
-// prompt describes the owner (`data/prompts/01-soul.md`, `04-context.md`), the
+// prompt describes the owner (SR-Jkai-Core's `data/prompts/01-soul.md`, `04-context.md`), the
 // owner's tool guide carries the owner's WhatsApp number, and most toolsets act
 // AS the owner — his mail, memory, calendar, house, secrets, schedules and
 // builders. So a member turn runs on its own persona and this allow-list,

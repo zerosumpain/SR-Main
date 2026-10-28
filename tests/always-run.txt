@@ -10,6 +10,7 @@ src/lib/access/catalogue.test.ts
 src/lib/access/route-guards.test.ts
 src/lib/access/showcase-routes.test.ts
 src/lib/auth.test.ts
+src/lib/capabilities/manifest.test.ts
 src/lib/costs/ledger.test.ts
 src/lib/daydream/budget.test.ts
 src/lib/daydream/think/tools.test.ts
@@ -23,6 +24,7 @@ src/lib/jkai/build-spend-attribution.test.ts
 src/lib/jkai/builder-guidance.test.ts
 src/lib/jkai/explainer-kit.test.ts
 src/lib/jkai/jkai-tools-extension.test.ts
+src/lib/jkai/no-inline-persona.test.ts
 src/lib/jkai/pi-codex-auth.test.ts
 src/lib/jkai/pi-runner.invocation.test.ts
 src/lib/jkai/research-brief.test.ts
@@ -76,6 +78,7 @@ tests/scripts/drizzle-orphan-tables.test.ts
 tests/scripts/gate-level.test.ts
 tests/scripts/hometowns-deploy-page.test.ts
 tests/scripts/jkai-builder-unit.test.ts
+tests/scripts/no-local-prompts.test.ts
 tests/scripts/pr-extraction.test.ts
 tests/scripts/rollback.test.ts
 tests/scripts/select-tests.test.ts

@@ -355,6 +355,12 @@
           ]
         },
         {
+          "pattern": "^/api/jkai/service/identity/?$",
+          "methods": [
+            "GET"
+          ]
+        },
+        {
           "pattern": "^/api/workflows/orchestrator/chat(?:/stream)?/?$",
           "methods": [
             "GET",

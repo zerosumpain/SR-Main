@@ -14,7 +14,9 @@ const ROOT = resolve(__dirname, '../..');
  * so it carries that harness's verbs — `terminal`, `execute_code`, `read_file`,
  * `search_files`. Those are correct where a skill documents *another* agent and
  * wrong where a skill instructs jkai. This guard covers the second case only:
- * jkai's own prompt stack and its own `jkai-*` skills.
+ * jkai's own `jkai-*` skills. jkai's prompt stack lives in SR-Jkai-Core now
+ * (Main's orphan copy was deleted in slice 9, and SR-Infra's estate check
+ * fails if it comes back), so its tool names are Core's to check.
  *
  * Deliberately NOT extended to the whole corpus. `autonomous-ai-agents/*`
  * documents Claude Code, Codex and opencode, where `terminal()` is
@@ -57,9 +59,9 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** jkai's own instruction surfaces — the prompt stack plus the jkai-* skills. */
+/** jkai's own instruction surfaces here: the jkai-* skills. */
 function jkaiOwnedDocs(): string[] {
-  const files = walk(join(ROOT, 'data/prompts'));
+  const files: string[] = [];
   for (const entry of readdirSync(join(ROOT, 'data/skills'))) {
     if (!entry.startsWith('jkai-')) continue;
     const full = join(ROOT, 'data/skills', entry);
@@ -73,7 +75,7 @@ describe("jkai's own instructions only name tools that exist", () => {
 
   it('found the docs to check', () => {
     // A silent zero here would make every assertion below vacuous.
-    expect(docs.length).toBeGreaterThan(5);
+    expect(docs.length).toBeGreaterThan(0);
   });
 
   it.each(DEAD_VERBS)('never tells the model to call %s(...)', (verb) => {
@@ -87,23 +89,10 @@ describe("jkai's own instructions only name tools that exist", () => {
     expect(offenders, `${verb}() is not a registered tool:\n${offenders.join('\n')}`).toEqual([]);
   });
 
-  it('names only registered tools in the always-on tool prompt', () => {
-    // 03-tools.md is prepended to every turn, so a wrong name there is paid for
-    // on every request rather than only when a skill is opened. It shipped
-    // naming `workflow_create` and `builds_start`, neither of which exists.
+  it('does not register any of the dead verbs, so naming one is always wrong', () => {
     const registered = registeredToolNames();
     expect(registered.size).toBeGreaterThan(100);
-
-    const text = readFileSync(join(ROOT, 'data/prompts/03-tools.md'), 'utf8');
-    // Backticked snake_case tokens are how this file refers to tools.
-    const referenced = [...text.matchAll(/`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`/g)].map((m) => m[1]);
-
-    // Node types and config keys share the snake_case shape, so only assert on
-    // tokens that look like tool calls or that we know the registry owns.
-    const unknown = [...new Set(referenced)].filter(
-      (t) => DEAD_VERBS.includes(t) && !registered.has(t),
-    );
-    expect(unknown, `named in 03-tools.md but not registered: ${unknown.join(', ')}`).toEqual([]);
+    expect(DEAD_VERBS.filter((v) => registered.has(v))).toEqual([]);
   });
 });
 
@@ -117,7 +106,7 @@ describe('skill_view is asked for references the way it declares them', () => {
   it('no skill passes file_path to skill_view', () => {
     const hits = execFileSync(
       'bash',
-      ['-c', `grep -rn "skill_view([^)]*file_path" data/skills data/prompts 2>/dev/null || true`],
+      ['-c', `grep -rn "skill_view([^)]*file_path" data/skills 2>/dev/null || true`],
       { cwd: ROOT, encoding: 'utf8' },
     ).trim();
     expect(hits).toBe('');
