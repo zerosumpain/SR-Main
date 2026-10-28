@@ -58,6 +58,11 @@ vi.mock('$lib/tools/load-registry', () => ({
   }),
 }));
 
+const principals = vi.hoisted(() => ({ recorded: [] as Array<Record<string, unknown>> }));
+vi.mock('$lib/jkai/principal/record.server', () => ({
+  recordInvocationPrincipal: (rec: Record<string, unknown>) => principals.recorded.push(rec),
+}));
+
 const { POST } = await import('./+server');
 const { invokeRemoteTool, RemoteInvokeError } = await import('$lib/tools/remote');
 
@@ -111,6 +116,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   calls = [];
+  principals.recorded = [];
   mutableEnv.JKAI_INVOKE_TOKEN = STANDARD;
   delete mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN;
 });
@@ -234,6 +240,27 @@ describe('POST /api/platform/tools/invoke', () => {
     await expect(invokeRemoteTool('no_such_tool', {}, undefined, target())).resolves.toEqual({
       success: false,
       error: 'Unknown tool: no_such_tool',
+    });
+  });
+
+  describe('principal phase 1 (logging only)', () => {
+    it('records each call with its lane and the context it arrived with', async () => {
+      await invokeRemoteTool(
+        'site_blog_list',
+        {},
+        { emit: () => {}, jobId: 'job-1', conversationId: 'conv-1', principalId: 'owner', allowedTools: ['site_blog_list'] },
+        target(),
+      );
+      expect(principals.recorded).toEqual([
+        { tool: 'site_blog_list', lane: 'standard', principalId: 'owner', jobId: 'job-1', conversationId: 'conv-1', allowedTools: ['site_blog_list'] },
+      ]);
+    });
+
+    it('records a call the lane then refuses, without changing the refusal', async () => {
+      const result = await invokeRemoteTool('gmail_send', { to: 'x' }, undefined, target());
+      expect(result.success).toBe(false);
+      expect(calls).toHaveLength(0);
+      expect(principals.recorded).toMatchObject([{ tool: 'gmail_send', lane: 'standard' }]);
     });
   });
 

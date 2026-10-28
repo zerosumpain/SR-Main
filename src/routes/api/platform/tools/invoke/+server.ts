@@ -11,6 +11,7 @@ import {
 import { loadToolRegistry } from '$lib/tools/load-registry';
 import { remoteInvokeTarget } from '$lib/tools/remote';
 import { rateLimit } from '$lib/server/rate-limit';
+import { recordInvocationPrincipal } from '$lib/jkai/principal/record.server';
 import type { InvokeContext } from '$lib/tools/invoke-contract';
 import type { ToolExecContext, ToolResult } from '$lib/tools/registry-internal';
 import { coerceModelContext } from '$lib/constants/default-models';
@@ -93,6 +94,20 @@ export const POST: RequestHandler = async ({ request }) => {
 		return framed ? new Response(resultLine(result), { headers: { 'content-type': NDJSON_CONTENT_TYPE, 'cache-control': 'no-store' } }) : json(result);
 	}
 	const registry = await loadToolRegistry();
+
+	/**
+	 * Principal phase 1: who this call is for, computed and logged beside the
+	 * turn's trace (`$lib/jkai/principal`). Logging only — it decides nothing,
+	 * and is recorded before the lane check so refused calls are counted too.
+	 */
+	recordInvocationPrincipal({
+		tool: name,
+		lane,
+		principalId: context.principalId,
+		jobId: context.jobId,
+		conversationId: context.conversationId,
+		allowedTools: context.allowedTools,
+	});
 
 	/**
 	 * Decided once, and every exit below obeys it.
