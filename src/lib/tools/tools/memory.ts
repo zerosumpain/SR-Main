@@ -8,6 +8,9 @@ const CATEGORIES = ['people', 'preferences', 'places', 'health', 'devices', 'sit
 
 register({
   name: 'save_memory',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description: 'Save a fact about the user to persistent memory. Use proactively when you learn something important (names, preferences, locations, health details). If this updates an existing memory, supply its exact replacesId to supersede it. Independent facts are never merged by word overlap.',
   parameters: {
     type: 'object',

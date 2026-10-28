@@ -76,6 +76,15 @@ export interface ToolExecContext {
   surface?: import('./invoke-contract').TurnSurface;
   /** The paired phone, from the verified credential only. */
   deviceId?: string;
+  /**
+   * Who this call is for (principal phase 2). Set by the receiver from a
+   * VERIFIED seal (`/api/platform/tools/invoke`), or by an in-process caller
+   * through `$lib/tools/in-process-principal`. `executeTool` enforces it with
+   * `principalRefusal`; a call without one is an unattended service call with
+   * this context's `allowedTools` as its only list. Nested calls inherit it
+   * through `currentExecution`.
+   */
+  principal?: import('./invoke-contract').ToolPrincipal;
 }
 
 /**
@@ -119,6 +128,14 @@ export interface ToolDefinition {
    * client can gate too. Omit for read-only / low-stakes tools.
    */
   destructive?: boolean;
+  /**
+   * Manifest M0: 'read' | 'mutate' | 'destructive', the confirm tier and the
+   * credential lane. Absent is derived from `destructive` (`tierOf` in the
+   * contract), so only tools that change something need to say so.
+   */
+  effect?: import('./invoke-contract').ToolEffect;
+  confirm?: import('./invoke-contract').ToolConfirm;
+  lane?: import('./invoke-contract').ToolLane;
   handler: (
     args: Record<string, unknown>,
     ctx?: ToolExecContext,

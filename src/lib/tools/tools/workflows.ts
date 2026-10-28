@@ -423,6 +423,9 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_run',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description:
     'Trigger a workflow run on behalf of the user. Creates a manual run, fires the engine, and returns the runId. ' +
     'When `awaitMs` is set (max 600000 = 10 min), the call BLOCKS until the run completes/fails or the timeout elapses, ' +

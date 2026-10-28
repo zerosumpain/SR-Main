@@ -28,6 +28,9 @@ register({
 
 register({
   name: 'ha_call_service',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description:
     'Call a Home Assistant service to control a device (turn on/off lights, set temperature, play media, etc.)',
   parameters: {

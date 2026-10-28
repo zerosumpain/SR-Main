@@ -50,6 +50,14 @@ export interface InvokeContext {
 	 * credential it verified (`identifyDevice`), never from a client body.
 	 */
 	deviceId?: string;
+	/**
+	 * The sealed principal (principal phase 2): `principal-seal.ts` HMAC-signs
+	 * one `PrincipalClaims` per call with `JKAI_PRINCIPAL_KEY`. The receiver
+	 * verifies it and takes `principalId`, `allowedTools`, `jobId`, `surface`
+	 * and `deviceId` from the claims, never from the body fields above, which
+	 * an older caller still sends and which can only narrow.
+	 */
+	principal?: string;
 }
 
 export interface InvokeRequest {
@@ -129,8 +137,262 @@ export function coerceInvokeRequest(body: unknown): InvokeRequest {
 	// Known words only: an unrecognised surface is dropped, not passed on.
 	if (isTurnSurface(raw.surface)) context.surface = raw.surface;
 	if (typeof raw.deviceId === 'string' && ID_PATTERN.test(raw.deviceId)) context.deviceId = raw.deviceId;
+	// Shape only; the seal is checked by the receiver, which has the key.
+	if (typeof raw.principal === 'string' && raw.principal.length <= MAX_SEALED_PRINCIPAL && SEALED_PATTERN.test(raw.principal)) {
+		context.principal = raw.principal;
+	}
 
 	return { name, args, context };
+}
+
+// ── Tool tiers (capability manifest M0) ──────────────────────────────────────
+
+/**
+ * What a call does, whether a person must say yes first, and which credential
+ * lane carries it. Declared on `ToolDefinition` beside `destructive`, served on
+ * the catalogue, and read by both the confirmation gate (Core) and the
+ * principal check (`principalRefusal`, Main's `executeTool`).
+ *
+ * - `effect`: 'read' changes nothing; 'mutate' changes the owner's own things
+ *   (a light, a memory, a build); 'destructive' leaves the site or cannot be
+ *   undone (a sent email, a published page).
+ * - `confirm`: 'never', 'light' (a one-tap card, owner attended only), or
+ *   'always' (the destructive card).
+ * - `lane`: 'standard', 'destructive' (needs the destructive invoke token), or
+ *   'commission' (closed everywhere until the commission token exists).
+ */
+export const TOOL_EFFECTS = ['read', 'mutate', 'destructive'] as const;
+export type ToolEffect = (typeof TOOL_EFFECTS)[number];
+export const TOOL_CONFIRMS = ['never', 'light', 'always'] as const;
+export type ToolConfirm = (typeof TOOL_CONFIRMS)[number];
+export const TOOL_LANES = ['standard', 'destructive', 'commission'] as const;
+export type ToolLane = (typeof TOOL_LANES)[number];
+
+export interface ToolTier {
+	effect: ToolEffect;
+	confirm: ToolConfirm;
+	lane: ToolLane;
+}
+
+const DESTRUCTIVE_TIER: ToolTier = { effect: 'destructive', confirm: 'always', lane: 'destructive' };
+const CONFIRM_RANK: Record<ToolConfirm, number> = { never: 0, light: 1, always: 2 };
+
+/**
+ * One tool's tier, from what its declaration (or a catalogue row) says.
+ *
+ * Fails closed. An ABSENT field is the legacy declaration and is derived from
+ * `destructive`, which is what every sender said before these fields existed
+ * (receivers ship first, so an older Main must not turn every read into a
+ * card). A field that is PRESENT but not a known word makes the whole tool
+ * destructive. Then the tier only ratchets up: `destructive: true` is always
+ * destructive, a destructive effect always confirms and needs its lane, a
+ * mutate confirms lightly unless it explicitly says 'never', and the
+ * commission lane always confirms.
+ */
+export function tierOf(decl: { destructive?: unknown; effect?: unknown; confirm?: unknown; lane?: unknown }): ToolTier {
+	const known = <T extends string>(words: readonly T[], v: unknown): v is T =>
+		typeof v === 'string' && (words as readonly string[]).includes(v);
+	if (
+		(decl.effect !== undefined && !known(TOOL_EFFECTS, decl.effect)) ||
+		(decl.confirm !== undefined && !known(TOOL_CONFIRMS, decl.confirm)) ||
+		(decl.lane !== undefined && !known(TOOL_LANES, decl.lane))
+	) {
+		return { ...DESTRUCTIVE_TIER };
+	}
+	let effect: ToolEffect = (decl.effect as ToolEffect | undefined) ?? (decl.destructive === true ? 'destructive' : 'read');
+	if (decl.destructive === true) effect = 'destructive';
+	let lane: ToolLane = (decl.lane as ToolLane | undefined) ?? (effect === 'destructive' ? 'destructive' : 'standard');
+	if (effect === 'destructive' && lane === 'standard') lane = 'destructive';
+	if (lane === 'commission' && effect === 'read') effect = 'mutate';
+	const floor: ToolConfirm =
+		effect === 'destructive' || lane === 'commission' ? 'always' : effect === 'mutate' && decl.confirm === undefined ? 'light' : 'never';
+	const declared = (decl.confirm as ToolConfirm | undefined) ?? 'never';
+	const confirm = CONFIRM_RANK[declared] >= CONFIRM_RANK[floor] ? declared : floor;
+	return { effect, confirm, lane };
+}
+
+/**
+ * The tools a member's turn may ever reach: flagged read AND listed here. A
+ * closed list in the shared contract so the chat process that offers them and
+ * the host that runs them agree (Core's `MEMBER_CHAT_TOOLS` must be a subset).
+ */
+export const MEMBER_SAFE_TOOLS: readonly string[] = [
+	'research_web_search',
+	'fetch_url',
+	'news_search',
+	'render_chart',
+	'render_table',
+	'render_diagram',
+	'evidence_read',
+];
+
+// ── The principal (phase 2) ──────────────────────────────────────────────────
+
+/**
+ * How a call reached the tools. Only 'session' and 'device' can be attended:
+ * WhatsApp, heartbeat, the service turn, workflows and the build bridge have
+ * nobody who can answer a gate (plan principle 6).
+ */
+export const PRINCIPAL_VIAS = ['session', 'device', 'service', 'heartbeat', 'whatsapp', 'bridge'] as const;
+export type PrincipalVia = (typeof PRINCIPAL_VIAS)[number];
+/** Which receiver a sealed principal is for; one seal never opens the other. */
+export const PRINCIPAL_AUDIENCES = ['sr-main', 'sr-workflows'] as const;
+export type PrincipalAudience = (typeof PRINCIPAL_AUDIENCES)[number];
+/** Hands-free surfaces: a person may be there, but cannot answer a gate. */
+const UNATTENDED_SURFACES: readonly string[] = ['siri', 'watch'];
+
+/** `JKAI_PRINCIPAL_KEY` shorter than this is no key at all. */
+export const PRINCIPAL_KEY_MIN_LENGTH = 32;
+/** What an issuer stamps; a call is sealed as it is sent, so this is short. */
+export const PRINCIPAL_TTL_MS = 120_000;
+/** The longest life a receiver accepts, whatever the issuer claimed. */
+export const PRINCIPAL_MAX_TTL_MS = 300_000;
+export const PRINCIPAL_CLOCK_SKEW_MS = 30_000;
+const MAX_SEALED_PRINCIPAL = 16_384;
+const SEALED_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/;
+const PRINCIPAL_ID_PATTERN = /^(owner|u_[A-Za-z0-9_-]{1,64})$/;
+const TOOL_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+const NONCE_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
+const PURPOSE_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
+
+/**
+ * Who a tool call is for — what the issuer decided and the receiver enforces.
+ *
+ * `allowedTools` is the caller's explicit list. Absent means unrestricted,
+ * which only an attended owner turn is; for anyone else absence means "no
+ * list", so nothing beyond reads (see `principalRefusal`).
+ */
+export interface ToolPrincipal {
+	/** 'owner' or a member's `u_…`. */
+	principalId: string;
+	via: PrincipalVia;
+	/** A live jobId and a principal who can answer the gate. */
+	attended: boolean;
+	jobId?: string;
+	surface?: TurnSurface;
+	deviceId?: string;
+	allowedTools?: string[];
+	/** A short label for logs, e.g. 'heartbeat', 'daydream-think'. */
+	purpose?: string;
+}
+
+/** A principal as sealed for one call to one receiver. */
+export interface PrincipalClaims extends ToolPrincipal {
+	v: 1;
+	aud: PrincipalAudience;
+	/** The one tool this seal opens. */
+	tool: string;
+	/** Milliseconds since the epoch. */
+	iat: number;
+	exp: number;
+	nonce: string;
+}
+
+/**
+ * The one definition of "attended": a session or device turn with a live job,
+ * not on a hands-free surface. Applied by the issuer before sealing and by the
+ * receiver after verifying, so neither has to trust the other's arithmetic.
+ */
+export function normalisePrincipal(p: ToolPrincipal): ToolPrincipal {
+	const attended =
+		p.attended === true &&
+		(p.via === 'session' || p.via === 'device') &&
+		typeof p.jobId === 'string' &&
+		p.jobId.length > 0 &&
+		!(p.surface && UNATTENDED_SURFACES.includes(p.surface));
+	return { ...p, attended };
+}
+
+/** Read claims strictly: anything malformed is no principal at all. */
+export function coercePrincipalClaims(raw: unknown): PrincipalClaims | null {
+	if (!isPlainObject(raw)) return null;
+	if (raw.v !== 1) return null;
+	if (typeof raw.aud !== 'string' || !(PRINCIPAL_AUDIENCES as readonly string[]).includes(raw.aud)) return null;
+	if (typeof raw.tool !== 'string' || !TOOL_NAME_PATTERN.test(raw.tool)) return null;
+	if (typeof raw.principalId !== 'string' || !PRINCIPAL_ID_PATTERN.test(raw.principalId)) return null;
+	if (typeof raw.via !== 'string' || !(PRINCIPAL_VIAS as readonly string[]).includes(raw.via)) return null;
+	if (typeof raw.attended !== 'boolean') return null;
+	if (!Number.isSafeInteger(raw.iat) || !Number.isSafeInteger(raw.exp)) return null;
+	if (typeof raw.nonce !== 'string' || !NONCE_PATTERN.test(raw.nonce)) return null;
+	const claims: PrincipalClaims = {
+		v: 1,
+		aud: raw.aud as PrincipalAudience,
+		tool: raw.tool,
+		principalId: raw.principalId,
+		via: raw.via as PrincipalVia,
+		attended: raw.attended,
+		iat: raw.iat as number,
+		exp: raw.exp as number,
+		nonce: raw.nonce,
+	};
+	if (raw.jobId !== undefined) {
+		if (typeof raw.jobId !== 'string' || !ID_PATTERN.test(raw.jobId)) return null;
+		claims.jobId = raw.jobId;
+	}
+	if (raw.surface !== undefined) {
+		if (!isTurnSurface(raw.surface)) return null;
+		claims.surface = raw.surface;
+	}
+	if (raw.deviceId !== undefined) {
+		if (typeof raw.deviceId !== 'string' || !ID_PATTERN.test(raw.deviceId)) return null;
+		claims.deviceId = raw.deviceId;
+	}
+	if (raw.allowedTools !== undefined) {
+		if (!Array.isArray(raw.allowedTools) || !raw.allowedTools.every((t) => typeof t === 'string')) return null;
+		claims.allowedTools = raw.allowedTools as string[];
+	}
+	if (raw.purpose !== undefined) {
+		if (typeof raw.purpose !== 'string' || !PURPOSE_PATTERN.test(raw.purpose)) return null;
+		claims.purpose = raw.purpose;
+	}
+	return claims;
+}
+
+/**
+ * Whether `principal` may run `tool`, or the sentence that says why not.
+ *
+ * PURE, and the one policy every receiver applies (Main's `executeTool`):
+ *
+ * 1. The commission lane is closed. Slice 6b opens it with its own token.
+ * 2. A list, when there is one, is a hard limit.
+ * 3. A member reaches only flagged read tools on the closed member list, and
+ *    only with a list.
+ * 4. Unattended principals never reach destructive or always-confirm tools,
+ *    and reach a mutate (or anything that confirms lightly) only when it is in
+ *    their explicit list — heartbeat's home tools, a workflow's named tool.
+ * 5. An attended owner turn reaches everything; its gate ran in the chat
+ *    process before the call was sent.
+ *
+ * The credential lane (standard vs destructive token) is checked separately,
+ * by the receiver that knows which token arrived.
+ */
+export function principalRefusal(principal: ToolPrincipal, tool: { name: string; tier: ToolTier }): string | null {
+	const p = normalisePrincipal(principal);
+	const { name, tier } = tool;
+	if (tier.lane === 'commission') {
+		return `${name} commissions work on the commission lane, which is not open yet.`;
+	}
+	if (p.allowedTools && !p.allowedTools.includes(name)) {
+		return `Tool ${name} is outside this caller's capability scope`;
+	}
+	if (p.principalId !== 'owner') {
+		if (!p.allowedTools || tier.effect !== 'read' || tier.confirm !== 'never' || !MEMBER_SAFE_TOOLS.includes(name)) {
+			return `Tool ${name} is outside this caller's capability scope`;
+		}
+		return null;
+	}
+	if (!p.attended) {
+		if (tier.effect === 'destructive' || tier.confirm === 'always') {
+			return (
+				`${name} needs confirming, and nobody is attached to this ${p.via} call to confirm it. ` +
+				`Ask again in /jkai, where the confirmation can be shown.`
+			);
+		}
+		if ((tier.effect === 'mutate' || tier.confirm === 'light') && !p.allowedTools) {
+			return `${name} changes something, and an unattended ${p.via} call may only run changes it lists explicitly.`;
+		}
+	}
+	return null;
 }
 
 // ── The turn envelope ────────────────────────────────────────────────────────
@@ -364,6 +626,10 @@ export interface CatalogueTool {
 	toolset: string;
 	category: string;
 	destructive: boolean;
+	/** Manifest M0 (`tierOf`). Always present once read by `coerceCataloguePayload`. */
+	effect: ToolEffect;
+	confirm: ToolConfirm;
+	lane: ToolLane;
 }
 
 export interface CataloguePayload {
@@ -376,6 +642,12 @@ export interface CataloguePayload {
 	}>;
 	/** The prose block the system prompt carries, built by the owning process. */
 	promptSection: string;
+	/**
+	 * The skills index (one `- id: description` line per playbook in Main's
+	 * `data/skills`), for the prompt's Skills section. The chat process has no
+	 * copy of the library; `skill_view` reads it on Main. '' from an older Main.
+	 */
+	skillsIndex: string;
 }
 
 export function coerceCataloguePayload(body: unknown): CataloguePayload {
@@ -383,22 +655,26 @@ export function coerceCataloguePayload(body: unknown): CataloguePayload {
 	const tools = Array.isArray(body.tools) ? body.tools : null;
 	if (!tools) throw new InvokeContractError('catalogue has no tools');
 	return {
-		tools: tools.filter(isPlainObject).flatMap((t) =>
-			typeof t.name === 'string' && t.name
-				? [
-						{
-							name: t.name,
-							description: typeof t.description === 'string' ? t.description : '',
-							parameters: isPlainObject(t.parameters)
-								? (t.parameters as CatalogueTool['parameters'])
-								: { type: 'object', properties: {} },
-							toolset: typeof t.toolset === 'string' ? t.toolset : '',
-							category: typeof t.category === 'string' ? t.category : '',
-							destructive: t.destructive === true
-						}
-					]
-				: []
-		),
+		tools: tools.filter(isPlainObject).flatMap((t) => {
+			if (typeof t.name !== 'string' || !t.name) return [];
+			// Fails closed: an unknown effect, confirm or lane word is destructive,
+			// and `destructive` follows the tier so a gate that reads only the
+			// boolean still asks.
+			const tier = tierOf(t);
+			return [
+				{
+					name: t.name,
+					description: typeof t.description === 'string' ? t.description : '',
+					parameters: isPlainObject(t.parameters)
+						? (t.parameters as CatalogueTool['parameters'])
+						: { type: 'object', properties: {} },
+					toolset: typeof t.toolset === 'string' ? t.toolset : '',
+					category: typeof t.category === 'string' ? t.category : '',
+					destructive: t.destructive === true || tier.effect === 'destructive',
+					...tier
+				}
+			];
+		}),
 		toolsets: Array.isArray(body.toolsets) ? body.toolsets.filter((t): t is string => typeof t === 'string') : [],
 		manifest: Array.isArray(body.manifest)
 			? body.manifest.filter(isPlainObject).map((m) => ({
@@ -412,6 +688,7 @@ export function coerceCataloguePayload(body: unknown): CataloguePayload {
 						: []
 				}))
 			: [],
-		promptSection: typeof body.promptSection === 'string' ? body.promptSection : ''
+		promptSection: typeof body.promptSection === 'string' ? body.promptSection : '',
+		skillsIndex: typeof body.skillsIndex === 'string' ? body.skillsIndex : ''
 	};
 }

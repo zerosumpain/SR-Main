@@ -129,6 +129,9 @@ function describeShape(v: unknown): string {
 // 915fae11: 36 zero-token iterations while chat reported "iteration 13").
 register({
   name: 'build_create',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description:
     'Start a new JKAI autonomous build: a SELF-CONTAINED app built in a sandbox — a dashboard, ' +
     'a game, a simulator, a data explorer, a one-off tool. It gets a workspace, a server on a ' +
@@ -238,6 +241,9 @@ register({
 
 register({
   name: 'build_control',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   // Deliberately NOT destructive (changed 2026-08-08). Publishing a static app
   // to /projects/ is reversible (build_delete unpublishes, and the previous
   // build row keeps its workspace), and gating it cost more than it protected:
@@ -601,6 +607,9 @@ register({
 
 register({
   name: 'build_tweak',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description: 'Inject a specific improvement instruction into a build. The build resumes with this new objective appended. Use for targeted changes like "change the colour scheme" or "add error handling".',
   parameters: {
     type: 'object',

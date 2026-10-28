@@ -42,14 +42,14 @@ const GATES = new Set(['confirm', 'plan', 'clarify']);
  * with the chat screen, which already sends them there. `notifyGate` carries
  * the gate's `lane` and `effect` in `data`. Fails CLOSED: a confirm keeps its
  * buttons only when it says it is a light `mutates` confirm outside the
- * commission lane. Today every confirm Core raises is destructive and none
- * says so yet, so every confirm push is view-only. Plan and clarify gates keep
+ * commission lane. Core's light confirm (slice 6) sends `effect: 'mutate'`. Plan and clarify gates keep
  * their buttons unless they ride the commission lane.
  */
 export function isViewOnlyGate(gate: string, data: Record<string, unknown>): boolean {
   if (data.lane === 'commission') return true;
   if (gate !== 'confirm') return false;
-  return data.effect !== 'mutates';
+  // 'mutate' is the contract's word (manifest M0); 'mutates' was this file's.
+  return data.effect !== 'mutate' && data.effect !== 'mutates';
 }
 
 const VIEW_ONLY_PREFIX = 'Answer this on the website.';

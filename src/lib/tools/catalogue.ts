@@ -1,4 +1,4 @@
-import type { CataloguePayload } from './invoke-contract';
+import { tierOf, type CataloguePayload } from './invoke-contract';
 import { loadToolRegistry } from './load-registry';
 import { remoteCatalogue, remoteInvokeTarget } from './remote';
 
@@ -156,7 +156,8 @@ export async function catalogueTools(): Promise<CataloguePayload['tools']> {
 			parameters: t.parameters,
 			toolset: t.toolset,
 			category: t.category,
-			destructive: t.destructive === true
+			destructive: t.destructive === true,
+			...tierOf(t)
 		}));
 	}
 	return (await payload()).tools;

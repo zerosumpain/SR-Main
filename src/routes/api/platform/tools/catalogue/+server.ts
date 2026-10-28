@@ -2,7 +2,8 @@ import { json, error } from '@sveltejs/kit';
 import { invokeLaneFor } from '$lib/server/invoke-auth';
 import { loadToolRegistry } from '$lib/tools/load-registry';
 import { remoteInvokeTarget } from '$lib/tools/remote';
-import type { CataloguePayload } from '$lib/tools/invoke-contract';
+import { tierOf, type CataloguePayload } from '$lib/tools/invoke-contract';
+import { renderSkillIndex } from '$lib/jkai/skills/registry';
 import type { RequestHandler } from './$types';
 
 /**
@@ -37,11 +38,16 @@ export const GET: RequestHandler = async ({ request }) => {
 			parameters: t.parameters,
 			toolset: t.toolset,
 			category: t.category,
-			destructive: t.destructive === true
+			destructive: t.destructive === true,
+			// Manifest M0: derived from `destructive` plus the explicit marks.
+			...tierOf(t)
 		})),
 		toolsets: registry.getAvailableToolsets(),
 		manifest: registry.getToolsetManifest(),
-		promptSection: registry.buildSystemPromptSection()
+		promptSection: registry.buildSystemPromptSection(),
+		// Main holds the skills library (`data/skills`) and runs `skill_view`;
+		// the chat process prints this index as its Skills section.
+		skillsIndex: renderSkillIndex()
 	};
 	return json(payload);
 };

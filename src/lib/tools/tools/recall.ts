@@ -122,6 +122,9 @@ register({
 
 register({
   name: 'memory_remember',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description:
     'Store a durable fact about the user that should survive this conversation. Only for things useful LATER — not task details, and never credentials or financial data. Facts are also extracted automatically after a conversation goes idle, so use this for something explicitly worth pinning now.',
   parameters: {

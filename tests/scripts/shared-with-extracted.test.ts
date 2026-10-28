@@ -103,6 +103,7 @@ describe('modules shared with the extracted applications', () => {
       // The tool wire and ToolExecContext. Core and Workflows hold them at
       // src/lib/workflows/site-tools/ (SR-Infra mainPathOverrides).
       'src/lib/tools/invoke-contract.ts',
+      'src/lib/tools/principal-seal.ts',
       'src/lib/tools/registry-internal.ts',
     ]);
   });
