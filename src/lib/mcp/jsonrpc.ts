@@ -18,7 +18,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { listMcpTools, todayLine } from './server';
 import { executeTool } from '$lib/tools/registry';
 import { unattendedPrincipal } from '$lib/tools/in-process-principal';
-import { publishToolStep, requestToolConfirmation } from '$lib/jkai/tool-step-bus';
+import { hasToolConfirmer, publishToolStep, requestToolConfirmation } from '$lib/jkai/tool-step-bus';
 import { isDestructive, describeDestructiveAction } from '$lib/jkai/chat/confirmation-gate';
 import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/jkai/chat/tool-summary';
 import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
@@ -373,10 +373,11 @@ export async function dispatchJsonRpc(
             // their SSE/requester channel by this key, not by conversationId —
             // on a canvas chat the two differ.
             busKey: busKey || undefined,
-            // A bus with a chat subscriber has someone to answer the gate above
-            // (the destructive confirmer is keyed by it); without one the MCP
-            // client is headless and runs reads only.
-            principal: busKey
+            // Attended only when a confirmer is actually subscribed on this
+            // bus: someone is there to answer the gate above. `busKey` alone
+            // is just a string from the call's own arguments (`workflow_id`)
+            // or meta, so naming one must not make a headless client attended.
+            principal: busKey && hasToolConfirmer(busKey)
               ? { principalId: 'owner', via: 'session' as const, attended: true, jobId: `mcp:${busKey}`.slice(0, 128), purpose: 'mcp' }
               : unattendedPrincipal('mcp'),
             emit: (msg: string) => {

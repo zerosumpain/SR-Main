@@ -161,3 +161,38 @@ describe('mcp/jsonrpc destructive confirmation gate', () => {
     expect(resultText(response)).toMatch(/declined|cancelled|not confirmed/i);
   });
 });
+
+describe('mcp/jsonrpc attended principal', () => {
+  const PROBE = 'mcp_attended_probe_mutate';
+  const ran: string[] = [];
+  beforeAll(async () => {
+    const { register } = await import('$lib/tools/registry-internal');
+    register({
+      name: PROBE,
+      description: 'probe',
+      parameters: { type: 'object', properties: { workflow_id: { type: 'string' } } },
+      category: 'Test',
+      toolset: 'test',
+      effect: 'mutate',
+      handler: async () => {
+        ran.push(PROBE);
+        return { success: true, data: { ok: true } };
+      },
+    });
+  });
+  beforeEach(() => {
+    ran.length = 0;
+  });
+
+  it('is NOT attended just because the call names a bus key in its arguments', async () => {
+    const { response } = await callTool(PROBE, { workflow_id: 'wf-nobody-listening' });
+    expect(ran).toEqual([]);
+    expect(resultText(response)).toMatch(/unattended service call may only run changes it lists/i);
+  });
+
+  it('is attended when a confirmer is subscribed on that bus', async () => {
+    registerToolConfirmer('wf-someone-here', async () => ({ approved: true }));
+    await callTool(PROBE, { workflow_id: 'wf-someone-here' });
+    expect(ran).toEqual([PROBE]);
+  });
+});
