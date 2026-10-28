@@ -797,7 +797,7 @@
                 <p class="msg event"><span class="meta">{timeOf(m.createdAt)}</span> Changed directly: {m.text}</p>
               {:else}
                 <div class="msg {m.role}">
-                  <span class="who">{m.role === 'user' ? (m.surface === 'phone' ? 'you, on the phone' : 'you') : 'planner'} · {timeOf(m.createdAt)}{m.planVersion ? ` · v${m.planVersion}` : ''}</span>
+                  <span class="who">{m.role === 'user' ? (m.surface === 'phone' ? 'you, on the phone' : m.surface === 'jkai' ? 'you, through jkai' : 'you') : 'planner'} · {timeOf(m.createdAt)}{m.planVersion ? ` · v${m.planVersion}` : ''}</span>
                   <p>{m.text}</p>
                   {#if m.research?.length}
                     <details class="lookups">

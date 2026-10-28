@@ -79,7 +79,12 @@ export const NO_PLANNER =
 
 export interface ConverseInput {
   text: string;
-  surface: 'site' | 'phone';
+  /**
+   * 'jkai': the turn came through jkai's trip tools (overhaul plan 2026-10-28,
+   * P2-4). It is planned exactly as a site turn — the stored messages are
+   * labelled 'jkai' so the trip page can say where they came from.
+   */
+  surface: 'site' | 'phone' | 'jkai';
   /**
    * v5: who is talking. The owner's memory (the full profile, `remember`) is
    * used only when `isOwner`; someone who cannot edit gets advice only — the
@@ -143,6 +148,8 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   const caller = input.caller ?? { isOwner: true, canEdit: true, name: null };
   // Advice only (v5): someone who cannot edit gets the reply — never ops, and (v8) never proposals or questions.
   const editor = caller.canEdit;
+  // Where the turn was planned from: jkai plans as the site does.
+  const planSurface: 'site' | 'phone' = input.surface === 'phone' ? 'phone' : 'site';
   // v5: the turn belongs to its speaker's own thread; the model sees only
   // that thread and the plan changes everyone sees — never another person's chat.
   const author = { email: (caller.email ?? trip.ownerEmail).trim().toLowerCase(), id: caller.personId ?? null };
@@ -178,7 +185,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     planVersion: latest?.version ?? null,
     messages: history,
     nowText: nowText(trip.timeZone),
-    surface: input.surface,
+    surface: planSurface,
     observation: input.observation ?? null,
     position: input.position ?? null,
     transport,
@@ -335,7 +342,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
   // act AND propose. The legacy option cards (for the family's current app,
   // which ignores proposals) are drawn from the fill and swap groups, on a
   // turn that changed nothing, as v7's options always were.
-  const proposer = { email: author.email, name: caller.name, personId: author.id, isOwner: caller.isOwner, surface: input.surface };
+  const proposer = { email: author.email, name: caller.name, personId: author.id, isOwner: caller.isOwner, surface: planSurface };
   let proposals: Proposal[] = [];
   let legacy: PlanOption[] = [];
   const drafts = editor ? [...answer.proposals, ...optionDrafts(answer.options)] : [];
@@ -406,7 +413,7 @@ export async function converse(trip: TripRecord, input: ConverseInput): Promise<
     // v8
     proposals,
     questions,
-    brief: await briefNow(fresh, input.surface).catch(() => (input.surface === 'phone' ? phoneBrief(brief) : brief)),
+    brief: await briefNow(fresh, planSurface).catch(() => (planSurface === 'phone' ? phoneBrief(brief) : brief)),
     diff: changed && finalPlan && !solveFailed ? planDiff(before, finalPlan, titles) : null,
     undo: made ? { toVersion: latest.version } : null,
   };

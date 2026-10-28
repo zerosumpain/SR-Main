@@ -5,6 +5,7 @@ import '$lib/daydream/chat-tools';
 // The owner's private reads, trips and captures register theirs the same way
 // (overhaul plan 2026-10-28, slice 7a).
 import '$lib/owner-data/chat-tools';
+import '$lib/trips/chat-tools';
 import '$lib/captures/chat-tools';
 // Commissioning's quota reader and backlog intake, registered by the domains
 // that own them so $lib/jkai never imports them back (see $lib/jkai/commission/ports).
