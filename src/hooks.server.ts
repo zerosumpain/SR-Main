@@ -231,9 +231,12 @@ if (runsService('background')) {
     .catch((err) => console.error('[hooks.server] game room sweep:', err));
 }
 // Re-enabled custom tools (plan P2-0a): the web process only, and only the
-// reviewed allow-list in $lib/tools/custom-tools-enabled.
+// reviewed allow-list in $lib/tools/custom-tools-enabled. JKAI_CUSTOM_TOOLS=off
+// is the kill switch; =on loads them whatever the role (the local preview,
+// whose Main runs as 'builder' so no WhatsApp or engines start).
 import { resolveServiceRole } from '$lib/server/service-role';
-if (!building && resolveServiceRole() === 'web') {
+const customToolsSwitch = (process.env.JKAI_CUSTOM_TOOLS ?? '').trim().toLowerCase();
+if (!building && customToolsSwitch !== 'off' && (customToolsSwitch === 'on' || resolveServiceRole() === 'web')) {
   void import('$lib/tools/custom-tool-loader')
     .then((m) => m.loadCustomTools())
     .catch((err) => console.error('[hooks.server] custom tools:', err));
