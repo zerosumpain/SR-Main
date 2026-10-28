@@ -17,6 +17,13 @@ const row = (extra: Record<string, unknown> = {}) => ({
 });
 
 describe('messageFor', () => {
+  it('carries a commissioned build and its links, grouped by build (slice 6b)', () => {
+    const m = messageFor(row({ category: 'build', title: 'Pull request needs you', url: '/jkai/develop/b1',
+      data: { kind: 'delivery', buildId: 'b1', prUrl: 'https://github.com/x/pull/9', previewUrl: 'https://p.example', conversationId: 'conv-1', budget: 'sent' } }));
+    expect(m.userInfo).toMatchObject({ buildId: 'b1', prUrl: 'https://github.com/x/pull/9', previewUrl: 'https://p.example', conversationId: 'conv-1', url: '/jkai/develop/b1' });
+    expect(m.threadId).toBe('delivery:b1');
+    expect(m.category).toBe('sr.alert');
+  });
   it('groups commission milestones without collapsing distinct events', () => {
     const id = '22222222-2222-4222-8222-222222222222';
     const m = messageFor(row({ category: 'daydream', data: { schemaVersion: 1, destination: 'daydream_commission', commissionId: id } }));

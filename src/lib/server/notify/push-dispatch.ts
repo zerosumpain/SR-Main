@@ -125,11 +125,22 @@ export function messageFor(row: LedgerRow): PushMessage {
   const connections = row.category === 'connections';
   const loud = row.severity === 'alert' || connections;
   const level: InterruptionLevel = loud ? 'active' : 'passive';
+  // A commissioned build's stage push (`$lib/jkai/delivery-push`): the build
+  // and its links ride along so a tap can open the build, and one build's
+  // pushes group under one thread on the lock screen.
+  const buildId = data.kind === 'delivery' ? str(data.buildId) : undefined;
+  if (buildId) {
+    userInfo.buildId = buildId;
+    for (const key of ['prUrl', 'previewUrl', 'conversationId']) {
+      const v = str(data[key]);
+      if (v) userInfo[key] = v;
+    }
+  }
   return {
     title: row.title,
     body: row.body,
     category: connections ? 'sr.connections' : 'sr.alert',
-    threadId: commissionId ? `commission:${commissionId}` : row.category,
+    threadId: commissionId ? `commission:${commissionId}` : buildId ? `delivery:${buildId}` : row.category,
     level,
     relevance: connections ? 1 : loud ? 0.8 : 0.2,
     collapseId: row.id,
