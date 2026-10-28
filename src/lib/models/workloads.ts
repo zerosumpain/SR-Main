@@ -592,6 +592,23 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
       'Follows the site default. A conversation STAMPS this model when it is created and keeps it for life, so changing it moves new threads only — the existing ones are on what they were opened with, and the composer\'s own picker still beats both. Deliberately separate from the site default so chat can be moved without moving every unpinned background role with it.',
   },
   {
+    // Slice 9 (owner decision 14): Siri, the Action Button and the Watch get a
+    // short spoken answer. Its own row so the hands-free spend shows on
+    // /admin/ops/costs apart from the desk's, and so it can be moved to a
+    // faster model without moving chat. Core resolves it for every turn whose
+    // envelope says 'siri' or 'watch' and tags the turn with this id.
+    id: 'jkai.voice',
+    scope: 'site',
+    label: 'jkai hands-free answers',
+    blurb: 'Quick answers from Siri, the Action Button and the Watch: read-only tools, a few rounds, a spoken reply.',
+    key: 'jkai.voice.model',
+    fallbackModelId: null,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'Follows the site default. Separate from chat turns because a spoken answer is waited on with the phone at your ear: a faster model may be worth pinning here without moving the desk.',
+  },
+  {
     id: 'workflow-node',
     scope: 'site',
     label: 'Canvas LLM nodes',

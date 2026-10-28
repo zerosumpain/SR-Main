@@ -334,6 +334,13 @@ export const resolveNotebookModel = () => resolveById('notebook');
 export const resolveChatTurnModel = () => resolveById('chat');
 
 /**
+ * The model a hands-free answer (Siri, the Action Button, the Watch) runs on.
+ * Resolved per turn, never stamped on the Quick answers thread, so moving it
+ * moves the next spoken answer.
+ */
+export const resolveVoiceModel = () => resolveById('jkai.voice');
+
+/**
  * The model a canvas LLM node runs on when its own `config.model` is blank.
  *
  * Resolved per run rather than stamped, so a change here reaches existing
