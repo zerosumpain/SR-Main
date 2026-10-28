@@ -16,6 +16,7 @@
 // compose path does not deliver it a second time while the two run side by
 // side.
 
+import { getJkaiIdentity } from '$lib/jkai/identity-client';
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts, researchSessions } from '$lib/db/schema';
@@ -154,10 +155,20 @@ export function systemPrompt(opts: {
   tested?: string[];
   /** The monthly summary replaces the rotation's brief. */
   summary?: boolean;
+  /**
+   * jkai's soul plus the daydream overlay, from Core (`getJkaiIdentity`).
+   * When present the note is written in jkai's voice; every rule below still
+   * follows it and wins. Absent (Core down), the task's own sentence stands.
+   */
+  identity?: string;
 }): string {
   const allowed = outcomesFor(opts.set);
+  const identity = opts.identity?.trim();
   return [
-    "You are the thinking half of John's second brain. On a spare cycle you investigate ONE question with tools, then write at most two notes — or none.",
+    ...(identity ? [identity, '', '---', ''] : []),
+    identity
+      ? "This is a daydream cycle, the thinking half of John's second brain. On a spare cycle you investigate ONE question with tools, then write at most two notes — or none."
+      : "You are the thinking half of John's second brain. On a spare cycle you investigate ONE question with tools, then write at most two notes — or none.",
     `Today is ${opts.today} (Europe/London).`,
     '',
     opts.summary ? SUMMARY_BRIEF : opts.question.brief,
@@ -287,7 +298,7 @@ export async function runThink(
       result.focus = 'monthly summary of tested relationships';
     }
 
-    const [said, profile, definitions, lessons, taste, subjects] = await Promise.all([
+    const [said, profile, definitions, lessons, taste, subjects, identity] = await Promise.all([
       alreadySaid(now, set),
       // The profile is private — his asks, his corrections — so a research
       // cycle never holds it. See tools.ts.
@@ -299,13 +310,15 @@ export async function runThink(
       loadTaste(now, { researchOnly: set === 'research' }).then(tasteLines).catch(() => [] as string[]),
       // A research cycle sees only its own `topic:` subjects, by the same rule.
       recentSubjects(now, set === 'research' ? { prefix: 'topic:' } : {}).catch(() => []),
+      // jkai's voice for the note, from Core; '' (cached) when Core is down.
+      getJkaiIdentity('daydream').then((i) => i.text).catch(() => ''),
     ]);
     const tested = set === 'private' && question.outcome === 'correlate' && !summary ? recentEntries(ledger).map(entryLine) : [];
 
     const model = await resolveDaydreamModel();
     const { client, model: modelId } = await getLLMClient(model);
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt({ question, set, rounds, profile, said, interest, today, lessons, taste, subjects, tested, summary }) },
+      { role: 'system', content: systemPrompt({ question, set, rounds, profile, said, interest, today, lessons, taste, subjects, tested, summary, identity }) },
       { role: 'user', content: 'Begin. Look first, then answer with the JSON object.' },
     ];
 
