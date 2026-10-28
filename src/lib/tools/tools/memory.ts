@@ -55,6 +55,7 @@ register({
         description: 'Natural-language recall using text, semantic similarity and connected entities',
       },
       asOf: { type: 'string', description: 'ISO date for historical recall; forgotten facts remain excluded.' },
+      scope: { type: 'string', enum: ['personal', 'daydream'], description: "Default 'personal'. 'daydream' recalls what the daydream loop learned from his sign-offs instead — derived, labelled, never merged with personal memory." },
       category: {
         type: 'string',
         enum: CATEGORIES,
@@ -68,7 +69,8 @@ register({
     const query = args.query as string | undefined;
     const category = args.category as string | undefined;
 
-    const retrieved = await retrieveMemories(query, category, 50, { asOf: args.asOf as string | undefined });
+    const scope = args.scope === 'daydream' ? 'daydream' : 'personal';
+    const retrieved = await retrieveMemories(query, category, 50, { asOf: args.asOf as string | undefined, scope });
     // The 1,536-float embedding is retrieval's business, not the model's: it
     // would cost ~2.5KB of context per row and push a 16-row recall past the
     // trace's 40KB result cap, at which point the recorded step keeps no ids
@@ -79,6 +81,10 @@ register({
     // error, when Core cannot answer.
     const { chatContext } = await import('$lib/intel-client/chat-context');
     const intelligence = query ? (await chatContext({ userMessage: query })).knowledge : '';
+    if (scope === 'daydream') {
+      // Derived rows, labelled; the graph's recall is personal context and stays out.
+      return { success: true, data: { scope, label: 'daydream (derived): learned by the daydream loop from his sign-offs, not something he stated', memories: rows, count: rows.length } };
+    }
     return { success: true, data: { memories: rows, count: rows.length, intelligence } };
   },
 });

@@ -35,8 +35,6 @@ import { ownerThread } from '$lib/jkai/owner-threads';
 import { OWNER_INTEL_SCOPE, spaceIn } from '$lib/intel-client/scope';
 import { DEFAULT_SUBJECT } from '../types';
 import { localDay } from '../features/build';
-import { formatLedger, sameMerchant } from '../spend/ledger';
-import { loadLedger } from '../spend/ledger.server';
 
 function clampInt(raw: unknown, lo: number, hi: number, dflt: number): number {
   const n = Number(raw);
@@ -108,43 +106,13 @@ export async function mailFactsTool(args: Record<string, unknown>, now = new Dat
   return lines.join('\n');
 }
 
-// ── diary ───────────────────────────────────────────────────────────────────
+// ── diary and spend ─────────────────────────────────────────────────────────
+//
+// Moved to `$lib/owner-data` (overhaul plan 2026-10-28, P2-2), where chat's
+// `diary` and `spend_ledger` share them. Re-exported for the toolbox.
 
-export async function diaryTool(args: Record<string, unknown>): Promise<string> {
-  const from = typeof args.from === 'string' && args.from.trim() ? args.from.trim() : 'today';
-  const to = typeof args.to === 'string' && args.to.trim() ? args.to.trim() : '+14d';
-  const q = query(args.query).toLowerCase();
-  const [{ readCalendar }, { loadExclusionSet }] = await Promise.all([
-    import('$lib/calendar/read'),
-    import('$lib/calendar/store'),
-  ]);
-  const read = await readCalendar({ dateRangeStart: from, dateRangeEnd: to }, await loadExclusionSet());
-  if (!read.available) return `The calendar could not be read (${read.error ?? 'unavailable'}). Treat the diary as unknown, never as empty.`;
-  const events = read.events.filter((e) => !q || `${e.title} ${e.location ?? ''}`.toLowerCase().includes(q)).slice(0, 60);
-  const lines = [`Diary ${from} to ${to}${q ? `, matching "${q}"` : ''}: ${events.length} event(s).`];
-  for (const e of events) {
-    lines.push(`  ${e.start.slice(0, 16).replace('T', ' ')}${e.end ? `–${e.end.slice(11, 16)}` : ''} ${e.title}${e.location ? ` @ ${e.location}` : ''}${e.calendar ? ` [${e.calendar}]` : ''}`);
-  }
-  return lines.join('\n');
-}
-
-// ── spend ───────────────────────────────────────────────────────────────────
-
-export async function spendTool(args: Record<string, unknown>, now = new Date()): Promise<string> {
-  const days = clampInt(args.days, 7, 180, 60);
-  const q = query(args.merchant);
-  const floor = localDay(new Date(now.getTime() - days * 86_400_000));
-  // Reconciled BEFORE the merchant filter: a receipt for "Apple" must still
-  // find the bank line, and a top-up its PayPal payments (`ledger.ts`).
-  const lines = await loadLedger(floor);
-  const needle = q.toLowerCase();
-  const text = formatLedger(lines, {
-    days,
-    since: floor,
-    filter: q ? (l) => l.merchant.toLowerCase().includes(needle) || sameMerchant(l.merchant, q) : undefined,
-  });
-  return text || `No verified spend in the last ${days} days${q ? ` matching "${q}"` : ''}. Absence of evidence, not of spending.`;
-}
+export { diaryTool } from '$lib/owner-data/diary.server';
+export { spendTool } from '$lib/owner-data/spend.server';
 
 // ── chat_threads ────────────────────────────────────────────────────────────
 

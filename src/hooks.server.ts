@@ -2,6 +2,10 @@ import { privacyMaintenance } from '$lib/people/privacy-maintenance';
 import { building } from '$app/environment';
 // Daydream registers its chat toolset itself; see $lib/daydream/chat-tools.
 import '$lib/daydream/chat-tools';
+// The owner's private reads, trips and captures register theirs the same way
+// (overhaul plan 2026-10-28, slice 7a).
+import '$lib/owner-data/chat-tools';
+import '$lib/captures/chat-tools';
 // Commissioning's quota reader and backlog intake, registered by the domains
 // that own them so $lib/jkai never imports them back (see $lib/jkai/commission/ports).
 import { registerCommissionQuota } from '$lib/daydream/commission-port';

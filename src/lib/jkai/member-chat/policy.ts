@@ -41,7 +41,9 @@ export const MEMBER_FORBIDDEN_TOOLSETS = [
   'memory',
   'recall',
   'gmail',
-  'mail',
+  // Mail in the knowledge graph (mail_search, mail_read) is toolset 'intel';
+  // 'mail' named nothing (fixed 2026-10-28, P2-12).
+  'intel',
   'files',
   'datastore',
   'home',
@@ -68,6 +70,16 @@ export const MEMBER_FORBIDDEN_TOOLSETS = [
   'diagnostics',
   'daydream',
   'briefing',
+  // Slice 7a's families, and the owner's own lanes that predate the list.
+  'trips',
+  'captures',
+  'money',
+  'family',
+  'people',
+  'notes',
+  'nodes',
+  'develop',
+  'self-improve',
 ] as const;
 
 /** A turn restricted to one principal and a closed tool list. */
