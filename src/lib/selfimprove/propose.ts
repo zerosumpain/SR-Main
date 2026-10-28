@@ -103,6 +103,28 @@ export function deliveryRequest(item: BacklogItemData, runId: string): DeliveryR
   return { title: item.title, backlogSlug: item.slug, outcome: deliveryOutcome(item, runId), ...deliveryBriefFrom(item.grooming) };
 }
 
+/**
+ * Channels autobuild never dispatches on its own (plan point 5 and decision 5).
+ *
+ * - 'capability-gap': an ask jkai could not meet, filed from chat. Its title
+ *   and quoted words can carry text a turn retrieved, so it is never built
+ *   without John's tap, however `daydream.appetite.autobuild` is set.
+ * - 'chat' and 'phone': an explicit commission already has its delivery
+ *   (`commissionBuild`), so an item from those channels that reaches this
+ *   phase was NOT explicitly commissioned and waits for the tap like any other.
+ *
+ * Any citation from a gap counts, not only the first channel: a gap merged
+ * into an older item must not let it ride that item's autobuild.
+ */
+export const NEVER_AUTOBUILD_SOURCES: ReadonlyArray<string> = ['capability-gap', 'chat', 'phone'];
+
+/** May `autobuild` dispatch this item without his tap? PURE. */
+export function autobuildMay(item: Pick<BacklogItemData, 'source' | 'citations'>): boolean {
+  if (item.source && NEVER_AUTOBUILD_SOURCES.includes(item.source)) return false;
+  if ((item.citations ?? []).some((c) => c.source === 'capability-gap')) return false;
+  return true;
+}
+
 export interface ProposeOpts {
   lanes?: BuildLanes;
   /** `daydream.appetite.autobuild` — may the engine dispatch without a tap?
@@ -123,8 +145,9 @@ export async function proposeFeatures(
   const backlog = await listBacklog();
 
   // Which items may spend. The owner's accepted brief is the tap; autobuild
-  // is the explicit, default-off exception.
-  const mayDispatch = (item: BacklogItemData) => autobuild || isOwnerAccepted(item);
+  // is the explicit, default-off exception, and never covers a capability
+  // gap or a chat/phone intake that was not an explicit commission.
+  const mayDispatch = (item: BacklogItemData) => isOwnerAccepted(item) || (autobuild && autobuildMay(item));
   const tapped = backlog.filter(mayDispatch);
   const reportWaiting = (kinds: ReadonlyArray<BacklogItemData['kind']>, what: string) => {
     const waiting = pickWork(backlog.filter((i) => !mayDispatch(i)), kinds, Number.MAX_SAFE_INTEGER).length;

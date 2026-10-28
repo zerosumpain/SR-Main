@@ -671,6 +671,79 @@ export interface CataloguePayload {
 	 * copy of the library; `skill_view` reads it on Main. '' from an older Main.
 	 */
 	skillsIndex: string;
+	/**
+	 * The capability manifest (slice 7b): what jkai can do, what is in preview
+	 * and what is not built yet, authored in Main's `$lib/capabilities`.
+	 * ABSENT from an older Main, and then a receiver keeps its own hand tables
+	 * (one release); present, it is what keyword rows, domain routing, the
+	 * always-on names, host routing and jkai_help's "not built yet" derive from.
+	 */
+	capabilities?: CatalogueCapability[];
+	/** Changes exactly when a row does. Absent with `capabilities`. */
+	capabilitiesVersion?: string;
+}
+
+export const CAPABILITY_STATUSES = ['live', 'preview', 'planned'] as const;
+export type CapabilityStatus = (typeof CAPABILITY_STATUSES)[number];
+export const CAPABILITY_HOSTS = ['main', 'workflows'] as const;
+export type CapabilityHost = (typeof CAPABILITY_HOSTS)[number];
+
+/** One manifest row as it crosses the wire. */
+export interface CatalogueCapability {
+	id: string;
+	title: string;
+	blurb: string;
+	app: string;
+	status: CapabilityStatus;
+	toolsets: string[];
+	tools: string[];
+	host: CapabilityHost;
+	alwaysOn: string[];
+	/** Case-insensitive regex sources; a receiver skips one that does not compile. */
+	keywords: string[];
+	domain?: string;
+	/** Site paths; the first is the link jkai gives. */
+	pages: string[];
+	native?: string;
+	memberSafe: boolean;
+	notes?: string;
+}
+
+/**
+ * Read manifest rows strictly. Fails closed per row: an unknown status or
+ * host drops the row (a toolset with no row is then refused a host by Core,
+ * never sent to Main by default), and `memberSafe` holds only when it is
+ * exactly `true`. Undefined when the payload carries none, so the receiver
+ * can tell "an older Main" from "an empty manifest".
+ */
+export function coerceCatalogueCapabilities(raw: unknown): CatalogueCapability[] | undefined {
+	if (!Array.isArray(raw)) return undefined;
+	const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : []);
+	const known = <T extends string>(words: readonly T[], v: unknown): v is T => typeof v === 'string' && (words as readonly string[]).includes(v);
+	return raw.filter(isPlainObject).flatMap((r) => {
+		if (typeof r.id !== 'string' || !r.id) return [];
+		if (!known(CAPABILITY_STATUSES, r.status)) return [];
+		const host = r.host === undefined ? 'main' : r.host;
+		if (!known(CAPABILITY_HOSTS, host)) return [];
+		const row: CatalogueCapability = {
+			id: r.id,
+			title: typeof r.title === 'string' ? r.title : r.id,
+			blurb: typeof r.blurb === 'string' ? r.blurb : '',
+			app: typeof r.app === 'string' ? r.app : '',
+			status: r.status,
+			toolsets: strings(r.toolsets),
+			tools: strings(r.tools),
+			host,
+			alwaysOn: strings(r.alwaysOn),
+			keywords: strings(r.keywords),
+			pages: strings(r.pages).filter((p) => p.startsWith('/')),
+			memberSafe: r.memberSafe === true,
+		};
+		if (typeof r.domain === 'string' && r.domain) row.domain = r.domain;
+		if (typeof r.native === 'string' && r.native) row.native = r.native;
+		if (typeof r.notes === 'string' && r.notes) row.notes = r.notes;
+		return [row];
+	});
 }
 
 export function coerceCataloguePayload(body: unknown): CataloguePayload {
@@ -712,6 +785,16 @@ export function coerceCataloguePayload(body: unknown): CataloguePayload {
 				}))
 			: [],
 		promptSection: typeof body.promptSection === 'string' ? body.promptSection : '',
-		skillsIndex: typeof body.skillsIndex === 'string' ? body.skillsIndex : ''
+		skillsIndex: typeof body.skillsIndex === 'string' ? body.skillsIndex : '',
+		...capabilitiesOf(body)
+	};
+}
+
+function capabilitiesOf(body: Record<string, unknown>): Pick<CataloguePayload, 'capabilities' | 'capabilitiesVersion'> {
+	const capabilities = coerceCatalogueCapabilities(body.capabilities);
+	if (!capabilities) return {};
+	return {
+		capabilities,
+		...(typeof body.capabilitiesVersion === 'string' ? { capabilitiesVersion: body.capabilitiesVersion } : {})
 	};
 }

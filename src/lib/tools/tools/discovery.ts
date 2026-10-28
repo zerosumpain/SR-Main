@@ -17,6 +17,56 @@ import {
   searchSkills,
 } from '$lib/jkai/skills/registry';
 import { optionalString } from '../tool-args';
+import { normalisePrincipal } from '../invoke-contract';
+import { capabilitiesFor, isCustomToolset, rankCapabilities } from '$lib/capabilities/manifest';
+import { gapTitle, queueCapabilityGap, quotedQuery, type GapOutcome } from '$lib/capabilities/gaps';
+import type { CapabilityEntry } from '$lib/capabilities/types';
+import type { ToolExecContext } from '../registry-internal';
+
+/** What jkai says a row's status is: one wording everywhere (plan point 7). */
+const STATUS_WORDS = { live: 'live', preview: 'preview', planned: 'not built yet' } as const;
+
+function capabilityView(entry: CapabilityEntry, canCommission: boolean) {
+  return {
+    id: entry.id,
+    title: entry.title,
+    status: STATUS_WORDS[entry.status],
+    blurb: entry.blurb,
+    page: entry.pages[0] ?? null,
+    ...(entry.notes ? { notes: entry.notes } : {}),
+    ...(entry.toolsets.length ? { toolsets: entry.toolsets } : {}),
+    ...(entry.status === 'planned' ? { canCommission } : {}),
+  };
+}
+
+/**
+ * The "not built yet" answer, worded once here so jkai_help and tool_search
+ * say the same thing: what it is, where it is done today, whether it is on
+ * the backlog, and the one offer — only when this turn could commission it.
+ */
+export function notBuiltYetAnswer(entry: Pick<CapabilityEntry, 'title' | 'pages'> | null, filed: GapOutcome | null, canCommission: boolean): string {
+  const what = entry ? `${entry.title} is not built yet` : 'Nothing on the site does that yet';
+  const page = entry?.pages[0] ? ` (today: ${entry.pages[0]})` : '';
+  const backlog =
+    filed?.status === 'queued' || filed?.status === 'already-queued'
+      ? " — it's on the backlog"
+      : filed === null
+        ? ''
+        : ' — I could not add it to the backlog just now';
+  return `${what}${page}${backlog}.${canCommission ? ' Want me to commission it?' : ''}`;
+}
+
+/**
+ * Who may file a gap and be offered a commission: the owner, attended. The
+ * offer needs a browser session (the commission lane, slice 6b).
+ */
+function askerOf(ctx: ToolExecContext | undefined): { owner: boolean; attended: boolean; canCommission: boolean } {
+  const p = ctx?.principal ? normalisePrincipal(ctx.principal) : null;
+  const owner = (p?.principalId ?? ctx?.principalId ?? 'owner') === 'owner';
+  const attended = !!p && p.attended && owner;
+  return { owner, attended, canCommission: attended && p?.via === 'session' };
+}
+
 
 register({
   name: 'skills_list',
@@ -103,31 +153,63 @@ register({
 register({
   name: 'tool_search',
   description:
-    'Search every registered tool by keyword, across all toolsets — including ones not currently active. Use this before concluding something cannot be done: the capability usually exists under a name you did not guess.',
+    'Search every registered tool by keyword, across all toolsets — including ones not currently active — and the capability list, which says what is live, in preview, or not built yet. Use this before concluding something cannot be done: the capability usually exists under a name you did not guess. Set `requested: true` only when John himself asked for this capability: a not-built-yet hit is then filed on the backlog for him to rule on.',
   parameters: {
     type: 'object',
     properties: {
       query: { type: 'string', description: 'Keywords, e.g. "calendar event" or "resize image".' },
       limit: { type: 'number', description: 'Max results (default 12).' },
+      requested: { type: 'boolean', description: 'True only when John asked for this capability himself (not when you are exploring). Files a not-built-yet ask on the backlog.' },
     },
     required: ['query'],
   },
   category: 'Discovery',
   toolset: 'discovery',
-  handler: async (raw: Record<string, unknown>) => {
-    const args = (raw ?? {}) as { query?: string; limit?: number };
+  handler: async (raw: Record<string, unknown>, ctx?: ToolExecContext) => {
+    const args = (raw ?? {}) as { query?: string; limit?: number; requested?: boolean };
     try {
       const terms = String(args?.query ?? '').toLowerCase().split(/\s+/).filter((t) => t.length > 1);
       if (terms.length === 0) return { success: false, error: 'query is required' };
+      const asker = askerOf(ctx);
       const policy = await getActivePolicy();
       let integrations: Awaited<ReturnType<typeof discoverIntegrations>> = []; let integrationLookup: 'ok' | 'unavailable' = 'ok';
       try { integrations = await discoverIntegrations(String(args.query), args.limit ?? 12); } catch { integrationLookup = 'unavailable'; }
-      const hits = resolveCapabilities(allTools, String(args.query), args.limit ?? 12).map(t => ({ t }));
+      // Saved custom tools are for an attended owner turn only; nobody else is told of them.
+      const searchable = asker.attended ? allTools : allTools.filter((t) => !isCustomToolset(t.toolset));
+      const hits = resolveCapabilities(searchable, String(args.query), args.limit ?? 12).map(t => ({ t }));
+      // Live rows rank above planned ones on a tie, and the live tool hits stay
+      // in the answer beside a planned row, so a weak match cannot tell John a
+      // live feature does not exist.
+      const rows = rankCapabilities(String(args.query), capabilitiesFor(ctx?.principal?.principalId ?? ctx?.principalId), 5);
+      const top = rows[0]?.entry ?? null;
+      const plannedHit = top?.status === 'planned' ? top : null;
+      const zeroHit = hits.length === 0 && rows.length === 0;
+      let notBuiltYet: { answer: string; capability: string | null; page: string | null; backlog: string } | undefined;
+      if (plannedHit || zeroHit) {
+        // Filed only when John asked for it himself on an attended owner turn:
+        // never for members, heartbeat, WhatsApp, the bridge or a scheduled
+        // run (they get the same answer with nothing filed).
+        const file = args.requested === true && asker.attended;
+        const filed = file
+          ? await queueCapabilityGap({
+              capabilityId: plannedHit?.id ?? null,
+              title: gapTitle(plannedHit, String(args.query)),
+              query: quotedQuery(String(args.query)),
+              ...(ctx?.conversationId ? { conversationId: ctx.conversationId } : {}),
+            })
+          : null;
+        notBuiltYet = {
+          answer: notBuiltYetAnswer(plannedHit, filed, asker.canCommission),
+          capability: plannedHit?.id ?? null,
+          page: plannedHit?.pages[0] ?? null,
+          backlog: filed ? filed.status : 'not-filed',
+        };
+      }
       return {
         success: true,
         data: {
           count: hits.length,
-          searched: allTools.length,
+          searched: searchable.length,
           integrations, integrationLookup,
           tools: hits.map((r) => ({
             name: r.t.name,
@@ -136,6 +218,8 @@ register({
             inputSchema: r.t.parameters,
             destructive: r.t.destructive ?? false,
           })),
+          capabilities: rows.map((r) => capabilityView(r.entry, asker.canCommission)),
+          ...(notBuiltYet ? { notBuiltYet } : {}),
         },
       };
     } catch (err) {

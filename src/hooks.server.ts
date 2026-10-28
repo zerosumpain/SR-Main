@@ -13,6 +13,11 @@ import { registerCommissionQuota } from '$lib/daydream/commission-port';
 import { registerCommissionIntake } from '$lib/selfimprove/commission-port';
 registerCommissionQuota();
 registerCommissionIntake();
+// The capability-gap queue (slice 7b): chat files a not-built-yet ask, the
+// backlog takes it in out of band. Registered by selfimprove, which owns the
+// backlog, so $lib/capabilities stays a leaf.
+import { registerCapabilityGapQueue, drainCapabilityGaps, GAP_DRAIN_INTERVAL_MS } from '$lib/selfimprove/capability-gaps';
+registerCapabilityGapQueue();
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
   startDependencyMonitor,
@@ -224,6 +229,18 @@ if (runsService('background')) {
   void import('$lib/games/rooms.server')
     .then((m) => m.startGameRoomSweep())
     .catch((err) => console.error('[hooks.server] game room sweep:', err));
+}
+// Re-enabled custom tools (plan P2-0a): the web process only, and only the
+// reviewed allow-list in $lib/tools/custom-tools-enabled.
+import { resolveServiceRole } from '$lib/server/service-role';
+if (!building && resolveServiceRole() === 'web') {
+  void import('$lib/tools/custom-tool-loader')
+    .then((m) => m.loadCustomTools())
+    .catch((err) => console.error('[hooks.server] custom tools:', err));
+}
+// Gaps a restart left queued; the usual path drains right after the chat call.
+if (!building && runsService('background')) {
+  setInterval(() => void drainCapabilityGaps(), GAP_DRAIN_INTERVAL_MS).unref?.();
 }
 if (runsService('background')) {
   startDatastoreReaper();

@@ -550,7 +550,7 @@ describe('intake channels', () => {
   });
 
   it('names every channel in the closed set', () => {
-    for (const s of ['owner', 'question', 'think', 'fault', 'doctor', 'starved', 'health', 'appetite', 'engine', 'toolsmith', 'trace', 'chat', 'phone', 'unattributed'] as const) {
+    for (const s of ['owner', 'question', 'think', 'fault', 'doctor', 'starved', 'health', 'appetite', 'engine', 'toolsmith', 'trace', 'chat', 'phone', 'capability-gap', 'unattributed'] as const) {
       expect(SOURCE_LABEL[s].label.length).toBeGreaterThan(0);
       expect(SOURCE_LABEL[s].from.length).toBeGreaterThan(0);
     }

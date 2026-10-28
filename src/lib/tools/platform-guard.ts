@@ -30,7 +30,7 @@
 // production, 18 use `platform.call` and NONE calls a destructive tool.
 
 import type { ToolResult } from './registry-internal';
-import { isDestructiveTool } from './catalogue';
+import { catalogueTools, isDestructiveTool } from './catalogue';
 
 /**
  * Refuse a destructive tool reached from inside an authored handler.
@@ -53,5 +53,28 @@ export async function refuseDestructiveCall(
       `and a stored tool runs with nobody to ask. Call "${toolName}" directly instead: that path ` +
       `prompts for confirmation. If this tool needs to prepare the action, have it return what should ` +
       `happen and let the caller do it.`,
+  };
+}
+
+/**
+ * Refuse anything but a plain read from inside a RE-ENABLED custom tool
+ * (`$lib/tools/custom-tools-enabled`).
+ *
+ * Those tools are declared read and run without a card, so the tier they
+ * pass on to `platform.call` is read too: a mutate (`ha_call_service`, a
+ * memory save, a trip change) or anything that confirms would otherwise run
+ * under the owner's attended principal with no card ever shown. Fails CLOSED
+ * on a tool the catalogue does not carry, unlike `refuseDestructiveCall`:
+ * a stored tool that names something unknown has nothing to gain from the
+ * clearer message.
+ */
+export async function refuseNonReadCall(toolName: string, callerName: string): Promise<ToolResult | null> {
+  const tier = (await catalogueTools()).find((t) => t.name === toolName);
+  if (tier && tier.effect === 'read' && tier.confirm === 'never') return null;
+  return {
+    success: false,
+    error:
+      `"${callerName}" is a saved custom tool that may only read, and "${toolName}" ${tier ? 'changes something or needs confirming' : 'is not a tool it can reach'}. ` +
+      `Call "${toolName}" directly instead, where its confirmation applies.`,
   };
 }

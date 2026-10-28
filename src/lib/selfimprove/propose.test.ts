@@ -27,7 +27,7 @@ vi.mock('./backlog', () => ({
   }),
 }));
 
-import { proposeFeatures } from './propose';
+import { autobuildMay, proposeFeatures } from './propose';
 
 function item(over: Partial<BacklogItemData>): BacklogItemData {
   return {
@@ -346,5 +346,39 @@ describe('the accepted brief becomes delivery fields', () => {
     await proposeFeatures({ ...budget, timeLeftMs: () => 1000 }, 'run1', { lanes });
 
     expect(h.deliveries).toHaveLength(0);
+  });
+});
+
+// Slice 7b (plan point 5 and decision 5): a capability gap, and a chat or
+// phone intake that was not an explicit commission, never ride autobuild.
+describe('proposeFeatures — autobuild exclusions', () => {
+  const at = new Date().toISOString();
+
+  it('never autobuilds a capability gap, but builds it once he taps it', async () => {
+    h.backlog = [item({ slug: 'gap', source: 'capability-gap' })];
+    await proposeFeatures(budget, 'run10', { lanes, autobuild: true });
+    expect(h.deliveries).toHaveLength(0);
+
+    h.backlog = [item({ slug: 'gap', source: 'capability-gap', ...tap })];
+    await proposeFeatures(budget, 'run11', { lanes, autobuild: true });
+    expect(h.deliveries.map((d) => d.backlogSlug)).toEqual(['gap']);
+  });
+
+  it('never autobuilds an item a capability gap merged into', async () => {
+    h.backlog = [item({ slug: 'old', source: 'think', citations: [{ source: 'capability-gap', ref: 'conv:c1', firstAt: at, lastAt: at, count: 1 }] })];
+    await proposeFeatures(budget, 'run12', { lanes, autobuild: true });
+    expect(h.deliveries).toHaveLength(0);
+  });
+
+  it('never autobuilds a chat or phone intake that was not explicitly commissioned', async () => {
+    h.backlog = [item({ slug: 'c', source: 'chat' }), item({ slug: 'p', source: 'phone' })];
+    await proposeFeatures(budget, 'run13', { lanes, autobuild: true });
+    expect(h.deliveries).toHaveLength(0);
+  });
+
+  it('still autobuilds the other channels', () => {
+    expect(autobuildMay({ source: 'think' })).toBe(true);
+    expect(autobuildMay({ source: 'doctor', citations: [{ source: 'question', firstAt: at, lastAt: at, count: 1 }] })).toBe(true);
+    expect(autobuildMay({ source: 'capability-gap' })).toBe(false);
   });
 });

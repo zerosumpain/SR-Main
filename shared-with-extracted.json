@@ -259,7 +259,7 @@
         "zerosumpain/SR-Jkai-Core",
         "zerosumpain/SR-Workflows"
       ],
-      "sha256": "777ea8e5e1c0b005a1546786a628d00177d9db2a4a1b565643db2506166f029d"
+      "sha256": "835f5310bc7879bac460d6257a60cca5181020969b235781d7a2b8670fdb0e1f"
     },
     "src/lib/tools/registry-internal.ts": {
       "peer": [

@@ -16,9 +16,13 @@ vi.mock('$lib/tools/load-registry', () => ({
       { name: 'site_blog_list', destructive: false, description: 'list posts', parameters: { type: 'object', properties: {} }, toolset: 'blog', category: 'content' },
       { name: 'gmail_send', destructive: true, description: 'send mail', parameters: { type: 'object', properties: {} }, toolset: 'gmail', category: 'comms' },
       { name: 'research_start' /* no flag at all */, description: 'start', parameters: { type: 'object', properties: {} }, toolset: 'research', category: 'research' },
+      { name: 'f1_driver_standings', effect: 'read', description: 'standings', parameters: { type: 'object', properties: {} }, toolset: 'custom:sports', category: 'Custom Tool' },
     ],
-    getAvailableToolsets: () => ['blog', 'gmail', 'research'],
-    getToolsetManifest: () => [{ toolset: 'blog', description: 'Blog', tools: [{ name: 'site_blog_list', description: 'list posts' }] }],
+    getAvailableToolsets: () => ['blog', 'gmail', 'research', 'custom:sports'],
+    getToolsetManifest: () => [
+      { toolset: 'blog', description: 'Blog', tools: [{ name: 'site_blog_list', description: 'list posts' }] },
+      { toolset: 'custom:sports', description: 'Saved', tools: [{ name: 'f1_driver_standings', description: 'standings' }] },
+    ],
     buildSystemPromptSection: () => 'TOOLSETS: blog, gmail, research',
   }),
 }));
@@ -50,16 +54,17 @@ afterAll(() => {
   }
 });
 
-function req(token?: string): Request {
-  return new Request('https://example.test/api/platform/tools/catalogue', {
+function req(token?: string, query = ''): Request {
+  return new Request(`https://example.test/api/platform/tools/catalogue${query}`, {
     method: 'GET',
     headers: token ? { authorization: `Bearer ${token}` } : {},
   });
 }
 
-async function call(token?: string) {
+async function call(token?: string, query = '') {
   try {
-    const response = (await GET({ request: req(token) } as never)) as Response;
+    const request = req(token, query);
+    const response = (await GET({ request, url: new URL(request.url) } as never)) as Response;
     return { status: response.status, body: await response.json() };
   } catch (e) {
     const httpError = e as { status?: number };
@@ -79,7 +84,28 @@ describe('GET /api/platform/tools/catalogue', () => {
       // assumed, because the flag crossing as `undefined` would read as "unknown"
       // on the far side, where unknown fails CLOSED and would confirm everything.
       ['research_start', false],
+      ['f1_driver_standings', false],
     ]);
+  });
+
+  // Slice 7b: the manifest rides the catalogue, and a re-enabled custom tool
+  // is on the owner's catalogue but not on the unattended one.
+  it('serves the capability manifest with its version', async () => {
+    const { body } = await call(TOKEN);
+    expect(body.capabilitiesVersion).toMatch(/^c1-[0-9a-f]{8}$/);
+    const ids = body.capabilities.map((c: { id: string }) => c.id);
+    expect(ids).toEqual(expect.arrayContaining(['trips', 'family', 'custom']));
+    expect(body.capabilities.find((c: { id: string }) => c.id === 'family')).toMatchObject({ status: 'planned', tools: expect.any(Array), pages: ['/home'] });
+  });
+
+  it('leaves custom tools out of the unattended audience', async () => {
+    const owner = await call(TOKEN);
+    expect(owner.body.tools.map((t: { name: string }) => t.name)).toContain('f1_driver_standings');
+    expect(owner.body.toolsets).toContain('custom:sports');
+    const unattended = await call(TOKEN, '?audience=unattended');
+    expect(unattended.body.tools.map((t: { name: string }) => t.name)).not.toContain('f1_driver_standings');
+    expect(unattended.body.toolsets).not.toContain('custom:sports');
+    expect(unattended.body.manifest.map((m: { toolset: string }) => m.toolset)).toEqual(['blog']);
   });
 
   /**
@@ -95,7 +121,7 @@ describe('GET /api/platform/tools/catalogue', () => {
     const { body } = await call(TOKEN);
     expect(body.tools[0].parameters).toEqual({ type: 'object', properties: {} });
     expect(body.tools[0].description).toBe('list posts');
-    expect(body.toolsets).toEqual(['blog', 'gmail', 'research']);
+    expect(body.toolsets).toEqual(['blog', 'gmail', 'research', 'custom:sports']);
     expect(body.manifest[0].toolset).toBe('blog');
     expect(body.promptSection).toContain('TOOLSETS');
   });
