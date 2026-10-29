@@ -87,6 +87,7 @@ describe('the quote card', () => {
     const q = quoteCard({ outcome: 'Add X to the backlog page\nmore', releasePolicy: 'pull_request', budget: BUDGET, mark: { fiveHourPct: 34, weeklyPct: 12 }, live: 0 });
     expect(q.lines).toEqual([
       'Commission a build on SR-Main: Add X to the backlog page',
+      expect.stringMatching(/^Brief: 30 characters \(5 beyond the headline\) · 0 acceptance criteria · autopilot on: grooms and builds unattended · brief [0-9a-f]{8} — read in full at \/jkai\/develop$/),
       'Stops at: Draft pull request',
       'Spend: up to 25 rounds, 2 hours, $2',
       'Quota now: ChatGPT 34% of the 5-hour window, 12% of the week',
@@ -97,7 +98,27 @@ describe('the quote card', () => {
   it('carries the refusal so the card is never shown for something refused', () => {
     expect(quoteCard({ releasePolicy: 'preview_only', budget: BUDGET, mark: { fiveHourPct: 90, weeklyPct: 1 }, live: 0 }).refusal).toMatch(/90% used/);
     expect(quoteCard({ releasePolicy: 'preview_only', budget: BUDGET, mark: null, live: 2 }).refusal).toMatch(/already running/);
-    expect(quoteCard({ releasePolicy: 'preview_only', budget: BUDGET, mark: null, live: 0 }).lines[3]).toMatch(/could not be read/);
+    expect(quoteCard({ releasePolicy: 'preview_only', budget: BUDGET, mark: null, live: 0 }).lines[4]).toMatch(/could not be read/);
+  });
+
+  it('digests the whole brief, not only its first 160 characters', () => {
+    const long = `Headline\n${'detail '.repeat(2000)}`;
+    const a = quoteCard({ outcome: long, criteria: ['one', 'two', ' '], autopilot: false, releasePolicy: 'preview_only', budget: BUDGET, mark: null, live: 0 });
+    expect(a.lines[1]).toMatch(/14,008 characters \(14,000 beyond the headline\) · 2 acceptance criteria · autopilot off/);
+    const b = quoteCard({ outcome: `${long}and a hidden extra ask`, criteria: ['one', 'two'], autopilot: false, releasePolicy: 'preview_only', budget: BUDGET, mark: null, live: 0 });
+    // Same headline, different brief: the fingerprint says so.
+    expect(a.lines[0]).toBe(b.lines[0]);
+    expect(a.lines[1].match(/brief ([0-9a-f]{8})/)![1]).not.toBe(b.lines[1].match(/brief ([0-9a-f]{8})/)![1]);
+  });
+
+  it('counts only running autopilot deliveries toward the live cap', async () => {
+    const { countsAsLiveCommission } = await import('./commission');
+    const on = { enabled: true, rounds: 1, maxRounds: 5, startedAt: 'x' };
+    expect(countsAsLiveCommission({ stage: 'building', autopilot: on }, null)).toBe(true);
+    expect(countsAsLiveCommission({ stage: 'brief', autopilot: undefined }, null)).toBe(false);
+    expect(countsAsLiveCommission({ stage: 'brief', autopilot: { ...on, enabled: false } }, null)).toBe(false);
+    expect(countsAsLiveCommission({ stage: 'building', autopilot: { ...on, stopReason: 'gave up' } }, null)).toBe(false);
+    expect(countsAsLiveCommission({ stage: 'pr_open', autopilot: on }, null)).toBe(false);
   });
 
   it('reads minutes that are not whole hours as minutes', () => {

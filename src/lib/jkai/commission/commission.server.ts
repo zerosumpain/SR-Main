@@ -33,7 +33,7 @@ import { commissionPorts } from './ports';
 import { builderClient } from '../builder-client';
 import {
   commissionRefusal,
-  deliveryTerminal,
+  countsAsLiveCommission,
   liveCapRefusal,
   OPERATION_KEY_PATTERN,
   quoteCard,
@@ -102,23 +102,50 @@ async function quotaMark(): Promise<{ fiveHourPct: number; weeklyPct: number } |
   }
 }
 
-/** Commissioned deliveries that have not settled (`deliveryTerminal`). */
-export async function liveCommissionCount(): Promise<number> {
-  const rows = await db
+/** Commissioned deliveries still spending (`countsAsLiveCommission`). */
+export async function liveCommissionCount(conn: Pick<typeof db, 'select'> = db): Promise<number> {
+  const rows = await conn
     .select({ state: jkaiBuildDeliveries.state, outcome: jkaiBuilds.outcome })
     .from(jkaiBuildDeliveries)
     .innerJoin(jkaiBuilds, eq(jkaiBuilds.id, jkaiBuildDeliveries.buildId))
     .where(sql`${jkaiBuildDeliveries.state} ? 'commission' AND ${jkaiBuildDeliveries.state}->'commission'->>'source' <> 'selfimprove'`)
     .orderBy(desc(jkaiBuildDeliveries.updatedAt))
     .limit(50);
-  return rows.filter((r) => !deliveryTerminal(r.state as DeliveryState, r.outcome)).length;
+  return rows.filter((r) => countsAsLiveCommission(r.state as DeliveryState, r.outcome)).length;
+}
+
+/** One key for every process: count-then-create runs one at a time. */
+const COMMISSION_LOCK_KEY = 'jkai-commission-live-cap';
+
+/**
+ * Run `fn` holding a transaction-scoped advisory lock, so two commissions in
+ * two processes (the web and the builder sidecar's nightly lane, or two tabs)
+ * cannot both count one live build and both create a second. The work inside
+ * writes on its own connection and commits before the lock is released, so
+ * the next holder counts it.
+ */
+async function withCommissionLock<T>(fn: () => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${COMMISSION_LOCK_KEY}))`);
+    return fn();
+  });
 }
 
 /** What the confirmation card says, true at the moment it is asked. */
-export async function quoteCommission(input: { releasePolicy?: ReleasePolicy; outcome?: string } = {}): Promise<CommissionQuote> {
+export async function quoteCommission(
+  input: { releasePolicy?: ReleasePolicy; outcome?: string; criteria?: string[]; autopilot?: boolean } = {},
+): Promise<CommissionQuote> {
   const releasePolicy = input.releasePolicy ?? 'preview_only';
   const [quota, liveCommissions] = await Promise.all([quotaMark(), liveCommissionCount().catch(() => 0)]);
-  const { lines, card, refusal } = quoteCard({ outcome: input.outcome, releasePolicy, budget: BUDGET, mark: quota, live: liveCommissions });
+  const { lines, card, refusal } = quoteCard({
+    outcome: input.outcome,
+    criteria: input.criteria,
+    autopilot: input.autopilot,
+    releasePolicy,
+    budget: BUDGET,
+    mark: quota,
+    live: liveCommissions,
+  });
   return {
     target: 'SR-Main',
     releasePolicy,
@@ -137,6 +164,15 @@ export function derivedOperationKey(conversationId: string | undefined, outcome:
   const words = outcome.trim().toLowerCase().replace(/\s+/g, ' ');
   const hash = createHash('sha256').update(`${conversationId ?? 'no-thread'}\n${words}`).digest('hex').slice(0, 24);
   return `chat:${hash}`;
+}
+
+/**
+ * The key as stored: scoped to whoever asked, so one principal's key (or a
+ * guessed one) can never return, or be answered with, another's delivery.
+ */
+export function scopedOperationKey(input: Pick<CommissionInput, 'source' | 'principal'>, operationKey: string): string {
+  const who = input.principal?.principalId ?? input.source;
+  return `${who}/${operationKey}`;
 }
 
 /** The delivery a key already made, and whether its start failed, or null. */
@@ -182,11 +218,14 @@ export async function commissionBuild(input: CommissionInput): Promise<Commissio
   const operationKey = input.operationKey ?? derivedOperationKey(conversationId ?? input.conversationId, outcome);
   if (!OPERATION_KEY_PATTERN.test(operationKey)) return { ok: false, reason: 'The operation key must be 8-200 letters, digits or _.:-' };
 
-  const running = inFlight.get(operationKey);
+  const scopedKey = scopedOperationKey(input, operationKey);
+
+  const running = inFlight.get(scopedKey);
   if (running) return running;
-  const work = (async (): Promise<CommissionResult> => {
-    // (2) Idempotency, before anything is counted or spent.
-    const existing = await deliveryForKey(operationKey);
+  const work = withCommissionLock(async (): Promise<CommissionResult> => {
+    // (2) Idempotency, before anything is counted or spent. Inside the lock,
+    // so another process's create for this key has committed or not started.
+    const existing = await deliveryForKey(scopedKey);
     if (existing) {
       return {
         ok: true,
@@ -222,7 +261,7 @@ export async function commissionBuild(input: CommissionInput): Promise<Commissio
           kind: 'feature',
           priority: 2,
           source: input.source,
-          ref: conversationId ? `conversation:${conversationId}` : `commission:${operationKey}`,
+          ref: conversationId ? `conversation:${conversationId}` : `commission:${scopedKey}`,
         });
         backlogSlug = result.slug;
       } catch (err) {
@@ -241,7 +280,7 @@ export async function commissionBuild(input: CommissionInput): Promise<Commissio
       source: input.source,
       ...(input.surface ? { surface: input.surface } : {}),
       ...(conversationId ? { conversationId } : {}),
-      operationKey,
+      operationKey: scopedKey,
       requestedBy: 'owner' as const,
       at: new Date().toISOString(),
       quotaAtStart: mark,
@@ -289,11 +328,11 @@ export async function commissionBuild(input: CommissionInput): Promise<Commissio
       }
     }
     return { ok: true, buildId, ...links(buildId), reused: false, started, note };
-  })();
-  inFlight.set(operationKey, work);
+  });
+  inFlight.set(scopedKey, work);
   try {
     return await work;
   } finally {
-    inFlight.delete(operationKey);
+    inFlight.delete(scopedKey);
   }
 }

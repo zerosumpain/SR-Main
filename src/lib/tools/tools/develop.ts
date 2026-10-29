@@ -47,7 +47,9 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      outcome: { type: 'string', description: 'The intended outcome, as it will appear on the card. Optional.' },
+      outcome: { type: 'string', description: 'The intended outcome, in full, exactly as it will be commissioned. The card digests the whole of it. Optional.' },
+      criteria: { type: 'array', items: { type: 'string' }, description: 'The acceptance criteria that will be commissioned with it. Optional.' },
+      autopilot: { type: 'boolean', description: 'Whether it will be commissioned with autopilot on (the default). Optional.' },
       releasePolicy: RELEASE_POLICY_PARAM,
     },
     required: [],
@@ -61,7 +63,12 @@ register({
     const releasePolicy = policyArg(args.releasePolicy);
     if (releasePolicy === 'invalid') return { success: false, error: "releasePolicy must be 'preview_only' or 'pull_request'." };
     const { quoteCommission } = await import('$lib/jkai/commission/commission.server');
-    const quote = await quoteCommission({ releasePolicy, outcome: typeof args.outcome === 'string' ? args.outcome : undefined });
+    const quote = await quoteCommission({
+      releasePolicy,
+      outcome: typeof args.outcome === 'string' ? args.outcome : undefined,
+      criteria: Array.isArray(args.criteria) ? args.criteria.filter((c): c is string => typeof c === 'string') : undefined,
+      autopilot: args.autopilot === false ? false : undefined,
+    });
     return { success: true, data: quote };
   },
 });

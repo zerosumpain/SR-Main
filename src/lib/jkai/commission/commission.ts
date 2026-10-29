@@ -119,27 +119,75 @@ export function budgetLine(budget: { maxIterations: number; maxTotalMinutes: num
 
 export interface CommissionQuoteFacts {
   outcome?: string;
+  criteria?: readonly string[];
+  /** Absent reads as on, which is what `develop_commission` defaults to. */
+  autopilot?: boolean;
   releasePolicy: ReleasePolicy;
   budget: { maxIterations: number; maxTotalMinutes: number; maxCostUsd: number };
   mark: { fiveHourPct: number; weeklyPct: number } | null;
   live: number;
 }
 
+/** Where the full brief is read once it is commissioned, and every delivery before. */
+export const COMMISSION_BRIEF_HREF = '/jkai/develop';
+
 /**
- * The confirmation card: four lines, phrased as a decision (what, where it
- * stops, what it may spend, the quota now), plus the refusal when there is
- * one so the card is never shown for something that would then be refused.
+ * A digest of the WHOLE brief, so a card never stands for less than it says:
+ * the first line alone is 160 characters of a brief that can run to 20,000.
+ * Its length, how much is beyond the headline, the criteria count, autopilot,
+ * and a short fingerprint of the exact text.
+ */
+export function briefDigest(f: Pick<CommissionQuoteFacts, 'outcome' | 'criteria' | 'autopilot'>): string {
+  const outcome = (f.outcome ?? '').trim();
+  const criteria = (f.criteria ?? []).filter((c) => c.trim());
+  const firstLine = outcome.split('\n')[0];
+  const more = outcome.length - Math.min(firstLine.length, 160);
+  const parts = [
+    `${outcome.length.toLocaleString('en-GB')} characters${more > 0 ? ` (${more.toLocaleString('en-GB')} beyond the headline)` : ''}`,
+    `${criteria.length} acceptance ${criteria.length === 1 ? 'criterion' : 'criteria'}`,
+    f.autopilot === false ? 'autopilot off: the brief waits for you' : 'autopilot on: grooms and builds unattended',
+  ];
+  if (outcome) parts.push(`brief ${fingerprint(`${outcome}\n${criteria.join('\n')}`)}`);
+  return parts.join(' · ');
+}
+
+/** 8 hex characters of FNV-1a: a fingerprint to compare, not a security hash. PURE, no node:crypto. */
+function fingerprint(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/**
+ * The confirmation card, phrased as a decision (what, a digest of the whole
+ * brief and where to read it, where it stops, what it may spend, the quota
+ * now), plus the refusal when there is one so the card is never shown for
+ * something that would then be refused.
  */
 export function quoteCard(f: CommissionQuoteFacts): { lines: string[]; card: string; refusal: string | null } {
   const what = (f.outcome ?? '').trim().split('\n')[0].slice(0, 160);
   const lines = [
     what ? `Commission a build on SR-Main: ${what}` : 'Commission a build on SR-Main',
+    `Brief: ${briefDigest(f)} — read in full at ${COMMISSION_BRIEF_HREF}`,
     `Stops at: ${STOP_WORDS[f.releasePolicy]}`,
     `Spend: ${budgetLine(f.budget)}`,
     `Quota now: ${quotaLine(f.mark)}`,
   ];
   const refusal = quotaRefusal(f.mark) ?? liveCapRefusal(f.live);
   return { lines, card: lines.join('\n'), refusal };
+}
+
+/**
+ * Whether a commissioned delivery counts toward `MAX_LIVE_COMMISSIONS`: its
+ * autopilot is ON and has not stopped, and it has not settled. A brief left
+ * with autopilot off waits for the owner and spends nothing, and one whose
+ * autopilot gave up is not running, so neither holds a slot.
+ */
+export function countsAsLiveCommission(state: Pick<DeliveryState, 'stage' | 'release' | 'autopilot'>, buildOutcome: string | null | undefined): boolean {
+  return state.autopilot?.enabled === true && !state.autopilot.stopReason && !deliveryTerminal(state, buildOutcome);
 }
 
 /** One word for a delivery's stage, as the thread reads it. */

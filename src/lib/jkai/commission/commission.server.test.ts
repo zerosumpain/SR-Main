@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   capabilities: { persistentSessions: true, brokerConfigured: true } as unknown,
   mutated: [] as string[],
   badModel: false,
+  locks: 0,
 }));
 
 vi.mock('$lib/db', () => {
@@ -34,7 +35,15 @@ vi.mock('$lib/db', () => {
     c.limit = result;
     return c;
   };
-  return { db: { select: (fields: Record<string, unknown>) => chain(fields) } };
+  const db = {
+    select: (fields: Record<string, unknown>) => chain(fields),
+    execute: async (q: unknown) => {
+      if (JSON.stringify(q).includes('pg_advisory_xact_lock')) h.locks++;
+      return { rows: [] };
+    },
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
+  };
+  return { db };
 });
 vi.mock('../development-create.server', () => {
   class DevelopmentModelChoiceError extends Error {}
@@ -63,7 +72,7 @@ vi.mock('../builder-client', () => ({
   },
 }));
 
-const { commissionBuild, derivedOperationKey, quoteCommission } = await import('./commission.server');
+const { commissionBuild, derivedOperationKey, quoteCommission, scopedOperationKey } = await import('./commission.server');
 const { setCommissionPorts } = await import('./ports');
 // The two domain halves, as `src/hooks.server.ts` registers them (`./ports`).
 setCommissionPorts({
@@ -81,7 +90,7 @@ const ask = (over: Record<string, unknown> = {}) =>
 beforeEach(() => {
   Object.assign(h, {
     byKey: null, byKeyStartError: null, live: [], thread: true, mark: { fiveHourPct: 20, weeklyPct: 10 }, created: [], intake: [], backlogLive: null,
-    capabilities: { persistentSessions: true, brokerConfigured: true }, mutated: [], badModel: false,
+    capabilities: { persistentSessions: true, brokerConfigured: true }, mutated: [], badModel: false, locks: 0,
   });
 });
 
@@ -92,7 +101,13 @@ describe('commissionBuild', () => {
     const input = h.created[0];
     expect(input).toMatchObject({ origin: 'chat', releasePolicy: 'pull_request', autopilot: true, backlogSlug: 'add-x-to-the-backlog-page', conversationId: 'conv-1', area: 'Platform' });
     expect(input.commission).toMatchObject({ source: 'chat', surface: 'web', conversationId: 'conv-1', requestedBy: 'owner', quotaAtStart: { fiveHourPct: 20, weeklyPct: 10 } });
-    expect((input.commission as { operationKey: string }).operationKey).toBe(derivedOperationKey('conv-1', 'Add X to the backlog page'));
+    expect((input.commission as { operationKey: string }).operationKey).toBe(`owner/${derivedOperationKey('conv-1', 'Add X to the backlog page')}`);
+    expect(h.locks).toBe(1);
+  });
+
+  it('scopes the operation key to who asked', () => {
+    expect(scopedOperationKey({ source: 'chat', principal: OWNER }, 'op-key-12345')).toBe('owner/op-key-12345');
+    expect(scopedOperationKey({ source: 'selfimprove', principal: undefined }, 'op-key-12345')).toBe('selfimprove/op-key-12345');
   });
 
   it('files the ask on the backlog as source chat, quoted', async () => {
@@ -133,11 +148,17 @@ describe('commissionBuild', () => {
   });
 
   it('refuses a third live commission, and does not count settled ones', async () => {
-    const live = { stage: 'building', criteria: [], release: undefined, autopilot: undefined };
+    const live = { stage: 'building', criteria: [], release: undefined, autopilot: { enabled: true, rounds: 1, maxRounds: 5, startedAt: 'x' } };
     h.live = [{ state: live, outcome: null }, { state: { ...live, stage: 'pr_open' }, outcome: null }];
     expect((await ask()).ok).toBe(true);
     h.live = [{ state: live, outcome: null }, { state: live, outcome: null }];
     expect(await ask({ operationKey: 'op-third-one' })).toMatchObject({ ok: false, reason: expect.stringMatching(/2 commissioned builds/) });
+    // A brief left with autopilot off, and a run whose autopilot stopped, hold no slot.
+    h.live = [
+      { state: { ...live, autopilot: { ...live.autopilot, enabled: false } }, outcome: null },
+      { state: { ...live, autopilot: { ...live.autopilot, stopReason: 'gave up' } }, outcome: null },
+    ];
+    expect((await ask({ operationKey: 'op-fourth-one' })).ok).toBe(true);
   });
 
   it('refuses unattended principals and production from chat before touching anything', async () => {
@@ -200,5 +221,6 @@ describe('quoteCommission', () => {
     expect(q).toMatchObject({ target: 'SR-Main', stopsAt: 'Preview only', budget: { maxIterations: 25, maxTotalMinutes: 120, maxCostUsd: 2 }, quota: { fiveHourPct: 34, weeklyPct: 12 }, liveCommissions: 0, refusal: null });
     expect(q.card).toContain('up to 25 rounds, 2 hours, $2');
     expect(q.card).toContain('ChatGPT 34%');
+    expect(q.card).toMatch(/Brief: 5 characters · 0 acceptance criteria · autopilot on.*\/jkai\/develop/);
   });
 });
