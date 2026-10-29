@@ -70,6 +70,10 @@ import {
   householdMember,
   jkaiAttachments,
   jkaiEvidenceResults,
+  jkaiEvents,
+  jkaiGates,
+  jkaiPresence,
+  jkaiTurns,
   nativeCredentials,
   appDevice,
   newsFavourites,
@@ -170,6 +174,12 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   activity_principals: { external_ref: 'erase' },
   jkai_conversations: { principal_id: 'erase' },
   jkai_attachments: { principal_id: 'erase' },
+  // The durable turn tables (hand-applied, behind Core's JKAI_DURABLE_TURNS):
+  // erased by principal when they exist, and their thread rows cascade too.
+  jkai_turns: { principal_id: 'erase' },
+  jkai_gates: { principal_id: 'erase' },
+  jkai_events: { principal_id: 'erase' },
+  jkai_presence: { principal_id: 'erase' },
   research_session: { principal_id: 'erase' },
   daydream_notebook: { principal_id: 'erase' },
   workflows: { principal_id: 'erase' },
@@ -419,6 +429,22 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
       if (threadIds.length) await tx.delete(jkaiEvidenceResults).where(inArray(jkaiEvidenceResults.conversationId, threadIds));
       await tx.delete(jkaiAttachments).where(eq(jkaiAttachments.principalId, pid));
       out.conversations = (await tx.delete(conversations).where(eq(conversations.principalId, pid)).returning({ id: conversations.id })).length;
+
+      // Their durable turns, gates, event channel and presence. Rows tied to
+      // a thread went with it; this takes the rest (a turn or event with no
+      // thread, a phone's presence). The tables are hand-applied and may be
+      // absent, and a failing statement would abort this whole transaction,
+      // so each is asked for first.
+      const present = await tx.execute(sql`SELECT
+          to_regclass('public.jkai_turns') IS NOT NULL AS turns,
+          to_regclass('public.jkai_gates') IS NOT NULL AS gates,
+          to_regclass('public.jkai_events') IS NOT NULL AS events,
+          to_regclass('public.jkai_presence') IS NOT NULL AS presence`);
+      const has = ((present as unknown as { rows?: Array<Record<string, boolean>> }).rows?.[0] ?? {}) as Record<string, boolean>;
+      if (has.gates) await tx.delete(jkaiGates).where(eq(jkaiGates.principalId, pid));
+      if (has.turns) await tx.delete(jkaiTurns).where(eq(jkaiTurns.principalId, pid));
+      if (has.events) await tx.delete(jkaiEvents).where(eq(jkaiEvents.principalId, pid));
+      if (has.presence) await tx.delete(jkaiPresence).where(eq(jkaiPresence.principalId, pid));
 
       const runs = await tx.select({ id: researchSessions.id }).from(researchSessions).where(eq(researchSessions.principalId, pid));
       // Explore-further children of theirs point at their runs; unhook first.
