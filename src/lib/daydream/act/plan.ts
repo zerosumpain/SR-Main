@@ -445,6 +445,26 @@ export function readStored(actions: unknown): { stored: StoredAction; plan: ActP
   return null;
 }
 
+/**
+ * Why a plan is not the one the confirmation card showed, or null. `step` is
+ * checked against a plan that was already stored (the card could only have
+ * read a stored label); `recipient` against any email draft, stored or just
+ * drafted. PURE.
+ */
+export function actMismatch(
+  plan: ActPlan,
+  storedLabel: string | null,
+  expect: { step?: string; recipient?: string },
+): string | null {
+  if (expect.step && storedLabel !== null && expect.step !== storedLabel) {
+    return `The suggested step has changed since you saw it; it is now: ${storedLabel}. Nothing was done.`;
+  }
+  if (expect.recipient && plan.kind === 'email_draft' && expect.recipient.toLowerCase() !== plan.domain.toLowerCase()) {
+    return `That draft would now go to ${plan.domain}, not ${expect.recipient}. Nothing was done.`;
+  }
+  return null;
+}
+
 export function storeAction(plan: ActPlan, calendar: string | null, done?: ActDone): StoredAction {
   return { kind: plan.kind, label: planLabel(plan, calendar), payload: JSON.stringify(plan), ...(done ? { done } : {}) };
 }
@@ -459,6 +479,8 @@ export interface NoteAct {
   status: 'ready' | 'open' | 'done' | 'undone' | 'sent';
   /** What will happen, or what did. */
   label: string;
+  /** For an email draft: who it is to (the sender's domain), shown on the card. */
+  recipient?: string;
   doneAt: string | null;
   /** Guided kinds stop here for a second tap — the draft to read first. */
   draft: { to: string; subject: string; body: string; gmailUrl: string } | null;
@@ -515,7 +537,7 @@ export function noteAct(actions: unknown, step: string | null, title = ''): Note
       const fired = plan.kind === 'reminder' && !!d.fireAt && Date.parse(d.fireAt) <= Date.now();
       return { kind: plan.kind, status: 'done', label: doneLabel(stored, plan), doneAt: d.at, draft, undoable: !fired };
     }
-    return { kind: plan.kind, status: 'ready', label: stored.label, doneAt: null, draft: null, undoable: false };
+    return { kind: plan.kind, status: 'ready', label: stored.label, ...(plan.kind === 'email_draft' ? { recipient: plan.domain } : {}), doneAt: null, draft: null, undoable: false };
   }
   return looksDoable(step, title)
     ? { kind: null, status: 'open', label: 'jkai sets this up itself, now — no more questions.', doneAt: null, draft: null, undoable: false }

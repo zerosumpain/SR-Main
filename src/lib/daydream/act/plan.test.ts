@@ -241,3 +241,17 @@ describe('looksDoable with the title', () => {
     expect(looksDoable('Book an adult place if it suits.', 'A geology walk')).toBe(false);
   });
 });
+
+describe('actMismatch (the card said what will be done)', () => {
+  it('refuses a stored step that changed since the card, and a draft to someone else', async () => {
+    const { actMismatch } = await import('./plan');
+    const reminder = { kind: 'reminder' as const, text: 'Book the MOT', date: '2026-11-02', time: null };
+    expect(actMismatch(reminder, 'Remind you on Mon 2 Nov at 09:00: “Book the MOT”', { step: 'Remind you on Mon 2 Nov at 09:00: “Book the MOT”' })).toBeNull();
+    expect(actMismatch(reminder, 'Remind you on Tue 3 Nov at 09:00: “Book the MOT”', { step: 'Remind you on Mon 2 Nov at 09:00: “Book the MOT”' })).toMatch(/changed since you saw it/);
+    // No stored plan yet: the card could only show the generic step.
+    expect(actMismatch(reminder, null, { step: 'anything' })).toBeNull();
+    const draft = { kind: 'email_draft' as const, domain: 'garage.example', subject: 's', body: 'b' };
+    expect(actMismatch(draft, null, { recipient: 'garage.example' })).toBeNull();
+    expect(actMismatch(draft, null, { recipient: 'bank.example' })).toMatch(/would now go to garage.example/);
+  });
+});

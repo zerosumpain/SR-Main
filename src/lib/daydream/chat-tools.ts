@@ -120,6 +120,9 @@ register({
         doubleCheck: note.commission ? { id: note.commission.id, state: note.commission.state, url: `/jkai/daydreams?commission=${encodeURIComponent(note.commission.id)}` } : null,
         stale: note.stale ? note.stale.why : null,
         replaces: note.replaces,
+        // What "do it for me" would do: pass `step` (and `recipient` for a
+        // draft) to daydream_do so the confirmation card can show them.
+        act: note.act ? { status: note.act.status, step: note.act.label, ...(note.act.recipient ? { recipient: note.act.recipient } : {}) } : null,
       },
     };
   },
@@ -252,10 +255,16 @@ register({
   effect: 'mutate',
   confirm: 'always',
   description:
-    'Carry out a daydream note\'s suggested step for John ("do it for me"): a calendar entry, a reminder, a calendar move or batch, an event hold, or an email DRAFT (never sent). John confirms first. Pass undo: true to take it back. Use only when he asks.',
+    'Carry out a daydream note\'s suggested step for John ("do it for me"): a calendar entry, a reminder, a calendar move or batch, an event hold, or an email DRAFT (never sent). John confirms first. Pass undo: true to take it back. Use only when he asks. ' +
+    'Pass `step` (act.step from daydream_note_get) and, for an email draft, `recipient` (act.recipient): the card shows them, and the call is refused if the note\'s step has changed since.',
   parameters: {
     type: 'object',
-    properties: { ...idParam, undo: { type: 'boolean', description: 'True to undo what was done for this note.' } },
+    properties: {
+      ...idParam,
+      undo: { type: 'boolean', description: 'True to undo what was done for this note.' },
+      step: { type: 'string', description: 'The step as daydream_note_get showed it (act.step). Shown on the card; refused if it no longer matches.' },
+      recipient: { type: 'string', description: 'For an email draft: who it goes to (act.recipient). Shown on the card; refused if it no longer matches.' },
+    },
     required: ['id'],
   },
   category: 'Daydream',
@@ -268,7 +277,11 @@ register({
     if (!id) return { success: false, error: 'id is required' };
     try {
       const { doIt, undoIt } = await import('$lib/daydream/act/act.server');
-      const out = args.undo === true ? await undoIt(id) : await doIt(id);
+      const expect = {
+        ...(typeof args.step === 'string' && args.step.trim() ? { step: args.step.trim() } : {}),
+        ...(typeof args.recipient === 'string' && args.recipient.trim() ? { recipient: args.recipient.trim() } : {}),
+      };
+      const out = args.undo === true ? await undoIt(id) : await doIt(id, new Date(), expect);
       if (!out.ok) return { success: false, error: out.reason, ...(out.needsCalendar ? { data: { needsCalendar: true, calendars: out.calendars } } : {}) };
       return { success: true, data: { id, status: out.status, label: out.label, ...(out.calendar ? { calendar: out.calendar } : {}), ...(out.already ? { already: true } : {}), undo: out.status === 'done' ? { id, undo: true } : null } };
     } catch (err) {

@@ -66,6 +66,15 @@ export function describeDestructiveAction(toolName: string, args: Record<string,
     case 'apple_calendar_update':    return `Update calendar event "${args.eventId ?? 'unknown'}" on ${args.calendar ?? 'the selected calendar'}?`;
     case 'apple_calendar_delete':    return `Delete calendar event "${args.eventId ?? 'unknown'}" from ${args.calendar ?? 'the selected calendar'}? This cannot be undone.`;
     case 'whatsapp_send':            return `Send WhatsApp message to ${(args.to as string) ?? 'default contact'}?`;
+    case 'daydream_do': {
+      const id = String(args.id ?? 'unknown');
+      if (args.undo === true) return `Undo what was done for daydream note ${id}?`;
+      const step = typeof args.step === 'string' && args.step.trim() ? args.step.trim().slice(0, 300) : null;
+      const to = typeof args.recipient === 'string' && args.recipient.trim() ? ` A draft to ${args.recipient.trim().slice(0, 120)}, not sent.` : '';
+      return step
+        ? `Do it for me (daydream note ${id}): ${step}?${to} You can undo it.`
+        : `Do it for me: carry out daydream note ${id}'s suggested step (a calendar entry, reminder or email draft — nothing is sent)?${to} You can undo it.`;
+    }
     default: {
       // No hand-written case: show the arguments rather than nothing, so the
       // prompt still says what is about to happen.

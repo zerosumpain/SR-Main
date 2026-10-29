@@ -31,6 +31,7 @@ import {
   readStored,
   shiftDay,
   storeAction,
+  actMismatch,
   toCreateArgs,
   toUpdateTimes,
   type ActDone,
@@ -303,7 +304,7 @@ async function loadRow(tx: DbExecutor, thoughtId: string) {
 }
 
 /** "Do it for me". Idempotent: a second tap reports the first one's result. */
-export async function doIt(thoughtId: string, now = new Date()): Promise<ActResult> {
+export async function doIt(thoughtId: string, now = new Date(), expect: { step?: string; recipient?: string } = {}): Promise<ActResult> {
   const result = await db.transaction(async (tx): Promise<ActResult> => {
     const row = await loadRow(tx, thoughtId);
     if (!row) return { ok: false, reason: 'That note no longer exists.' };
@@ -331,6 +332,9 @@ export async function doIt(thoughtId: string, now = new Date()): Promise<ActResu
     const checked = checkPlan(draft, { noteText: text.all, today, evidenceText: evidence });
     if (!checked.ok) return { ok: false, reason: checked.reason };
     const plan: ActPlan = checked.plan;
+    // The card showed a step and a recipient: do exactly that, or nothing.
+    const mismatch = actMismatch(plan, existing?.stored.label ?? null, expect);
+    if (mismatch) return { ok: false, reason: mismatch };
 
     let outcome: Outcome;
     switch (plan.kind) {
