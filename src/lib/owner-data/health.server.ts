@@ -312,6 +312,20 @@ async function whoopByDay(key: string, from: Date): Promise<Map<string, number[]
   return byDay;
 }
 
+/**
+ * One series as bounded day values, for code that needs the numbers rather
+ * than the card (daydream's extra correlate series). Same reads, same bounds,
+ * same aggregation as `healthSeriesTool`; null for an unknown key.
+ */
+export async function seriesDays(key: string, windowDays: number, now = new Date()): Promise<DayValue[] | null> {
+  const from = new Date(now.getTime() - windowDays * 86_400_000);
+  const apple = APPLE_SERIES[key];
+  if (apple) return boundDays(await appleByDay(apple.metric, from), apple.how, apple.lo, apple.hi).days;
+  const whoop = WHOOP_SERIES[key];
+  if (whoop) return boundDays(await whoopByDay(key, from), key === 'strain' ? 'max' : 'mean', whoop.lo, whoop.hi).days;
+  return null;
+}
+
 export async function healthSeriesTool(args: Record<string, unknown>, now = new Date()): Promise<string> {
   const key = typeof args.metric === 'string' ? args.metric.trim() : '';
   const rawDays = Number(args.days);

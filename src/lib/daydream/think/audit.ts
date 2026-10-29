@@ -35,6 +35,9 @@ export const MAX_CHANGED_CHARS = 200;
  */
 export const QUESTION_EVIDENCE_KIND = 'think-question';
 
+/** A note that cited "Right now" (`situation.ts`). Identifies nothing. */
+export const SITUATION_EVIDENCE_KIND = 'think-situation';
+
 export interface ThinkNote {
   outcome: Outcome;
   title: string;
@@ -189,7 +192,9 @@ export function validateThinkOutput(
         rawScore: 1,
         components: { audited: 1 },
         evidence: [
-          ...cited.map((c) => ({ kind: 'think-card', id: c.ref, note: c.text.slice(0, 300) })),
+          // The situation card is the same for every note that day: kept as
+          // its own kind, which the echo guard ignores (`refutations.ts`).
+          ...cited.map((c) => ({ kind: c.tool === 'situation' ? SITUATION_EVIDENCE_KIND : 'think-card', id: c.ref, note: c.text.slice(0, 300) })),
           ...(opts.channel
             ? [{ kind: QUESTION_EVIDENCE_KIND, id: opts.channel, note: `${opts.channel} × ${outcome}` }]
             : []),

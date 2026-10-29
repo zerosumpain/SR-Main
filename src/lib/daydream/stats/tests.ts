@@ -219,6 +219,114 @@ export function correlate(
   return { r, p: pValueForR(r, effectiveN), n };
 }
 
+// ── a third factor, and two kinds of day ───────────────────────────────────
+//
+// Owner, 2026-10-29: "think about complex relationships". One pair at a time
+// cannot tell "sleep moves with mood" from "a busy diary moves both". These
+// two answer the next questions a cycle asks: does the pair hold with the third
+// factor held fixed, and does a metric differ on one kind of day?
+
+export interface PartialResult extends TestResult {
+  /** The plain pair over the same complete days, for comparison. */
+  rawR: number;
+}
+
+/**
+ * Spearman partial correlation of x and y with z held fixed, over days where
+ * all three were recorded. First-order formula over the rank correlations;
+ * the p-value spends one more degree of freedom for z.
+ */
+export function partialCorrelate(
+  xs: Array<number | null>,
+  ys: Array<number | null>,
+  zs: Array<number | null>,
+): PartialResult {
+  const a: number[] = [];
+  const b: number[] = [];
+  const c: number[] = [];
+  for (let i = 0; i < Math.min(xs.length, ys.length, zs.length); i++) {
+    const x = xs[i];
+    const y = ys[i];
+    const z = zs[i];
+    if (x == null || y == null || z == null || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+    a.push(x);
+    b.push(y);
+    c.push(z);
+  }
+  const n = a.length;
+  if (n < MIN_PAIRS) return { r: 0, p: 1, n, rawR: 0 };
+  const rxy = spearman(a, b);
+  const rxz = spearman(a, c);
+  const ryz = spearman(b, c);
+  const den = Math.sqrt((1 - rxz * rxz) * (1 - ryz * ryz));
+  const r = den < 1e-9 ? 0 : Math.max(-1, Math.min(1, (rxy - rxz * ryz) / den));
+  const effectiveN = effectiveSampleSize(a, b) - 1;
+  return { r, p: pValueForR(r, effectiveN), n, rawR: rxy };
+}
+
+export interface GroupComparison {
+  /** Days the condition held, and did not, with a reading of the metric. */
+  nIn: number;
+  nOut: number;
+  medianIn: number;
+  medianOut: number;
+  /** Two-tailed Mann–Whitney p (normal approximation, tie-corrected). */
+  p: number;
+  /** Probability a random condition day reads higher than a random other day. */
+  probabilityHigher: number;
+}
+
+/** Below this many days on either side, a comparison is anecdote. */
+export const MIN_GROUP = 5;
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((p, q) => p - q);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
+/** Standard normal upper tail, Abramowitz–Stegun 7.1.26 via erfc. */
+function normalTail(z: number): number {
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const erfc = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429)))) * Math.exp(-x * x);
+  return erfc / 2;
+}
+
+/**
+ * One metric on days when a condition held against days when it did not.
+ * Days with no reading, or no answer for the condition, are left out.
+ * Returns null below MIN_GROUP on either side.
+ */
+export function compareGroups(values: Array<number | null>, condition: Array<boolean | null>): GroupComparison | null {
+  const yes: number[] = [];
+  const no: number[] = [];
+  for (let i = 0; i < Math.min(values.length, condition.length); i++) {
+    const v = values[i];
+    const c = condition[i];
+    if (v == null || !Number.isFinite(v) || c == null) continue;
+    (c ? yes : no).push(v);
+  }
+  if (yes.length < MIN_GROUP || no.length < MIN_GROUP) return null;
+  const all = [...yes, ...no];
+  const ranks = rankOf(all);
+  const n1 = yes.length;
+  const n2 = no.length;
+  const rankSum = ranks.slice(0, n1).reduce((s, r) => s + r, 0);
+  const u = rankSum - (n1 * (n1 + 1)) / 2;
+  const mu = (n1 * n2) / 2;
+  // Tie correction on the variance.
+  const counts = new Map<number, number>();
+  for (const v of all) counts.set(v, (counts.get(v) ?? 0) + 1);
+  const n = n1 + n2;
+  let ties = 0;
+  for (const t of counts.values()) ties += t * t * t - t;
+  const variance = ((n1 * n2) / 12) * (n + 1 - ties / (n * (n - 1)));
+  const z = variance > 0 ? (Math.abs(u - mu) - 0.5) / Math.sqrt(variance) : 0;
+  const p = variance > 0 ? Math.min(1, 2 * normalTail(Math.max(0, z))) : 1;
+  return { nIn: n1, nOut: n2, medianIn: median(yes), medianOut: median(no), p, probabilityHigher: u / (n1 * n2) };
+}
+
 // ── multiple comparisons ─────────────────────────────────────────────────────
 
 export interface Corrected<T> {

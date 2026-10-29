@@ -157,7 +157,7 @@ const CHANNEL_FOCUS: Record<Channel, string> = {
  *  prompt carries, so the rotation and the rules cannot disagree. */
 export const OUTCOME_ASK: Record<Outcome, string> = {
   correlate:
-    'Find one relationship worth testing between this and another part of his life, and TEST it with correlate() before you say anything. Report the r, n and p you got — a null result on a sensible question is worth saying once.',
+    'Find one relationship worth testing between this and another part of his life — mood, who he was with, being away, the diary, his body — and TEST it before you say anything: correlate() for two measures, with a "control" when a third thing could drive both; compare_days() for a kind of day (with family, away, busy). Report the figures — a null result on a sensible question is worth saying once, and a link that vanishes under a control is worth saying too.',
   efficiency:
     'Find one concrete thing that is costing him time or effort for nothing, and propose the specific change.',
   quality_of_life:

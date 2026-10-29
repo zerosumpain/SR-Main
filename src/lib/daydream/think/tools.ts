@@ -39,6 +39,8 @@
 // `apple_calendar_list` (bypasses the owner's diary exclusions — `diary` reads
 // through them), every `gmail_*` (picks a mailbox; see reads.ts).
 //
+//   compare_days     the same day store, split by a condition       read
+
 // ── Cards ──────────────────────────────────────────────────────────────────
 //
 // Every result is wrapped by CODE as a card `{id, tool, args, text}`, and the
@@ -48,7 +50,7 @@
 // `ponder/lookups.ts` was protecting, kept rather than traded away.
 
 import { unattendedPrincipal } from '$lib/tools/in-process-principal';
-import { createCorrelator, correlateDescription, type LedgerSession } from './correlate';
+import { compareDaysDescription, createCorrelator, createDayComparer, correlateDescription, type LedgerSession } from './correlate';
 import { HUB_SECTIONS, activitiesTool, healthHubTool, healthSeriesDescription, healthSeriesTool } from './health';
 import { chatThreadsTool, diaryTool, mailFactsTool, spendTool } from './reads';
 import { isResearchChannel, type Channel } from './questions';
@@ -58,7 +60,7 @@ import { errMsg } from '../types';
 export const PRIVATE_SITE_TOOLS = ['ha_find', 'ha_query_state', 'ha_get_history', 'memory_search', 'health_timeline'] as const;
 
 /** Tools implemented here, over the owner's data. PRIVATE only. */
-export const LOCAL_TOOLS = ['health_hub', 'health_series', 'correlate', 'mail_facts', 'diary', 'spend', 'chat_threads', 'activities'] as const;
+export const LOCAL_TOOLS = ['health_hub', 'health_series', 'correlate', 'compare_days', 'mail_facts', 'diary', 'spend', 'chat_threads', 'activities'] as const;
 export type LocalTool = (typeof LOCAL_TOOLS)[number];
 
 /** Registered site tools a RESEARCH cycle may call. */
@@ -161,8 +163,25 @@ const LOCAL_DEFINITIONS: Record<LocalTool, () => ToolDefinition['function']> = {
         a: { type: 'string', description: 'First metric key.' },
         b: { type: 'string', description: 'Second metric key. The lagged test reads a today against b tomorrow.' },
         days: { type: 'number', description: 'Window in days, 21–365. Default 90.' },
+        control: { type: 'string', description: 'Optional third metric to hold fixed (partial correlation).' },
       },
       required: ['a', 'b'],
+    },
+  }),
+  compare_days: () => ({
+    name: 'compare_days',
+    description: compareDaysDescription(),
+    parameters: {
+      type: 'object',
+      properties: {
+        metric: { type: 'string', description: 'The metric to compare.' },
+        when: { type: 'string', description: 'The metric that splits the days.' },
+        above: { type: 'number', description: 'Condition: `when` above this.' },
+        below: { type: 'number', description: 'Condition: `when` below this (used if above is not given).' },
+        nextDay: { type: 'boolean', description: 'Read `metric` the day after the condition.' },
+        days: { type: 'number', description: 'Window in days, 21–365. Default 90.' },
+      },
+      required: ['metric', 'when'],
     },
   }),
   mail_facts: () => ({
@@ -244,6 +263,7 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
   /** Cards of correlate() pairs tested recently with nothing new (`ledger.ts`). */
   const staleCards = new Set<string>();
   const correlate = createCorrelator({ subject: opts.subject, now: opts.now, ledger: opts.ledger });
+  const compareDays = createDayComparer({ subject: opts.subject, now: opts.now });
   let lastStale = false;
   let calls = 0;
 
@@ -258,6 +278,8 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         lastStale = out.stale === true;
         return out.text;
       }
+      case 'compare_days':
+        return compareDays(args);
       case 'mail_facts':
         return mailFactsTool(args, opts.now);
       case 'diary':
