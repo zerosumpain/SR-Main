@@ -76,6 +76,39 @@ export async function replyCodeEligible(tool: string, args: Record<string, unkno
   return tier.effect === 'mutate' && tier.confirm !== 'always' && tier.lane === 'standard';
 }
 
+/** How long a "the tables are (not) there" answer is trusted. */
+const TABLES_TTL_MS = 5 * 60_000;
+let tablesCache: { present: boolean; at: number } | null = null;
+
+/**
+ * Whether reply codes can exist at all here: `JKAI_REPLY_CODES` is not 'off'
+ * and the durable tables (`jkai_turns`, `jkai_gates`) are present. They are
+ * hand-applied and behind Core's `JKAI_DURABLE_TURNS`, so on a database
+ * without them the intercept must step aside entirely — otherwise every
+ * 4-digit message ("1745", a PIN, a time) hit a missing table, was caught as
+ * code-shaped and answered "I couldn't check that code" instead of reaching
+ * chat. Cached, a failed probe included, so the inbound path does not pay a
+ * catalogue query per message.
+ */
+export async function replyCodesAvailable(now: number = Date.now()): Promise<boolean> {
+  if ((process.env.JKAI_REPLY_CODES ?? '').trim().toLowerCase() === 'off') return false;
+  if (tablesCache && now - tablesCache.at < TABLES_TTL_MS) return tablesCache.present;
+  let present = false;
+  try {
+    const res = await db.execute(sql`SELECT to_regclass('public.jkai_gates') IS NOT NULL AND to_regclass('public.jkai_turns') IS NOT NULL AS present`);
+    present = (res as unknown as { rows?: Array<{ present: boolean }> }).rows?.[0]?.present === true;
+  } catch {
+    present = false;
+  }
+  tablesCache = { present, at: now };
+  return present;
+}
+
+/** For tests. */
+export function resetReplyCodeAvailability(): void {
+  tablesCache = null;
+}
+
 const deps = (): ReplyCodeDeps => ({ store: sqlReplyCodeStore, isOwner: isOwnerNumber, eligible: replyCodeEligible });
 
 /** After a WhatsApp turn whose call Core froze: the text to add under the reply. */
@@ -90,6 +123,8 @@ export function askForReplyCode(from: string, conversationId: string, call: Froz
  * refuses anything destructive or always-confirm, whatever the row says.
  */
 export async function handleReplyCode(from: string, text: string): Promise<ReplyCodeAnswer> {
+  // No tables (or switched off): no code can be open, so nothing is consumed.
+  if (!(await replyCodesAvailable())) return { handled: false };
   try {
     const [conv] = await db
       .select({ id: conversations.id })
@@ -120,8 +155,9 @@ export async function handleReplyCode(from: string, text: string): Promise<Reply
     return answer;
   } catch (err) {
     console.error('[whatsapp-reply-code] answer failed:', err instanceof Error ? err.message : err);
-    // A code-shaped message that could not be checked must not reach chat as
-    // if nothing were pending; anything else carries on.
+    // The tables exist, so a code may really be pending: a code-shaped
+    // message that could not be checked must not reach chat as if nothing
+    // were; anything else carries on.
     return /^\s*\d{4}\s*[.!]?\s*$/.test(text) ? { handled: true, reply: "I couldn't check that code just now, so I haven't done anything." } : { handled: false };
   }
 }
