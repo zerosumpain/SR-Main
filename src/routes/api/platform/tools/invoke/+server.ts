@@ -48,7 +48,22 @@ import type { RequestHandler } from './$types';
  *
  * Spec: `docs/superpowers/specs/2026-09-17-jkai-tool-invoke-contract.md`.
  */
-/** Seals seen by this process, kept until they expire: one seal, one call. */
+/**
+ * Seals seen by this process, kept until they expire: one seal, one call.
+ *
+ * ACCEPTED RISK (reviewed 2026-10-29): the ledger is in memory, per process.
+ * A seal replayed to a DIFFERENT Main process, or to this one after a restart,
+ * inside its lifetime (at most `PRINCIPAL_MAX_TTL_MS` + skew, 5.5 minutes) is
+ * not caught. Moving it to Postgres was considered and not done: no existing
+ * table fits (jkai_events and jkai_gates are turn records, and the tables with
+ * an expiry belong to other features and their GRANTs), the rule is no new
+ * table in this batch, and this route is hot — a write per tool call. What
+ * bounds the risk: a replay needs the service token AND a captured seal (the
+ * wire is TLS between our own hosts), the seal opens only the one tool it
+ * names, carries the same principal it was issued for (it widens nothing),
+ * and, once Core seals them, is bound to the call's conversation and
+ * arguments (`$lib/server/principal-intake`).
+ */
 const nonces = createNonceLedger();
 
 export const POST: RequestHandler = async ({ request }) => {
