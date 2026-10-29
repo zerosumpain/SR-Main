@@ -4,7 +4,7 @@ import type { ToolPrincipal } from './invoke-contract';
 
 /**
  * `ha_call_service` is one tool that can switch a lamp or open the front door.
- * Its per-call tier (`tierForCall` → `callTier`) is what keeps the second out
+ * Its per-call tier (`registerCallTier` → `callTier`) is what keeps the second out
  * of reach of every caller that cannot answer a gate: a heartbeat, a WhatsApp
  * reply code and a scheduled callback all list the tool, so the list alone
  * would let them. The refinement is enforced in `executeTool` itself.
@@ -36,7 +36,7 @@ vi.mock('$lib/db', () => ({
 }));
 
 const reg = await import('./registry');
-const { callTier } = await import('./declared-tier');
+const { callTier, registerCallTier } = await import('./declared-tier');
 const { haCallServiceConfirm } = await import('./tools/home-assistant');
 const { replyCodeEligible } = await import('$lib/integrations/whatsapp/reply-code.server');
 const { fireCallback } = await import('$lib/scheduled/executor');
@@ -73,8 +73,10 @@ describe('the per-call tier of ha_call_service', () => {
 		const tool = reg.getTool('ha_call_service')!;
 		expect(callTier(tool, UNLOCK)).toEqual({ effect: 'mutate', confirm: 'always', lane: 'standard' });
 		expect(callTier(tool, LIGHT_OFF)).toEqual({ effect: 'mutate', confirm: 'light', lane: 'standard' });
-		expect(callTier({ effect: 'mutate', tierForCall: () => ({ confirm: 'never' }) }, {}).confirm).toBe('light');
-		expect(callTier({ effect: 'read', tierForCall: () => { throw new Error('x'); } }, {}).confirm).toBe('always');
+		registerCallTier('call_tier_probe_lower', () => ({ confirm: 'never' }));
+		registerCallTier('call_tier_probe_throws', () => { throw new Error('x'); });
+		expect(callTier({ name: 'call_tier_probe_lower', effect: 'mutate' }, {}).confirm).toBe('light');
+		expect(callTier({ name: 'call_tier_probe_throws', effect: 'read' }, {}).confirm).toBe('always');
 	});
 
 	it('refuses a malformed domain or service before Home Assistant is called, even attended', async () => {

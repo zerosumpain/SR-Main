@@ -3,6 +3,7 @@ import { getHomeAssistantService } from '$lib/integrations/homeassistant/service
 import { loadRegistryMap } from '$lib/integrations/homeassistant/registry-map';
 import { resolveEntityId, searchEntities, DEFAULT_LIMIT, MAX_LIMIT } from '$lib/integrations/homeassistant/entity-search';
 import type { ToolConfirm } from '../invoke-contract';
+import { registerCallTier } from '../declared-tier';
 
 /** A Home Assistant domain: lowercase words joined by underscores. */
 export const HA_DOMAIN_PATTERN = /^[a-z_]+$/;
@@ -101,7 +102,6 @@ register({
   },
   category: 'Home Assistant',
   toolset: 'home',
-  tierForCall: (args) => ({ confirm: haCallServiceConfirm(args) }),
   handler: async (args) => {
     if (typeof args.domain !== 'string' || !HA_DOMAIN_PATTERN.test(args.domain)) {
       return { success: false, error: 'domain must be a Home Assistant domain such as light or climate (lowercase letters and underscores).' };
@@ -118,6 +118,9 @@ register({
     );
   },
 });
+
+// Enforced by `executeTool` through `callTier`.
+registerCallTier('ha_call_service', (args) => ({ confirm: haCallServiceConfirm(args) }));
 
 register({
   name: 'ha_fire_event',
