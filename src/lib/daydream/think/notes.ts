@@ -12,6 +12,7 @@
 //
 // The wire shape (`NativeNote`) is FIXED: the iPhone app was built against it.
 
+import { solutionView, type SolutionView } from '../act/solution';
 import { QUESTION_EVIDENCE_KIND } from './audit';
 import { noteAct, type NoteAct } from '../act/plan';
 import { followStage, noteFollow, type NoteFollow } from '../act/follow';
@@ -426,6 +427,8 @@ export interface FeedNote extends NativeNote {
   /** Taking it further — research, the backlog, a prototype, a watch, a
    *  message, a Home Assistant refresh (`act/follow.ts`). */
   follow: NoteFollow;
+  /** The one press that does what it suggests (`act/solution.ts`), or null. */
+  solution: SolutionView | null;
   /** Older notes on the same subject this one replaced (`topics.ts`). */
   replaces: Array<{ id: string; title: string }>;
   /** Probably past its date, and why — or null (`shelf.ts`). */
@@ -468,7 +471,8 @@ export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteC
   const review = noteReview(row);
   const act = noteAct(row.proposedActions, split.next, row.title);
   const follow = followOf(row, n, split, review, ctx);
-  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done', following: followStage(follow) });
+  const solution = solutionView(row.proposedActions);
+  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done' || solution?.state === 'done', following: followStage(follow) });
   return {
     ...n,
     outcomeLabel: outcomeLabel(n.outcome),
@@ -491,6 +495,7 @@ export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteC
     review,
     act,
     follow,
+    solution,
     replaces: readReplaces(row.proposedActions),
     stale: stalenessOf(row, { stage: where.stage, now }),
     reason: reasonOf(row.feedbackNote),
@@ -517,6 +522,8 @@ export interface NativeNoteDetail extends NativeNote {
   act: NoteAct | null;
   /** Taking it further (`act/follow.ts`); an older app ignores it. */
   follow: NoteFollow;
+  /** The one-press solution (`act/solution.ts`); an older app ignores it. */
+  solution: SolutionView | null;
   replaces: Array<{ id: string; title: string }>;
   /** Probably past its date (`shelf.ts`); an older app ignores it. */
   stale: Staleness | null;
@@ -534,7 +541,8 @@ export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT, 
   const review = noteReview(row);
   const act = noteAct(row.proposedActions, split.next, row.title);
   const follow = followOf(row, n, split, review, ctx);
-  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done', following: followStage(follow) });
+  const solution = solutionView(row.proposedActions);
+  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done' || solution?.state === 'done', following: followStage(follow) });
   return {
     ...n,
     summary: split.summary,
@@ -548,6 +556,7 @@ export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT, 
     review,
     act,
     follow,
+    solution,
     replaces: readReplaces(row.proposedActions),
     stale: stalenessOf(row, { stage: where.stage, now }),
     reason: reasonOf(row.feedbackNote),

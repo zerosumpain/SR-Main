@@ -63,6 +63,7 @@
 /api/native/daydream/feedback
 /api/native/daydream/follow
 /api/native/daydream/shelf
+/api/native/daydream/solve
 /api/native/family/alarm
 /api/native/family/alarm/cancel
 /api/native/family/backlog

@@ -38,7 +38,15 @@ export const POST: RequestHandler = async ({ request }) => {
           return json({ error: 'verdict must be useful, not_useful or never_kind' }, { status: 400 });
         }
         const res = await recordFeedback(id, verdict, str('note') || undefined);
-        return json({ ok: true, ...res });
+        // Worth knowing, and it needs something the site cannot do yet: the
+        // gap goes on the build list (`act/solution.server.ts`). Soft.
+        let filed: string | null = null;
+        if (verdict === 'useful') {
+          const { fileGapOnAccept } = await import('$lib/daydream/act/solution.server');
+          const { backlogPorts } = await import('$lib/selfimprove/follow-ports.server');
+          filed = (await fileGapOnAccept(id, backlogPorts).catch(() => ({ filed: null }))).filed;
+        }
+        return json({ ok: true, ...res, filed });
       }
 
       case 'reason': {
@@ -129,6 +137,25 @@ export const POST: RequestHandler = async ({ request }) => {
         if (!isFollowOp(op)) return json({ error: `unknown follow-up: ${op || '(none)'}` }, { status: 400 });
         const { backlogPorts } = await import('$lib/selfimprove/follow-ports.server');
         return json(await runFollow(thoughtId, op, { description: body.description, entities: body.entities }, backlogPorts));
+      }
+
+      case 'solve':
+      case 'unsolve': {
+        // The note's solution, one press (`act/solution.server.ts`); the
+        // second press takes back what can be taken back.
+        const thoughtId = str('thoughtId');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        const { runSolution, undoSolution } = await import('$lib/daydream/act/solution.server');
+        if (action === 'unsolve') return json(await undoSolution(thoughtId));
+        const { backlogPorts } = await import('$lib/selfimprove/follow-ports.server');
+        return json(await runSolution(thoughtId, backlogPorts));
+      }
+
+      case 'stop_tracker': {
+        const id = str('trackerId');
+        if (!id) return json({ error: 'trackerId is required' }, { status: 400 });
+        const { stopTracker } = await import('$lib/daydream/act/track.server');
+        return json({ ok: await stopTracker(id) });
       }
 
       case 'act_calendar': {

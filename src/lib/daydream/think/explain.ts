@@ -140,10 +140,17 @@ export function describeSource(tool: string, args: Args): SourceLine {
       return { label: 'Health trend', detail: join(words(str(args.metric)), days(num(args.days) ?? 28)) };
     case 'health_timeline':
       return { label: 'Health timeline', detail: '' };
+    case 'situation':
+      return { label: 'Right now', detail: 'where you were, who with, body, mood, diary' };
+    case 'compare_days':
+      return {
+        label: 'Compared kinds of day',
+        detail: join(`${words(str(args.metric)) || '?'} by ${words(str(args.when)) || '?'}`, days(num(args.days) ?? 90)),
+      };
     case 'correlate':
       return {
         label: 'Tested a link',
-        detail: join(`${words(str(args.a)) || '?'} against ${words(str(args.b)) || '?'}`, days(num(args.days) ?? 90)),
+        detail: join(`${words(str(args.a)) || '?'} against ${words(str(args.b)) || '?'}${str(args.control) ? `, holding ${words(str(args.control))} fixed` : ''}`, days(num(args.days) ?? 90)),
       };
     case 'ha_find': {
       const what = [...list(args.domain).map(words), ...list(args.area)];
@@ -193,7 +200,7 @@ export function describeSources(evidence: unknown): SourceLine[] {
   const out: SourceLine[] = [];
   const seen = new Set<string>();
   for (const e of evidence as Array<{ kind?: unknown; id?: unknown }>) {
-    if (e?.kind !== 'think-card' || typeof e.id !== 'string') continue;
+    if ((e?.kind !== 'think-card' && e?.kind !== 'think-situation') || typeof e.id !== 'string') continue;
     const parsed = parseCardRef(e.id);
     if (!parsed) continue;
     const line = describeSource(parsed.tool, parsed.args);

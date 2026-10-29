@@ -65,6 +65,7 @@ describe('the two allow-lists', () => {
       'health_hub',
       'health_series',
       'correlate',
+      'compare_days',
       'mail_facts',
       'diary',
       'spend',
