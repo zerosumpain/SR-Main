@@ -24,7 +24,7 @@ vi.mock('$lib/jkai/grounding/authored.server', () => ({
 }));
 
 import { REENABLED_CUSTOM_TOOLS, customToolsetFor } from './custom-tools-enabled';
-import { loadCustomTools } from './custom-tool-loader';
+import { handlerCodeHash, loadCustomTools } from './custom-tool-loader';
 import { executeTool, getTool } from './registry';
 import type { ToolPrincipal } from './invoke-contract';
 
@@ -49,6 +49,22 @@ describe('the re-enabled custom tools allow-list', () => {
   });
 });
 
+describe('the reviewed handler pin', () => {
+  it('pins a sha256 for every re-enabled tool', () => {
+    for (const t of REENABLED_CUSTOM_TOOLS) expect(t.sha256, t.name).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('skips, and does not register, a row whose code changed since the review', async () => {
+    h.rows = [row('pinned_probe_tool', 'probe', 'return { success: true };')];
+    const out = await loadCustomTools(new Set(['pinned_probe_tool']), new Map([['pinned_probe_tool', handlerCodeHash('return { success: false };')]]));
+    expect(out.loaded).toEqual([]);
+    expect(out.skipped).toEqual([{ name: 'pinned_probe_tool', reason: 'handler_code does not match the reviewed sha256' }]);
+    expect(getTool('pinned_probe_tool')).toBeUndefined();
+    const none = await loadCustomTools(new Set(['pinned_probe_tool']), new Map());
+    expect(none.loaded).toEqual([]);
+  }, 120_000);
+});
+
 describe('loadCustomTools', () => {
   it('loads only allow-listed rows, under custom:, read, and skips a collision', async () => {
     h.rows = [
@@ -57,7 +73,8 @@ describe('loadCustomTools', () => {
       row('sausage_generator', 'fun', ''),
       row('tool_search', 'discovery', ''),
     ];
-    const out = await loadCustomTools(new Set(['f1_driver_standings', 'wikipedia_live_summary', 'tool_search']));
+    const pins = new Map(h.rows.map((r) => [r.name, handlerCodeHash(r.handlerCode)]));
+    const out = await loadCustomTools(new Set(['f1_driver_standings', 'wikipedia_live_summary', 'tool_search']), pins);
     expect(out.loaded).toEqual(['f1_driver_standings', 'wikipedia_live_summary']);
     expect(out.skipped).toEqual([{ name: 'tool_search', reason: 'collides with a registered tool' }]);
     expect(getTool('f1_driver_standings')).toMatchObject({ toolset: 'custom:sports', effect: 'read' });

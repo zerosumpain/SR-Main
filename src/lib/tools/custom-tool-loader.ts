@@ -9,7 +9,8 @@ import { register } from './registry-internal';
 import type { ToolResult } from './registry-internal';
 import { refuseDestructiveCall, refuseNonReadCall } from './platform-guard';
 import { isRegisteredTool } from './catalogue';
-import { REENABLED_CUSTOM_TOOL_NAMES, customToolsetFor } from './custom-tools-enabled';
+import { createHash } from 'node:crypto';
+import { REENABLED_CUSTOM_TOOL_HASHES, REENABLED_CUSTOM_TOOL_NAMES, customToolsetFor } from './custom-tools-enabled';
 import { executeSiteTool } from './executor';
 
 // Module-level guard against custom-tool recursion. Depth reflects how deeply
@@ -106,7 +107,14 @@ function buildHandler(name: string, code: string, opts: { readOnly?: boolean } =
  * a built-in tool is skipped, never registered over it. Called once from
  * `hooks.server.ts`, in the web process only.
  */
-export async function loadCustomTools(allow: ReadonlySet<string> = REENABLED_CUSTOM_TOOL_NAMES): Promise<{ loaded: string[]; skipped: Array<{ name: string; reason: string }> }> {
+export function handlerCodeHash(code: string): string {
+  return createHash('sha256').update(code, 'utf8').digest('hex');
+}
+
+export async function loadCustomTools(
+  allow: ReadonlySet<string> = REENABLED_CUSTOM_TOOL_NAMES,
+  pins: ReadonlyMap<string, string> = REENABLED_CUSTOM_TOOL_HASHES,
+): Promise<{ loaded: string[]; skipped: Array<{ name: string; reason: string }> }> {
   const out = { loaded: [] as string[], skipped: [] as Array<{ name: string; reason: string }> };
   if (allow.size === 0) return out;
   let rows;
@@ -120,6 +128,14 @@ export async function loadCustomTools(allow: ReadonlySet<string> = REENABLED_CUS
 
   for (const row of rows) {
     if (!allow.has(row.name)) continue;
+    // Pinned to the reviewed code: a row edited since the review stays dark.
+    const pinned = pins.get(row.name);
+    const actual = handlerCodeHash(row.handlerCode ?? '');
+    if (!pinned || pinned !== actual) {
+      console.warn(`[custom-tools] "${row.name}" not loaded: handler_code sha256 ${actual.slice(0, 12)}… does not match the reviewed pin ${pinned ? pinned.slice(0, 12) + '…' : '(none)'}`);
+      out.skipped.push({ name: row.name, reason: 'handler_code does not match the reviewed sha256' });
+      continue;
+    }
     try {
       if (await isRegisteredTool(row.name)) {
         out.skipped.push({ name: row.name, reason: 'collides with a registered tool' });
