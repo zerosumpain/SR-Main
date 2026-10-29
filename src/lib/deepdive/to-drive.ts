@@ -25,7 +25,7 @@ import { createHash } from 'node:crypto';
 import { db } from '$lib/db';
 import { workflowFiles, driveFolderSettings, type WorkflowFilePermissions } from '$lib/db/schema';
 import { eq, like } from 'drizzle-orm';
-import { newDiskPath, saveBuffer, deleteFile } from '$lib/file-store/storage';
+import { allocateDiskPath, saveBuffer, deleteFile } from '$lib/file-store/storage';
 import { reindexFileInBackground } from '$lib/file-index/store';
 import { enqueueIntelJob } from '$lib/intel-client/outbox';
 import { assertPublicUrl } from '$lib/server/ssrf-guard';
@@ -283,7 +283,7 @@ export async function saveSourceToDrive(
       kind = 'page';
     }
 
-    const diskPath = newDiskPath(name);
+    const diskPath = await allocateDiskPath(name);
     await saveBuffer(diskPath, buf);
 
     let inserted: { id: string } | undefined;

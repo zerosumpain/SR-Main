@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { workflowFiles } from '$lib/db/schema';
 import { createFileShare } from '$lib/file-shares';
-import { deleteFile, newDiskPath, saveBuffer } from '$lib/file-store/storage';
+import { deleteFile, allocateDiskPath, saveBuffer } from '$lib/file-store/storage';
 
 export const GPX_MIME_TYPE = 'application/gpx+xml';
 const ROUTE_PREFIX = 'drive/routes/';
@@ -64,7 +64,7 @@ export async function createRouteExport(input: RouteExportInput): Promise<{
   const [existing] = await db.select({ id: workflowFiles.id }).from(workflowFiles).where(eq(workflowFiles.name, name)).limit(1);
   if (existing) throw new Error(`a route export already exists at ${name}`);
 
-  const diskPath = newDiskPath(name);
+  const diskPath = await allocateDiskPath(name);
   await saveBuffer(diskPath, content);
   try {
     const [file] = await db.insert(workflowFiles).values({

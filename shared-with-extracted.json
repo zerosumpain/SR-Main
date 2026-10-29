@@ -7,7 +7,19 @@
   "files": {
     "src/lib/file-store/storage.ts": {
       "peer": "zerosumpain/SR-Drive",
-      "sha256": "7e71f53383890231b799bf79d175b5423833f9de0606900fe5c38338b5fc6d13"
+      "sha256": "03b606e3fc9fb6d9517616795ac8abafafb46576f9a35209f96fea6ceb6c7b78"
+    },
+    "src/lib/file-store/backends.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "f8004223b442b8fa1487723bf8a3641b1ea072fbafd1c7d05131bbfd19394728"
+    },
+    "src/lib/file-store/connected.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "5c8575bc5bf530e804ccc7d8e0efedc6376bcbfc3d5cd74f71bf3b8e342e6e17"
+    },
+    "src/lib/file-store/location.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "7be58c628fb59d33a3171000b36fb65f6031499a2329d8ba88572f5a61f5a819"
     },
     "src/lib/file-shares.ts": {
       "peer": "zerosumpain/SR-Drive",
