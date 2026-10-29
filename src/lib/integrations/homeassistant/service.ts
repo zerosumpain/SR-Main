@@ -73,11 +73,11 @@ export class HomeAssistantService {
   ): Promise<HAOperationResult> {
     const body: Record<string, unknown> = { ...data };
     if (entityId) body.entity_id = entityId;
-    return this.request(`/api/services/${domain}/${service}`, { method: 'POST', body });
+    return this.request(`/api/services/${encodeURIComponent(domain)}/${encodeURIComponent(service)}`, { method: 'POST', body });
   }
 
   async fireEvent(eventType: string, data?: Record<string, unknown>): Promise<HAOperationResult> {
-    return this.request(`/api/events/${eventType}`, { method: 'POST', body: data || {} });
+    return this.request(`/api/events/${encodeURIComponent(eventType)}`, { method: 'POST', body: data || {} });
   }
 
   async getHistory(

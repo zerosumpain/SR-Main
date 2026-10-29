@@ -67,6 +67,31 @@ export interface ToolExecContext {
   modelContext?: import('$lib/server/models/types').ModelContext;
   /** The session's reasoning effort, carried for the same reason. */
   thinkingLevel?: import('$lib/models/thinking').ThinkingLevel | null;
+  /**
+   * Where the turn came from — `TurnEnvelope.surface` ('web', 'ios',
+   * 'whatsapp', …). A label for logs and formatting, never a grant: who may
+   * run what is the principal's question. Absent for callers that predate the
+   * envelope, and for headless ones.
+   */
+  surface?: import('./invoke-contract').TurnSurface;
+  /** The paired phone, from the verified credential only. */
+  deviceId?: string;
+  /**
+   * Who this call is for (principal phase 2). Set by the receiver from a
+   * VERIFIED seal (`/api/platform/tools/invoke`), or by an in-process caller
+   * through `$lib/tools/in-process-principal`. `executeTool` enforces it with
+   * `principalRefusal`; a call without one is an unattended service call with
+   * this context's `allowedTools` as its only list. Nested calls inherit it
+   * through `currentExecution`.
+   */
+  principal?: import('./invoke-contract').ToolPrincipal;
+  /**
+   * Which invoke credential carried this call, set ONLY by the receiver that
+   * checked it (`/api/platform/tools/invoke`). 'commission' is the one thing
+   * that lets `principalRefusal` open the commission lane; in-process callers
+   * never set it, so nothing inside a process can commission a build.
+   */
+  credentialLane?: 'standard' | 'destructive' | 'commission';
 }
 
 /**
@@ -110,6 +135,14 @@ export interface ToolDefinition {
    * client can gate too. Omit for read-only / low-stakes tools.
    */
   destructive?: boolean;
+  /**
+   * Manifest M0: 'read' | 'mutate' | 'destructive', the confirm tier and the
+   * credential lane. Absent is derived from `destructive` (`tierOf` in the
+   * contract), so only tools that change something need to say so.
+   */
+  effect?: import('./invoke-contract').ToolEffect;
+  confirm?: import('./invoke-contract').ToolConfirm;
+  lane?: import('./invoke-contract').ToolLane;
   handler: (
     args: Record<string, unknown>,
     ctx?: ToolExecContext,

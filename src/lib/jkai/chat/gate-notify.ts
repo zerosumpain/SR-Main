@@ -22,8 +22,19 @@ import { notifyAllSubscribers } from '$lib/server/push';
 export function notifyGate(
   jobId: string,
   alert: { title: string; body: string },
-  /** Null: an alert that opens the chat, with nothing to answer from it. */
-  gate: { gate: 'plan' | 'confirm' | 'clarify'; [id: string]: string } | null,
+  /**
+   * Null: an alert that opens the chat, with nothing to answer from it.
+   *
+   * `lane` and `effect` say what the gate guards. The push dispatcher makes a
+   * destructive or commission confirm VIEW-ONLY (no lock-screen Approve), and a
+   * confirm that says neither is treated as destructive (`isViewOnlyGate`).
+   */
+  gate: {
+    gate: 'plan' | 'confirm' | 'clarify';
+    lane?: 'commission' | string;
+    effect?: 'read' | 'mutates' | 'destructive';
+    [id: string]: string | undefined;
+  } | null,
 ): void {
   try {
     const job = getJob(jobId);

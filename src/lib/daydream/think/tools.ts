@@ -47,6 +47,7 @@
 // pack" to "code built every card the model saw" — the property
 // `ponder/lookups.ts` was protecting, kept rather than traded away.
 
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { createCorrelator, correlateDescription, type LedgerSession } from './correlate';
 import { HUB_SECTIONS, activitiesTool, healthHubTool, healthSeriesDescription, healthSeriesTool } from './health';
 import { chatThreadsTool, diaryTool, mailFactsTool, spendTool } from './reads';
@@ -306,7 +307,7 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         } else {
           const { executeSiteTool } = await import('$lib/tools/executor');
           // The allow-list again, as the executor's own capability scope.
-          const res = await executeSiteTool(name, args, { emit: () => {}, allowedTools: [...allowed] });
+          const res = await executeSiteTool(name, args, { emit: () => {}, allowedTools: [...allowed], principal: unattendedPrincipal('daydream-think', allowed) });
           if (!res?.success) {
             return { card: null, failed: true, content: `No card — ${name} failed: ${(res?.error ?? 'no result').slice(0, 200)}` };
           }

@@ -149,14 +149,8 @@ const rank = (layer) => LAYERS.indexOf(layer);
 // Each line is the debt, not the design. Fix one and delete the line.
 // ---------------------------------------------------------------------------
 const BASELINE_LAYER = [
-  // The tool registry ($lib/tools, formerly $lib/workflows/site-tools), which
-  // the platform layer reaches up for. It is a registry of DOMAIN capabilities,
-  // so the fix is to invert it: let the domain register its tools with the
-  // platform rather than the platform importing the catalogue. Renamed from
-  // 'routing -> workflows' on 2026-10-02 when the registry left the workflows
-  // folder; 'llm -> workflows' disappeared with it.
-  'routing -> tools',
-
+  // Empty since 2026-10-28: 'routing -> tools' went when the routing alert
+  // stopped sending through `whatsapp_send` and used the notification ledger.
 ];
 
 // R4 exceptions: API routes reusing a project page's lib. Each of these four is
@@ -305,6 +299,18 @@ function resolveSpecifier(spec, fromFile) {
   return null; // $app/*, $env/*, node:*, bare packages
 }
 
+// R6: the build orchestrator runs only inside the jkai-builder sidecar
+// (packages/jkai-builder, which is outside src/ and so never scanned here).
+// Everything in src/ reaches builds through $lib/jkai/builder-client. The web
+// app runs as `sr-main` and cannot write the build workspace, so an in-process
+// orchestrator fails every iteration in milliseconds and retries past its cap:
+// that is what a chat build_create did on 2026-10-03 (build 915fae11, 36
+// zero-token iterations). This applies inside $lib/jkai too, which the layer
+// rules never look at, and it has no baseline.
+const ORCHESTRATOR_RE = /^src\/lib\/jkai\/orchestrator(\.(ts|js))?$/;
+const ORCHESTRATOR_SELF = 'src/lib/jkai/orchestrator.ts';
+const orchestratorImports = [];
+
 const edges = new Map(); // "a|b" -> { count, examples: [] }
 let scanned = 0;
 
@@ -321,6 +327,7 @@ for (const file of files) {
     const spec = m[1] ?? m[2] ?? m[3];
     const target = resolveSpecifier(spec, file);
     if (!target) continue;
+    if (ORCHESTRATOR_RE.test(target) && file !== ORCHESTRATOR_SELF) orchestratorImports.push(`${file}  →  ${spec}`);
     const to = ownerOf(target) ?? (target === 'src/lib' ? { kind: 'lib-root', name: ':lib-root' } : null);
     if (!to) continue;
     scanned++;
@@ -409,6 +416,15 @@ for (const [key, info] of edges) {
         info,
       });
   }
+}
+
+if (orchestratorImports.length) {
+  violations.push({
+    rule:
+      'only the jkai-builder sidecar may import the build orchestrator — use builderClient from $lib/jkai/builder-client',
+    label: 'src -> $lib/jkai/orchestrator',
+    info: { examples: orchestratorImports },
+  });
 }
 
 // R5: no NEW mutual imports between lib modules.

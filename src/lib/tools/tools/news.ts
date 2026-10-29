@@ -79,6 +79,7 @@ export async function searchNews(args: Record<string, unknown>) {
 
 register({
   name: 'news_search',
+  effect: 'read',
   description:
     'Search the live news desk backed by technical wires (Hacker News, Lobsters, Ars Technica) and UK public-sector feeds (GOV.UK, DfE, ONS). Use when the user specifically asks for news, headlines, recent stories, or what these sources is discussing. Returns relevant story metadata plus original, discussion, and internal reader links so the answer can cite its sources. Omit query for the current headlines; use view="new" for newest stories and view="best" for the strongest stories from the last 24 hours.',
   parameters: {

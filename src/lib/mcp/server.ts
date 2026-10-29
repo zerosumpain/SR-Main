@@ -21,6 +21,8 @@ import {
 import type { ToolDefinition } from '$lib/tools/registry-internal';
 import { isEssentialUnderPolicy, isMetaToolEnabled } from './essentials';
 import { JKAI_EXTENDED_TOOL } from './meta-tool';
+import { isCustomToolset } from '$lib/capabilities/manifest';
+import { declaredTier } from '$lib/tools/declared-tier';
 import {
   describeWithPolicy,
   getActivePolicy,
@@ -53,7 +55,7 @@ function toolToMcp(def: ToolDefinition, policy: ToolPolicyVersion): McpTool {
       type: 'object',
       properties: {},
     },
-    ...(def.destructive ? { annotations: { destructiveHint: true } } : {}),
+    ...(def.destructive || declaredTier(def).effect === 'destructive' ? { annotations: { destructiveHint: true } } : {}),
   };
 }
 
@@ -87,7 +89,9 @@ export function todayLine(now: Date = new Date()): string {
 }
 
 export async function listMcpTools(): Promise<McpTool[]> {
-  const tools = getTools();
+  // Re-enabled custom tools run only on an attended owner turn; an MCP client
+  // (the bridge) is not one.
+  const tools = getTools().filter((t) => !isCustomToolset(t.toolset));
   const policy = await getActivePolicy();
   if (isMetaToolEnabled()) {
     const essentials = tools

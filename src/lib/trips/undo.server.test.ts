@@ -66,6 +66,27 @@ beforeEach(() => {
   h.created = true;
 });
 
+describe('undoTo against a plan that moved on', () => {
+  it('refuses when a family member edited after the version John saw, and writes nothing', async () => {
+    h.latest = { version: 6, plan: PLAN }; // their edit made v6
+    const r = await undoTo(TRIP, 4, CALLER, { expectedLatest: 5 });
+    expect(r.status).toBe(409);
+    expect(String(r.body.error)).toMatch(/changed since version 5: it is now at version 6/);
+    expect(r.body.latestVersion).toBe(6);
+    expect(h.restored).toEqual([]);
+    expect(h.replans).toEqual([]);
+    expect(h.logged).toEqual([]);
+  });
+
+  it('refuses a second identical undo: the first already made a new version', async () => {
+    expect((await undoTo(TRIP, 4, CALLER, { expectedLatest: 5 })).status).toBe(200);
+    h.latest = { version: 6, plan: PLAN }; // the "Undone: …" version the first one wrote
+    const again = await undoTo(TRIP, 4, CALLER, { expectedLatest: 5 });
+    expect(again.status).toBe(409);
+    expect(h.replans).toHaveLength(1);
+  });
+});
+
 describe('undoTo', () => {
   it('puts the version before back and re-solves into a NEW version led by “Undone: …”', async () => {
     const r = await undoTo(TRIP, null, CALLER);

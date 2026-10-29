@@ -1,3 +1,4 @@
+import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
@@ -62,7 +63,7 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!tool.enabled) return json({ error: `The deployed tool "${name}" is disabled.` }, { status: 409 });
 
   const execution = await runLiveToolTest(args as Record<string, unknown>, (testArgs) =>
-    executeTool(name, testArgs),
+    executeTool(name, testArgs, { emit: () => {}, principal: ownerActionPrincipal('admin-tool-test') }),
   );
 
   let recorded = true;

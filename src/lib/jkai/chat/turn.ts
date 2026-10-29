@@ -9,7 +9,13 @@
 //   POST /api/jkai/service/turn
 //   Authorization: Bearer <JKAI_INVOKE_TOKEN>
 //   { input: { text, attachmentIds? }, history: [{ role, content, createdAt, attachmentIds? }], options }
-//   → 200 { response, memory }
+//   → 200 { response, memory, identityVersion? }
+//
+// `options.envelope` says where the turn came from ({ surface: 'whatsapp' } or
+// { surface: 'followup' }); Core picks the persona's length and format from it
+// and reports which soul answered (`identityVersion`), which the caller stamps
+// on the assistant row beside `metadata.channel`. An older Core ignores the
+// envelope and sends no version, and the caller stamps only the channel.
 //
 // Core's gateway passes the path through without a session and the route checks
 // the invoke token, as it does for chat-context. The turn is owner-grade: Core
@@ -20,11 +26,12 @@
 //
 // Unlike chat-context this IS the reply, so a failure throws: each caller already
 // has its own answer for a turn that failed.
-import { postToExtracted } from '$lib/server/extracted-app';
+import { ExtractedAppError, postToExtracted } from '$lib/server/extracted-app';
 import type { JkaiAttachment } from '$lib/db/schema';
 import type { ModelContext, PriceSnapshot } from '$lib/server/models/types';
 import type { ThinkingLevel } from '$lib/models/thinking';
 import type { MemoryTurnStamp } from '$lib/jkai/memory/contracts';
+import type { TurnEnvelope } from '$lib/tools/invoke-contract';
 
 /**
  * A history message as the callers hold it. Declared here rather than imported
@@ -62,9 +69,18 @@ export interface RemoteTurnOptions {
   priceSnapshot: PriceSnapshot | null;
   subagentDepth?: number;
   toolWhitelist?: string[];
+  /**
+   * WhatsApp only: mutates Core may offer but must freeze for John's reply code
+   * rather than run (`$lib/integrations/whatsapp/reply-code`). Kept apart from
+   * `toolWhitelist`, so a Core that predates reply codes never offers them.
+   */
+  confirmByCode?: string[];
   maxRounds?: number;
   useIntelContext?: boolean;
+  /** Kept beside `envelope.surface: 'followup'` for a Core that predates the envelope. */
   origin?: 'followup';
+  /** Where the turn came from. No deviceId: these turns have no phone. */
+  envelope?: Pick<TurnEnvelope, 'surface' | 'locale' | 'tz' | 'refs'>;
   /** Cost-attribution tag Core wraps the turn in, e.g. 'delegation'. */
   activity?: string;
 }
@@ -73,6 +89,27 @@ export interface RemoteTurn {
   response: string;
   /** Core's memory stamp for the turn, stored on the assistant row as-is. */
   memory: MemoryTurnStamp | null;
+  /** Which soul answered, from Core; null from a Core that predates it. */
+  identityVersion: string | null;
+  /** The one call Core froze for John's reply code (WhatsApp only), or null. */
+  confirm: FrozenCall | null;
+}
+
+/** A tool call Core did not run because it waits for John's reply code. */
+export interface FrozenCall {
+  tool: string;
+  args: Record<string, unknown>;
+  prompt: string;
+}
+
+/** Read strictly: anything malformed is no frozen call, so nothing is asked. */
+export function coerceFrozenCall(raw: unknown): FrozenCall | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.tool !== 'string' || !/^[A-Za-z0-9_.:-]{1,128}$/.test(r.tool)) return null;
+  if (!r.args || typeof r.args !== 'object' || Array.isArray(r.args)) return null;
+  const prompt = typeof r.prompt === 'string' && r.prompt.trim() ? r.prompt.trim().slice(0, 600) : `Proceed with ${r.tool}?`;
+  return { tool: r.tool, args: r.args as Record<string, unknown>, prompt };
 }
 
 /** A turn can run tools for minutes — `workflow_run` alone may wait 600s. */
@@ -85,12 +122,29 @@ export async function chatTurn(
   opts: { timeoutMs?: number; port?: number } = {},
 ): Promise<RemoteTurn> {
   const attachmentIds = (input.attachments ?? []).map((a) => a.id);
-  const res = await postToExtracted<{ response?: unknown; memory?: unknown }>(
+  const res = await postToExtracted<{ response?: unknown; memory?: unknown; identityVersion?: unknown; confirm?: unknown }>(
     'jkai-core',
     '/api/jkai/service/turn',
     { input: { text: input.text, ...(attachmentIds.length ? { attachmentIds } : {}) }, history: history.map(toWire), options },
     { timeoutMs: opts.timeoutMs ?? TIMEOUT_MS, port: opts.port },
   );
   if (typeof res?.response !== 'string') throw new Error('chat turn: Core returned no response');
-  return { response: res.response, memory: (res.memory as MemoryTurnStamp | null) ?? null };
+  return {
+    response: res.response,
+    memory: (res.memory as MemoryTurnStamp | null) ?? null,
+    identityVersion: typeof res.identityVersion === 'string' && res.identityVersion ? res.identityVersion.slice(0, 120) : null,
+    confirm: coerceFrozenCall(res.confirm),
+  };
+}
+
+
+/**
+ * Core is not there to answer: the lane is closed, the connection was refused
+ * or reset, or the gateway said 502/503/504. A caller that may wait (the
+ * heartbeat) skips and tries again later rather than answering in some other
+ * voice. A slow turn, a 4xx or a 500 is an answer, not an absence: false.
+ */
+export function isCoreUnreachable(err: unknown): boolean {
+  if (!(err instanceof ExtractedAppError)) return false;
+  return /service lane is closed|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENOTFOUND|EAI_AGAIN|socket hang up|returned 50[234]\b/.test(err.message);
 }

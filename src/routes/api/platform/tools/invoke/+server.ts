@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { invokeLaneFor } from '$lib/server/invoke-auth';
+import { invokeLaneFor, presentsCommissionToken } from '$lib/server/invoke-auth';
 import {
 	coerceInvokeRequest,
 	InvokeContractError,
@@ -11,9 +11,15 @@ import {
 import { loadToolRegistry } from '$lib/tools/load-registry';
 import { remoteInvokeTarget } from '$lib/tools/remote';
 import { rateLimit } from '$lib/server/rate-limit';
+import { recordInvocationPrincipal } from '$lib/jkai/principal/record.server';
 import type { InvokeContext } from '$lib/tools/invoke-contract';
 import type { ToolExecContext, ToolResult } from '$lib/tools/registry-internal';
 import { coerceModelContext } from '$lib/constants/default-models';
+import { env } from '$env/dynamic/private';
+import { createNonceLedger } from '$lib/tools/principal-seal';
+import { intakePrincipal, principalEnforceMode } from '$lib/tools/principal-intake';
+import { type PrincipalClaims } from '$lib/tools/invoke-contract';
+import { declaredTier } from '$lib/tools/declared-tier';
 import { isThinkingLevel } from '$lib/models/thinking';
 import type { RequestHandler } from './$types';
 
@@ -42,8 +48,29 @@ import type { RequestHandler } from './$types';
  *
  * Spec: `docs/superpowers/specs/2026-09-17-jkai-tool-invoke-contract.md`.
  */
+/**
+ * Seals seen by this process, kept until they expire: one seal, one call.
+ *
+ * ACCEPTED RISK (reviewed 2026-10-29): the ledger is in memory, per process.
+ * A seal replayed to a DIFFERENT Main process, or to this one after a restart,
+ * inside its lifetime (at most `PRINCIPAL_MAX_TTL_MS` + skew, 5.5 minutes) is
+ * not caught. Moving it to Postgres was considered and not done: no existing
+ * table fits (jkai_events and jkai_gates are turn records, and the tables with
+ * an expiry belong to other features and their GRANTs), the rule is no new
+ * table in this batch, and this route is hot — a write per tool call. What
+ * bounds the risk: a replay needs the service token AND a captured seal (the
+ * wire is TLS between our own hosts), the seal opens only the one tool it
+ * names, carries the same principal it was issued for (it widens nothing),
+ * and, once Core seals them, is bound to the call's conversation and
+ * arguments (`$lib/tools/principal-intake`).
+ */
+const nonces = createNonceLedger();
+
 export const POST: RequestHandler = async ({ request }) => {
-	const lane = invokeLaneFor(request);
+	const serviceLane = invokeLaneFor(request);
+	// The commission credential is its own lane and opens nothing else (see
+	// `$lib/server/invoke-auth`); it is asked only when the service tokens fail.
+	const lane = serviceLane === 'none' && presentsCommissionToken(request) ? 'commission' : serviceLane;
 	if (lane === 'none') throw error(401, 'invalid token');
 
 	/**
@@ -83,8 +110,28 @@ export const POST: RequestHandler = async ({ request }) => {
 		throw error(400, 'body must be JSON');
 	}
 	const { name, args, context } = parsed;
+
+	/**
+	 * Principal phase 2: the call must carry a seal from `JKAI_PRINCIPAL_KEY`,
+	 * for this receiver and this tool, unexpired and never seen before. The
+	 * body's `principalId`, `allowedTools`, `jobId`, `surface` and `deviceId`
+	 * are not trusted on their own any more; the claims replace them, and a body
+	 * list can only narrow the sealed one.
+	 *
+	 * `JKAI_PRINCIPAL_ENFORCE` ('log' by default for one release, 'on' after):
+	 * in 'log' a MISSING seal (or an unset key) is logged and the call runs as
+	 * an UNATTENDED service principal read from the body; a bad seal is refused
+	 * in both modes. See `$lib/tools/principal-intake`.
+	 */
+	const mode = principalEnforceMode(env.JKAI_PRINCIPAL_ENFORCE);
+	const intake = intakePrincipal({ tool: name, args, context, key: env.JKAI_PRINCIPAL_KEY, mode, ledger: nonces });
+	if (!intake.ok) throw error(intake.status, intake.message);
+	const claims = intake.claims;
+	const jobId = intake.jobId;
+	if (intake.notes.length) console.warn(`[principal] ${name}: ${intake.notes.join('; ')}`);
+
 	if (name === '__daydream_commission_v1') {
-		if (lane !== 'destructive' || context.principalId !== 'owner') throw error(403, 'Commission runtime requires the owner service lane');
+		if (lane !== 'destructive' || claims.principalId !== 'owner') throw error(403, 'Commission runtime requires the owner service lane');
 		const { invokeCommissionOperation } = await import('$lib/daydream/commission-executor.server');
 		const framed = wantsNdjson(request.headers.get('accept'));
 		let result: ToolResult;
@@ -93,6 +140,23 @@ export const POST: RequestHandler = async ({ request }) => {
 		return framed ? new Response(resultLine(result), { headers: { 'content-type': NDJSON_CONTENT_TYPE, 'cache-control': 'no-store' } }) : json(result);
 	}
 	const registry = await loadToolRegistry();
+
+	/**
+	 * Principal phase 1: who this call is for, computed and logged beside the
+	 * turn's trace (`$lib/jkai/principal`). Logging only — it decides nothing,
+	 * and is recorded before the lane check so refused calls are counted too.
+	 */
+	recordInvocationPrincipal({
+		tool: name,
+		lane,
+		principalId: claims.principalId,
+		jobId,
+		conversationId: context.conversationId,
+		allowedTools: claims.allowedTools,
+		surface: claims.surface,
+		deviceId: claims.deviceId,
+		signed: intake.sealed ? { via: claims.via, attended: claims.attended } : undefined,
+	});
 
 	/**
 	 * Decided once, and every exit below obeys it.
@@ -122,8 +186,31 @@ export const POST: RequestHandler = async ({ request }) => {
 	 * the user what to do instead. A 403 would reach the caller as a transport
 	 * failure and lose the sentence.
 	 */
+	/**
+	 * The commission lane, both ways round, refused in the RESULT for the same
+	 * reason as the destructive one below. The commission token runs only a
+	 * commission-lane tool; a commission-lane tool runs only on that token
+	 * (and `executeTool` then also wants an attended owner browser session).
+	 */
+	const declaredLane = (() => {
+		const declared = registry.getTool(name);
+		return declared ? declaredTier(declared).lane : null;
+	})();
+	if (lane === 'commission' && declaredLane !== 'commission') {
+		return single({ success: false, error: `The commission credential opens only commissioning tools, not ${name}.` });
+	}
+	if (declaredLane === 'commission' && lane !== 'commission') {
+		return single({
+			success: false,
+			error:
+				`${name} commissions a build, and the commission lane to this site is closed to this caller. ` +
+				`Commission it from /jkai in a browser, where the confirmation can be shown.`,
+		});
+	}
+
 	if (lane !== 'destructive') {
-		if (registry.getTool(name)?.destructive === true) {
+		const declared = registry.getTool(name);
+		if (declared && declaredTier(declared).lane === 'destructive') {
 			return single({
 				success: false,
 				error:
@@ -154,7 +241,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		// that will not serialise throws in `json()`. The framed path already
 		// turned both into a failed result; the debug path should not answer 500
 		// where it answers cleanly.
-		return single(await runTool(registry, name, args, execContextFrom(context, () => {})));
+		return single(await runTool(registry, name, args, execContextFrom(context, claims, jobId, lane, () => {})));
 	}
 
 	const encoder = new TextEncoder();
@@ -176,7 +263,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				registry,
 				name,
 				args,
-				execContextFrom(context, (text) => write(statusLine(text))),
+				execContextFrom(context, claims, jobId, lane, (text) => write(statusLine(text))),
 			);
 			write(resultLine(result));
 			if (!closed) controller.close();
@@ -207,17 +294,39 @@ export const POST: RequestHandler = async ({ request }) => {
  * it write it onto a row that a sidecar picks up hours later, so a bad value
  * would surface a long way from here.
  */
-function execContextFrom(context: InvokeContext, emit: (text: string) => void): ToolExecContext {
+function execContextFrom(
+	context: InvokeContext,
+	claims: PrincipalClaims,
+	jobId: string | undefined,
+	lane: 'standard' | 'destructive' | 'commission',
+	emit: (text: string) => void,
+): ToolExecContext {
 	const raw = context.modelContext;
 	const modelId = typeof raw?.modelId === 'string' ? raw.modelId : '';
+	// The sealed list is the limit; a body list can only narrow it.
+	const allowedTools = claims.allowedTools
+		? context.allowedTools
+			? claims.allowedTools.filter((t) => context.allowedTools!.includes(t))
+			: claims.allowedTools
+		: context.allowedTools;
 	return {
 		conversationId: context.conversationId,
 		workflowId: context.workflowId,
-		jobId: context.jobId,
-		allowedTools: context.allowedTools,
-		// Whose turn: a member's call must arrive as a member's, or the
-		// executor's fail-closed check (no allow-list ⇒ refuse) never fires.
-		principalId: context.principalId,
+		jobId,
+		allowedTools,
+		// Whose turn, from the seal: a member's call arrives as a member's, so
+		// the executor's fail-closed checks fire.
+		principalId: claims.principalId,
+		principal: {
+			principalId: claims.principalId,
+			via: claims.via,
+			attended: claims.attended,
+			...(claims.jobId ? { jobId: claims.jobId } : {}),
+			...(claims.surface ? { surface: claims.surface } : {}),
+			...(claims.deviceId ? { deviceId: claims.deviceId } : {}),
+			...(allowedTools ? { allowedTools } : {}),
+			...(claims.purpose ? { purpose: claims.purpose } : {}),
+		},
 		modelContext: modelId
 			? coerceModelContext({
 					provider: typeof raw?.provider === 'string' ? raw.provider : undefined,
@@ -225,6 +334,12 @@ function execContextFrom(context: InvokeContext, emit: (text: string) => void): 
 				})
 			: undefined,
 		thinkingLevel: isThinkingLevel(context.thinkingLevel) ? context.thinkingLevel : null,
+		// From the seal, not the body: what the issuer verified.
+		...(claims.surface ? { surface: claims.surface } : {}),
+		...(claims.deviceId ? { deviceId: claims.deviceId } : {}),
+		// The credential this route checked, so `executeTool` can open the
+		// commission lane for exactly the calls that carried its token.
+		credentialLane: lane,
 		emit,
 	};
 }

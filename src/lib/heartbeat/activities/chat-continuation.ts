@@ -2,7 +2,7 @@ import { db } from '$lib/db';
 import { orchestratorChats, heartbeatPulses, conversations } from '$lib/db/schema';
 import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { listChatJobs } from '$lib/jkai/chat/activity';
-import { runHeartbeatTurn, postHeartbeatNote } from '../llm';
+import { runHeartbeatTurn, postHeartbeatNote, HeartbeatSkipped } from '../llm';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'chat-continuation';
@@ -93,6 +93,48 @@ export function beatGate(opts: {
   return opts.ageMs < waitMs ? 'backoff' : 'act';
 }
 
+/** The soft check-in's synthetic user turn. Matched by `trailingChain`. */
+export const SOFT_CHECKIN_TEXT = '[heartbeat] checking in — anything more to do here, or have we landed?';
+
+interface ChainRow {
+  role: string;
+  content: string;
+  metadata: unknown;
+}
+
+/**
+ * What trails a conversation, read newest-first: how many of our own beats,
+ * whether one of them was already a soft check-in, and whether the newest row
+ * is ANOTHER heartbeat activity's output (a build watcher's note, say).
+ *
+ * The last two are the duplicate check-ins of 2026-10-03. A soft check-in's own
+ * reply ("We've landed.") reads as a silent pause, so the thread was asked
+ * "have we landed?" again at 10, then 30 minutes — and a build watcher's
+ * closing note did the same on the thread it narrated, so two threads about one
+ * build were checked in on in the same tick and answered "landed" and "not
+ * landed" side by side. A pause gets ONE soft check-in, and a thread another
+ * activity is narrating is left to that activity. PURE.
+ */
+export function trailingChain(rowsNewestFirst: readonly ChainRow[]): {
+  beats: number;
+  softCheckedIn: boolean;
+  otherActivity: boolean;
+} {
+  let beats = 0;
+  let softCheckedIn = false;
+  let otherActivity = false;
+  for (const [i, r] of rowsNewestFirst.entries()) {
+    const hb = (r.metadata as { heartbeat?: { activity?: string; kind?: string } } | null)?.heartbeat;
+    if (hb?.activity !== NAME) {
+      if (i === 0 && hb?.activity) otherActivity = true;
+      break;
+    }
+    beats++;
+    if (hb.kind === 'user-trigger' && r.content === SOFT_CHECKIN_TEXT) softCheckedIn = true;
+  }
+  return { beats, softCheckedIn, otherActivity };
+}
+
 /** A 'silent' pause this short almost always means the user is reading the
  *  assistant's reply. The user-trigger LLM call is expensive (~1500 prompt
  *  tokens) and the visible "[heartbeat] checking in…" turn-pair clutters the
@@ -157,22 +199,18 @@ export const chatContinuation: ActivityHandler = {
 
     type Latest = (typeof recent)[number];
     const latestByConv = new Map<string, Latest>();
-    // How many of our own beats trail each conversation, newest-first. Drives
-    // the backoff ladder; `recent` is already ordered desc.
-    const consecutiveBeatsByConv = new Map<string, number>();
-    const chainClosed = new Set<string>();
+    // Each conversation's rows, newest-first (`recent` is ordered desc), for
+    // `trailingChain`: the beats that drive the backoff ladder, and the two
+    // duplicate check-in guards.
+    const rowsByConv = new Map<string, Latest[]>();
     for (const r of recent) {
       if (!r.convId) continue;
       if (!latestByConv.has(r.convId)) latestByConv.set(r.convId, r);
-      if (!chainClosed.has(r.convId)) {
-        const m = r.metadata as { heartbeat?: { activity?: string } } | null;
-        if (m?.heartbeat?.activity === NAME) {
-          consecutiveBeatsByConv.set(r.convId, (consecutiveBeatsByConv.get(r.convId) ?? 0) + 1);
-        } else {
-          chainClosed.add(r.convId);
-        }
-      }
+      const rows = rowsByConv.get(r.convId) ?? [];
+      rows.push(r);
+      rowsByConv.set(r.convId, rows);
     }
+    const chainByConv = new Map([...rowsByConv].map(([id, rows]) => [id, trailingChain(rows)]));
     const latest = Array.from(latestByConv.values()).filter((r) => r.role === 'assistant');
 
     if (latest.length === 0) {
@@ -229,7 +267,8 @@ export const chatContinuation: ActivityHandler = {
       if (!row.convId) continue;
       const convId = row.convId;
       const ageMs = now - new Date(row.createdAt).getTime();
-      const beats = consecutiveBeatsByConv.get(convId) ?? 0;
+      const chain = chainByConv.get(convId) ?? { beats: 0, softCheckedIn: false, otherActivity: false };
+      const beats = chain.beats;
       // A conversation we are actively beating into is not stale — each beat
       // is itself the newest message, so the plain 25-minute ceiling would
       // fire the moment the ladder widened past it.
@@ -251,7 +290,19 @@ export const chatContinuation: ActivityHandler = {
         continue;
       }
 
+      // Another heartbeat activity wrote the newest row (a build watcher's
+      // note): that activity is narrating this thread, so do not talk over it.
+      if (chain.otherActivity) {
+        skippedReasons.otherActivity = (skippedReasons.otherActivity ?? 0) + 1;
+        continue;
+      }
+
       const cls = classify(row.content);
+      // One soft check-in per pause: its own reply is not a new pause.
+      if (cls === 'silent' && chain.softCheckedIn) {
+        skippedReasons.alreadyCheckedIn = (skippedReasons.alreadyCheckedIn ?? 0) + 1;
+        continue;
+      }
       // Silent pauses need a longer reading window than question/blocked
       // nudges. If the user's been quiet for less than SILENT_MIN_STALE_MS,
       // they're almost certainly still reading the previous reply.
@@ -302,7 +353,7 @@ export const chatContinuation: ActivityHandler = {
           }
           await runHeartbeatTurn({
             conversationId: convId,
-            userText: '[heartbeat] checking in — anything more to do here, or have we landed?',
+            userText: SOFT_CHECKIN_TEXT,
             activityName: NAME,
             instruction:
               'If the previous turn appears to have completed the task, reply briefly confirming completion. ' +
@@ -313,6 +364,11 @@ export const chatContinuation: ActivityHandler = {
         }
         actedCount++;
       } catch (err) {
+        // Core down: nothing was written; the next tick sees the same pause.
+        if (err instanceof HeartbeatSkipped) {
+          skippedReasons.coreDown = (skippedReasons.coreDown ?? 0) + 1;
+          continue;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[heartbeat] chat-continuation failed for conv ${convId}: ${msg}`);
         skippedReasons.error = (skippedReasons.error ?? 0) + 1;

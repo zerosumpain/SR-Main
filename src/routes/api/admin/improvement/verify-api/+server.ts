@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { DatastoreError, getRecordByKey } from '$lib/datastore';
 import { executeTool } from '$lib/tools/registry';
+import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
 import { COLLECTIONS } from '$lib/selfimprove/types';
 
 // Owner-only (enforced in hooks.server.ts for /api/admin/*). Verifies a single
@@ -48,7 +49,7 @@ export const POST: RequestHandler = async ({ request }) => {
     url: example.url,
     method: example.method ?? 'GET',
     body: example.body,
-  });
+  }, { emit: () => {}, principal: ownerActionPrincipal('admin-verify-api') });
 
   // Re-read for the status/lastVerifiedAt that api_call just wrote.
   let updated: CatalogEntry = entry;

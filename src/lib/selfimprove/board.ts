@@ -84,6 +84,14 @@ export const IDEA_SOURCES = [
   'toolsmith',
   /** A chat turn the owner analysed and sent to the engine. */
   'trace',
+  /** A build the owner commissioned from web chat (`develop_commission`). */
+  'chat',
+  /** RESERVED: a build commissioned from the iPhone app, once the server can
+   *  prove the request came from him. Nothing writes it yet. */
+  'phone',
+  /** An ask jkai could not meet: a planned capability, or one nothing on the
+   *  site does (slice 7b). Queued from chat, never autobuilt (`propose.ts`). */
+  'capability-gap',
   /** Queued before this field existed. Never a guess. */
   'unattributed',
 ] as const;
@@ -219,6 +227,9 @@ export const SOURCE_LABEL: Readonly<Record<IdeaSource, { label: string; from: st
   engine: { label: 'About the engine', from: 'its own proposals, never built by a lane' },
   toolsmith: { label: 'The toolsmith', from: 'the retired toolsmith — asides had while authoring' },
   trace: { label: 'A turn you sent', from: 'a chat trace analysed by hand' },
+  chat: { label: 'Commissioned in chat', from: 'a build you commissioned from web chat' },
+  phone: { label: 'Commissioned on the phone', from: 'a build you commissioned from the iPhone app' },
+  'capability-gap': { label: 'Capability gap', from: 'something you asked jkai for that is not built yet' },
   unattributed: { label: 'Before this was recorded', from: 'queued before the channel was stamped' },
 };
 

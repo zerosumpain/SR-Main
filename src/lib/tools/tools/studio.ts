@@ -25,6 +25,9 @@ import type { ResearchMode } from '$lib/jkai/research-brief';
 
 register({
   name: 'studio_build',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description:
     'Start a Studio build: turn a challenge statement into a multi-chapter interactive explainer ' +
     'published at /projects/<slug>/. Runs a research stage, plans a chapter spine, then builds one ' +

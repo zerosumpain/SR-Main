@@ -246,6 +246,34 @@
         "zerosumpain/SR-Data-Standard-Designer"
       ],
       "sha256": "7041898ef576d29aa0dd3c9afde0ed6de25a7888bc2adac244eb661ed738be54"
+    },
+    "src/lib/jkai/jkai-theme.svelte.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "29c1db7b98f696728cd371a1e421255158eab9edafecc01d77445cb6fc3a8f76"
+    },
+    "src/lib/tools/invoke-contract.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "835f5310bc7879bac460d6257a60cca5181020969b235781d7a2b8670fdb0e1f"
+    },
+    "src/lib/tools/registry-internal.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "eaa3c6bcaec0d865ce9106d5687c669f3b9dddd33e5cc9060c56bcd435712b7c"
+    },
+    "src/lib/tools/principal-seal.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "abecd2ab0c0e0340338270a9b263cef54305c12a4b37e5fa0182bbb61ea71b37"
     }
   }
 }

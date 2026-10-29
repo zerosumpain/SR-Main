@@ -10,7 +10,7 @@ vi.mock('@whiskeysockets/baileys', () => {
 		sendMessage: vi.fn().mockResolvedValue({ key: { id: 'msg-123' } }),
 		logout: vi.fn().mockResolvedValue(undefined),
 		end: vi.fn(),
-		user: { id: '447359228511:1@s.whatsapp.net' }
+		user: { id: '447700900123:1@s.whatsapp.net' }
 	};
 
 	return {
@@ -49,26 +49,27 @@ describe('WhatsAppService', () => {
 	});
 
 	it('formats phone numbers to WhatsApp JID', () => {
-		expect(service.toJid('+447359228511')).toBe('447359228511@s.whatsapp.net');
-		expect(service.toJid('447359228511')).toBe('447359228511@s.whatsapp.net');
+		expect(service.toJid('+447700900123')).toBe('447700900123@s.whatsapp.net');
+		expect(service.toJid('447700900123')).toBe('447700900123@s.whatsapp.net');
 	});
 
 	it('extracts phone number from JID', () => {
-		expect(service.fromJid('447359228511@s.whatsapp.net')).toBe('447359228511');
-		expect(service.fromJid('447359228511:1@s.whatsapp.net')).toBe('447359228511');
+		expect(service.fromJid('447700900123@s.whatsapp.net')).toBe('447700900123');
+		expect(service.fromJid('447700900123:1@s.whatsapp.net')).toBe('447700900123');
 	});
 
 	it('checks allowlist correctly', () => {
-		service.setAllowedNumbers(['+447359228511', '+12025551234']);
-		expect(service.isAllowed('447359228511')).toBe(true);
-		expect(service.isAllowed('+447359228511')).toBe(true);
+		service.setAllowedNumbers(['+447700900123', '+12025551234']);
+		expect(service.isAllowed('447700900123')).toBe(true);
+		expect(service.isAllowed('+447700900123')).toBe(true);
 		expect(service.isAllowed('12025551234')).toBe(true);
 		expect(service.isAllowed('9999999999')).toBe(false);
 	});
 
-	it('allows all numbers when allowlist is empty', () => {
+	// Fail closed since the 28 Oct lane fix: an empty list is nobody, not everybody.
+	it('refuses every number when the allowlist is empty', () => {
 		service.setAllowedNumbers([]);
-		expect(service.isAllowed('447359228511')).toBe(true);
-		expect(service.isAllowed('anything')).toBe(true);
+		expect(service.isAllowed('447700900123')).toBe(false);
+		expect(service.isAllowed('anything')).toBe(false);
 	});
 });

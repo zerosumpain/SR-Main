@@ -182,7 +182,7 @@
       journeyStatus = body.session.status;
       exportRequestedAt = body.session.exportRequestedAt;
       remindAt = body.session.remindAt;
-      message = 'Saved. JKAI will keep your place while the provider prepares the archive.';
+      message = 'Saved. jkai will keep your place while the provider prepares the archive.';
     } catch (error) {
       message = error instanceof Error ? error.message : 'Could not record the export request';
     } finally {
@@ -246,7 +246,7 @@
         message = guide?.preparation
           ? journeyStatus === 'waiting_export'
             ? 'Your export wait and data choices are saved. The upload step will unlock when this importer passes its launch checks.'
-            : 'Your data choices are saved. Request the export when you are ready, and JKAI will keep your place.'
+            : 'Your data choices are saved. Request the export when you are ready, and jkai will keep your place.'
           : 'Your choices are saved. This source will resume here when its connection is available.';
         return;
       }
@@ -294,7 +294,7 @@
   }
 </script>
 
-<svelte:head><title>Add a source — JKAI</title></svelte:head>
+<svelte:head><title>Add a source — jkai</title></svelte:head>
 
 <main class="onboard-shell source-surface">
   <div class="topline">
@@ -303,9 +303,9 @@
   </div>
 
   <header>
-    <p class="eyebrow">JKAI · Guided source setup</p>
+    <p class="eyebrow">jkai · Guided source setup</p>
     <h1>Make your activity useful.</h1>
-    <p>Start with what you want JKAI to understand. You will see the evidence, choose the data, and grant each use separately.</p>
+    <p>Start with what you want jkai to understand. You will see the evidence, choose the data, and grant each use separately.</p>
   </header>
 
   <ActivityOnboardingStepper current={step} />
@@ -316,7 +316,7 @@
     <section aria-labelledby="purpose-title">
       <p class="section-code">Step 1 / Purpose</p>
       <h2 id="purpose-title">What should this source help with?</h2>
-      <p class="section-copy">Pick one or more. This only shapes recommendations; it does not grant JKAI access.</p>
+      <p class="section-copy">Pick one or more. This only shapes recommendations; it does not grant jkai access.</p>
       <div class="choice-grid">
         {#each ACTIVITY_ONBOARDING_OUTCOMES as outcome (outcome.id)}
           <button
@@ -422,8 +422,8 @@
         </div>
         <div class="boundary">
           <h3>The trust boundary</h3>
-          <div><strong>JKAI receives</strong><ul>{#each guide.receives as item}<li>{item}</li>{/each}</ul></div>
-          <div><strong>JKAI never receives</strong><ul>{#each guide.neverReceives as item}<li>{item}</li>{/each}</ul></div>
+          <div><strong>jkai receives</strong><ul>{#each guide.receives as item}<li>{item}</li>{/each}</ul></div>
+          <div><strong>jkai never receives</strong><ul>{#each guide.neverReceives as item}<li>{item}</li>{/each}</ul></div>
         </div>
       </div>
       <div class="actions"><button class="secondary" onclick={() => step = 2}>← Choose another source</button><button onclick={() => step = 4}>{guide.preparation ? 'Choose what to import →' : 'Choose what to connect →'}</button></div>
@@ -432,7 +432,7 @@
     <section aria-labelledby="data-title">
       <p class="section-code">Step 4 / Select data</p>
       <h2 id="data-title">Which parts may become usable?</h2>
-      <p class="section-copy">This limits the permission choices available after connection. JKAI still keeps the minimum source provenance needed for preview, audit and deletion.</p>
+      <p class="section-copy">This limits the permission choices available after connection. jkai still keeps the minimum source provenance needed for preview, audit and deletion.</p>
       <div class="data-choices">
         {#each selectedProvider.dataClasses as dataClass (dataClass)}
           <button
@@ -448,7 +448,7 @@
       </div>
       <aside class="next-note">
         <strong>Still off after this step</strong>
-        <span>JKAI, Daydream, Briefing, workflows, Intel and external tools receive nothing until you review evidence and grant them access separately.</span>
+        <span>jkai, Daydream, Briefing, workflows, Intel and external tools receive nothing until you review evidence and grant them access separately.</span>
       </aside>
       <div class="actions">
         <button class="secondary" onclick={() => step = 3}>← Back to preparation</button>

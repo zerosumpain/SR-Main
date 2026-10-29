@@ -10,6 +10,7 @@ import { getCodexUsage } from '$lib/server/models/codex-usage';
 import { getDeployVersion } from '$lib/server/deploy-version';
 import { viewerOf } from '$lib/server/viewer';
 import { reachablePages } from '$lib/access/catalogue';
+import { JKAI_THEME_COOKIE, themeFromCookie } from '$lib/jkai/jkai-theme.svelte';
 
 /** What the header shows a member: nothing. Spend, credit, the Codex quota and
  *  the workflow counts are the owner's operational data, not theirs. */
@@ -45,6 +46,10 @@ export const load: LayoutServerLoad = async (event) => {
   // for the surfaces their permissions open (intel, notes, recall — the access
   // catalogue), and this load runs under them. Their "home" in the hub is the
   // first of those they hold.
+  // Night unless the reader chose paper. The cookie is Core's (`path=/jkai`,
+  // same origin), so the choice made on /jkai follows him to every Main room
+  // under it, rendered on the server so nothing flips after hydration.
+  const jkaiTheme = themeFromCookie(event.cookies.get(JKAI_THEME_COOKIE));
   const viewer = await viewerOf(event).catch(() => null);
   if (viewer?.kind === 'member') {
     // `/jkai` itself counts: with chat open to them, the hub's own page is theirs.
@@ -55,7 +60,7 @@ export const load: LayoutServerLoad = async (event) => {
       : jkai.includes('/jkai')
         ? '/jkai'
         : (jkai[0] ?? '/');
-    return { deploy: getDeployVersion(), member: true as const, memberHome, memberReach: reach, hub: MEMBER_HUB };
+    return { deploy: getDeployVersion(), jkaiTheme, member: true as const, memberHome, memberReach: reach, hub: MEMBER_HUB };
   }
   // Midnight in the database's timezone, the same boundary the spend ledger
   // uses — this was a rolling 24 hours while everything beside it in the header
@@ -135,6 +140,7 @@ export const load: LayoutServerLoad = async (event) => {
 
   return {
     deploy: getDeployVersion(),
+    jkaiTheme,
     member: false as const,
     memberHome: undefined as string | undefined,
     memberReach: [] as string[],

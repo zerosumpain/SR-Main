@@ -1,3 +1,4 @@
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { db } from '$lib/db';
 import { orchestratorChats, scheduledCallbacks } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -50,7 +51,15 @@ async function warnOwner(row: ScheduledCallback, error: string): Promise<void> {
  * cleanly. Each kind handler is intentionally tiny — no shared abstractions
  * because the three behaviours are genuinely different.
  */
-export async function fireCallback(row: ScheduledCallback): Promise<FireResult> {
+/**
+ * How long a callback may wait for jkai core to come back before it is failed
+ * and the owner told. A "lights off at 11" that fires at 11:20 is still worth
+ * doing; one at 3am is not, and silence then would be the broken promise
+ * `warnOwner` exists for.
+ */
+export const DEFER_GRACE_MS = 30 * 60_000;
+
+export async function fireCallback(row: ScheduledCallback, now: Date = new Date()): Promise<FireResult> {
   try {
     let result: FireResult;
     switch (row.kind) {
@@ -65,6 +74,14 @@ export async function fireCallback(row: ScheduledCallback): Promise<FireResult> 
         break;
       default:
         result = { ok: false, summary: `unknown kind ${row.kind}`, error: `unknown kind ${row.kind}` };
+    }
+
+    if (result.deferred) {
+      const late = now.getTime() - new Date(row.fireAt).getTime();
+      // Left pending: the next tick fires it again once core answers.
+      if (late < DEFER_GRACE_MS) return result;
+      result = { ok: false, summary: result.summary, error: `${result.error ?? 'deferred'} (gave up after ${Math.round(late / 60_000)} min)` };
+      await warnOwner(row, result.error!);
     }
 
     await db.update(scheduledCallbacks).set({
@@ -125,6 +142,10 @@ async function fireTool(row: ScheduledCallback): Promise<FireResult> {
   const ctx = {
     emit: () => {},
     conversationId: row.conversationId ?? undefined,
+    // The one tool this callback names, unattended. `schedule_tool_call_at`
+    // already refuses to defer a destructive tool; this refuses it again here.
+    allowedTools: [payload.toolName],
+    principal: unattendedPrincipal('scheduled', [payload.toolName], 'heartbeat'),
   };
   const out = await executeSiteTool(payload.toolName, payload.args ?? {}, ctx);
 
@@ -154,18 +175,27 @@ async function fireOrchestratorTurn(row: ScheduledCallback): Promise<FireResult>
   if (!payload.message) return { ok: false, summary: 'orchestrator-turn requires payload.message', error: 'no message' };
 
   // Re-engage the orchestrator by inserting a synthetic user message and
-  // running a focused chat turn against it. Uses the heartbeat LLM helper
-  // (no plan/clarify phases — this is system-driven, not user-driven).
-  const { runHeartbeatTurn } = await import('$lib/heartbeat/llm');
-  const turn = await runHeartbeatTurn({
-    conversationId: row.conversationId,
-    userText: payload.message,
-    activityName: row.name,
-    instruction:
-      'You are responding to a scheduled re-engagement of this conversation. Treat the message above as a system reminder. Be concise and concrete. You may call tools (system + home toolsets are available) to actually do things — e.g. turn off lights, send messages — not just narrate.',
-    maxTokens: 800,
-    toolsEnabled: true,
-  });
+  // running a focused chat turn against it. Uses the heartbeat turn, which is
+  // a Core chat turn on the 'heartbeat' surface (no plan/clarify phases — this
+  // is system-driven, not user-driven), offered the home tools.
+  const { runHeartbeatTurn, HeartbeatSkipped } = await import('$lib/heartbeat/llm');
+  let turn: Awaited<ReturnType<typeof runHeartbeatTurn>>;
+  try {
+    turn = await runHeartbeatTurn({
+      conversationId: row.conversationId,
+      userText: payload.message,
+      activityName: row.name,
+      instruction:
+        'You are responding to a scheduled re-engagement of this conversation. Treat the message above as a system reminder. Be concise and concrete. You may call the tools offered (follow-ups, heartbeat, schedule and home) to actually do things — e.g. turn off lights or set a scene — not just narrate. Nothing else can be called from here.',
+      maxTokens: 800,
+      toolsEnabled: true,
+    });
+  } catch (err) {
+    // Core is down: nothing was written, and the turn is not answered in any
+    // other voice. Try again on a later tick (see DEFER_GRACE_MS).
+    if (err instanceof HeartbeatSkipped) return { ok: false, deferred: true, summary: 'jkai core unreachable — deferred', error: err.message };
+    throw err;
+  }
   return {
     ok: true,
     summary: `orchestrator turn — ${turn.reply.slice(0, 120)}`,

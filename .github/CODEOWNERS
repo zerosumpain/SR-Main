@@ -65,4 +65,4 @@
 # that is read at runtime in production
 /CLAUDE.md                  @zerosumpain
 /.claude/                   @zerosumpain
-/data/prompts/              @zerosumpain
+/data/prompts/              @zerosumpain  # gone (slice 9); a return needs review

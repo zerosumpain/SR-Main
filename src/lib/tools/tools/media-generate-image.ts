@@ -176,6 +176,8 @@ export async function handleGenerateImage(
 
 register({
   name: 'generate_image',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Generate one to four images from a text prompt. Saves each image as a conversation attachment the user can view and download inline.',
   toolset: 'media',

@@ -10,6 +10,7 @@
 // here would close a module cycle (the same reason `queueBuildNotes` lives in
 // the heartbeat activity).
 
+import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
 import { eq, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { daydreamThoughts, gmailAccounts, jkaiBuilds, researchSessions } from '$lib/db/schema';
@@ -279,9 +280,11 @@ export async function startPrototype(thoughtId: string, now = new Date()): Promi
     return { ok: true, message: 'Prototype started — capped at 45 minutes.', href: `/jkai/builds/${build.id}` };
   });
   if (res.ok && buildId) {
-    const { orchestrator } = await import('$lib/jkai/orchestrator');
+    // The sidecar, never the in-process orchestrator: the web app cannot write
+    // the build workspace (see tools/tools/builds.ts).
+    const { builderClient } = await import('$lib/jkai/builder-client');
     try {
-      await orchestrator.startBuild(buildId);
+      await builderClient.startBuild(buildId);
     } catch (err) {
       await db.update(jkaiBuilds).set({ status: 'failed' } as never).where(eq(jkaiBuilds.id, buildId));
       return { ok: false, reason: `The builder could not be reached: ${String(err instanceof Error ? err.message : err).slice(0, 160)}` };
@@ -456,7 +459,8 @@ export async function discardGmailDraft(thoughtId: string, now = new Date()): Pr
 
 async function tool(name: string, args: Record<string, unknown>) {
   const { executeTool } = await import('$lib/tools/registry');
-  return executeTool(name, args);
+  // The owner's own press on a sign-off: the press answers the gate.
+  return executeTool(name, args, { emit: () => {}, principal: ownerActionPrincipal('daydream-follow') });
 }
 
 /** Look now at what is unavailable. Read-only; he picks from the list. */

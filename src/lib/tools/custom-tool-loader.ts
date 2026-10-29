@@ -7,7 +7,10 @@ import { customTools } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { register } from './registry-internal';
 import type { ToolResult } from './registry-internal';
-import { refuseDestructiveCall } from './platform-guard';
+import { refuseDestructiveCall, refuseNonReadCall } from './platform-guard';
+import { isRegisteredTool } from './catalogue';
+import { createHash } from 'node:crypto';
+import { REENABLED_CUSTOM_TOOL_HASHES, REENABLED_CUSTOM_TOOL_NAMES, customToolsetFor } from './custom-tools-enabled';
 import { executeSiteTool } from './executor';
 
 // Module-level guard against custom-tool recursion. Depth reflects how deeply
@@ -31,7 +34,7 @@ export interface ToolPlatform {
   call: (name: string, args: Record<string, unknown>) => Promise<ToolResult>;
 }
 
-function buildPlatform(callerName: string): ToolPlatform {
+function buildPlatform(callerName: string, opts: { readOnly?: boolean } = {}): ToolPlatform {
   return {
     async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
       if ((currentExecution()?.depth ?? 0) >= MAX_PLATFORM_CALL_DEPTH) {
@@ -40,10 +43,12 @@ function buildPlatform(callerName: string): ToolPlatform {
           error: `platform.call depth limit (${MAX_PLATFORM_CALL_DEPTH}) exceeded while calling "${name}" from "${callerName}". Check for tools calling each other in a loop.`,
         };
       }
-      const refusal = await refuseDestructiveCall(name, callerName);
+      const refusal = opts.readOnly ? await refuseNonReadCall(name, callerName) : await refuseDestructiveCall(name, callerName);
       if (refusal) return refusal;
       // Through the executor seam, which is also what keeps the circular init
-      // between registry.ts and this module from coming back.
+      // between registry.ts and this module from coming back. The spread
+      // carries the CALLER's principal and allowedTools: a custom tool reaches
+      // nothing its caller could not.
       try {
         return await executeSiteTool(name, args, { emit: () => {}, ...currentExecution(), depth: (currentExecution()?.depth ?? 0) + 1 });
       } finally {
@@ -63,9 +68,9 @@ function buildPlatform(callerName: string): ToolPlatform {
  *        Whoop, etc. — without managing credentials themselves)
  * Must return { success: boolean, data?: unknown, error?: string }.
  */
-function buildHandler(name: string, code: string): (args: Record<string, unknown>) => Promise<ToolResult> {
+function buildHandler(name: string, code: string, opts: { readOnly?: boolean } = {}): (args: Record<string, unknown>) => Promise<ToolResult> {
   validateHandler(code);
-  const platform = buildPlatform(name);
+  const platform = buildPlatform(name, opts);
 
   return async (args: Record<string, unknown>) => {
     let result: ToolResult;
@@ -93,40 +98,67 @@ function buildHandler(name: string, code: string): (args: Record<string, unknown
 }
 
 /**
- * Load all enabled custom tools from DB and register them.
- * Called once on startup after static tools are registered.
+ * Load the re-enabled custom tools into this process (plan P2-0a).
+ *
+ * Only rows that are enabled AND on the reviewed allow-list
+ * (`REENABLED_CUSTOM_TOOLS`) load; the rest of the table stays dark. Each one
+ * is re-homed under `custom:<toolset>`, declared read, and given a
+ * `platform.call` that may only reach read tools. A name that collides with
+ * a built-in tool is skipped, never registered over it. Called once from
+ * `hooks.server.ts`, in the web process only.
  */
-export async function loadCustomTools(): Promise<number> {
+export function handlerCodeHash(code: string): string {
+  return createHash('sha256').update(code, 'utf8').digest('hex');
+}
+
+export async function loadCustomTools(
+  allow: ReadonlySet<string> = REENABLED_CUSTOM_TOOL_NAMES,
+  pins: ReadonlyMap<string, string> = REENABLED_CUSTOM_TOOL_HASHES,
+): Promise<{ loaded: string[]; skipped: Array<{ name: string; reason: string }> }> {
+  const out = { loaded: [] as string[], skipped: [] as Array<{ name: string; reason: string }> };
+  if (allow.size === 0) return out;
   let rows;
   try {
     rows = await db.select().from(customTools).where(eq(customTools.enabled, true));
   } catch {
     // Table may not exist yet on first run
     console.warn('[custom-tools] Table not found — skipping');
-    return 0;
+    return out;
   }
 
-  let loaded = 0;
   for (const row of rows) {
+    if (!allow.has(row.name)) continue;
+    // Pinned to the reviewed code: a row edited since the review stays dark.
+    const pinned = pins.get(row.name);
+    const actual = handlerCodeHash(row.handlerCode ?? '');
+    if (!pinned || pinned !== actual) {
+      console.warn(`[custom-tools] "${row.name}" not loaded: handler_code sha256 ${actual.slice(0, 12)}… does not match the reviewed pin ${pinned ? pinned.slice(0, 12) + '…' : '(none)'}`);
+      out.skipped.push({ name: row.name, reason: 'handler_code does not match the reviewed sha256' });
+      continue;
+    }
     try {
+      if (await isRegisteredTool(row.name)) {
+        out.skipped.push({ name: row.name, reason: 'collides with a registered tool' });
+        continue;
+      }
       register({
         name: row.name,
         description: row.description,
-        toolset: row.toolset,
+        toolset: customToolsetFor(row.toolset),
         parameters: row.parameters as { type: 'object'; properties: Record<string, unknown>; required?: string[] },
         category: 'Custom Tool',
-        handler: buildHandler(row.name, row.handlerCode),
+        effect: 'read',
+        handler: buildHandler(row.name, row.handlerCode, { readOnly: true }),
       });
-      loaded++;
+      out.loaded.push(row.name);
     } catch (err) {
-      console.error(`[custom-tools] Failed to load "${row.name}":`, err instanceof Error ? err.message : err);
+      out.skipped.push({ name: row.name, reason: err instanceof Error ? err.message : String(err) });
     }
   }
 
-  if (loaded > 0) {
-    console.log(`[custom-tools] Loaded ${loaded} custom tool(s)`);
-  }
-  return loaded;
+  for (const s of out.skipped) console.warn(`[custom-tools] Skipped "${s.name}": ${s.reason}`);
+  if (out.loaded.length) console.log(`[custom-tools] Loaded ${out.loaded.length} re-enabled custom tool(s): ${out.loaded.join(', ')}`);
+  return out;
 }
 
 export { buildHandler };

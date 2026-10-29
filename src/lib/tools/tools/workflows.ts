@@ -18,6 +18,8 @@ const AMEND_OPS_DESCRIPTION =
 
 registerWorkflowTool({
   name: 'workflow_build_from_spec',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Build a NEW canvas (workflow) from an EXPLICIT JSON spec — name, trigger, nodes, edges. ' +
     'PREFER workflow_generate UNLESS the user dictated exact node types and config: this tool takes your spec verbatim, ' +
@@ -101,6 +103,7 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_list',
+  effect: 'read',
   description:
     'List existing workflows with their names, descriptions, and schedule status. ' +
     'Compact by default — returns only the identifying fields (id, name, description, trigger, updatedAt) to keep token usage low. ' +
@@ -118,6 +121,7 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_delete',
+  effect: 'destructive',
   destructive: true,
   description:
     'Permanently delete a workflow by ID. This CASCADES — all nodes, edges, run history, chat messages and audit log for the canvas are wiped and CANNOT be recovered. ' +
@@ -141,6 +145,7 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_inspect',
+  effect: 'read',
   description: 'Full structural view of a workflow — metadata, all nodes (type, label, config), all edges (connections), schedules, and last 5 execution runs',
   parameters: {
     type: 'object',
@@ -153,6 +158,7 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_get_run',
+  effect: 'read',
   description: 'Drill into a specific workflow execution run — per-node inputs, outputs, errors, timing, and logs',
   parameters: {
     type: 'object',
@@ -165,6 +171,7 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_get_generation_log',
+  effect: 'read',
   description: 'Replay how the orchestrator built a workflow — the tool-calling sequence (search_nodes, use_node, connect_nodes, finalize) with reasoning',
   parameters: {
     type: 'object',
@@ -177,6 +184,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_update_metadata',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Rename a workflow, update its description, or change its trigger config',
   parameters: {
     type: 'object',
@@ -194,6 +203,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_update_node',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     "Update a workflow node's config, label, or type. When changing type, the new type must exist in the node registry. " +
     'To REMOVE a config key entirely (not just set it to a new value), either pass it as `null` in `config` or list its name in `removeConfigKeys`. ' +
@@ -223,6 +234,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_add_node',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Add a new node to a workflow. The type must match a registered node type exactly — typos (e.g. "code-exec" instead of "code-execute", or "whatsapp-message" instead of "whatsapp") will be rejected because the canvas cannot render them. Call workflow_list_node_types first if you are unsure which type to use.',
   parameters: {
     type: 'object',
@@ -241,6 +254,7 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_list_node_types',
+  effect: 'read',
   description:
     'List registered workflow node types with their labels, categories and descriptions. This is the authoritative list — anything not in it will be rejected by workflow_add_node / workflow_update_node. ' +
     'PASS A `query` describing what you need ("whatsapp", "scrape a page", "run python") — the unfiltered catalogue is 88 types and costs ~5k tokens, a filtered one costs a few hundred. ' +
@@ -266,6 +280,7 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_describe_node',
+  effect: 'read',
   description:
     'Get the FULL detail for one or more node types — config schema (every field with type, required flag, enum values and defaults), input/output ports, usage guidance and example configs. ' +
     'Call this after workflow_list_node_types when you need the exact config keys before adding or updating nodes. ' +
@@ -292,6 +307,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_remove_node',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Remove a node from a workflow (also removes all connected edges)',
   parameters: {
     type: 'object',
@@ -304,6 +321,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_add_edge',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Connect two nodes in a workflow',
   parameters: {
     type: 'object',
@@ -322,6 +341,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_remove_edge',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Remove a connection between workflow nodes',
   parameters: {
     type: 'object',
@@ -334,6 +355,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_update_edge',
+  effect: 'mutate',
+  confirm: 'never',
   description: "Change an edge's routing — reconnect to different nodes or change handles",
   parameters: {
     type: 'object',
@@ -352,6 +375,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_amend',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Apply several canvas edits as ONE atomic change — the tool to reach for when an amendment is more than a single node config tweak. ' +
     'Rewiring a branch is add-node + remove-edge + add-edge + add-edge; run as separate tool calls a failure halfway leaves a dangling node and a severed branch on a canvas nobody is looking at. Here either all of it lands or none of it does. ' +
@@ -379,6 +404,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_add_schedule',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Add a cron schedule to a workflow',
   parameters: {
     type: 'object',
@@ -395,6 +422,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_update_schedule',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Enable/disable a schedule or change its cron config',
   parameters: {
     type: 'object',
@@ -411,6 +440,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_remove_schedule',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Remove a schedule from a workflow',
   parameters: {
     type: 'object',
@@ -423,6 +454,9 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_run',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description:
     'Trigger a workflow run on behalf of the user. Creates a manual run, fires the engine, and returns the runId. ' +
     'When `awaitMs` is set (max 600000 = 10 min), the call BLOCKS until the run completes/fails or the timeout elapses, ' +
@@ -459,6 +493,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_subscribe',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Subscribe a JKAI build to a workflow. When the workflow next runs to completion (via schedule, manual trigger, event, or another tool call), ' +
     'the result is queued as a pending delivery and surfaced at the top of the build\'s next iteration prompt. ' +
@@ -477,6 +513,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_unsubscribe',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Remove a workflow subscription from a build.',
   parameters: {
     type: 'object',
@@ -492,6 +530,7 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_clear_data_store',
+  effect: 'destructive',
   destructive: true,
   description:
     'Clear entries from a workflow\'s data store. Use this to enable smoother test runs of pipelines that dedupe via stored "seen" keys. ' +
@@ -524,6 +563,7 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_lint',
+  effect: 'read',
   description:
     'Run a static linter over a workflow\'s nodes/edges before triggering a run. Catches the common authoring mistakes: ' +
     'unsupported template syntax, unknown config keys, code-execute body issues, and {{input.X}} references that don\'t match the upstream schema. ' +
@@ -541,6 +581,8 @@ registerWorkflowTool({
 
 registerWorkflowTool({
   name: 'workflow_generate',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Generate (or modify) a complete workflow from a natural-language request using the in-repo rich generator. ' +
     'PREFER THIS over hand-authoring a DAG with workflow_build_from_spec / workflow_add_node when the user describes what they want in prose. ' +

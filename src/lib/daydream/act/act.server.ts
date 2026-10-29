@@ -11,6 +11,7 @@
 // exists to stop a model writing on its own initiative, and here the owner
 // pressed the button.
 
+import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { daydreamThoughts, gmailAccounts } from '$lib/db/schema';
@@ -30,6 +31,7 @@ import {
   readStored,
   shiftDay,
   storeAction,
+  actMismatch,
   toCreateArgs,
   toUpdateTimes,
   type ActDone,
@@ -59,7 +61,8 @@ async function tool(name: string, args: Record<string, unknown>) {
   // Dynamic for the reason `calendar/read.ts` gives: the registry boots
   // platform services on import.
   const { executeTool } = await import('$lib/tools/registry');
-  return executeTool(name, args);
+  // The owner's own press on a sign-off: the press answers the gate.
+  return executeTool(name, args, { emit: () => {}, principal: ownerActionPrincipal('daydream-act') });
 }
 
 const why = (res: { error?: unknown } | null | undefined) => String(res?.error ?? 'no reason given').slice(0, 200);
@@ -301,7 +304,7 @@ async function loadRow(tx: DbExecutor, thoughtId: string) {
 }
 
 /** "Do it for me". Idempotent: a second tap reports the first one's result. */
-export async function doIt(thoughtId: string, now = new Date()): Promise<ActResult> {
+export async function doIt(thoughtId: string, now = new Date(), expect: { step?: string; recipient?: string } = {}): Promise<ActResult> {
   const result = await db.transaction(async (tx): Promise<ActResult> => {
     const row = await loadRow(tx, thoughtId);
     if (!row) return { ok: false, reason: 'That note no longer exists.' };
@@ -329,6 +332,9 @@ export async function doIt(thoughtId: string, now = new Date()): Promise<ActResu
     const checked = checkPlan(draft, { noteText: text.all, today, evidenceText: evidence });
     if (!checked.ok) return { ok: false, reason: checked.reason };
     const plan: ActPlan = checked.plan;
+    // The card showed a step and a recipient: do exactly that, or nothing.
+    const mismatch = actMismatch(plan, existing?.stored.label ?? null, expect);
+    if (mismatch) return { ok: false, reason: mismatch };
 
     let outcome: Outcome;
     switch (plan.kind) {

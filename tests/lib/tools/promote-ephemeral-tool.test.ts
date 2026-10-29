@@ -44,7 +44,9 @@ describe('promote_ephemeral_tool', () => {
   // caught without blowing up.
   it('requires messageId + toolCallId', async () => {
     const { executeTool } = await import('$lib/tools/registry');
-    const res = await executeTool('promote_ephemeral_tool', { messageId: '', toolCallId: '' });
+    const { ownerActionPrincipal } = await import('$lib/tools/in-process-principal');
+    // Promotion is destructive (it stores model-written code): an owner press.
+    const res = await executeTool('promote_ephemeral_tool', { messageId: '', toolCallId: '' }, { emit: () => {}, principal: ownerActionPrincipal('test') });
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/messageId|toolCallId/i);
   });

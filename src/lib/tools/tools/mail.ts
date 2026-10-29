@@ -23,6 +23,7 @@ const TOOL_SCOPE: IntelScope = OWNER_INTEL_SCOPE;
 
 register({
   name: 'mail_search',
+  effect: 'read',
   description:
     'Semantic search over email threads that have been admitted to the knowledge graph, including the text of their attachments. Returns ranked passages with the thread subject, who was on it, when it was received, and a link into Gmail. Use this for "what did X say about Y", "what did we agree", or anything whose answer is a sentence inside an email. Only threads taken into the knowledge graph are searchable — the rest of the mailbox is invisible here. For documents in /drive use file_search instead.',
   parameters: {
@@ -62,6 +63,7 @@ register({
 
 register({
   name: 'mail_read',
+  effect: 'read',
   description:
     'Read every indexed passage of one admitted email thread, in order. Use after mail_search when a single passage is not enough. Takes the noteId from a mail_search hit.',
   parameters: {

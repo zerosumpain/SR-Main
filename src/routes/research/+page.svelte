@@ -1,4 +1,4 @@
-<svelte:head><title>Research — JKAI</title></svelte:head>
+<svelte:head><title>Research — jkai</title></svelte:head>
 <script lang="ts">
   import { goto } from '$app/navigation';
   import type { PageData } from './$types';
@@ -200,7 +200,7 @@
     <section class="research-lede">
       <div class="lede-inner">
         <div class="lede-copy">
-          <p class="eyebrow">JKAI · source-aware enquiry</p>
+          <p class="eyebrow">jkai · source-aware enquiry</p>
           <h1>ASK WIDER.<br /><span>KNOW WHAT HOLDS.</span></h1>
           <p class="standfirst">
             Fast answers through full investigations, with traceable sources, extracted facts and

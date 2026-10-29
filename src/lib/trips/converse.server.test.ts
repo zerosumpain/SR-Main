@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Trip, Wish } from './model';
 
 // One conversation turn with the store, the places, the planner model and the
@@ -144,7 +144,15 @@ vi.mock('./store.server', () => ({
 
 const { converse, NO_PLANNER } = await import('./converse.server');
 
+// The fixtures are a Rome trip on 27-30 Oct 2026; past days are not offered,
+// so pin the clock to the trip's first morning or the suite expires with it.
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-27T07:00:00Z'));
   h.messages = [];
   h.wishes = [];
   h.replans = [];

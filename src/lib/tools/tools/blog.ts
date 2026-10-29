@@ -5,6 +5,7 @@ import { desc, eq } from 'drizzle-orm';
 
 register({
   name: 'blog_list',
+  effect: 'read',
   description: 'List blog posts with title, slug, status (draft/published), excerpt, and timestamps',
   parameters: {
     type: 'object',
@@ -22,6 +23,7 @@ register({
 
 register({
   name: 'blog_get',
+  effect: 'read',
   description: 'Get full blog post content, tags, and metadata by ID',
   parameters: {
     type: 'object',
@@ -40,6 +42,8 @@ register({
 
 register({
   name: 'blog_create',
+  effect: 'destructive',
+  destructive: true,
   description: 'Create a new blog post',
   parameters: {
     type: 'object',
@@ -73,6 +77,8 @@ register({
 
 register({
   name: 'blog_update',
+  effect: 'destructive',
+  destructive: true,
   description: 'Update an existing blog post (title, content, status, tags)',
   parameters: {
     type: 'object',
@@ -101,6 +107,8 @@ register({
 
 register({
   name: 'blog_unpublish',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Unpublish a blog post — sets its status back to draft',
   parameters: {
     type: 'object',

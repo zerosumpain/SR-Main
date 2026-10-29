@@ -487,7 +487,8 @@ export interface TripMessage {
   /** Plan version after this message, if it changed the plan. */
   planVersion: number | null;
   /** Where it was said. */
-  surface: 'site' | 'phone';
+  /** 'jkai': asked through jkai's trip tools (slice 7a), on the owner's own thread. */
+  surface: 'site' | 'phone' | 'jkai';
   createdAt: string;
   /** v3: what the planner looked up for this reply (assistant messages). */
   research?: ResearchStep[];

@@ -29,8 +29,8 @@ export const JKAI_EXTENDED_TOOL: McpTool = {
     // fourteen Gmail searches while `api_integration_call` sat one call away.
     // A domain that is absent here is a domain the model does not know it has.
     'blog, health, calendar, workflow, gmail, payments and API integrations, ' +
-    'research, scraper, files and drive, datastore, the intel knowledge graph, ' +
-    'build, schedule, monitors, agents, home-assistant, render, ' +
+    'research, files and drive, datastore, the intel knowledge graph and mail, ' +
+    'build, schedule, monitors, home-assistant, render, ' +
     'document, image, audio, system domains). Use this when you need a ' +
     'capability beyond the essential tools you can see directly. Workflow: ' +
     'operation="list" to discover (optionally with a "query" — plain words ' +

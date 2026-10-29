@@ -632,7 +632,7 @@
               {:else if !hasProfile}
                 <p class="np-aside">Nothing trip-relevant found in your memory, notes or family roster yet ({checked(data.profile.gatheredAt)}). Tell the planner anything it should know.</p>
               {:else}
-                <p class="np-aside lede">From your JKAI memory, notes and family roster, {checked(data.profile.gatheredAt)}. It uses this without being asked; say in the conversation if anything is wrong.</p>
+                <p class="np-aside lede">From your jkai memory, notes and family roster, {checked(data.profile.gatheredAt)}. It uses this without being asked; say in the conversation if anything is wrong.</p>
                 <dl class="profile">
                   {#if data.profile.travellers.length}<dt>Travelling</dt><dd>{data.profile.travellers.map((t) => `${t.name}${t.relation ? ` (${t.relation})` : ''}${t.notes.length ? ` — ${t.notes.join('; ')}` : ''}`).join(', ')}</dd>{/if}
                   {#if data.profile.constraints.length}<dt>Needs</dt><dd><ul>{#each data.profile.constraints as c, ci (ci)}<li>{c.text} <span class="src">{c.source}</span></li>{/each}</ul></dd>{/if}
@@ -797,7 +797,7 @@
                 <p class="msg event"><span class="meta">{timeOf(m.createdAt)}</span> Changed directly: {m.text}</p>
               {:else}
                 <div class="msg {m.role}">
-                  <span class="who">{m.role === 'user' ? (m.surface === 'phone' ? 'you, on the phone' : 'you') : 'planner'} · {timeOf(m.createdAt)}{m.planVersion ? ` · v${m.planVersion}` : ''}</span>
+                  <span class="who">{m.role === 'user' ? (m.surface === 'phone' ? 'you, on the phone' : m.surface === 'jkai' ? 'you, through jkai' : 'you') : 'planner'} · {timeOf(m.createdAt)}{m.planVersion ? ` · v${m.planVersion}` : ''}</span>
                   <p>{m.text}</p>
                   {#if m.research?.length}
                     <details class="lookups">

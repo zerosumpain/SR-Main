@@ -1,7 +1,7 @@
 import { register } from '../registry-internal';
 import type { ToolDefinition, ToolResult } from '../registry-internal';
 import { runAppleCalendar, parseCalendarDateRange, resolveOptions_calendar } from '$lib/integrations/apple-caldav';
-import { listCredentials } from '$lib/integrations/credentials';
+import { listCredentials, updateCredential } from '$lib/integrations/credentials';
 
 const TIMEZONE = 'Europe/London';
 
@@ -279,6 +279,40 @@ export async function resolveAppleCredential(
   };
 }
 
+/** iCloud answering 401 to the CalDAV PROPFIND (tsdav says "Invalid credentials"). */
+const CREDENTIAL_REJECTED = /\b401\b|unauthori[sz]ed|invalid credentials/i;
+
+/**
+ * The error a failed calendar connection hands back to the model.
+ *
+ * Since 2026-10-03, 4 of 7 apple_calendar_list calls failed. Three were the
+ * empty strings Codex sends for optional arguments (fixed in executeTool). The
+ * fourth, on 10-23, was iCloud answering 401 to a credential that had tested
+ * ok on 09-28: the app-specific password had been revoked, which happens to
+ * every one of them when the Apple ID password changes. The raw "Unable to
+ * access Apple Calendar: Invalid credentials: PROPFIND … 401" read as a
+ * transient fault, so the model retried and then told John his diary was
+ * unavailable without saying why. A rejected credential cannot fix itself, so
+ * say what John has to do, tell the model not to retry, and mark the
+ * credential failed so /admin/connections shows it too.
+ */
+export async function calendarAccessError(err: unknown, credentialId: string): Promise<string> {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  if (!CREDENTIAL_REJECTED.test(message)) {
+    return message ? `Unable to access Apple Calendar: ${message}` : 'Unable to access Apple Calendar.';
+  }
+  await updateCredential(credentialId, {
+    lastTestedAt: new Date(),
+    lastTestStatus: 'failed',
+    lastTestError: message.slice(0, 500),
+  }).catch((e) => console.warn('[apple-calendar] could not mark the credential failed:', (e as Error)?.message));
+  return (
+    'iCloud rejected the stored Apple Calendar credential (HTTP 401), so no calendar can be read until it is replaced. ' +
+    'This is not transient: do not retry. Tell John his iCloud app-specific password has been revoked or changed, and that he ' +
+    `needs to create a new one at appleid.apple.com and paste it into the credential at /admin/connections/credentials/${credentialId}.`
+  );
+}
+
 async function selectedCalendar(args: Record<string, unknown>): Promise<{ credentialId: string; calendar: CalendarOption } | { error: string }> {
   const credential = await resolveAppleCredential(args.credentialId);
   if ('error' in credential) return { error: credential.error };
@@ -287,7 +321,7 @@ async function selectedCalendar(args: Record<string, unknown>): Promise<{ creden
     if ('error' in calendar) return calendar;
     return { credentialId: credential.credentialId, calendar };
   } catch (err) {
-    return { error: err instanceof Error ? `Unable to access Apple Calendar: ${err.message}` : 'Unable to access Apple Calendar.' };
+    return { error: await calendarAccessError(err, credential.credentialId) };
   }
 }
 
@@ -322,7 +356,7 @@ export async function handleAppleCalendarList(args: Record<string, unknown>): Pr
     // an opaque TypeError several frames away instead of a usable message.
     calendars = Array.isArray(resolved) ? resolved : [];
   } catch (err) {
-    return { success: false, error: err instanceof Error ? `Unable to access Apple Calendar: ${err.message}` : 'Unable to access Apple Calendar.' };
+    return { success: false, error: await calendarAccessError(err, credentialId) };
   }
   if (args.listCalendars === true) return { success: true, data: { credentialId, calendars } };
 
@@ -509,24 +543,25 @@ export async function handleAppleCalendarDelete(args: Record<string, unknown>): 
 export const appleCalendarTools: ToolDefinition[] = [
   {
     name: 'apple_calendar_list',
+    effect: 'read',
     description: 'Read iCloud Calendar events. ANSWER A CALENDAR QUESTION IN ONE CALL: every argument is optional, and with none it reads the next 30 days across EVERY calendar on the only configured credential — do not call it first to discover the credential, then again for calendars, then once per calendar. Narrow with `query` (case-insensitive text over title, location, notes, organiser and attendees), `calendar` (a name or an array of names to restrict to), and `dateRangeStart`/`dateRangeEnd`, which accept ISO-8601, a YYYY-MM-DD date, or relative forms — "today", "tomorrow", "+7d", "-3d", "+3m" — so you never need a separate date lookup. Use `createdAfter`/`modifiedAfter` for "what was added or changed recently", which is a different question from when the event happens. Returns at most 100 compact rows merged across calendars and sorted by start, each tagged with its `calendar`, plus totalCount, truncated, calendarsRead, and `unavailable` when a calendar could not be read — treat a result with `unavailable` as partial, never as an empty diary. Set includeRawIcs only for intentional diagnostics. Pass `listCalendars: true` only when you need calendar names for a WRITE. ORGANIZER identifies a meeting organiser, not a guaranteed creator or audit identity for manually added shared-calendar events. Credentials are resolved server-side; only their safe ids and labels are returned.',
     parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id. Omit — it is resolved automatically when only one is configured.' }, calendar: { type: ['string', 'array'], items: { type: 'string' }, description: 'Restrict the read to one calendar, or several. Omit to read every calendar, which is almost always what you want. A resource URL, or a displayed name matched exactly.' }, dateRangeStart: { type: 'string', description: 'Range start: ISO-8601, YYYY-MM-DD, or relative ("today", "-3d", "+2w"). Defaults to today.' }, dateRangeEnd: { type: 'string', description: 'Range end: ISO-8601, YYYY-MM-DD, or relative ("tomorrow", "+30d", "+3m"). Defaults to 30 days out.' }, query: { type: 'string', description: 'Case-insensitive text filter over event title, location, notes, organiser and attendees.' }, createdAfter: { type: 'string', description: 'Only events whose calendar entry was CREATED after this point. Same date forms as the range. Events with no creation stamp are excluded.' }, modifiedAfter: { type: 'string', description: 'Only events whose calendar entry was last MODIFIED after this point. Same date forms as the range.' }, listCalendars: { type: 'boolean', description: 'Return the calendar list instead of events. Only needed to pick a calendar for a write.' }, includeRawIcs: { type: 'boolean', description: 'Include raw ICS and extension properties for diagnostics. Defaults to false.' } }, required: [] },
     category: 'Apple Calendar', toolset: 'apple-calendar', handler: handleAppleCalendarList,
   },
   {
-    name: 'apple_calendar_create', destructive: true,
+    name: 'apple_calendar_create', effect: 'destructive', destructive: true,
     description: 'Create an iCloud Calendar event on a selected existing credential and calendar. Use start/end ISO date-times, or allDayStart/allDayEnd inclusive YYYY-MM-DD dates. This is an external write and requires user confirmation. Identical retries are de-duplicated by a deterministic UID based on credential, calendar, title, start and end.',
     parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id. Omit — it is resolved automatically when only one is configured.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name (for example Family).' }, title: { type: 'string' }, start: { type: 'string', description: 'ISO-8601 event start date-time.' }, end: { type: 'string', description: 'ISO-8601 event end date-time.' }, allDayStart: { type: 'string', description: 'Inclusive all-day start date, YYYY-MM-DD.' }, allDayEnd: { type: 'string', description: 'Inclusive all-day end date, YYYY-MM-DD.' }, location: { type: 'string' }, notes: { type: 'string' } }, required: ['calendar', 'title'] },
     category: 'Apple Calendar', toolset: 'apple-calendar', handler: handleAppleCalendarCreate,
   },
   {
-    name: 'apple_calendar_update', destructive: true,
+    name: 'apple_calendar_update', effect: 'destructive', destructive: true,
     description: 'Edit an existing iCloud Calendar event, such as renaming it or changing its time, all-day dates, location, or notes. Only supplied fields change; omitted fields are preserved. This external write requires user confirmation and verifies the event belongs to the selected credential and calendar.',
     parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id. Omit — it is resolved automatically when only one is configured.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name.' }, eventId: { type: 'string', description: 'Event resource URL returned by listing events; it must belong to this calendar.' }, title: { type: 'string', description: 'Replacement event title.' }, start: { type: 'string', description: 'Replacement ISO-8601 timed start; omit to preserve it.' }, end: { type: 'string', description: 'Replacement ISO-8601 timed end; omit to preserve it.' }, allDayStart: { type: 'string', description: 'Replacement inclusive all-day start, YYYY-MM-DD; provide with allDayEnd.' }, allDayEnd: { type: 'string', description: 'Replacement inclusive all-day end, YYYY-MM-DD; provide with allDayStart.' }, location: { type: 'string', description: 'Replacement location; an empty string clears it.' }, notes: { type: 'string', description: 'Replacement notes; an empty string clears them.' } }, required: ['calendar', 'eventId'] },
     category: 'Apple Calendar', toolset: 'apple-calendar', handler: handleAppleCalendarUpdate,
   },
   {
-    name: 'apple_calendar_delete', destructive: true,
+    name: 'apple_calendar_delete', effect: 'destructive', destructive: true,
     description: 'Delete an existing iCloud Calendar event from the selected credential and calendar. This cannot be undone, requires user confirmation, and verifies the event belongs to that calendar before deletion.',
     parameters: { type: 'object', properties: { credentialId: { type: 'string', description: 'Existing Apple Calendar credential id. Omit — it is resolved automatically when only one is configured.' }, calendar: { type: 'string', description: 'Calendar resource URL or unambiguous displayed name.' }, eventId: { type: 'string', description: 'Event resource URL returned by listing events; it must belong to this calendar.' } }, required: ['calendar', 'eventId'] },
     category: 'Apple Calendar', toolset: 'apple-calendar', handler: handleAppleCalendarDelete,

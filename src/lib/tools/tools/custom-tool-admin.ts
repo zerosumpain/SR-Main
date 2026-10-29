@@ -31,6 +31,7 @@ import { staticScan, smokeTest, type SmokeCase } from '$lib/selfimprove/verify';
 
 register({
   name: 'list_custom_tools',
+  effect: 'read',
   description:
     'List every tool the platform has written for itself — name, description, toolset, whether it is enabled, and its run and error counts. Use this before proposing a new tool (one may already exist), and to spot tools that are failing: a high error count against a high run count means the tool is broken, not unused. Built-in tools are not listed; they live in code.',
   toolset: 'custom-tools',
@@ -68,6 +69,8 @@ register({
 
 register({
   name: 'update_tool',
+  effect: 'destructive',
+  destructive: true,
   description:
     "Replace a stored custom tool's handler code and/or description, in place. Use this to FIX a tool that is failing rather than creating a near-duplicate under a new name — the run history, the name and anything referring to it all survive. The new handler must pass the same checks a new tool does, and the old one stays live until the new one has proved itself, so a bad edit cannot take a working tool down.",
   toolset: 'custom-tools',
@@ -99,7 +102,7 @@ register({
     if (!row) {
       return {
         success: false,
-        error: `No custom tool named "${name}". Call list_custom_tools to see what exists. Built-in tools live in code and cannot be updated this way — those need request_change.`,
+        error: `No custom tool named "${name}". Call list_custom_tools to see what exists. Built-in tools live in code and cannot be updated this way — those need a commissioned build (develop_commission).`,
       };
     }
 
@@ -121,6 +124,9 @@ register({
         description: newDescription!,
         toolset: row.toolset,
         category: 'Custom Tool',
+        // Model-written code with full reach: fails closed as destructive.
+        effect: 'destructive',
+        destructive: true,
         parameters: row.parameters as never,
         handler: buildHandler(name, row.handlerCode),
       });
@@ -183,6 +189,9 @@ register({
       description: newDescription ?? row.description,
       toolset: row.toolset,
       category: 'Custom Tool',
+      // Model-written code with full reach: fails closed as destructive.
+      effect: 'destructive',
+      destructive: true,
       parameters: row.parameters as never,
       handler: buildHandler(name, newCode),
     });
@@ -201,6 +210,7 @@ register({
 
 register({
   name: 'delete_tool',
+  effect: 'destructive',
   destructive: true,
   description:
     'Remove a stored custom tool permanently and unregister it, so nothing can call it afterwards. Prefer update_tool when a tool is merely broken — deleting loses the name and its history. Built-in tools cannot be deleted; only tools the platform wrote for itself.',

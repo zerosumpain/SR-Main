@@ -11,6 +11,8 @@ import { publishedLink } from '$lib/builds/published-link';
 
 register({
   name: 'followup_schedule',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Schedule an in-memory follow-up check on a background task (research/build only). NOTE: you usually do NOT need this — builds and research sessions (build_create/build_tweak, research_start/research_branch) and workflow_run now auto-attach a DURABLE watcher the moment they start, which survives restarts. For a durable custom watch on anything else, or a "when it finishes, do X" action, prefer register_heartbeat_action. This queue is in-memory and is lost on restart; use it only for a lightweight one-off check.',
   parameters: {
     type: 'object',
@@ -65,6 +67,7 @@ register({
 
 register({
   name: 'followup_status',
+  effect: 'read',
   description: 'Check the current follow-up queue — see what background tasks are being tracked.',
   parameters: { type: 'object', properties: {} },
   category: 'System',
@@ -77,6 +80,8 @@ register({
 
 register({
   name: 'followup_cancel',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Cancel a scheduled follow-up by ID.',
   parameters: {
     type: 'object',

@@ -18,6 +18,7 @@ import { resolveCapabilities } from '$lib/jkai/grounding/capabilities';
 import type { ToolExecContext } from '$lib/tools/registry-internal';
 import { isEssentialUnderPolicy } from './essentials';
 import { catalogueTools } from '$lib/tools/catalogue';
+import { isCustomToolset } from '$lib/capabilities/manifest';
 import type { CatalogueTool } from '$lib/tools/invoke-contract';
 import { executeSiteTool } from '$lib/tools/executor';
 import { describeWithPolicy, getActivePolicy, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
@@ -145,7 +146,9 @@ async function getExtendedTools(policy: ToolPolicyVersion): Promise<CatalogueToo
   const all = await catalogueTools();
   // A tool promoted into the visible set must leave the extended catalogue, or
   // the model sees it twice and can reach it by two different call shapes.
-  return all.filter((t) => !isEssentialUnderPolicy(t.name, policy));
+  // Re-enabled custom tools are for an attended owner turn; the bridge is
+  // not one, so they are not listed here (and `executeTool` refuses them).
+  return all.filter((t) => !isEssentialUnderPolicy(t.name, policy) && !isCustomToolset(t.toolset));
 }
 
 /**

@@ -1,5 +1,27 @@
 import { privacyMaintenance } from '$lib/people/privacy-maintenance';
 import { building } from '$app/environment';
+// Daydream registers its chat toolset itself; see $lib/daydream/chat-tools.
+import '$lib/daydream/chat-tools';
+// The owner's private reads, trips and captures register theirs the same way
+// (overhaul plan 2026-10-28, slice 7a).
+import '$lib/owner-data/chat-tools';
+import '$lib/trips/chat-tools';
+import '$lib/captures/chat-tools';
+// Commissioning's quota reader and backlog intake, registered by the domains
+// that own them so $lib/jkai never imports them back (see $lib/jkai/commission/ports).
+import { registerCommissionQuota } from '$lib/daydream/commission-port';
+import { registerCommissionIntake } from '$lib/selfimprove/commission-port';
+registerCommissionQuota();
+registerCommissionIntake();
+// WhatsApp reply codes reach the tool catalogue through a port, so
+// $lib/integrations never imports $lib/tools (see reply-code-port).
+import { registerReplyCodeToolRuntime } from '$lib/tools/reply-code-runtime';
+registerReplyCodeToolRuntime();
+// The capability-gap queue (slice 7b): chat files a not-built-yet ask, the
+// backlog takes it in out of band. Registered by selfimprove, which owns the
+// backlog, so $lib/capabilities stays a leaf.
+import { registerCapabilityGapQueue, drainCapabilityGaps, GAP_DRAIN_INTERVAL_MS } from '$lib/selfimprove/capability-gaps';
+registerCapabilityGapQueue();
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
 import {
   startDependencyMonitor,
@@ -40,7 +62,7 @@ import { actAsDeviceMember, actAsDeviceOwner, memberDevice, nativeDevice, native
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
-import { invokeLaneFor, hasJkaiServiceToken } from '$lib/server/invoke-auth';
+import { invokeLaneFor, hasJkaiServiceToken, presentsCommissionToken } from '$lib/server/invoke-auth';
 import { modelServiceAppFor } from '$lib/server/model-service-auth';
 import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
@@ -211,6 +233,21 @@ if (runsService('background')) {
   void import('$lib/games/rooms.server')
     .then((m) => m.startGameRoomSweep())
     .catch((err) => console.error('[hooks.server] game room sweep:', err));
+}
+// Re-enabled custom tools (plan P2-0a): the web process only, and only the
+// reviewed allow-list in $lib/tools/custom-tools-enabled. JKAI_CUSTOM_TOOLS=off
+// is the kill switch; =on loads them whatever the role (the local preview,
+// whose Main runs as 'builder' so no WhatsApp or engines start).
+import { resolveServiceRole } from '$lib/server/service-role';
+const customToolsSwitch = (process.env.JKAI_CUSTOM_TOOLS ?? '').trim().toLowerCase();
+if (!building && customToolsSwitch !== 'off' && (customToolsSwitch === 'on' || resolveServiceRole() === 'web')) {
+  void import('$lib/tools/custom-tool-loader')
+    .then((m) => m.loadCustomTools())
+    .catch((err) => console.error('[hooks.server] custom tools:', err));
+}
+// Gaps a restart left queued; the usual path drains right after the chat call.
+if (!building && runsService('background')) {
+  setInterval(() => void drainCapabilityGaps(), GAP_DRAIN_INTERVAL_MS).unref?.();
 }
 if (runsService('background')) {
   startDatastoreReaper();
@@ -768,9 +805,15 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
       (pathname === '/api/platform/tools/catalogue' && event.request.method === 'GET') ||
       (pathname === '/api/platform/daydream/briefing' && event.request.method === 'GET') ||
       (pathname === '/api/platform/briefing/context' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/jkai/today' && event.request.method === 'GET') ||
       (pathname === '/api/platform/backlog/intake' && event.request.method === 'POST')) &&
     invokeLaneFor(event.request) !== 'none'
   ) {
+    return resolve(event);
+  }
+  // The commission credential reaches exactly one path and verb, and the route
+  // then opens only the commission lane with it (`presentsCommissionToken`).
+  if (pathname === '/api/platform/tools/invoke' && event.request.method === 'POST' && presentsCommissionToken(event.request)) {
     return resolve(event);
   }
 

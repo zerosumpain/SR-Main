@@ -135,6 +135,7 @@ export const HOOK_BYPASSES: string[] = [
 export const HOOK_EXACT_BYPASSES: string[] = [
   '/api/internal/session', // POST only, audience-bound session authority key
   '/health', // the public health landing; every /health/* child is owner-only
+  '/api/platform/jkai/today', // GET only, service token; the jkai desk's Today (hooks match it with ===)
   // The two orchestrator paths a chat turn needs, opened to a paired iPhone's
   // device token as well as an owner session.
   //
@@ -212,5 +213,6 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/jkai/codegraph/ingest': 'Bearer CLAUDE_CHANGELOG_SECRET',
   '/api/jkai/codegraph/query': 'CLAUDE_CHANGELOG_SECRET or owner session',
   '/health': 'public page · owner payload withheld without a session',
+  '/api/platform/jkai/today': 'GET only · jkai service token; the owner payload for the jkai desk Today',
   '/tools': 'public static tree',
 };

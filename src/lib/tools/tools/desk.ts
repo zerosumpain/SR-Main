@@ -58,6 +58,7 @@ function issueText(error: { issues: Array<{ path: PropertyKey[]; message: string
 
 register({
   name: 'show_in_panel',
+  effect: 'read',
   description:
     'Lay out the desk (the panel beside the chat) for this answer as sections of blocks. Use it when the answer is a comparison, plan, itinerary, briefing or decision that reads better as structure than prose; then keep the chat reply short and say it is on the desk. Not for casual replies or a single figure. Sources, mail, calendar and charts from other tools already appear on the desk; your page leads above them. Calling it again replaces your previous page.',
   toolset: 'visualise',

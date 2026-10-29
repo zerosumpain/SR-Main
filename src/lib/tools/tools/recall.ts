@@ -18,6 +18,7 @@ import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm';
 
 register({
   name: 'session_search',
+  effect: 'read',
   description:
     'Search what was actually said in past conversations, by keyword. Returns matching messages with their conversation title and date. Use when the user refers to something discussed before ("what did we decide about X") and it is not in the current thread.',
   parameters: {
@@ -81,6 +82,7 @@ register({
 
 register({
   name: 'memory_search',
+  effect: 'read',
   description:
     'Search stored long-term memories about the user — people, preferences, places, health, devices, situations. These are extracted automatically from past conversations. Use before asking the user something they may already have told you.',
   parameters: {
@@ -89,18 +91,29 @@ register({
       query: { type: 'string', description: 'Keywords. Omit to list the most recent memories.' },
       category: { type: 'string', description: 'Optional category filter.' },
       limit: { type: 'number', description: 'Max results (default 20, max 100).' },
+      scope: {
+        type: 'string',
+        enum: ['personal', 'daydream'],
+        description:
+          "Default 'personal' (what he told you). 'daydream' searches the lessons and rulings the daydream loop learned from his sign-offs instead — derived, so cite them as learned, not as facts he stated. Only when he asks about what daydream learned or noticed.",
+      },
     },
   },
   category: 'Recall',
   toolset: 'recall',
   handler: async (raw: Record<string, unknown>) => {
-    const args = (raw ?? {}) as { query?: string; category?: string; limit?: number };
+    const args = (raw ?? {}) as { query?: string; category?: string; limit?: number; scope?: string };
     const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 100);
+    // Opt-in and never merged: the personal scope is unchanged (the memory
+    // firewall), and a daydream row is labelled derived (plan point 8, 7a).
+    const scope = args.scope === 'daydream' ? 'daydream' : 'personal';
     try {
-      const rows = await retrieveMemories(args.query, args.category, limit);
+      const rows = await retrieveMemories(args.query, args.category, limit, { scope });
       return {
         success: true,
         data: {
+          scope,
+          ...(scope === 'daydream' ? { label: DAYDREAM_DERIVED } : {}),
           count: rows.length,
           memories: rows.map((m) => ({
             // The id was omitted, which made a returned memory impossible to
@@ -111,6 +124,7 @@ register({
             content: m.content,
             confidence: m.confidence,
             updated: m.updatedAt?.toISOString() ?? null,
+            ...(scope === 'daydream' ? daydreamOrigin(m) : {}),
           })),
         },
       };
@@ -122,6 +136,9 @@ register({
 
 register({
   name: 'memory_remember',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description:
     'Store a durable fact about the user that should survive this conversation. Only for things useful LATER — not task details, and never credentials or financial data. Facts are also extracted automatically after a conversation goes idle, so use this for something explicitly worth pinning now.',
   parameters: {
@@ -154,6 +171,16 @@ register({
     }
   },
 });
+
+/** What a daydream-scope memory says about where it came from. */
+export const DAYDREAM_DERIVED = 'daydream (derived): learned by the daydream loop from his sign-offs and rulings, not something he stated';
+
+export function daydreamOrigin(m: { daydreamOrigin?: string | null; provenance?: unknown }): { derived: true; origin: string; thoughtId?: string } {
+  const p = (m.provenance ?? {}) as Record<string, unknown>;
+  const origin = m.daydreamOrigin ?? (typeof p.origin === 'string' ? p.origin : 'daydream');
+  const thoughtId = typeof p.thoughtId === 'string' ? p.thoughtId : typeof p.sourceId === 'string' && p.sourceId.startsWith('thought:') ? p.sourceId.slice(8) : undefined;
+  return { derived: true, origin, ...(thoughtId ? { thoughtId } : {}) };
+}
 
 /** A window around the first match, so relevance is judgeable without the whole turn. */
 function excerpt(text: string, q: string, radius = 160): string {

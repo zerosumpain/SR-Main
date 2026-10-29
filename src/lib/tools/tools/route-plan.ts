@@ -72,9 +72,10 @@ function num(value: unknown, field: string): number {
 
 register({
   name: 'route_plan',
+  effect: 'read',
   destructive: false,
   description:
-    'Plan a real running, road-cycling, mountain-bike or hiking route with openrouteservice and rank the candidates on loop quality (retracing, out-and-back spurs, surface, climbing). Returns the top 3 with GPX. Use this instead of writing coordinates yourself. Omit targetDistanceKm to let recent training history choose the distance. This is for TRAINING — a circular route scored on terrain. For simply getting from one place to another, with journey time and live traffic, use route_directions.',
+    'Plan a real running, road-cycling, mountain-bike or hiking route with openrouteservice and rank the candidates on loop quality (retracing, out-and-back spurs, surface, climbing). Returns the top 3 with GPX. Use this instead of writing coordinates yourself. Omit targetDistanceKm to let recent training history choose the distance. This is for TRAINING — a circular route scored on terrain, not point-to-point directions or journey times.',
   parameters: {
     type: 'object',
     properties: {
@@ -202,6 +203,7 @@ register({
 
 register({
   name: 'route_target_suggest',
+  effect: 'read',
   destructive: false,
   description:
     'Suggest a sensible route distance for a sport from recent training history, ACWR training load and readiness. Use when the user asks "how far should I go today".',

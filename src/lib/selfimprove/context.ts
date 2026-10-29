@@ -12,6 +12,7 @@
 // Everything here is READ-ONLY and best-effort: any source that fails is simply
 // omitted, because a thinner prompt is much better than a failed build phase.
 
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { db } from '$lib/db';
 import { customTools } from '$lib/db/schema';
 import { desc } from 'drizzle-orm';
@@ -152,7 +153,10 @@ async function loadCatalogApis(): Promise<CatalogApiSummary[]> {
 async function loadSecretHandles(): Promise<string[]> {
   try {
     const { executeTool } = await import('$lib/tools/registry');
-    const res = await executeTool('api_secrets_list', {});
+    const res = await executeTool('api_secrets_list', {}, {
+      emit: () => {},
+      principal: unattendedPrincipal('selfimprove-context', ['api_secrets_list']),
+    });
     if (!res.success) return [];
     const data = res.data as { secrets?: Array<{ handle?: string; available?: boolean }> } | undefined;
     return (data?.secrets ?? [])

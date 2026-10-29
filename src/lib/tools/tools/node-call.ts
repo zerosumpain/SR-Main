@@ -51,6 +51,7 @@ function allowedList(): string {
 // describes the tool to Main's catalogue (MCP and chat both read it).
 registerWorkflowTool({
   name: 'node_call',
+  effect: 'read',
   description:
     'Run one workflow node directly, without building a workflow — the way to reach a capability that exists only as a canvas node. ' +
     `Runnable types: ${allowedList()}. ` +

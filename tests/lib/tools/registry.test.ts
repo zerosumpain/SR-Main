@@ -1,7 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { getTools, getToolDefinitions, isRegisteredTool, buildSystemPromptSection } from '$lib/tools/registry';
+import { getTools, getToolDefinitions, isRegisteredTool, buildSystemPromptSection, getToolsetManifest } from '$lib/tools/registry';
 
 describe('tool registry', () => {
+  // A toolset with no blurb is described to the model by its bare name. 'intel'
+  // (mail_search, mail_read) was one of those, so a mail question routed by the
+  // manifest saw only the word "intel".
+  it('gives every registered toolset a description', () => {
+    const bare = getToolsetManifest().filter((t) => t.description === t.toolset).map((t) => t.toolset);
+    expect(bare).toEqual([]);
+  });
+
   it('loads all domain modules and registers tools', () => {
     const tools = getTools();
     expect(tools.length).toBeGreaterThanOrEqual(40);

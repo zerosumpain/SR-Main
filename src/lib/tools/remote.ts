@@ -8,7 +8,10 @@ import {
 	NDJSON_CONTENT_TYPE,
 	type CataloguePayload,
 	type InvokeContext,
+	type PrincipalAudience,
+	type ToolPrincipal,
 } from './invoke-contract';
+import { sealPrincipal } from './principal-seal';
 
 /**
  * The caller half of the tool-invoke contract.
@@ -35,6 +38,8 @@ export interface RemoteInvokeTarget {
 	/** Canonical Host, when the call goes through a gateway that checks it. */
 	host?: string;
 	timeoutMs?: number;
+	/** Which receiver this is, so a sealed principal opens only that one. */
+	audience?: PrincipalAudience;
 }
 
 /**
@@ -147,6 +152,42 @@ export function contextForWire(ctx?: ToolExecContext): InvokeContext {
 }
 
 /**
+ * The call's principal, sealed for one tool and one receiver (principal
+ * phase 2). The context's own principal when the caller set one; otherwise an
+ * unattended service call held to the context's `allowedTools` — the same
+ * fallback Main's `executeTool` applies in-process, so a caller that forgot to
+ * say who it is can read and nothing more. Null when `JKAI_PRINCIPAL_KEY` is
+ * unset or short, and the receiver then refuses the call: there is no
+ * unsigned mode.
+ */
+export function principalForCall(ctx: ToolExecContext | undefined): ToolPrincipal {
+	if (ctx?.principal) {
+		// A context list narrows the principal's, never widens it.
+		const own = ctx.principal.allowedTools;
+		const narrowed = ctx.allowedTools ? (own ? own.filter((t) => ctx.allowedTools!.includes(t)) : [...ctx.allowedTools]) : own;
+		return { ...ctx.principal, ...(narrowed ? { allowedTools: narrowed } : {}) };
+	}
+	return {
+		principalId: ctx?.principalId || 'owner',
+		via: 'service',
+		attended: false,
+		purpose: 'unlabelled',
+		...(ctx?.allowedTools ? { allowedTools: [...ctx.allowedTools] } : {}),
+		...(ctx?.surface ? { surface: ctx.surface } : {}),
+	};
+}
+
+let keyWarned = false;
+function sealedPrincipalFor(name: string, ctx: ToolExecContext | undefined, aud: PrincipalAudience): string | null {
+	const sealed = sealPrincipal(principalForCall(ctx), { key: env.JKAI_PRINCIPAL_KEY, aud, tool: name });
+	if (!sealed && !keyWarned) {
+		keyWarned = true;
+		console.warn('[principal] JKAI_PRINCIPAL_KEY is unset or shorter than 32 characters; tool calls go unsigned and will be refused');
+	}
+	return sealed;
+}
+
+/**
  * Always NDJSON.
  *
  * The caller cannot tell a meaningful `emit` from the no-op one chat passes
@@ -163,9 +204,10 @@ export async function invokeRemoteTool(
 	target: RemoteInvokeTarget,
 ): Promise<ToolResult> {
 	const url = new URL(target.url);
-	const body = Buffer.from(
-		JSON.stringify({ name, args, context: contextForWire(ctx) }),
-	);
+	const context = contextForWire(ctx);
+	const principal = sealedPrincipalFor(name, ctx, target.audience ?? 'sr-workflows');
+	if (principal) context.principal = principal;
+	const body = Buffer.from(JSON.stringify({ name, args, context }));
 	/**
 	 * An INACTIVITY window, bounded by the deadline when one is set — not a hard
 	 * cut-off, and the distinction matters for the three tools that stream.

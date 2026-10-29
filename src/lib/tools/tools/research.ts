@@ -13,6 +13,8 @@ import { withActivity } from '$lib/context/activity';
 
 register({
   name: 'research_start',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Start a research session on a topic. `depth` picks how much work to do: ' +
     "'instant' answers from model knowledge with no sources (seconds); " +
@@ -92,6 +94,7 @@ register({
 
 register({
   name: 'research_status',
+  effect: 'read',
   description: 'Check the status and stats of a research session',
   parameters: {
     type: 'object',
@@ -108,6 +111,7 @@ register({
 
 register({
   name: 'research_list',
+  effect: 'read',
   description:
     'List recent research sessions with topic, status, and stats. ' +
     'Compact by default — returns only the identifying fields (id, topic, status, createdAt) to keep token usage low. ' +
@@ -143,6 +147,7 @@ register({
 
 register({
   name: 'research_get_report',
+  effect: 'read',
   description: 'Get the narrative report/findings from a completed research session',
   parameters: {
     type: 'object',
@@ -160,6 +165,8 @@ register({
 
 register({
   name: 'research_control',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Control a research session: stop it or skip the current phase',
   parameters: {
     type: 'object',
@@ -186,6 +193,7 @@ register({
 
 register({
   name: 'research_inspect',
+  effect: 'read',
   description: 'Full view of a research session — topic, goals, status, config, parent session (if branched), report summary, timestamps',
   parameters: {
     type: 'object',
@@ -232,6 +240,7 @@ register({
 
 register({
   name: 'research_query',
+  effect: 'read',
   description: "Ask a question answered from a research session's findings. Returns the answer and confidence level. If the research lacks sufficient information, suggests follow-up options (branch research or web search).",
   parameters: {
     type: 'object',
@@ -319,6 +328,8 @@ Instructions:
 
 register({
   name: 'research_branch',
+  effect: 'mutate',
+  confirm: 'never',
   description: "Spawn a focused follow-up research session from an existing one. Inherits the parent's findings as seed context and digs deeper into a specific subtopic.",
   parameters: {
     type: 'object',
@@ -367,6 +378,7 @@ register({
 
 register({
   name: 'research_extract',
+  effect: 'read',
   description: 'Extract findings from a research session into another format: blog_draft, build_prompt, workflow_description, or summary. Optionally focus on a specific area.',
   parameters: {
     type: 'object',
@@ -429,6 +441,7 @@ register({
 
 register({
   name: 'research_web_search',
+  effect: 'read',
   description: 'Quick web search for a fact-check or to fill a knowledge gap — lighter than starting a full research session. Searched through the model provider\'s own web grounding, so it takes 15-30 seconds; returns a short sourced summary and the pages it cited.',
   parameters: {
     type: 'object',
@@ -479,6 +492,7 @@ register({
 // a "Search deeper with Tavily" button), and jkai refuses the call otherwise.
 register({
   name: 'tavily_search',
+  effect: 'read',
   description: 'Tavily web search — ONLY when John explicitly asks for Tavily (or a deeper Tavily search). Spends a Tavily credit per call. For any other web lookup, use your own web search.',
   parameters: {
     type: 'object',
@@ -511,6 +525,7 @@ function safeHost(url: string): string {
 
 register({
   name: 'research_search',
+  effect: 'read',
   description:
     'Semantic search across the MATERIALS of ALL deep-dive research sessions at once, ' +
     'searched by meaning (not keywords). Covers BOTH the extracted facts (distilled claims) ' +

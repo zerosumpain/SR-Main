@@ -2,8 +2,9 @@
  * Commissioning a development delivery — the one way a feature enters
  * `/jkai/develop`.
  *
- * Two callers: the owner's "New feature" form (`POST /api/jkai/development`)
- * and the nightly improvement engine, which hands an owner-accepted backlog
+ * Three callers: the owner's "New feature" form (`POST /api/jkai/development`),
+ * a commission from web chat (`$lib/jkai/commission`, which records who asked
+ * on `state.commission`), and the nightly improvement engine, which hands an owner-accepted backlog
  * brief here instead of opening a change request (via the injected lane in
  * `$lib/heartbeat/build-lanes`). Both get the same paused build, the same
  * budget and the same delivery state, so a backlog item is reviewed, previewed
@@ -12,7 +13,7 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { jkaiBuildDeliveries, jkaiBuilds } from '$lib/db/schema';
-import type { DeliveryState, ReleasePolicy } from '$lib/constants/development';
+import type { DeliveryCommission, DeliveryState, ReleasePolicy } from '$lib/constants/development';
 import { SR_MAIN_GIT_TARGET } from './git-targets';
 import { CHANGE_REQUEST_BUDGET } from './change-request';
 import { resolveDevelopmentModel } from './development-models.server';
@@ -38,6 +39,12 @@ export interface CreateDeliveryInput {
   grooming?: DeliveryState['grooming'];
   /** The improvement-backlog item this delivers, when it came from one. */
   backlogSlug?: string;
+  /** 'chat' for a commission from a jkai thread; absent is the form's 'manual'. */
+  origin?: 'manual' | 'chat';
+  /** The thread that asked, already normalised and checked to exist. */
+  conversationId?: string;
+  /** Who asked and on what terms; written on the delivery's state. */
+  commission?: Omit<DeliveryCommission, 'model'>;
 }
 
 /** The model id was not in the catalogue — the caller's mistake, not a fault. */
@@ -48,14 +55,15 @@ export class DevelopmentModelChoiceError extends Error {}
  * stays in the route; this throws only when the model cannot be resolved or
  * the database refuses.
  */
-export async function createDevelopmentDelivery(input: CreateDeliveryInput): Promise<{ buildId: string }> {
+export async function createDevelopmentDelivery(input: CreateDeliveryInput): Promise<{ buildId: string; model: { provider: string; modelId: string } }> {
   let model;
   try { model = await resolveDevelopmentModel(input.modelId); }
   catch (e) { throw new DevelopmentModelChoiceError((e as Error).message); }
   const outcome = input.outcome.trim();
   const [build] = await db.insert(jkaiBuilds).values({
     title: (input.title?.trim() || outcome.split('\n')[0]).slice(0, 100), prompt: outcome, status: 'paused',
-    origin: 'manual', planStatus: 'approved',
+    origin: input.origin ?? 'manual', planStatus: 'approved',
+    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
     gitTargetConfig: { ...SR_MAIN_GIT_TARGET, openPr: false, ...(input.backlogSlug ? { backlogSlug: input.backlogSlug } : {}) },
     budgetConfig: { ...CHANGE_REQUEST_BUDGET }, modelProvider: model.provider, modelId: model.modelId,
   }).returning();
@@ -65,12 +73,16 @@ export async function createDevelopmentDelivery(input: CreateDeliveryInput): Pro
     autopilot: input.autopilot === true,
     maxRounds: input.maxRounds,
   });
+  if (input.commission) {
+    const commission: DeliveryCommission = { ...input.commission, model: { provider: model.provider ?? 'openrouter', modelId: model.modelId, pinned: input.modelId !== undefined && input.modelId !== '' } };
+    await mutateDelivery(build.id, 'commissioned', (s) => ({ ...s, commission }));
+  }
   const extras = Object.fromEntries(Object.entries(input.brief ?? {}).filter(([, v]) => typeof v === 'string' ? v.trim() : Array.isArray(v) ? v.length : v != null));
   if (Object.keys(extras).length || input.grooming) {
     await mutateDelivery(build.id, input.backlogSlug ? 'brief_imported_from_backlog' : 'brief_imported', (s) => ({ ...s, brief: { ...s.brief, ...extras },
       ...(input.grooming ? { grooming: input.grooming } : {}) }));
   }
-  return { buildId: build.id };
+  return { buildId: build.id, model: { provider: model.provider ?? 'openrouter', modelId: model.modelId } };
 }
 
 /** What the backlog dedup reads from a delivery. */

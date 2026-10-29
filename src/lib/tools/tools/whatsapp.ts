@@ -3,6 +3,7 @@ import { NOTIFICATION_CATEGORIES } from '$lib/constants/notification-categories'
 
 register({
   name: 'whatsapp_send',
+  effect: 'destructive',
   destructive: true,
   description: 'Send a WhatsApp message to a phone number. Use this to proactively message the user or send alerts/notifications.',
   parameters: {
@@ -25,6 +26,8 @@ register({
 
 register({
   name: 'notify_owner',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     "Notify the owner (John) under a notification category. The category's route decides WhatsApp, the iPhone, both or neither, and the raise is written to the notification ledger. Prefer this over whatsapp_send for anything addressed to the owner. Returns which channels it went to.",
   parameters: {

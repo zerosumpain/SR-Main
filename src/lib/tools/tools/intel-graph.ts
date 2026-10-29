@@ -83,6 +83,7 @@ function notFound(query: string) {
 
 register({
   name: 'intel_find',
+  effect: 'read',
   description:
     'Find entities in the intel knowledge graph by name or partial name. Returns each match with its type, how many things it connects to, and how central it is. ' +
     'Use this first when you need an entity id for the other intel tools, or when the user asks "do I know anything about X" and you want the graph view rather than the text view.',
@@ -136,6 +137,7 @@ register({
 
 register({
   name: 'intel_neighbourhood',
+  effect: 'read',
   description:
     'What surrounds an entity in the intel graph, out to N hops. Returns the connected entities grouped by hop distance, with the relationship describing each link. ' +
     'Use when the user asks who or what is around something ("who works on X", "what is connected to Y"), or to gather context before answering about an entity.',
@@ -210,6 +212,7 @@ register({
 
 register({
   name: 'intel_path',
+  effect: 'read',
   description:
     'How two entities in the intel graph are connected — the chain of relationships between them, and alternative routes. ' +
     'Use for "how is A connected to B", "is there any link between X and Y", or to check whether two things you are discussing are actually related.',

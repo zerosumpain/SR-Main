@@ -122,8 +122,16 @@ function describeShape(v: unknown): string {
 // Existing Tools (renamed)
 // ==========================================
 
+// Every build tool below drives the builder sidecar through `builderClient`,
+// never `$lib/jkai/orchestrator` in-process. The web app runs as `sr-main`,
+// which cannot write the build workspace, so an in-process loop failed every
+// iteration in milliseconds and retried past its cap (2026-10-03, build
+// 915fae11: 36 zero-token iterations while chat reported "iteration 13").
 register({
   name: 'build_create',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description:
     'Start a new JKAI autonomous build: a SELF-CONTAINED app built in a sandbox — a dashboard, ' +
     'a game, a simulator, a data explorer, a one-off tool. It gets a workspace, a server on a ' +
@@ -140,10 +148,10 @@ register({
     'IT CANNOT CHANGE THE STRANGE RAMBLINGS SITE. No repo access, no branch, no pull request. ' +
     'Nothing it writes can become a page, route, API endpoint, component, workflow node or ' +
     'schema change on strangeramblings.com, and it cannot escalate itself once started — ' +
-    '`request_change` is destructive and therefore not on the build tool bridge. ' +
+    '`develop_commission` is on the commission lane and therefore never on the build tool bridge. ' +
     'So if the ask names an SR route, endpoint, component or schema, or just says "on the site" ' +
     'or "on strangeramblings.com", this is the WRONG tool and no amount of iterating fixes it: ' +
-    'use `request_change`, which branches the real repo, runs the gate and opens a PR. ' +
+    'use `develop_commission` (commission a build), which builds the real repo with a brief, criteria and a gate, and stops at a preview or a draft PR. ' +
     'Optionally attach primary workflows the build should foreground in its planning context.',
   parameters: {
     type: 'object',
@@ -162,7 +170,7 @@ register({
   toolset: 'builds',
   producesLongRunningTask: { kind: 'build', idPath: 'id', cadenceSeconds: 30 },
   handler: async (args, toolCtx) => {
-    const { orchestrator } = await import('$lib/jkai/orchestrator');
+    const { builderClient } = await import('$lib/jkai/builder-client');
     const { resolveBuilderModel } = await import('$lib/server/models/workload-settings');
     // Read from the tool context, not from the ambient session store: the build
     // is started here and then runs for up to an hour in a sidecar with no async
@@ -177,6 +185,9 @@ register({
     const insertValues: Record<string, unknown> = {
       title: (args.title as string) || null,
       prompt: args.prompt as string,
+      // Stamped so a chat-started build is told apart from a /jkai one without
+      // falling back on conversation_id (they were all stored as 'manual').
+      origin: 'chat',
       budgetConfig: { ...DEFAULT_BUILD_BUDGET },
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
@@ -186,13 +197,14 @@ register({
     if (toolCtx?.conversationId) insertValues.conversationId = normaliseConversationId(toolCtx.conversationId);
     if (attachedWorkflowIds.length > 0) insertValues.attachedWorkflowIds = attachedWorkflowIds;
     const [build] = await db.insert(jkaiBuilds).values(insertValues as any).returning();
-    await orchestrator.startBuild(build.id);
+    await builderClient.startBuild(build.id);
     return { success: true, data: build };
   },
 });
 
 register({
   name: 'build_list',
+  effect: 'read',
   description:
     'List recent JKAI builds with status (pending/running/completed/failed) and `outcome` — `completed` alone does NOT mean it deployed: read `outcome` for delivered | pr_open | budget_cap | stopped_by_user | registered. `pr_open` means the builder proved a candidate and proposed it, not that CI merged or production serves it. ' +
     'Compact by default — returns only the identifying fields (id, title, status, publishedSlug, createdAt) to keep token usage low. ' +
@@ -230,6 +242,9 @@ register({
 
 register({
   name: 'build_control',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   // Deliberately NOT destructive (changed 2026-08-08). Publishing a static app
   // to /projects/ is reversible (build_delete unpublishes, and the previous
   // build row keeps its workspace), and gating it cost more than it protected:
@@ -264,12 +279,12 @@ register({
   category: 'JKAI Builder',
   toolset: 'builds',
   handler: async (args) => {
-    const { orchestrator } = await import('$lib/jkai/orchestrator');
+    const { builderClient } = await import('$lib/jkai/builder-client');
     const action = args.action as string;
     const id = args.id as string;
-    if (action === 'pause') await orchestrator.pauseBuild(id);
-    else if (action === 'resume') await orchestrator.resumeBuild(id);
-    else if (action === 'stop') await orchestrator.stopBuild(id);
+    if (action === 'pause') await builderClient.pauseBuild(id);
+    else if (action === 'resume') await builderClient.resumeBuild(id);
+    else if (action === 'stop') await builderClient.stopBuild(id);
     else if (action === 'publish') {
       const { publishBuild } = await import('$lib/jkai/sandbox');
       const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, id)).limit(1);
@@ -338,6 +353,7 @@ const GATE_BUDGET_SECONDS = 1_200;
 
 register({
   name: 'build_inspect',
+  effect: 'read',
   description:
     'Full build overview — status, liveness, prompt, config, all iterations (number, status, goals, evaluation summary, duration, tokens), serve config, published URL. Judge progress from `liveness`, not by subtracting timestamps: you do not know the current time, and `updatedAt` only moves at iteration boundaries.',
   parameters: {
@@ -438,6 +454,7 @@ register({
 
 register({
   name: 'build_get_iteration',
+  effect: 'read',
   description: 'Deep dive into a specific build iteration — full plan, actions (commands + output), messages (LLM conversation), evaluation, next steps, tokens, duration',
   parameters: {
     type: 'object',
@@ -467,6 +484,7 @@ register({
 
 register({
   name: 'build_get_plan',
+  effect: 'read',
   description: 'Get the planning phase (iteration 0) — the proposer/critic/reviser debate, final plan, and goals',
   parameters: {
     type: 'object',
@@ -503,6 +521,7 @@ register({
 
 register({
   name: 'build_get_logs',
+  effect: 'read',
   description: 'Get recent logs for a build (types: thinking, text, code, output, error, system). Most recent first.',
   parameters: {
     type: 'object',
@@ -537,6 +556,7 @@ register({
 
 register({
   name: 'build_list_files',
+  effect: 'read',
   description: 'List files in a build workspace (dev or live space)',
   parameters: {
     type: 'object',
@@ -564,6 +584,7 @@ register({
 
 register({
   name: 'build_read_file',
+  effect: 'read',
   description: 'Read a specific file from a build workspace',
   parameters: {
     type: 'object',
@@ -593,6 +614,9 @@ register({
 
 register({
   name: 'build_tweak',
+  // Manifest M0: changes the owner's own things. A one-tap card when
+  // attended; unattended callers run it only when they list it.
+  effect: 'mutate',
   description: 'Inject a specific improvement instruction into a build. The build resumes with this new objective appended. Use for targeted changes like "change the colour scheme" or "add error handling".',
   parameters: {
     type: 'object',
@@ -609,14 +633,16 @@ register({
   // build_create. Idempotent: re-arms the existing watch-build-<id> action.
   producesLongRunningTask: { kind: 'build', idPath: 'id', cadenceSeconds: 30 },
   handler: async (args) => {
-    const { orchestrator } = await import('$lib/jkai/orchestrator');
-    await orchestrator.continueBuild(args.id as string, args.instruction as string);
+    const { builderClient } = await import('$lib/jkai/builder-client');
+    await builderClient.continueBuild(args.id as string, args.instruction as string);
     return { success: true, data: { id: args.id, instruction: args.instruction } };
   },
 });
 
 register({
   name: 'build_write_file',
+  effect: 'mutate',
+  confirm: 'never',
   description: 'Write or update a file in a build workspace directly',
   parameters: {
     type: 'object',
@@ -646,6 +672,8 @@ register({
 
 register({
   name: 'register_chat_build',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Register an app you just built as a JKAI build, so it appears in the Archive tab on /jkai/develop and can be promoted to /projects/<slug>/. ' +
     'Use this whenever you finish a static web app (single-page or multi-page HTML/JS/CSS) in a conversation — typically WhatsApp or general chat. ' +
@@ -773,6 +801,16 @@ register({
           error: `build ${updateId} was made by the ${existing.origin} builder; this tool only replaces the files of a build it registered itself.`,
         };
       }
+      // build_create stamps origin 'chat' too, but its rows are the builder's
+      // work: replacing their files would overwrite a running or finished
+      // sandbox build and relabel it 'registered'. Only a row this tool filed
+      // (completed, never run by the builder) is replaceable.
+      if (existing.status !== 'completed' || (existing.outcome != null && existing.outcome !== 'registered')) {
+        return {
+          success: false,
+          error: `build ${updateId} was run by the builder (build_create); use build_tweak to change it, or register a new app without updateBuildId.`,
+        };
+      }
       const [updated] = await db
         .update(jkaiBuilds)
         .set({ title, prompt, status: 'completed', outcome: 'registered', updatedAt: new Date() })
@@ -884,6 +922,7 @@ register({
 
 register({
   name: 'build_delete',
+  effect: 'destructive',
   destructive: true,
   description: 'Delete a build and all its iterations, logs, and workspace files',
   parameters: {

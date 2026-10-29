@@ -130,9 +130,9 @@ src/lib/tools/tools/apis.ts
 # Not code, and not shipped to a browser — which is exactly why these were
 # missed. CLAUDE.md classified L1 (no type check, no tests, no build) and
 # tier=low, so an agent could rewrite the instructions every agent reads and
-# auto-merge it. data/prompts/ is the live jkai prompt stack: read at runtime
-# and rsynced to the VPS, so a change there ships to production behaviour
-# without touching a line of TypeScript. .claude/ carries the skills that tell
+# auto-merge it. data/prompts/ was jkai's prompt stack; it lives only in
+# SR-Jkai-Core now (deleted here in slice 9). Kept listed so a copy that comes
+# back needs a human, as well as failing SR-Infra's estate check. .claude/ carries the skills that tell
 # an agent how to work, and is tracked in this PUBLIC repo.
 #
 # This is the TRUST axis, not blast radius: the point is that a human sees the

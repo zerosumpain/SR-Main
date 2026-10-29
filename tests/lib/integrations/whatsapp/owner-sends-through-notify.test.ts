@@ -69,9 +69,17 @@ describe('failed scheduled callback', () => {
 
 describe('route_export', () => {
   const args = { gpx: '<gpx/>', basename: 'loop.gpx', activity: 'running', distanceMiles: 5.2 };
+  // Destructive: phase 2 runs it only for an attended owner, as after a confirm card.
+  const attended = { emit: () => {}, principal: { principalId: 'owner', via: 'session' as const, attended: true, jobId: 'job-1' } };
+
+  it('is refused to a caller with no principal (unattended)', async () => {
+    const res = await executeSiteTool('route_export', args);
+    expect(res.success).toBe(false);
+    expect(notify).not.toHaveBeenCalled();
+  });
 
   it('sends the link through the notifier with WhatsApp forced open', async () => {
-    const res = await executeSiteTool('route_export', args);
+    const res = await executeSiteTool('route_export', args, attended);
     expect(res.success).toBe(true);
     expect(notify.mock.calls[0][0]).toMatchObject({
       category: 'system',
@@ -83,13 +91,13 @@ describe('route_export', () => {
 
   it('still reports a failed WhatsApp send as a failure', async () => {
     h.result = { raised: true, id: 'n1', whatsapp: false, routed: { whatsapp: true, native: true } };
-    const res = await executeSiteTool('route_export', args);
+    const res = await executeSiteTool('route_export', args, attended);
     expect(res.success).toBe(false);
     expect(res.error).toContain('WhatsApp delivery failed');
   });
 
   it('skips the notifier when sendWhatsapp is false', async () => {
-    const res = await executeSiteTool('route_export', { ...args, sendWhatsapp: false });
+    const res = await executeSiteTool('route_export', { ...args, sendWhatsapp: false }, attended);
     expect(res.success).toBe(true);
     expect(notify).not.toHaveBeenCalled();
   });

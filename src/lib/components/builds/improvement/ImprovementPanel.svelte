@@ -158,7 +158,7 @@
         body: JSON.stringify({
           rationale:
             `Promote self-improvement capability ${capability.name} after a successful deployed acceptance test ` +
-            'so JKAI can reach it without a discovery round-trip.',
+            'so jkai can reach it without a discovery round-trip.',
           promoteToEssential: [capability.name],
           targetTool: capability.name,
         }),
@@ -262,13 +262,13 @@
   const kindOrder = ['insight', 'api_verified', 'api_registered', 'tool_created', 'tool_rejected', 'proposal'];
 </script>
 
-<svelte:head><title>{embedded ? 'Daydreams — JKAI' : 'Self-Improvement — JKAI'}</title></svelte:head>
+<svelte:head><title>{embedded ? 'Daydreams — jkai' : 'Self-Improvement — jkai'}</title></svelte:head>
 <svelte:window onhashchange={openLinkedRun} />
 
 <div class="wrap" class:embedded>
   {#if !embedded}<header class="page-hdr">
     <div>
-      <div class="kicker">JKAI · Self-Improvement</div>
+      <div class="kicker">jkai · Self-Improvement</div>
       <h1>The Ledger</h1>
       <p class="sub">
         Every change the nightly engine has made to itself, in plain English: what
@@ -278,7 +278,7 @@
       </p>
     </div>
     <div class="hdr-links">
-      <a class="back-link" href="/jkai">JKAI</a>
+      <a class="back-link" href="/jkai">jkai</a>
       <a class="back-link" href="/jkai/develop/improvement#controls">Controls →</a>
     </div>
   </header>{/if}
@@ -375,7 +375,7 @@
       <span class="sr-label-tight">Prove what shipped</span>
       <span class="block-meta">{deployed.length} deployed {deployed.length === 1 ? 'capability' : 'capabilities'}</span>
     </div>
-    <p class="acceptance-lede">Find a shipped example, expand it, then test the handler or try its prompt in JKAI.</p>
+    <p class="acceptance-lede">Find a shipped example, expand it, then test the handler or try its prompt in jkai.</p>
     <div class="example-toolbar">
       <input class="nm-text-input" aria-label="Search shipped examples" placeholder="Search names, descriptions or example prompts…" bind:value={capabilitySearch} />
       <select class="nm-text-input" aria-label="Filter live test status" bind:value={capabilityFilter}>
@@ -397,7 +397,7 @@
               </div>
               <span class="story-pill">
                 {capability.promoted
-                  ? 'direct in JKAI'
+                  ? 'direct in jkai'
                   : capability.promotionTrial
                     ? 'promotion trial'
                     : hasPassedLiveTest(capability)
@@ -441,12 +441,12 @@
               </div>
 
               <div class="acceptance-step">
-                <div class="step-label mono"><span>2</span> Test discovery in JKAI</div>
+                <div class="step-label mono"><span>2</span> Test discovery in jkai</div>
                 <p>Send this unchanged in a fresh chat. Check that the answer uses live data and names this capability.</p>
                 <blockquote class="jkai-prompt">{capability.jkaiTestPrompt}</blockquote>
-                <a class="measure-btn button-link" href={jkaiHref(capability)}>Open test in JKAI →</a>
+                <a class="measure-btn button-link" href={jkaiHref(capability)}>Open test in jkai →</a>
                 <p class="usage mono">
-                  {capability.jkaiRuns} estimated JKAI/ambient run{capability.jkaiRuns === 1 ? '' : 's'} ·
+                  {capability.jkaiRuns} estimated jkai/ambient run{capability.jkaiRuns === 1 ? '' : 's'} ·
                   {capability.errorCount} error{capability.errorCount === 1 ? '' : 's'}
                 </p>
               </div>
@@ -454,9 +454,9 @@
               <div class="acceptance-step promotion-step">
                 <div class="step-label mono"><span>3</span> Promotion</div>
                 {#if capability.promoted}
-                  <p>Directly visible to JKAI. Its policy remains measured and reversible.</p>
+                  <p>Directly visible to jkai. Its policy remains measured and reversible.</p>
                 {:else if capability.promotionTrial}
-                  <p>Direct access is on trial. Use a fresh JKAI chat so the refreshed manifest is tested.</p>
+                  <p>Direct access is on trial. Use a fresh jkai chat so the refreshed manifest is tested.</p>
                 {:else}
                   <p>
                     Promotion removes the discovery round-trip, but adds this schema to every chat. Start only after

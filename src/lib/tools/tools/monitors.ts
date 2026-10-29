@@ -6,6 +6,8 @@ import { createMonitor, listMonitors } from '$lib/monitors/monitors.server';
 
 register({
   name: 'monitor_create',
+  effect: 'mutate',
+  confirm: 'never',
   description:
     'Create a MONITOR: turn a "watch X and tell me when Y" request into a recurring scheduled workflow that checks a source, keeps only genuinely new items, and messages you when something new appears. Use when the user wants to be notified about ongoing changes (prices, listings, news, a page, an API). Returns the monitor + its canvas URL. May take a while (it generates a workflow).',
   parameters: {
@@ -34,6 +36,7 @@ register({
 
 register({
   name: 'monitor_list',
+  effect: 'read',
   description: 'List the active monitors (watch workflows) with their schedule, enabled state, and last run status.',
   parameters: { type: 'object', properties: {} },
   category: 'Monitors',

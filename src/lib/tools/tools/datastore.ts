@@ -219,6 +219,7 @@ const filterSchema = {
 export const datastoreTools: ToolDefinition[] = [
   {
     name: 'datastore_list_collections',
+    effect: 'read',
     description:
       'List the datastore collections you can read (name, slug, whether it is a system collection, whether it enforces a schema). The datastore is the permanent, sitewide store for structured/queryable data. Use this to discover what collections already exist before querying or saving.',
     parameters: { type: 'object', properties: {}, required: [] },
@@ -228,6 +229,8 @@ export const datastoreTools: ToolDefinition[] = [
   },
   {
     name: 'datastore_create_collection',
+    effect: 'mutate',
+    confirm: 'never',
     description:
       'Create a datastore collection (a named bucket of JSON records). Only needed for a first-class dataset with a schema or custom permissions — datastore_save auto-creates a plain collection on demand.',
     parameters: {
@@ -250,6 +253,7 @@ export const datastoreTools: ToolDefinition[] = [
   },
   {
     name: 'datastore_query',
+    effect: 'read',
     description:
       'Query records in a datastore collection with filters, sort, limit and offset. Use this to READ structured/queryable data you (or a workflow) previously saved. For a single record by id/key use datastore_get. For a distilled personal fact use recall_memories instead.',
     parameters: {
@@ -278,6 +282,7 @@ export const datastoreTools: ToolDefinition[] = [
   },
   {
     name: 'datastore_get',
+    effect: 'read',
     description: 'Fetch a single datastore record by id, or by its natural key within a collection.',
     parameters: {
       type: 'object',
@@ -294,6 +299,8 @@ export const datastoreTools: ToolDefinition[] = [
   },
   {
     name: 'datastore_save',
+    effect: 'mutate',
+    confirm: 'never',
     description:
       'Save a record into the permanent datastore. Provide a "key" to upsert (create-or-replace by natural key); omit it to insert a new record. Use this for structured/queryable data that should persist and be shared sitewide. For a distilled personal fact about John use save_memory instead; for throwaway per-workflow state use the data-store node.',
     parameters: {
@@ -316,6 +323,8 @@ export const datastoreTools: ToolDefinition[] = [
   },
   {
     name: 'datastore_update',
+    effect: 'mutate',
+    confirm: 'never',
     description:
       'Update an existing datastore record referenced by id or key. Use "data" to replace the whole body or "patch" to shallow-merge top-level fields. Pass "expectedVersion" for optimistic concurrency.',
     parameters: {
@@ -337,6 +346,7 @@ export const datastoreTools: ToolDefinition[] = [
   },
   {
     name: 'datastore_delete',
+    effect: 'destructive',
     description: 'Delete a datastore record by id or key. This is destructive and cannot be undone.',
     destructive: true,
     parameters: {

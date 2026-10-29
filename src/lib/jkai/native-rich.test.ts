@@ -71,12 +71,23 @@ describe('tables and diagrams', () => {
     expect(out).toEqual([{ type: 'diagram', code: 'graph TD; A-->B', caption: 'Flow' }]);
   });
 
-  it('leaves a map to the web chat — the app has no map kind to decode', () => {
+  it('draws markers and tracks natively, with bounds; a heatmap goes to the web (slice 8)', () => {
     const out = nativeArtifacts([
-      step({ type: 'map', layers: [{ kind: 'points', points: [{ lat: 52.6, lng: 1.3 }] }] }),
-      step({ type: 'diagram', code: 'graph TD; A-->B' }),
+      step({ type: 'map', caption: 'Route', layers: [
+        { kind: 'points', points: [{ lat: 52.6, lng: 1.3, label: 'Norwich' }, { lat: 999, lng: 0 }] },
+        { kind: 'track', points: [{ lat: 52.6, lng: 1.3 }, { lat: 52.7, lng: 1.1 }] },
+      ] }),
+      step({ type: 'map', layers: [{ kind: 'heatmap', points: [{ lat: 1, lng: 1 }] }] }),
+      step({ type: 'map', layers: [] }),
     ]);
-    expect(out.map((a) => a.type)).toEqual(['diagram']);
+    expect(out[0]).toEqual({
+      type: 'map', simple: true, caption: 'Route',
+      points: [{ lat: 52.6, lon: 1.3, label: 'Norwich' }],
+      tracks: [[{ lat: 52.6, lon: 1.3 }, { lat: 52.7, lon: 1.1 }]],
+      bounds: { south: 52.6, west: 1.1, north: 52.7, east: 1.3 },
+    });
+    expect(out[1]).toEqual({ type: 'map', simple: false, caption: null });
+    expect(out[2]).toEqual({ type: 'map', simple: false, caption: null });
   });
 
   it('survives metadata that is not what it expects', () => {
@@ -127,6 +138,14 @@ describe('the desk page for the drawer', () => {
     expect(p?.sections[0].blocks.map((b) => b.id)).toEqual(['b']);
     const acts = p!.sections[0].blocks[0];
     expect(acts.type === 'actions' && acts.items.map((a) => a.kind)).toEqual(['ask']);
+  });
+
+  it('keeps a page whose section overflowed the schema, losing only the overflow (24-vs-40 fix)', () => {
+    const blocks = Array.from({ length: 30 }, (_, i) => ({ id: `p${i}`, type: 'prose', markdown: `Line ${i}` }));
+    const p = nativePanel(page(blocks));
+    expect(p?.sections[0].blocks).toHaveLength(24);
+    const many = { panel: { ...page([]).panel, sections: Array.from({ length: 14 }, (_, i) => ({ id: `s${i}`, label: '', blocks: [{ id: `b${i}`, type: 'prose', markdown: 'x' }] })) } };
+    expect(nativePanel(many)?.sections).toHaveLength(12);
   });
 
   it('is null for no page, an invalid page, or a page left empty', () => {

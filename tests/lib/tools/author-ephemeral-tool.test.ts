@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { getTool, executeTool } from '$lib/tools/registry';
+import { getTool, executeTool as rawExecuteTool } from '$lib/tools/registry';
+import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
+
+// Authoring and promoting run model-written code: destructive tools, reached
+// only by an attended owner (here, an owner press).
+const executeTool = (name: string, args: Record<string, unknown>) =>
+  rawExecuteTool(name, args, { emit: () => {}, principal: ownerActionPrincipal('test') });
 
 beforeAll(async () => {
   await import('$lib/tools/tools/visualise');

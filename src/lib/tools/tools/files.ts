@@ -10,6 +10,7 @@ const MAX_INLINE_TEXT_BYTES = 200 * 1024;
 
 register({
   name: 'file_list',
+  effect: 'read',
   description:
     'List files in the workflow file store (uploaded via /drive). Returns id, name, mimeType, sizeBytes, description, and updatedAt for each. Use file_read to read a specific file by id or name.',
   parameters: {
@@ -44,6 +45,7 @@ register({
 
 register({
   name: 'file_read',
+  effect: 'read',
   description:
     'Read a file from the workflow file store and return its text content. For text/markdown/json/csv files the raw bytes are returned as utf-8. For PDF/DOCX/audio/video files the file is automatically extracted (PDFs parsed page-by-page, audio/video transcribed via Whisper). Returns { name, mimeType, sizeBytes, kind, text, meta? }. Look up files first with file_list. Specify the file by id (preferred) or by name.',
   parameters: {
@@ -120,6 +122,7 @@ register({
 
 register({
   name: 'file_search',
+  effect: 'read',
   description:
     'Semantic search across the CONTENT of every file in the /drive store — not just filenames. ' +
     'Text documents are searched by meaning; images are searched by their VISUAL content (people, ' +

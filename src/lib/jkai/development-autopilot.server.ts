@@ -24,7 +24,7 @@
 import { db } from '$lib/db';
 import { jkaiBuilds, jkaiBuildDeliveries } from '$lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
-import { notifyAllSubscribers } from '$lib/server/push';
+import { notifyDelivery } from './delivery-push.server';
 import { loadDelivery, mutateDelivery } from './development-state.server';
 import { autopilotActive, failureSignature, type DeliveryState } from './development';
 import { emitLog } from './log-emitter';
@@ -72,8 +72,8 @@ async function stop(buildId: string, reason: string, notify = true): Promise<'st
   await mutateDelivery(buildId, 'autopilot_stopped', s => ({ ...s, autopilot: s.autopilot ? { ...s.autopilot, stopReason: reason } : s.autopilot }));
   await emitLog(buildId, 'system', `Autopilot stopped: ${reason}`);
   if (notify) {
-    await notifyAllSubscribers({ title: 'Autopilot needs you', body: reason.slice(0, 140), url: `/jkai/develop/${buildId}` })
-      .catch((error) => console.warn('[autopilot] push failed', error));
+    // Under the jkai push budget, with the build and its links in `data`.
+    await notifyDelivery(buildId, { title: 'Autopilot needs you', body: reason.slice(0, 140), weight: 'blocking' });
   }
   return 'stopped';
 }
@@ -114,7 +114,7 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
     const result = await watchDevelopmentRelease(buildId).catch(() => 'pending' as const);
     if (result === 'deployed') {
       await mutateDelivery(buildId, 'autopilot_complete', s => ({ ...s, autopilot: s.autopilot ? { ...s.autopilot, stopReason: 'The feature is merged and serving in production.' } : s.autopilot }));
-      await notifyAllSubscribers({ title: 'Shipped', body: build.title ?? 'A development feature is live', url: `/jkai/develop/${buildId}` }).catch(() => {});
+      await notifyDelivery(buildId, { title: 'Shipped', body: build.title ?? 'A development feature is live', weight: 'terminal' });
       return 'shipped';
     }
     if (result === 'closed') return stop(buildId, 'The pull request was closed without merging.');
@@ -123,7 +123,7 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
       const fresh = await loadDelivery(buildId);
       const reason = fresh?.state.release?.awaitingOwner;
       if (reason && reason !== state.release?.awaitingOwner) {
-        await notifyAllSubscribers({ title: 'Pull request needs you', body: reason.slice(0, 140), url: `/jkai/develop/${buildId}` }).catch(() => {});
+        await notifyDelivery(buildId, { title: 'Pull request needs you', body: reason.slice(0, 140), weight: 'blocking' });
         await emitLog(buildId, 'system', `Autopilot is waiting on the owner: ${reason}`);
       }
     }
@@ -139,7 +139,7 @@ export async function autopilotStep(buildId: string): Promise<AutopilotOutcome> 
       // Terminal, and a success. Without this the step fell through to the
       // restart branch and set the worker going again on finished work, which
       // clears acceptedAt and destroys the acceptance it had just earned.
-      await notifyAllSubscribers({ title: 'Ready for you', body: build.title ?? 'A development feature is accepted and waiting', url: `/jkai/develop/${buildId}` }).catch(() => {});
+      await notifyDelivery(buildId, { title: 'Ready for you', body: build.title ?? 'A development feature is accepted and waiting', weight: 'blocking' });
       return stop(buildId, 'The candidate is accepted into the batch. This feature is set to preview only, so releasing it is your call.', false);
     }
     try {

@@ -205,6 +205,10 @@ export async function handleCreateTool(args: Record<string, unknown>): Promise<{
     toolset,
     parameters,
     category: 'Custom Tool',
+    // Model-written code with fetch: declared destructive, so it confirms
+    // and no unattended caller reaches it.
+    effect: 'destructive',
+    destructive: true,
     handler,
   });
 

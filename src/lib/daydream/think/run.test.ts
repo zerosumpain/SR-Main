@@ -42,6 +42,16 @@ describe('systemPrompt', () => {
     expect(r).toMatch(/Roman aqueducts/);
   });
 
+  it('writes in jkai\'s voice when Core gives the identity, with every rule after it', () => {
+    const p = systemPrompt({ ...base, question: health, set: 'private', identity: 'SOUL TEXT\n\nSurface: a daydream note.' });
+    expect(p.startsWith('SOUL TEXT')).toBe(true);
+    expect(p).toMatch(/This is a daydream cycle/);
+    expect(p).not.toMatch(/You are the thinking half/);
+    expect(p.indexOf('OUTCOMES')).toBeGreaterThan(p.indexOf('SOUL TEXT'));
+    // Core down: the task's own sentence, exactly as before.
+    expect(systemPrompt({ ...base, question: health, set: 'private', identity: '' })).toMatch(/^You are the thinking half/);
+  });
+
   it('gives a research cycle one interest and the so-what rule', () => {
     const r = systemPrompt({ ...base, question: research, set: 'research', profile: [] });
     expect(r).toMatch(/THIS CYCLE'S INTEREST[^\n]*"Roman aqueducts"/);

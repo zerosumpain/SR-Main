@@ -153,6 +153,8 @@ const INTAKE_WORDS: Partial<Record<IdeaSource, string>> = {
   fault: 'An idea from daydream',
   doctor: 'A fix the workflow doctor asked for',
   trace: 'An idea from a chat',
+  chat: 'A build John commissioned',
+  phone: 'A build John commissioned',
 };
 
 function titleIsSafe(i: WorkItem): boolean {

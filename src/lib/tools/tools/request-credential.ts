@@ -189,6 +189,8 @@ export async function handleRequestCredential(
 
 const def: ToolDefinition = {
   name: 'request_credential',
+  effect: 'mutate',
+  confirm: 'never',
   category: 'apis',
   toolset: 'apis',
   description:

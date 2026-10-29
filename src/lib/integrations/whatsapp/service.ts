@@ -12,6 +12,7 @@ import { readBuffer } from '$lib/jkai/media/storage';
 import type { JkaiAttachment } from '$lib/db/schema';
 import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 import { ownsWhatsAppSession } from '$lib/server/service-role';
+import { isAllowedSender, normaliseAllowList, resolveSender } from './sender';
 import type {
 	WhatsAppServiceStatus,
 	WhatsAppServiceState,
@@ -55,13 +56,12 @@ export class WhatsAppService {
 	}
 
 	setAllowedNumbers(numbers: string[]): void {
-		this.allowedNumbers = new Set(numbers.map((n) => n.replace(/^\+/, '')));
+		this.allowedNumbers = normaliseAllowList(numbers);
 	}
 
+	/** Fails closed: an empty allow-list admits nobody (see `./sender`). */
 	isAllowed(number: string): boolean {
-		if (this.allowedNumbers.size === 0) return true;
-		const normalized = number.replace(/^\+/, '');
-		return this.allowedNumbers.has(normalized);
+		return isAllowedSender(this.allowedNumbers, number);
 	}
 
 	onMessage(handler: MessageHandler): void {
@@ -69,7 +69,7 @@ export class WhatsAppService {
 	}
 
 	toJid(phoneNumber: string): string {
-		// Strip every non-digit so panel-formatted numbers (e.g. "+44 7359228511",
+		// Strip every non-digit so panel-formatted numbers (e.g. "+44 7700900123",
 		// "+44 (0) 7359 228511", "+44-7359-228511") all collapse to the
 		// digits-only form Baileys/WhatsApp expects. Leaving a space in here
 		// produces an invalid JID — the server silently drops the send and
@@ -259,6 +259,30 @@ export class WhatsAppService {
 				// Skip messages with no text and no media
 				if (!text && !mediaKind) continue;
 
+				const remoteJid = msg.key.remoteJid || '';
+				const isGroup = remoteJid.endsWith('@g.us');
+				const isLid = remoteJid.endsWith('@lid');
+
+				if (isGroup) continue; // Skip group messages for now
+
+				// Who sent it, as a PHONE NUMBER, checked against the allow-list
+				// before anything else is done with the message (media included).
+				// A LID is resolved to its number; one that cannot be resolved is
+				// refused rather than waved through, which is what used to happen
+				// to every LID message (see `./sender`).
+				const sender = await resolveSender(msg.key, (lid) =>
+					(this.sock as any)?.signalRepository?.lidMapping?.getPNForLID?.(lid) ?? Promise.resolve(null),
+				);
+				if (!sender.number) {
+					console.log(`[whatsapp] Blocked LID message that could not be resolved to a number (pushName: ${msg.pushName || 'unknown'})`);
+					continue;
+				}
+				const from = sender.number;
+				if (!this.isAllowed(from)) {
+					console.log(`[whatsapp] Blocked message from unapproved ${isLid ? 'LID sender' : 'number'}`);
+					continue;
+				}
+
 				// Download media bytes if present
 				if (mediaKind) {
 					try {
@@ -270,34 +294,6 @@ export class WhatsAppService {
 					} catch (err) {
 						console.warn('[whatsapp] media download failed:', err);
 					}
-				}
-
-				const remoteJid = msg.key.remoteJid || '';
-				const isGroup = remoteJid.endsWith('@g.us');
-				const isLid = remoteJid.endsWith('@lid');
-
-				if (isGroup) continue; // Skip group messages for now
-
-				// For LID JIDs (newer WhatsApp format), try to get phone from participant or notify
-				let from: string;
-				if (isLid) {
-					// LID JIDs don't contain the phone number directly.
-					// Use participant if available, otherwise use pushName/notify for logging
-					const participant = msg.key.participant;
-					if (participant && participant.includes('@s.whatsapp.net')) {
-						from = this.fromJid(participant);
-					} else {
-						// Accept LID messages — we can't resolve to phone but they're direct messages
-						from = this.fromJid(remoteJid);
-						console.log(`[whatsapp] LID message from ${from} (pushName: ${msg.pushName || 'unknown'})`);
-					}
-				} else {
-					from = this.fromJid(remoteJid);
-				}
-
-				if (!isLid && !this.isAllowed(from)) {
-					console.log(`[whatsapp] Blocked message from unapproved number: ${from}`);
-					continue;
 				}
 
 				this.messageHandler({

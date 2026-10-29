@@ -159,7 +159,7 @@
 {#if open}
   <div class="jl-bg" role="button" tabindex="-1" onclick={onClose} onkeydown={() => {}}>
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-    <div class="jl" role="dialog" aria-label="JKAI launcher" onclick={(e) => e.stopPropagation()}>
+    <div class="jl" role="dialog" aria-label="jkai launcher" onclick={(e) => e.stopPropagation()}>
       <div class="jl-search">
         <span class="jl-slash">⌘K</span>
         <!-- svelte-ignore a11y_autofocus -->

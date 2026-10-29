@@ -247,7 +247,7 @@
   }
 </script>
 
-<svelte:head><title>{embedded ? 'Daydreams · JKAI' : 'Briefing · JKAI'}</title></svelte:head>
+<svelte:head><title>{embedded ? 'Daydreams · jkai' : 'Briefing · jkai'}</title></svelte:head>
 
 {#if !embedded}<JkaiPageTitle title="BRIEFING" />{/if}
 
@@ -285,7 +285,7 @@
         <div>
           <span class="eyebrow">Briefing profile</span>
           <h2 id="profile-title">Decide what earns attention</h2>
-          <p>Select the signals JKAI can use, set the editorial priorities, and choose how much recent memory should be carried into each briefing.</p>
+          <p>Select the signals jkai can use, set the editorial priorities, and choose how much recent memory should be carried into each briefing.</p>
         </div>
         <label class="master-switch">
           <input type="checkbox" bind:checked={enabled} />

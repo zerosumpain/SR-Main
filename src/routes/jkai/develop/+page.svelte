@@ -323,7 +323,7 @@
 
 <DaydreamShell
   path="/jkai/develop"
-  kicker="JKAI · Pi site development"
+  kicker="jkai · Pi site development"
   title={['What should we build?']}
   compactTitle
   compactCover

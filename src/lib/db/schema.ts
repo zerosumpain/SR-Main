@@ -2526,6 +2526,126 @@ export type JkaiToolTrace = typeof jkaiToolTraces.$inferSelect;
 export type NewJkaiToolTrace = typeof jkaiToolTraces.$inferInsert;
 
 // ==========================================
+// JKAI durable turns, gates, events and presence (overhaul slice 8)
+// ==========================================
+//
+// SR-Jkai-Core writes these; Main declares them because Main is the schema
+// executor. They are created by HAND-APPLIED SQL
+// (scripts/migrations/2026-10-28-jkai-durable-turns.sql) with GRANTs to both
+// sr_main_runtime and sr_core_runtime in the same script — never by drizzle
+// push, which can hang CI on a new table or exit 0 having applied nothing.
+// The declarations below must match that script column for column, so the
+// push that follows finds nothing to do. Core reads and writes them with raw
+// SQL behind JKAI_DURABLE_TURNS (default off) until the GRANTs are confirmed.
+
+/**
+ * One chat turn (a Core job), from its start to how it ended. Token deltas stay
+ * in memory; this holds the lifecycle, the phase, the last stream seq and the
+ * partial text, so another slot, a restart or the phone can say what happened.
+ * `updated_at` is the owning slot's lease: a row still open whose lease is two
+ * minutes stale belonged to a process that died without draining.
+ */
+export const jkaiTurns = pgTable(
+  'jkai_turns',
+  {
+    jobId: text('job_id').primaryKey(),
+    conversationId: text('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+    /** 'owner' or a member's `u_…` — the same principal the job routes check. */
+    principalId: text('principal_id').notNull().default('owner'),
+    /** The turn envelope's surface ('web', 'ios', 'whatsapp', …). */
+    surface: text('surface'),
+    /** Which process ran it (release id + host), for the operator. */
+    slot: text('slot'),
+    /** running | gated | done | error | interrupted | cancelled */
+    status: text('status').notNull().default('running'),
+    phase: text('phase'),
+    lastSeq: integer('last_seq').notNull().default(0),
+    partialText: text('partial_text').notNull().default(''),
+    /** The turn's budget kind: chat | agentic | delegated (job-store TURN_BUDGET_MS). */
+    workload: text('workload').notNull().default('chat'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    error: text('error'),
+  },
+  (t) => [
+    index('jkai_turns_conversation_idx').on(t.conversationId, t.startedAt),
+    index('jkai_turns_status_idx').on(t.status, t.updatedAt),
+  ],
+);
+
+/**
+ * A gate (plan, clarify, confirm, credential, approval) a turn stopped at. An
+ * answer that reaches a slot which does not hold the job is written here, and
+ * the owning slot's waiter picks it up — so a gate is answerable across slots.
+ */
+export const jkaiGates = pgTable(
+  'jkai_gates',
+  {
+    jobId: text('job_id').notNull().references(() => jkaiTurns.jobId, { onDelete: 'cascade' }),
+    /** The waiter key, `<kind>:<id>` (e.g. `confirm:…`). */
+    gateKey: text('gate_key').notNull(),
+    kind: text('kind').notNull(),
+    principalId: text('principal_id').notNull().default('owner'),
+    conversationId: text('conversation_id'),
+    /** The gate's stream frame, as the chat screen received it. */
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+    answeredAt: timestamp('answered_at', { withTimezone: true }),
+    answer: jsonb('answer').$type<Record<string, unknown>>(),
+    /** Provenance: 'session' | 'device' | 'push', and which slot took it. */
+    answeredBy: text('answered_by'),
+    /** Set by the owning slot once it has handed the answer to its waiter. */
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.jobId, t.gateKey] }),
+    index('jkai_gates_open_idx').on(t.answeredAt, t.openedAt),
+  ],
+);
+
+/**
+ * The per-principal event channel behind `/api/jkai/events?scope=me`: turn
+ * lifecycle, desk sections, follow-ups and gates, for every client of one
+ * principal. `seq` is the SSE `id:` a reconnect resumes from. Pruned after 7 days.
+ */
+export const jkaiEvents = pgTable(
+  'jkai_events',
+  {
+    seq: bigserial('seq', { mode: 'number' }).primaryKey(),
+    principalId: text('principal_id').notNull(),
+    conversationId: text('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+    /** turn | desk | message | gate | build | daydream | followup */
+    kind: text('kind').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('jkai_events_principal_idx').on(t.principalId, t.seq),
+    index('jkai_events_created_idx').on(t.createdAt),
+  ],
+);
+
+/**
+ * Who is looking at which thread, from which surface — the durable form of
+ * Core's presence map, so WhatsApp escalation can tell a watching phone from a
+ * pocketed one whichever slot took the beat.
+ */
+export const jkaiPresence = pgTable(
+  'jkai_presence',
+  {
+    principalId: text('principal_id').notNull(),
+    conversationId: text('conversation_id').notNull(),
+    surface: text('surface').notNull(),
+    seenAt: timestamp('seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.principalId, t.conversationId, t.surface] }),
+    index('jkai_presence_seen_idx').on(t.seenAt),
+  ],
+);
+
+// ==========================================
 // JKAI Attachments (multimedia I/O)
 // ==========================================
 
