@@ -318,7 +318,7 @@ export function createDayComparer(opts: { subject?: string; now?: Date } = {}) {
 
 export function compareDaysDescription(): string {
   return (
-    'Compare one daily metric on two kinds of day: days when another metric is above (or below) a threshold against the rest — e.g. recoveryScore on days with familyMinutes above 120, mood on days with calendarBusyMinutes above 300, sleepMinutes after awayOvernight above 0.5. ' +
+    'Compare one daily metric on two kinds of day: days when another metric is above (or below) a threshold against the rest — e.g. recoveryScore on days with familyShare above 50, mood on days with calendarBusyMinutes above 300, sleepMinutes after awayOvernight above 0.5. ' +
     `Median on each side and a Mann–Whitney p, ${MIN_GROUP}+ days each side. Metric keys: ${CORRELATE_METRICS.join(', ')}. ` +
     'Omit above/below to split at the median. nextDay:true reads the metric the day after.'
   );

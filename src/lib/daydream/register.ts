@@ -53,7 +53,7 @@ const SOLVE_WORDS: Record<string, string> = {
 const FOLLOW_WORDS: Record<string, string> = {
   research: 'Research run',
   promote: 'On the build list',
-  build: 'Build accepted',
+  build: 'Build brief',
   prototype: 'Prototype',
   watch: 'Watch',
   message: 'Message drafted',
@@ -125,7 +125,7 @@ export function registerEntries(rows: readonly RegisterRow[]): RegisterEntry[] {
         at: f.at,
         source: 'follow',
         kind: FOLLOW_WORDS[kind] ?? kind,
-        what: kind === 'build' && !data.acceptedAt ? 'Brief drafted' : FOLLOW_WORDS[kind] ?? kind,
+        what: kind === 'build' ? (data.acceptedAt ? 'Accepted for build' : 'Brief drafted') : FOLLOW_WORDS[kind] ?? kind,
         state: kind === 'watch' && data.stoppedAt ? 'stopped' : 'done',
         href,
         result: null,

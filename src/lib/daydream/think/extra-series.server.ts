@@ -13,10 +13,13 @@
 //   daylightMinutes Apple time in daylight
 //   wristTemp       Apple sleeping wrist temperature, °C
 //   mindfulMinutes  Apple mindful minutes
-//   familyMinutes   minutes he and at least one other household member were
-//                   at the same place (home, or the same named place), in
-//                   10-minute slots off the trail. Null on a day the trail
-//                   saw him for under two hours — "not seen" is not "alone".
+//   familyShare     the share (%) of the time the trail saw him that at
+//                   least one other household member was at the same place
+//                   (home, or the same named place), in 10-minute slots. A
+//                   share, not minutes: on production the trail sees him for
+//                   2 to 11 hours a day, so raw minutes mostly measured how
+//                   much the phone reported. Null on a day it saw him for
+//                   under two hours — "not seen" is not "alone".
 //   awayOvernight   1 when every fix between 01:00 and 05:00 had him away
 //                   from home, 0 when any had him home, null when none.
 //
@@ -28,7 +31,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { DEFAULT_SUBJECT } from '../types';
 
-export const EXTRA_METRICS = ['mood', 'daylightMinutes', 'wristTemp', 'mindfulMinutes', 'familyMinutes', 'awayOvernight'] as const;
+export const EXTRA_METRICS = ['mood', 'daylightMinutes', 'wristTemp', 'mindfulMinutes', 'familyShare', 'awayOvernight'] as const;
 export type ExtraMetric = (typeof EXTRA_METRICS)[number];
 
 export function isExtraMetric(key: string): key is ExtraMetric {
@@ -41,7 +44,7 @@ export const EXTRA_HEADINGS: Record<ExtraMetric, string> = {
   daylightMinutes: 'Time in daylight (min)',
   wristTemp: 'Sleeping wrist temperature (°C)',
   mindfulMinutes: 'Mindful minutes (min)',
-  familyMinutes: 'Time with family (min at the same place)',
+  familyShare: 'Time with family (% of the day he was seen)',
   awayOvernight: 'Away overnight (1 away, 0 home)',
 };
 
@@ -53,7 +56,7 @@ const APPLE_KEY: Partial<Record<ExtraMetric, string>> = {
   mindfulMinutes: 'mindful',
 };
 
-/** Minutes the trail must have seen him on a day before familyMinutes counts. */
+/** Minutes the trail must have seen him on a day before familyShare counts. */
 export const FAMILY_MIN_SEEN_MINUTES = 120;
 const SLOT_SECONDS = 600;
 
@@ -76,7 +79,7 @@ async function companySubjects(): Promise<string[]> {
   }
 }
 
-async function familyMinutes(from: Date): Promise<Map<string, number>> {
+async function familyShare(from: Date): Promise<Map<string, number>> {
   const others = await companySubjects();
   const out = new Map<string, number>();
   const res = await db.execute(sql`
@@ -100,7 +103,7 @@ async function familyMinutes(from: Date): Promise<Map<string, number>> {
   for (const r of res.rows as Array<{ day: string; seen: number; together: number }>) {
     const seenMin = Number(r.seen) * (SLOT_SECONDS / 60);
     if (seenMin < FAMILY_MIN_SEEN_MINUTES) continue;
-    out.set(String(r.day).slice(0, 10), Number(r.together) * (SLOT_SECONDS / 60));
+    out.set(String(r.day).slice(0, 10), Math.round((Number(r.together) / Number(r.seen)) * 100));
   }
   return out;
 }
@@ -122,7 +125,7 @@ async function awayOvernight(from: Date): Promise<Map<string, number>> {
 export async function loadExtraSeries(key: ExtraMetric, windowDays: number, now = new Date()): Promise<Map<string, number>> {
   const from = new Date(now.getTime() - windowDays * 86_400_000);
   try {
-    if (key === 'familyMinutes') return await familyMinutes(from);
+    if (key === 'familyShare') return await familyShare(from);
     if (key === 'awayOvernight') return await awayOvernight(from);
     const { seriesDays } = await import('$lib/owner-data/health.server');
     const days = (await seriesDays(APPLE_KEY[key]!, windowDays, now)) ?? [];

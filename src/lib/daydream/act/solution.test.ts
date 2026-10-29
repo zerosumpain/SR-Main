@@ -7,9 +7,8 @@ const pages = new Set(['/trips', '/health', '/home']);
 const ctx = { citedText: cited, sitePages: pages };
 
 describe('checkSolve', () => {
-  it('every tracker metric is a series the health reader knows (or time with family)', () => {
+  it('every tracker metric is a series the health reader knows', () => {
     for (const m of TRACK_METRICS) {
-      if (m === 'familyMinutes') continue;
       expect(m in APPLE_SERIES || m in WHOOP_SERIES, m).toBe(true);
     }
   });

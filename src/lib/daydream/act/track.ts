@@ -112,7 +112,11 @@ function fmt(n: number | null, unit: string): string {
 export function progressLine(t: Tracker, p: TrackerProgress): string {
   const w = TRACK_WORDS[t.metric];
   const target = `${t.goal === 'at_least' ? 'at least' : 'at most'} ${fmt(t.target, w.unit)}`;
-  if (!p.recorded) return `No ${w.label.toLowerCase()} readings since it started (${p.daysIn} day${p.daysIn === 1 ? '' : 's'} in). Target ${target}.`;
+  if (!p.recorded) {
+    return p.status === 'running'
+      ? `No ${w.label.toLowerCase()} readings since it started (${p.daysIn} day${p.daysIn === 1 ? '' : 's'} in). Target ${target}.`
+      : `No ${w.label.toLowerCase()} readings during its ${p.daysIn} days, so there is nothing to judge. Target was ${target}.`;
+  }
   const vs = p.baseline != null ? ` against ${fmt(p.baseline, w.unit)} in the ${BASELINE_DAYS} days before` : '';
   return `${p.hits} of ${p.recorded} recorded day${p.recorded === 1 ? '' : 's'} on target (${target}); averaging ${fmt(p.average, w.unit)}${vs}.`;
 }

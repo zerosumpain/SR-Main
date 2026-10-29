@@ -73,10 +73,6 @@ export async function stopTracker(id: string, now = new Date()): Promise<boolean
 export async function trackerSeries(t: Tracker, now = new Date()): Promise<DayValue[]> {
   const span = Math.round((now.getTime() - Date.parse(`${t.startDay}T00:00:00Z`)) / 86_400_000) + BASELINE_DAYS + 2;
   const window = Math.min(120, Math.max(BASELINE_DAYS + 2, span));
-  if (t.metric === 'familyMinutes') {
-    const { loadExtraSeries } = await import('../think/extra-series.server');
-    return [...(await loadExtraSeries('familyMinutes', window, now))].map(([day, value]) => ({ day, value })).sort((a, b) => a.day.localeCompare(b.day));
-  }
   const { seriesDays } = await import('$lib/owner-data/health.server');
   return (await seriesDays(t.metric, window, now)) ?? [];
 }

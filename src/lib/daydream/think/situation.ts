@@ -66,7 +66,10 @@ function where(p: PersonNow): string {
     case 'off':
       return 'not sharing location';
     default:
-      return p.ageMins == null ? 'location unknown' : `last seen ${p.place ? `at ${p.place}` : p.distanceKm != null ? distanceBand(p.distanceKm) : 'somewhere'} ${Math.round(p.ageMins / 60)} h ago`;
+      if (p.ageMins == null) return 'location unknown';
+      // A fix days old says nothing about now, and only crowds the card.
+      if (p.ageMins > 24 * 60) return 'not seen today';
+      return `last seen ${p.place ? `at ${p.place}` : p.distanceKm != null ? distanceBand(p.distanceKm) : 'somewhere'} ${Math.round(p.ageMins / 60)} h ago`;
   }
 }
 

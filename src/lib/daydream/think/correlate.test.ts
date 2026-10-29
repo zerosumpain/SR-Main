@@ -106,7 +106,7 @@ describe('controls and kinds of day (2026-10-29)', () => {
   });
 
   it('the extra metrics are in the vocabulary, and a control must be a third metric', () => {
-    expect(refusal('mood', 'familyMinutes')).toBeNull();
+    expect(refusal('mood', 'familyShare')).toBeNull();
     expect(controlRefusal('mood', 'sleepMinutes', 'mood')).toMatch(/third metric/);
     expect(controlRefusal('mood', 'sleepMinutes', 'nonsense')).toMatch(/not a day metric/);
   });
@@ -121,8 +121,8 @@ describe('controls and kinds of day (2026-10-29)', () => {
   });
 
   it('compares a metric on two kinds of day', () => {
-    const split = rows.map((r, i) => ({ ...r, familyMinutes: i % 2 ? 300 : 0, recoveryScore: i % 2 ? 70 + (i % 5) : 40 + (i % 5) }));
-    const args = parseCompareArgs({ metric: 'recoveryScore', when: 'familyMinutes', above: 120 });
+    const split = rows.map((r, i) => ({ ...r, familyShare: i % 2 ? 80 : 10, recoveryScore: i % 2 ? 70 + (i % 5) : 40 + (i % 5) }));
+    const args = parseCompareArgs({ metric: 'recoveryScore', when: 'familyShare', above: 50 });
     expect(typeof args).toBe('object');
     const out = compareRows(split, args as Exclude<typeof args, string>);
     expect(out.ok).toBe(true);

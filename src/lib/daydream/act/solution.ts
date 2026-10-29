@@ -34,8 +34,9 @@
 export const SOLVE_KINDS = ['track', 'home', 'open', 'build', 'watch'] as const;
 export type SolveKind = (typeof SOLVE_KINDS)[number];
 
-/** Series a tracker may follow: `health_series` keys plus time with family.
- *  `solution.test.ts` pins that each health key exists there. */
+/** Series a tracker may follow: `health_series` keys. Time with family is
+ *  not one — it leans on how much the trail saw him (`extra-series.server.ts`).
+ *  `solution.test.ts` pins that each key exists there. */
 export const TRACK_METRICS = [
   'sleep_hours',
   'deep_minutes',
@@ -51,7 +52,6 @@ export const TRACK_METRICS = [
   'mindful',
   'mood',
   'walking_speed',
-  'familyMinutes',
 ] as const;
 export type TrackMetric = (typeof TRACK_METRICS)[number];
 
@@ -70,7 +70,6 @@ export const TRACK_WORDS: Record<TrackMetric, { label: string; unit: string }> =
   mindful: { label: 'Mindful minutes', unit: 'min' },
   mood: { label: 'Mood', unit: '' },
   walking_speed: { label: 'Walking speed', unit: 'm/s' },
-  familyMinutes: { label: 'Time with family', unit: 'min' },
 };
 
 export const TRACK_MIN_DAYS = 7;

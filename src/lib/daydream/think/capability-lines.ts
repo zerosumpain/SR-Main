@@ -25,7 +25,7 @@ export function sitePages(): Set<string> {
 export function capabilityLines(limit = 60): string[] {
   return CAPABILITIES.filter((c) => c.status !== 'planned' && c.pages.length)
     .slice(0, limit)
-    .map((c) => `  - ${c.title} — ${c.pages[0]}${c.status === 'preview' ? ' (preview)' : ''}: ${c.blurb.replace(/\s+/g, ' ').slice(0, 110)}`);
+    .map((c) => `  - ${c.title} — ${c.pages[0]}${c.status === 'preview' ? ' (preview)' : ''}: ${c.blurb.replace(/\s+/g, ' ').slice(0, 70)}`);
 }
 
 /** The prompt block. `backlog` is open backlog titles, newest first. */

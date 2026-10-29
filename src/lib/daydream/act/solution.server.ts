@@ -159,20 +159,30 @@ async function buildIt(row: Row, plan: Extract<SolvePlan, { kind: 'build' }>, po
     console.error('[daydream] build solution: brief not accepted:', err instanceof Error ? err.message : err);
     grooming = null;
   }
-  const accepted = !!grooming;
-  const message = accepted
-    ? 'On the build list and accepted — the builder takes one accepted item a night.'
-    : 'On the build list as Proposed. Its brief could not be drafted just now; accept it from the backlog.';
-  const data: BuildData | null = grooming
-    ? { slug: item.slug, grooming, brief: briefView(grooming), title: item.title, detail: item.detail, kind: item.kind, priority: item.priority, acceptedAt: now.toISOString() }
-    : null;
+  if (!grooming) {
+    // On the list, but not accepted: the button stays, so a second press
+    // retries the brief rather than leaving him to find the backlog.
+    await promoteOnly(row.id, intake.slug, now);
+    return { ok: true, message: 'On the build list as Proposed. Its brief could not be drafted just now — press again later, or accept it from the backlog.', href };
+  }
+  const message = 'On the build list and accepted — the builder takes one accepted item a night.';
+  const data: BuildData = { slug: item.slug, grooming, brief: briefView(grooming), title: item.title, detail: item.detail, kind: item.kind, priority: item.priority, acceptedAt: now.toISOString() };
   await markDone(row.id, plan, { at: now.toISOString(), ref: intake.slug, href, message, undoneAt: null }, (actions) =>
-    withFollow(
-      data ? withFollow(actions, followEntry('build', 'Accepted for build', data, now)) : actions,
-      followEntry('promote', 'On the backlog', { slug: intake.slug }, now),
-    ),
+    withFollow(withFollow(actions, followEntry('build', 'Accepted for build', data, now)), followEntry('promote', 'On the backlog', { slug: intake.slug }, now)),
   );
   return { ok: true, message, href };
+}
+
+/** Record that the note's idea is on the backlog, without touching its solution. */
+async function promoteOnly(id: string, slug: string, now: Date): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`daydream-follow:${id}`}))`);
+    const [cur] = await tx.select({ actions: daydreamThoughts.proposedActions }).from(daydreamThoughts).where(eq(daydreamThoughts.id, id)).limit(1);
+    await tx
+      .update(daydreamThoughts)
+      .set({ proposedActions: withFollow(cur?.actions, followEntry('promote', 'On the backlog', { slug }, now)) as Array<{ kind: string; label: string; payload: string }>, updatedAt: now })
+      .where(eq(daydreamThoughts.id, id));
+  });
 }
 
 /** The second press: stop a tracker, or turn the lights back on. */
@@ -221,13 +231,6 @@ export async function fileGapOnAccept(thoughtId: string, ports: () => BacklogPor
   if ('reason' in res) return { filed: null };
   // Only the backlog entry: "Build it" stays ready, and pressing it later
   // finds this item (intake merges) and accepts it.
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`daydream-follow:${thoughtId}`}))`);
-    const [cur] = await tx.select({ actions: daydreamThoughts.proposedActions }).from(daydreamThoughts).where(eq(daydreamThoughts.id, thoughtId)).limit(1);
-    await tx
-      .update(daydreamThoughts)
-      .set({ proposedActions: withFollow(cur?.actions, followEntry('promote', 'On the backlog', { slug: res.slug }, now)) as Array<{ kind: string; label: string; payload: string }>, updatedAt: now })
-      .where(eq(daydreamThoughts.id, thoughtId));
-  });
+  await promoteOnly(thoughtId, res.slug, now);
   return { filed: res.slug };
 }

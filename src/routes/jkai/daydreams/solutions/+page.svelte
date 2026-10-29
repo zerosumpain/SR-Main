@@ -24,8 +24,8 @@
     {
       key: 'kind',
       label: 'Most used',
-      value: data.summary.byKind[0]?.[0] ?? '—',
-      sub: data.summary.byKind[0] ? `${data.summary.byKind[0][1]} time${data.summary.byKind[0][1] === 1 ? '' : 's'}` : 'none yet',
+      value: data.summary.byKind[0] ? String(data.summary.byKind[0][1]) : '—',
+      sub: data.summary.byKind[0]?.[0] ?? 'none yet',
       tone: 'quiet',
     },
   ]);
