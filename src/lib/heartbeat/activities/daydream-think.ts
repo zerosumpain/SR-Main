@@ -83,6 +83,16 @@ export const daydreamThink: ActivityHandler = {
       return { outcome: 'skipped', summary: 'daydreaming disabled' };
     }
 
+    // Trackers that ended get their result now (`act/track.server.ts`) — no
+    // model call, and before the spare-cycle gates, so a busy evening does
+    // not hold a result back.
+    try {
+      const { reportFinishedTrackers } = await import('$lib/daydream/act/track.server');
+      await reportFinishedTrackers(now);
+    } catch (err) {
+      console.error(`[daydream] tracker results not sent: ${errMsg(err)}`);
+    }
+
     // Spare cycles means spare — ponder's two gates, unchanged.
     const running = (await listChatJobs()).filter((j) => j.status === 'running');
     if (running.length > 0) {
@@ -100,10 +110,20 @@ export const daydreamThink: ActivityHandler = {
       return { outcome: 'skipped', summary: `budget: ${verdict.reason}`, details: { budget } };
     }
 
+    // What is already on the build list, so the cycle does not propose it
+    // again (`capability-lines.ts`). Soft: an unreadable backlog costs only that.
+    let backlog: string[] = [];
+    try {
+      const { listBacklog } = await import('$lib/selfimprove/backlog');
+      backlog = (await listBacklog()).filter((i) => i.status === 'open').map((i) => i.title).slice(0, 25);
+    } catch {
+      backlog = [];
+    }
+
     await guard.begin();
     let result;
     try {
-      result = await runThink({ now, maxRounds: ROUNDS_BY_DEPTH[budget.plan.depth] });
+      result = await runThink({ now, maxRounds: ROUNDS_BY_DEPTH[budget.plan.depth], backlog });
     } catch (err) {
       return { outcome: 'error', summary: errMsg(err) };
     }

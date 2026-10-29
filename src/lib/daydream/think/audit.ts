@@ -10,6 +10,7 @@
 
 import { resolveCites } from '../cites';
 import { checkPlan, storeAction, type StoredAction } from '../act/plan';
+import { checkSolve, storeSolve } from '../act/solution';
 import type { Candidate } from '../snapshot-types';
 import { OUTCOMES, type Channel, type Outcome } from './questions';
 import { parseUntil } from './shelf';
@@ -89,6 +90,8 @@ export function validateThinkOutput(
     researchTopic?: string | null;
     /** The monthly correlation summary's subject, set by code (`ledger.ts`). */
     summaryKey?: string | null;
+    /** Site pages an "open" solution may point at (`capability-lines.ts`). */
+    sitePages?: ReadonlySet<string>;
   } = {},
 ): ThinkAudit {
   const out: ThinkAudit = { notes: [], rejected: [], citationDrops: 0 };
@@ -158,6 +161,13 @@ export function validateThinkOutput(
       });
       if (checked.ok) proposedActions = [storeAction(checked.plan, null)];
       else out.rejected.push(`note "${label}": do-it plan dropped — ${checked.reason}`);
+    }
+    // The solution (`act/solution.ts`): checked against the cited cards like
+    // the plan. A bad one is dropped; the note still stands.
+    if (n.solve && typeof n.solve === 'object') {
+      const checked = checkSolve(n.solve, { citedText: cited.map((c) => c.text).join('\n'), sitePages: opts.sitePages ?? new Set() });
+      if (checked.ok) proposedActions = [...proposedActions, storeSolve(checked.plan) as unknown as StoredAction];
+      else out.rejected.push(`note "${label}": solution dropped — ${checked.reason}`);
     }
     const slug = slugOf(title);
     if (slug.length < 3) { out.rejected.push(`note "${label}": title has no usable words`); continue; }

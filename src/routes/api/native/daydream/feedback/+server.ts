@@ -48,5 +48,12 @@ export const POST: RequestHandler = withDevice(async ({ request }) => {
 
   if (!(await thinkNoteKind(parsed.id))) return json({ error: 'No such note' }, { status: 404 });
   await recordFeedback(parsed.id, parsed.verdict, undefined, 'explicit');
+  // Worth knowing, and it needs something the site cannot do yet: on the
+  // build list by itself, as from the web card (`act/solution.server.ts`).
+  if (parsed.verdict === 'useful') {
+    const { fileGapOnAccept } = await import('$lib/daydream/act/solution.server');
+    const { backlogPorts } = await import('$lib/selfimprove/follow-ports.server');
+    await fileGapOnAccept(parsed.id, backlogPorts).catch(() => null);
+  }
   return { ok: true };
 });

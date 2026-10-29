@@ -66,7 +66,10 @@
   const paras = $derived(n.summary.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean));
   const long = $derived(paras.length > 1 || (paras[0]?.length ?? 0) > 260);
   const ownerRuled = $derived(n.review?.by === 'owner' ? n.review.verdict : null);
-  const decided = $derived((!!n.verdict || !!ownerRuled || n.act?.status === 'done' || n.act?.status === 'sent') && !changing);
+  const decided = $derived((!!n.verdict || !!ownerRuled || n.act?.status === 'done' || n.act?.status === 'sent' || n.solution?.state === 'done') && !changing);
+  // The solution (`act/solution.ts`): one press does what the note suggests.
+  const sol = $derived(n.solution);
+  const solReady = $derived(!!sol && (sol.state === 'ready' || sol.state === 'undone'));
   const saidWrong = $derived(n.review?.verdict === 'wrong');
   const canCheck = $derived(checksOn && n.checkable && !commission);
   // The reasons that fit his verdict, offered once, until he gives one.
@@ -127,6 +130,24 @@
       await invalidateAll();
     }
     acting = false;
+  }
+  type SolveOut = { ok: boolean; reason?: string; message?: string; href?: string };
+  async function solve(op: 'solve' | 'unsolve') {
+    acting = true;
+    actMessage = null;
+    menu = false;
+    const r = await postThought<SolveOut>({ action: op, thoughtId: n.id });
+    acting = false;
+    if (!r.ok || !r.out.ok) {
+      actMessage = r.out.reason ?? r.error ?? 'That did not work.';
+      return;
+    }
+    // "Open it" is a press that takes him there.
+    if (op === 'solve' && sol?.kind === 'open' && r.out.href) {
+      if (r.out.href.startsWith('/')) window.location.assign(r.out.href);
+      else window.open(r.out.href, '_blank', 'noopener');
+    }
+    await invalidateAll();
   }
   async function chooseAndDo() {
     if (!calendarChoice) return;
@@ -252,6 +273,19 @@
     </div>
   {/if}
 
+  {#if sol && sol.state !== 'ready'}
+    <div class="did" class:undone={sol.state === 'undone'}>
+      <p class="did-k">{sol.state === 'undone' ? 'Taken back' : 'Done'}</p>
+      <p class="did-v">
+        {sol.state === 'undone' ? `Taken back: ${sol.label}` : (sol.message ?? sol.label)}
+        {#if sol.href && sol.state === 'done'} · <a href={sol.href} target={sol.href.startsWith('/') ? undefined : '_blank'} rel={sol.href.startsWith('/') ? undefined : 'noopener noreferrer'}>{sol.kind === 'track' ? 'See it on Solutions' : sol.kind === 'build' ? 'Open in the backlog' : 'Open it'}</a>{/if}
+      </p>
+      {#if sol.undoable}
+        <button type="button" class="link-btn" disabled={acting} onclick={() => solve('unsolve')}>{acting ? 'Taking it back…' : sol.kind === 'track' ? 'Stop tracking' : 'Turn them back on'}</button>
+      {/if}
+    </div>
+  {/if}
+
   {#if n.review}
     <div class="ruled {n.review.verdict}">
       <p class="ruled-k">
@@ -276,6 +310,7 @@
       <span class="v-sub">{n.raised ? 'It messaged you about this' : 'It kept this to the Inbox'}{n.kindMuted ? ' · this kind is muted' : ''}</span>
       <span class="spacer"></span>
       {#if n.kindMuted}<button type="button" class="link-btn" disabled={isBusy} onclick={onunmute}>Unmute this kind</button>{/if}
+      {#if sol && solReady}<button type="button" class="link-btn" disabled={isBusy || acting} onclick={() => solve('solve')}>{acting ? 'Working…' : sol.label}</button>{/if}
       {#if n.act && (n.act.status === 'ready' || n.act.status === 'open' || n.act.status === 'undone')}<button type="button" class="link-btn" disabled={isBusy || acting} onclick={() => act('do_it')}>{acting ? 'Doing it…' : 'Do it for me'}</button>{/if}
       {#if canCheck}<button type="button" class="link-btn" disabled={isBusy} onclick={onprepare}>Double-check it</button>{/if}
       <button type="button" class="link-btn" onclick={() => (changing = true)}>Change</button>
@@ -295,6 +330,15 @@
     <div class="decide">
       <p class="decide-k">What do you want to do?</p>
       <div class="choices">
+        {#if sol && solReady}
+          <!-- The solution leads: one press does what the note suggests and
+               counts it as worth knowing (`act/solution.server.ts`). -->
+          <button type="button" class="choice solve" disabled={isBusy || acting} onclick={() => solve('solve')}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3 5 14h6l-1 7 8-11h-6l1-7z" /></svg>
+            <span class="c-t">{acting ? 'Working…' : sol.label}</span>
+            <span class="c-s">{sol.explain}</span>
+          </button>
+        {/if}
         <button type="button" class="choice good" disabled={isBusy} onclick={() => rate('useful')}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" /></svg>
           <span class="c-t">Worth knowing</span>
@@ -847,6 +891,19 @@
   }
   .choice.doit svg {
     color: var(--success);
+  }
+  .choices > .choice.solve {
+    flex: 2 1 260px;
+    max-width: 440px;
+    border-color: var(--accent-ink);
+    background: var(--accent-ink-tint-06);
+  }
+  .choice.solve svg {
+    color: var(--accent-ink);
+  }
+  .choice.solve:hover:not(:disabled) {
+    background: var(--accent-ink-tint-06);
+    border-color: var(--text-primary);
   }
   .ruled {
     margin: 12px 0 0;
