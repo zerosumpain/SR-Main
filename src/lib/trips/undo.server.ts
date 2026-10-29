@@ -26,10 +26,31 @@ export interface UndoCaller {
  * Put the trip back as it was at `toVersion` (default: the version before
  * the latest). 409 when there is nothing to go back to, or that version was
  * made before snapshots were kept.
+ *
+ * `expectedLatest`, when given, is the version the caller last saw. If the
+ * plan has moved on since (a family member's edit, or this same undo already
+ * applied), the undo is refused with 409 rather than silently wiping the
+ * newer change: restoring a snapshot replaces everything after it.
  */
-export async function undoTo(trip: TripRecord, toVersion: number | null | undefined, caller: UndoCaller): Promise<{ status: number; body: Record<string, unknown> }> {
+export async function undoTo(
+  trip: TripRecord,
+  toVersion: number | null | undefined,
+  caller: UndoCaller,
+  opts: { expectedLatest?: number } = {},
+): Promise<{ status: number; body: Record<string, unknown> }> {
   const latest = await latestPlan(trip.id);
   if (!latest) return { status: 409, body: { error: 'There is nothing to undo yet.' } };
+  if (opts.expectedLatest !== undefined && latest.version !== opts.expectedLatest) {
+    return {
+      status: 409,
+      body: {
+        error:
+          `The plan has changed since version ${opts.expectedLatest}: it is now at version ${latest.version}, ` +
+          `so I haven't undone anything — that would also throw away the newer change. Look at the latest plan and ask again.`,
+        latestVersion: latest.version,
+      },
+    };
+  }
   const target = toVersion ?? latest.version - 1;
   if (!Number.isInteger(target) || target < 1 || target > latest.version) return { status: 400, body: { error: 'There is no such version.' } };
   if (target === latest.version) return { status: 409, body: { error: 'That is the plan as it stands.' } };

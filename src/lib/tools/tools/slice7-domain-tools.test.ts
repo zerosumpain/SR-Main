@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
   converse: [] as Array<{ text: string; surface: string; caller: { canEdit: boolean; isOwner: boolean; email?: string } }>,
-  undo: [] as Array<{ toVersion: number | null; caller: { name: string | null; surface: string } }>,
+  undo: [] as Array<{ toVersion: number | null; caller: { name: string | null; surface: string }; opts?: { expectedLatest?: number } }>,
   feedback: [] as unknown[],
   reasons: [] as unknown[],
   verdicts: [] as unknown[],
@@ -45,8 +45,8 @@ vi.mock('$lib/trips/converse.server', () => ({
   },
 }));
 vi.mock('$lib/trips/undo.server', () => ({
-  undoTo: async (_trip: unknown, toVersion: number | null, caller: (typeof h.undo)[number]['caller']) => {
-    h.undo.push({ toVersion, caller });
+  undoTo: async (_trip: unknown, toVersion: number | null, caller: (typeof h.undo)[number]['caller'], opts?: { expectedLatest?: number }) => {
+    h.undo.push({ toVersion, caller, opts });
     return { status: 200, body: { planVersion: 5, changes: ['Undone: synthetic'] } };
   },
 }));
@@ -175,8 +175,17 @@ describe('slice 7a domain tools', () => {
   it('trip_undo goes back through the planner as jkai, and refuses a non-integer version', async () => {
     const r = await run('trip_undo', { tripId: TRIP.id, toVersion: 3 });
     expect(r.success).toBe(true);
-    expect(h.undo[0]).toEqual({ toVersion: 3, caller: { name: 'jkai', surface: 'site' } });
+    // Only a target: the plan must still be at the version just after it.
+    expect(h.undo[0]).toEqual({ toVersion: 3, caller: { name: 'jkai', surface: 'site' }, opts: { expectedLatest: 4 } });
     expect((await run('trip_undo', { tripId: TRIP.id, toVersion: 'three' })).success).toBe(false);
+  });
+
+  it('trip_undo needs the version John saw, and goes back one from it', async () => {
+    const none = await run('trip_undo', { tripId: TRIP.id });
+    expect(none.success).toBe(false);
+    expect(none.error).toMatch(/expectedLatest/);
+    await run('trip_undo', { tripId: TRIP.id, expectedLatest: 4 });
+    expect(h.undo.at(-1)).toMatchObject({ toVersion: 3, opts: { expectedLatest: 4 } });
   });
 
   it('capture_get labels the transcript as other people\'s words and caps it', async () => {

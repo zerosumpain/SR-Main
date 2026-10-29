@@ -263,18 +263,38 @@ register({
   name: 'trip_undo',
   effect: 'mutate',
   description:
-    'Put a trip back as it was at an earlier plan version (default: the version before the latest) — the undo for trip_converse. It makes a NEW version led by "Undone: …", so it can itself be undone. John confirms first.',
-  parameters: { type: 'object', properties: { ...tripIdParam, toVersion: { type: 'number', description: 'The version to go back to (undo.toVersion from trip_converse). Omit for the one before the latest.' } }, required: ['tripId'] },
+    'Put a trip back as it was at an earlier plan version — the undo for trip_converse. It makes a NEW version led by "Undone: …", so it can itself be undone. John confirms first. ' +
+    'Pass `expectedLatest` (the planVersion trip_converse returned, i.e. the plan as John last saw it) and/or `toVersion` (undo.toVersion from trip_converse). ' +
+    'With only toVersion, the plan must still be at toVersion + 1. If anyone has changed the plan since, the undo is refused rather than wiping their change.',
+  parameters: {
+    type: 'object',
+    properties: {
+      ...tripIdParam,
+      toVersion: { type: 'number', description: 'The version to go back to (undo.toVersion from trip_converse). Omit to go back one from expectedLatest.' },
+      expectedLatest: { type: 'number', description: 'The plan version John last saw (planVersion from trip_converse). The undo is refused if the plan has moved on.' },
+    },
+    required: ['tripId'],
+  },
   category: 'Trips',
   toolset: 'trips',
   surfaces: ['chat', 'app'],
   handler: async (args, ctx) => {
     const found = await tripFor('trip_undo', args, ctx);
     if ('success' in found) return found;
-    const raw = args.toVersion;
-    if (raw !== undefined && raw !== null && !Number.isInteger(raw)) return { success: false, error: 'toVersion is a version number.' };
+    const to = args.toVersion;
+    const seen = args.expectedLatest;
+    if (to !== undefined && to !== null && !Number.isInteger(to)) return { success: false, error: 'toVersion is a version number.' };
+    if (seen !== undefined && seen !== null && !Number.isInteger(seen)) return { success: false, error: 'expectedLatest is a version number.' };
+    const toVersion = Number.isInteger(to) ? (to as number) : null;
+    const given = Number.isInteger(seen) ? (seen as number) : null;
+    if (toVersion === null && given === null) {
+      return { success: false, error: 'Say which plan you are undoing: pass expectedLatest (the planVersion trip_converse returned) or toVersion (its undo.toVersion).' };
+    }
+    // Only a target: it was the undo of the version just after it, so the
+    // plan must still be there; restoring further back needs expectedLatest.
+    const expectedLatest = given ?? (toVersion as number) + 1;
     const { undoTo } = await import('./undo.server');
-    const out = await undoTo(found.trip, (raw as number | null | undefined) ?? null, { name: 'jkai', surface: 'site' });
+    const out = await undoTo(found.trip, toVersion ?? expectedLatest - 1, { name: 'jkai', surface: 'site' }, { expectedLatest });
     if (out.status !== 200) return { success: false, error: String(out.body.error ?? 'Could not undo.') };
     return { success: true, data: { id: found.trip.id, title: found.trip.title, ...out.body, ...links(found.trip.id) } };
   },
