@@ -16,7 +16,8 @@ import type { InvokeContext } from '$lib/tools/invoke-contract';
 import type { ToolExecContext, ToolResult } from '$lib/tools/registry-internal';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { env } from '$env/dynamic/private';
-import { createNonceLedger, openPrincipal } from '$lib/tools/principal-seal';
+import { createNonceLedger } from '$lib/tools/principal-seal';
+import { intakePrincipal, principalEnforceMode } from '$lib/server/principal-intake';
 import { type PrincipalClaims } from '$lib/tools/invoke-contract';
 import { declaredTier } from '$lib/tools/declared-tier';
 import { isThinkingLevel } from '$lib/models/thinking';
@@ -100,15 +101,19 @@ export const POST: RequestHandler = async ({ request }) => {
 	 * for this receiver and this tool, unexpired and never seen before. The
 	 * body's `principalId`, `allowedTools`, `jobId`, `surface` and `deviceId`
 	 * are not trusted on their own any more; the claims replace them, and a body
-	 * list can only narrow the sealed one. Unset key: the lane does not exist.
+	 * list can only narrow the sealed one.
+	 *
+	 * `JKAI_PRINCIPAL_ENFORCE` ('log' by default for one release, 'on' after):
+	 * in 'log' a MISSING seal (or an unset key) is logged and the call runs as
+	 * an UNATTENDED service principal read from the body; a bad seal is refused
+	 * in both modes. See `$lib/server/principal-intake`.
 	 */
-	const verdict = openPrincipal(context.principal, { key: env.JKAI_PRINCIPAL_KEY, aud: 'sr-main', tool: name, ledger: nonces });
-	if (!verdict.ok) {
-		if (verdict.reason === 'unconfigured') throw error(503, 'principal key is not configured');
-		throw error(401, `principal ${verdict.reason}`);
-	}
-	const claims = verdict.claims;
-	if (claims.jobId && context.jobId && claims.jobId !== context.jobId) throw error(401, 'principal does not match the call');
+	const mode = principalEnforceMode(env.JKAI_PRINCIPAL_ENFORCE);
+	const intake = intakePrincipal({ tool: name, args, context, key: env.JKAI_PRINCIPAL_KEY, mode, ledger: nonces });
+	if (!intake.ok) throw error(intake.status, intake.message);
+	const claims = intake.claims;
+	const jobId = intake.jobId;
+	if (intake.notes.length) console.warn(`[principal] ${name}: ${intake.notes.join('; ')}`);
 
 	if (name === '__daydream_commission_v1') {
 		if (lane !== 'destructive' || claims.principalId !== 'owner') throw error(403, 'Commission runtime requires the owner service lane');
@@ -130,12 +135,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		tool: name,
 		lane,
 		principalId: claims.principalId,
-		jobId: claims.jobId ?? context.jobId,
+		jobId,
 		conversationId: context.conversationId,
 		allowedTools: claims.allowedTools,
 		surface: claims.surface,
 		deviceId: claims.deviceId,
-		signed: { via: claims.via, attended: claims.attended },
+		signed: intake.sealed ? { via: claims.via, attended: claims.attended } : undefined,
 	});
 
 	/**
@@ -221,7 +226,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		// that will not serialise throws in `json()`. The framed path already
 		// turned both into a failed result; the debug path should not answer 500
 		// where it answers cleanly.
-		return single(await runTool(registry, name, args, execContextFrom(context, claims, lane, () => {})));
+		return single(await runTool(registry, name, args, execContextFrom(context, claims, jobId, lane, () => {})));
 	}
 
 	const encoder = new TextEncoder();
@@ -243,7 +248,7 @@ export const POST: RequestHandler = async ({ request }) => {
 				registry,
 				name,
 				args,
-				execContextFrom(context, claims, lane, (text) => write(statusLine(text))),
+				execContextFrom(context, claims, jobId, lane, (text) => write(statusLine(text))),
 			);
 			write(resultLine(result));
 			if (!closed) controller.close();
@@ -277,6 +282,7 @@ export const POST: RequestHandler = async ({ request }) => {
 function execContextFrom(
 	context: InvokeContext,
 	claims: PrincipalClaims,
+	jobId: string | undefined,
 	lane: 'standard' | 'destructive' | 'commission',
 	emit: (text: string) => void,
 ): ToolExecContext {
@@ -291,7 +297,7 @@ function execContextFrom(
 	return {
 		conversationId: context.conversationId,
 		workflowId: context.workflowId,
-		jobId: claims.jobId ?? context.jobId,
+		jobId,
 		allowedTools,
 		// Whose turn, from the seal: a member's call arrives as a member's, so
 		// the executor's fail-closed checks fire.

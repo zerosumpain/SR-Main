@@ -82,6 +82,7 @@ const original = {
   destructive: env.JKAI_INVOKE_DESTRUCTIVE_TOKEN,
   commission: env.JKAI_INVOKE_COMMISSION_TOKEN,
   key: env.JKAI_PRINCIPAL_KEY,
+  enforce: env.JKAI_PRINCIPAL_ENFORCE,
 };
 
 let server: http.Server;
@@ -126,6 +127,8 @@ afterAll(async () => {
   else mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN = original.commission;
   if (original.key === undefined) delete mutableEnv.JKAI_PRINCIPAL_KEY;
   else mutableEnv.JKAI_PRINCIPAL_KEY = original.key;
+  if (original.enforce === undefined) delete mutableEnv.JKAI_PRINCIPAL_ENFORCE;
+  else mutableEnv.JKAI_PRINCIPAL_ENFORCE = original.enforce;
 });
 
 beforeEach(() => {
@@ -133,6 +136,8 @@ beforeEach(() => {
   principals.recorded = [];
   mutableEnv.JKAI_INVOKE_TOKEN = STANDARD;
   mutableEnv.JKAI_PRINCIPAL_KEY = KEY;
+  // Full enforcement unless a case says otherwise; 'log' has its own block.
+  mutableEnv.JKAI_PRINCIPAL_ENFORCE = 'on';
   delete mutableEnv.JKAI_INVOKE_DESTRUCTIVE_TOKEN;
   delete mutableEnv.JKAI_INVOKE_COMMISSION_TOKEN;
 });
@@ -181,6 +186,8 @@ describe('POST /api/platform/tools/invoke', () => {
         conversationId: 'c1',
         workflowId: null,
         jobId: 'j1',
+        // A job id crosses only when the seal names it too (see the seal block).
+        principal: { ...OWNER_SESSION, jobId: 'j1' },
         modelContext: { modelId: 'claude-opus-5' } as never,
         thinkingLevel: 'high' as never,
         allowedTools: ['site_blog_list'],
@@ -270,7 +277,8 @@ describe('POST /api/platform/tools/invoke', () => {
       await invokeRemoteTool(
         'site_blog_list',
         {},
-        { emit: () => {}, jobId: 'job-1', conversationId: 'conv-1', principalId: 'owner', allowedTools: ['site_blog_list'] },
+        // An unattended service principal that names its job, so the job crosses.
+        { emit: () => {}, jobId: 'job-1', conversationId: 'conv-1', principalId: 'owner', allowedTools: ['site_blog_list'], principal: { principalId: 'owner', via: 'service', attended: false, jobId: 'job-1' } },
         target(),
       );
       expect(principals.recorded).toEqual([
@@ -281,7 +289,6 @@ describe('POST /api/platform/tools/invoke', () => {
           jobId: 'job-1',
           conversationId: 'conv-1',
           allowedTools: ['site_blog_list'],
-          // A context with no principal is sealed as an unattended service call.
           signed: { via: 'service', attended: false },
         },
       ]);
@@ -460,6 +467,74 @@ describe('POST /api/platform/tools/invoke', () => {
     it('401s a seal for a different job than the call names', async () => {
       const res = await raw(sealed('site_blog_list', OWNER_SESSION, { jobId: 'someone-elses-job' }), { token: STANDARD });
       expect(res.status).toBe(401);
+    });
+
+    it('401s a body jobId when the seal names no job', async () => {
+      const unattended = { principalId: 'owner', via: 'heartbeat' as const, attended: false };
+      const res = await raw(sealed('site_blog_list', unattended, { jobId: 'a-live-chat-job' }), { token: STANDARD });
+      expect(res.status).toBe(401);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('checks a sealed conversation and arguments hash when the issuer binds them', async () => {
+      const { principalArgsHash } = await import('$lib/server/principal-intake');
+      const bind = (extra: Record<string, unknown>) => {
+        const good = sealPrincipal(OWNER_SESSION, { key: KEY, aud: 'sr-main', tool: 'site_blog_list' })!;
+        const claims = JSON.parse(Buffer.from(good.split('.')[0], 'base64url').toString());
+        const body = Buffer.from(JSON.stringify({ ...claims, ...extra })).toString('base64url');
+        const { createHmac } = require('node:crypto') as typeof import('node:crypto');
+        return `${body}.${createHmac('sha256', KEY).update('sr-principal-v1.' + body).digest('base64url')}`;
+      };
+      const ok = await raw({ name: 'site_blog_list', args: { a: 1 }, context: { conversationId: 'c1', principal: bind({ conversationId: 'c1', argsHash: principalArgsHash('site_blog_list', { a: 1 }) }) } }, { token: STANDARD });
+      expect(ok.status).toBe(200);
+      const otherConv = await raw({ name: 'site_blog_list', args: {}, context: { conversationId: 'c2', principal: bind({ conversationId: 'c1' }) } }, { token: STANDARD });
+      expect(otherConv.status).toBe(401);
+      const otherArgs = await raw({ name: 'site_blog_list', args: { a: 2 }, context: { principal: bind({ argsHash: principalArgsHash('site_blog_list', { a: 1 }) }) } }, { token: STANDARD });
+      expect(otherArgs.status).toBe(401);
+      expect(calls).toHaveLength(1);
+    });
+  });
+
+  describe("JKAI_PRINCIPAL_ENFORCE=log (the one-release grace)", () => {
+    beforeEach(() => {
+      mutableEnv.JKAI_PRINCIPAL_ENFORCE = 'log';
+    });
+
+    it('runs an unsealed call, read from the body, as an UNATTENDED service principal', async () => {
+      const res = await raw({ name: 'site_blog_list', context: { principalId: 'owner', jobId: 'job-1', allowedTools: ['site_blog_list'] } }, { token: STANDARD });
+      expect(res.status).toBe(200);
+      expect(calls[0].ctx!.principal).toMatchObject({ principalId: 'owner', via: 'service', attended: false, allowedTools: ['site_blog_list'] });
+    });
+
+    it('is also what an unset key means, rather than a 503', async () => {
+      delete mutableEnv.JKAI_PRINCIPAL_KEY;
+      expect((await raw({ name: 'site_blog_list' }, { token: STANDARD })).status).toBe(200);
+      expect(calls[0].ctx!.principal!.attended).toBe(false);
+    });
+
+    it('defaults to log when unset or unrecognised', async () => {
+      delete mutableEnv.JKAI_PRINCIPAL_ENFORCE;
+      expect((await raw({ name: 'site_blog_list' }, { token: STANDARD })).status).toBe(200);
+      mutableEnv.JKAI_PRINCIPAL_ENFORCE = 'yes please';
+      expect((await raw({ name: 'site_blog_list' }, { token: STANDARD })).status).toBe(200);
+    });
+
+    it('still refuses a forged, expired or replayed seal', async () => {
+      const forged = sealPrincipal(OWNER_SESSION, { key: 'f'.repeat(40), aud: 'sr-main', tool: 'site_blog_list' });
+      expect((await raw({ name: 'site_blog_list', context: { principal: forged } }, { token: STANDARD })).status).toBe(401);
+      const old = sealPrincipal(OWNER_SESSION, { key: KEY, aud: 'sr-main', tool: 'site_blog_list', now: Date.now() - 10 * 60_000 });
+      expect((await raw({ name: 'site_blog_list', context: { principal: old } }, { token: STANDARD })).status).toBe(401);
+      const once = sealed('site_blog_list');
+      expect((await raw(once, { token: STANDARD })).status).toBe(200);
+      expect((await raw(once, { token: STANDARD })).status).toBe(401);
+      // (A string that is not seal-shaped at all is dropped by the contract
+      // reader and so reads as no seal: unattended, like any unsealed call.)
+    });
+
+    it('drops a body jobId the seal does not name, rather than trusting it', async () => {
+      const unattended = { principalId: 'owner', via: 'heartbeat' as const, attended: false };
+      expect((await raw(sealed('site_blog_list', unattended, { jobId: 'a-live-chat-job' }), { token: STANDARD })).status).toBe(200);
+      expect(calls[0].ctx!.jobId).toBeUndefined();
     });
   });
 
