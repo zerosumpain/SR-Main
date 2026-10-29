@@ -13,6 +13,10 @@ import { registerCommissionQuota } from '$lib/daydream/commission-port';
 import { registerCommissionIntake } from '$lib/selfimprove/commission-port';
 registerCommissionQuota();
 registerCommissionIntake();
+// WhatsApp reply codes reach the tool catalogue through a port, so
+// $lib/integrations never imports $lib/tools (see reply-code-port).
+import { registerReplyCodeToolRuntime } from '$lib/tools/reply-code-runtime';
+registerReplyCodeToolRuntime();
 // The capability-gap queue (slice 7b): chat files a not-built-yet ask, the
 // backlog takes it in out of band. Registered by selfimprove, which owns the
 // backlog, so $lib/capabilities stays a leaf.

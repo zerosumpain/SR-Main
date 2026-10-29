@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { openPrincipal } from '$lib/tools/principal-seal';
-import { coercePrincipalClaims, type InvokeContext, type PrincipalClaims } from '$lib/tools/invoke-contract';
+import { openPrincipal } from './principal-seal';
+import { coercePrincipalClaims, type InvokeContext, type PrincipalClaims } from './invoke-contract';
 
 /**
  * Who an invoke-route call is for, from its seal — and what to do while the

@@ -17,7 +17,7 @@ import type { ToolExecContext, ToolResult } from '$lib/tools/registry-internal';
 import { coerceModelContext } from '$lib/constants/default-models';
 import { env } from '$env/dynamic/private';
 import { createNonceLedger } from '$lib/tools/principal-seal';
-import { intakePrincipal, principalEnforceMode } from '$lib/server/principal-intake';
+import { intakePrincipal, principalEnforceMode } from '$lib/tools/principal-intake';
 import { type PrincipalClaims } from '$lib/tools/invoke-contract';
 import { declaredTier } from '$lib/tools/declared-tier';
 import { isThinkingLevel } from '$lib/models/thinking';
@@ -62,7 +62,7 @@ import type { RequestHandler } from './$types';
  * wire is TLS between our own hosts), the seal opens only the one tool it
  * names, carries the same principal it was issued for (it widens nothing),
  * and, once Core seals them, is bound to the call's conversation and
- * arguments (`$lib/server/principal-intake`).
+ * arguments (`$lib/tools/principal-intake`).
  */
 const nonces = createNonceLedger();
 
@@ -121,7 +121,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	 * `JKAI_PRINCIPAL_ENFORCE` ('log' by default for one release, 'on' after):
 	 * in 'log' a MISSING seal (or an unset key) is logged and the call runs as
 	 * an UNATTENDED service principal read from the body; a bad seal is refused
-	 * in both modes. See `$lib/server/principal-intake`.
+	 * in both modes. See `$lib/tools/principal-intake`.
 	 */
 	const mode = principalEnforceMode(env.JKAI_PRINCIPAL_ENFORCE);
 	const intake = intakePrincipal({ tool: name, args, context, key: env.JKAI_PRINCIPAL_KEY, mode, ledger: nonces });

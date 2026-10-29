@@ -90,6 +90,9 @@ describe('WHATSAPP_CONFIRM_BY_CODE', () => {
 
   it('is refused for every destructive, always-confirm or commission tool by the live eligibility check', async () => {
     const { replyCodeEligible } = await import('./reply-code.server');
+    // Unregistered, nothing is eligible; then as hooks.server.ts registers it.
+    expect(await replyCodeEligible('ha_call_service', { domain: 'light', service: 'turn_off' })).toBe(false);
+    (await import('$lib/tools/reply-code-runtime')).registerReplyCodeToolRuntime();
     // A representative call each; ha_call_service is eligible only in its safe domains.
     const sample: Record<string, Record<string, unknown>> = { ha_call_service: { domain: 'light', service: 'turn_off' } };
     for (const name of WHATSAPP_CONFIRM_BY_CODE) expect(await replyCodeEligible(name, sample[name] ?? {}), name).toBe(true);

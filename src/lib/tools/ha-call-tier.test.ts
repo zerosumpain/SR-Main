@@ -39,6 +39,8 @@ const reg = await import('./registry');
 const { callTier, registerCallTier } = await import('./declared-tier');
 const { haCallServiceConfirm } = await import('./tools/home-assistant');
 const { replyCodeEligible } = await import('$lib/integrations/whatsapp/reply-code.server');
+// As hooks.server.ts registers it at boot.
+(await import('./reply-code-runtime')).registerReplyCodeToolRuntime();
 const { fireCallback } = await import('$lib/scheduled/executor');
 const { heartbeatToolNames } = await import('$lib/heartbeat/llm');
 

@@ -2,8 +2,7 @@ import { sql, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { conversations, orchestratorChats } from '$lib/db/schema';
 import { isOwnerNumber } from '$lib/config/owner-number';
-import { callTier } from '$lib/tools/declared-tier';
-import { unattendedPrincipal } from '$lib/tools/in-process-principal';
+import { replyCodeToolRuntime } from './reply-code-port';
 import type { FrozenCall } from '$lib/jkai/chat/turn';
 import { WHATSAPP_CONFIRM_BY_CODE } from './tool-whitelist';
 import {
@@ -67,12 +66,12 @@ export const sqlReplyCodeStore: ReplyCodeStore = {
  */
 export async function replyCodeEligible(tool: string, args: Record<string, unknown> = {}): Promise<boolean> {
   if (!(WHATSAPP_CONFIRM_BY_CODE as readonly string[]).includes(tool)) return false;
-  const { loadToolRegistry } = await import('$lib/tools/load-registry');
-  const def = (await loadToolRegistry()).getTool(tool);
-  if (!def) return false;
+  const rt = replyCodeToolRuntime();
+  if (!rt) return false;
   // The per-call tier: `ha_call_service` on a lock is 'always', so no code
   // is ever issued (or honoured) for it.
-  const tier = callTier(def, args);
+  const tier = await rt.tierOf(tool, args);
+  if (!tier) return false;
   return tier.effect === 'mutate' && tier.confirm !== 'always' && tier.lane === 'standard';
 }
 
@@ -118,8 +117,8 @@ export function askForReplyCode(from: string, conversationId: string, call: Froz
 
 /**
  * The intercept's step: John's message against his open code, if any. The
- * confirmed call runs in this process as an unattended WhatsApp principal
- * that lists exactly that one tool, so `executeTool`'s principal check still
+ * confirmed call runs through the registered tool runtime (`./reply-code-port`)
+ * as an unattended WhatsApp principal that lists exactly that one tool, so `executeTool`'s principal check still
  * refuses anything destructive or always-confirm, whatever the row says.
  */
 export async function handleReplyCode(from: string, text: string): Promise<ReplyCodeAnswer> {
@@ -136,12 +135,9 @@ export async function handleReplyCode(from: string, text: string): Promise<Reply
       {
         ...deps(),
         execute: async (tool, args) => {
-          const { executeSiteTool } = await import('$lib/tools/executor');
-          return executeSiteTool(tool, args, {
-            emit: () => {},
-            conversationId: conv?.id,
-            principal: unattendedPrincipal('whatsapp-reply-code', [tool], 'whatsapp'),
-          });
+          const rt = replyCodeToolRuntime();
+          if (!rt) return { success: false, error: 'The tool catalogue is not available in this process.' };
+          return rt.run(tool, args, conv?.id);
         },
       },
     );

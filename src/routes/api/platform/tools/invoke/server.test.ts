@@ -477,7 +477,7 @@ describe('POST /api/platform/tools/invoke', () => {
     });
 
     it('checks a sealed conversation and arguments hash when the issuer binds them', async () => {
-      const { principalArgsHash } = await import('$lib/server/principal-intake');
+      const { principalArgsHash } = await import('$lib/tools/principal-intake');
       const bind = (extra: Record<string, unknown>) => {
         const good = sealPrincipal(OWNER_SESSION, { key: KEY, aud: 'sr-main', tool: 'site_blog_list' })!;
         const claims = JSON.parse(Buffer.from(good.split('.')[0], 'base64url').toString());
