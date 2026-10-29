@@ -27,6 +27,7 @@ vi.mock('$lib/server/models/workload-settings', () => ({
   resolveChatTurnModel: async () => ({ provider: 'openrouter', modelId: 'test/model' }),
 }));
 vi.mock('./inbound-intercept', () => ({ interceptOwnerInbound: async () => ({ handled: false }) }));
+vi.mock('$lib/config/owner-number', () => ({ isOwnerNumber: (n: string) => n === '447700900123' }));
 vi.mock('./reply-code.server', () => ({
   askForReplyCode: async (...a: unknown[]) => {
     h.asked.push(a);
