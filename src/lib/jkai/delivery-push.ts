@@ -21,12 +21,27 @@ export const DELIVERY_COALESCE_MINUTES = 15;
 export type DeliveryPushBudget = 'sent' | 'daily_cap' | 'coalesced';
 
 /** The sentence the Builds category carries, so the cap is visible. */
-export const DELIVERY_PUSH_BUDGET_LINE = `Commissioned-build stage pushes: at most ${JKAI_PUSH_DAILY_CAP} a day, one per build per ${DELIVERY_COALESCE_MINUTES} minutes; the rest are noted in the thread.`;
+export const DELIVERY_PUSH_BUDGET_LINE = `Commissioned-build stage pushes: at most ${JKAI_PUSH_DAILY_CAP} a day, one per build per ${DELIVERY_COALESCE_MINUTES} minutes, except a new stage that needs you or a shipped build; the rest are noted in the thread.`;
+
+/**
+ * How a push weighs against coalescing. 'blocking' (the owner must act: needs
+ * you, a pull request or a result waiting) and 'terminal' (shipped) are never
+ * folded into an earlier push for the same build — a "needs you" ten minutes
+ * after a "ready for you" is news — unless it repeats the very same stage
+ * (same collapse key), which is the duplicate coalescing exists to catch.
+ * 'progress' coalesces per build as before.
+ */
+export type DeliveryPushWeight = 'blocking' | 'terminal' | 'progress';
+
+/** The key a push coalesces under: the build, or the build and its stage. */
+export function deliveryCollapseKey(buildId: string, title: string, weight: DeliveryPushWeight): string {
+  return weight === 'progress' ? `delivery:${buildId}` : `delivery:${buildId}:${title.trim().toLowerCase()}`;
+}
 
 export function deliveryPushDecision(input: {
-  /** Delivery pushes that rang the phone in the last 24 hours. */
+  /** Delivery pushes that actually reached a channel in the last 24 hours. */
   sentToday: number;
-  /** When this build last rang the phone, or null. */
+  /** When a push with this collapse key last reached a channel, or null. */
   lastForBuildAt: Date | null;
   now: Date;
 }): DeliveryPushBudget {

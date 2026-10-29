@@ -63,7 +63,7 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     // The jkai push budget (decision 16) is stated here because this is the
     // line the phone's settings screen shows; keep it in step with
     // DELIVERY_PUSH_BUDGET_LINE in $lib/jkai/delivery-push (a test pins it).
-    description: 'Autonomous builds and workflow runs reaching a terminal state. Commissioned-build stage pushes: at most 5 a day, one per build per 15 minutes; the rest are noted in the thread.',
+    description: 'Autonomous builds and workflow runs reaching a terminal state. Commissioned-build stage pushes: at most 5 a day, one per build per 15 minutes, except a new stage that needs you or a shipped build; the rest are noted in the thread.',
     whatsapp: true,
     native: true,
     minIntervalSeconds: 0,
