@@ -21,6 +21,8 @@ export const CAPABILITY_GAP_COLLECTION = 'capability_gaps';
 /** How often the background service sweeps for gaps a restart stranded. */
 export const GAP_DRAIN_INTERVAL_MS = 5 * 60_000;
 const DRAIN_BATCH = 20;
+/** A gap the nightly intake cap turned away waits this long before it is tried again. */
+export const GAP_CAPPED_RETRY_MS = 60 * 60_000;
 
 export interface QueuedGap {
   capabilityId: string | null;
@@ -31,6 +33,9 @@ export interface QueuedGap {
   slug?: string;
   queuedAt: string;
   filedAt?: string;
+  /** Set while the backlog's daily intake cap holds it back: still queued, retried after this. */
+  retryAfter?: string;
+  cappedCount?: number;
 }
 
 async function ensureQueue(): Promise<void> {
@@ -104,8 +109,11 @@ async function drainOnce(): Promise<number> {
   if (!records.length) return 0;
   const { intakeIdeas } = await import('./backlog');
   let done = 0;
+  const nowMs = Date.now();
   for (const rec of records) {
     const gap = rec.data as unknown as QueuedGap;
+    // Held back by the intake cap: not until its retry time.
+    if (gap.retryAfter && Date.parse(gap.retryAfter) > nowMs) continue;
     const result = await intakeIdeas([
       {
         title: gap.title,
@@ -123,7 +131,17 @@ async function drainOnce(): Promise<number> {
     ]);
     const outcome = result.outcomes[0] ?? 'skipped';
     const slug = result.added[0] ?? result.merged[0]?.into;
-    const next: QueuedGap = { ...gap, status: outcome, filedAt: new Date().toISOString(), ...(slug ? { slug } : {}) };
+    if (outcome === 'capped') {
+      // The backlog took its day's worth of new ideas. The ask was told it
+      // was queued, so it stays queued — tried again after a wait — rather
+      // than being parked as 'capped', which no sweep ever looked at again.
+      const held: QueuedGap = { ...gap, status: 'queued', retryAfter: new Date(nowMs + GAP_CAPPED_RETRY_MS).toISOString(), cappedCount: (gap.cappedCount ?? 0) + 1 };
+      await upsertRecord(CAPABILITY_GAP_COLLECTION, { key: rec.key as string, data: asData(held) }, SYSTEM_ACTOR);
+      done++;
+      continue;
+    }
+    const { retryAfter: _r, ...rest } = gap;
+    const next: QueuedGap = { ...rest, status: outcome, filedAt: new Date().toISOString(), ...(slug ? { slug } : {}) };
     // A row the intake skipped (an unreadable backlog) stays queued for the next sweep.
     if (outcome !== 'skipped') await upsertRecord(CAPABILITY_GAP_COLLECTION, { key: rec.key as string, data: asData(next) }, SYSTEM_ACTOR);
     done++;
