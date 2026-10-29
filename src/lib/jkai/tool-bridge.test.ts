@@ -11,6 +11,7 @@ import {
   manifestForBuild,
   invokeTool,
   BRIDGE_MUTATES,
+  BRIDGE_READS,
   buildWriteRefusal,
 } from './tool-bridge';
 import { getTool } from '$lib/tools/registry';
@@ -54,8 +55,10 @@ describe('destructive tools are not on the bridge', () => {
     if (getTool('gmail_send')) expect(await isBridgeable('gmail_send')).toBe(false);
   });
 
-  it('allows read-only tools', async () => {
-    if (getTool('workflow_list')) expect(await isBridgeable('workflow_list')).toBe(true);
+  it('allows the reviewed build and catalogue reads', async () => {
+    for (const n of ['build_read_file', 'codegraph_query', 'skill_view', 'tool_search', 'workflow_list_node_types']) {
+      expect(await isBridgeable(n), n).toBe(true);
+    }
   });
 
   it('omits them from the manifest and the definitions', async () => {
@@ -140,5 +143,40 @@ describe('the bridge offers reads and only the reviewed build mutates', () => {
     await expect(
       invokeTool('build_write_file', { buildId: 'build-other', path: 'x', content: 'y' }, ['build_write_file'], { buildId: 'build-abc' }),
     ).rejects.toThrow(/own workspace/);
+  });
+});
+
+describe('the bridge reads are a closed list', () => {
+  const PRIVATE = [
+    'gmail_search', 'gmail_get_message', 'mail_search', 'mail_read', 'recall_memories', 'memory_search', 'session_search',
+    'knowledge_search', 'health_stats', 'health_sleep', 'intel_find', 'activity_search', 'apple_calendar_list',
+    'file_read', 'datastore_query', 'api_secrets_list', 'browser_snapshot', 'workflow_list', 'workflow_get_run', 'fetch_url',
+  ];
+
+  it.each(PRIVATE)('never offers %s, even to an "all" build', async (name) => {
+    expect(getTool(name), name).toBeDefined();
+    expect(await isBridgeable(name)).toBe(false);
+    const offered = (await definitionsForBuild(['all'])).map((d) => d.function.name);
+    expect(offered).not.toContain(name);
+    await expect(invokeTool(name, {}, [name], { buildId: 'build-abc' })).rejects.toThrow(/not available to builds|not given/);
+  });
+
+  it('never offers the chat-registered private reads (trips, captures, daydream, owner data)', async () => {
+    await import('$lib/daydream/chat-tools');
+    await import('$lib/owner-data/chat-tools');
+    await import('$lib/trips/chat-tools');
+    await import('$lib/captures/chat-tools');
+    const offered = new Set((await definitionsForBuild(['all'])).map((d) => d.function.name));
+    for (const n of offered) expect([...BRIDGE_READS, ...BRIDGE_MUTATES] as readonly string[], n).toContain(n);
+  });
+
+  it('offers web search only to a build that names research, and never a fetch', async () => {
+    const all = (await definitionsForBuild(['all'])).map((d) => d.function.name);
+    expect(all).not.toContain('research_web_search');
+    const research = (await definitionsForBuild(['research', 'builds'])).map((d) => d.function.name);
+    expect(research).toContain('research_web_search');
+    expect(research).not.toContain('fetch_url');
+    expect(research).not.toContain('research_get_report');
+    expect((await definitionsForBuild(['web'])).map((d) => d.function.name)).not.toContain('fetch_url');
   });
 });
