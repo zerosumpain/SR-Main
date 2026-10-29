@@ -10,6 +10,10 @@ import { extensionForMime } from '$lib/jkai/media/mime';
 import type { WhatsAppInboundMessage, WhatsAppSendResult } from './types';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 import { WHATSAPP_CONFIRM_BY_CODE, WHATSAPP_TOOL_WHITELIST } from './tool-whitelist';
+import { isOwnerNumber } from '$lib/config/owner-number';
+
+/** What a non-owner sender is told: nothing about the owner, nothing run. */
+export const NON_OWNER_REPLY = 'This number only answers its owner.';
 
 type SendFn = (to: string, text: string) => Promise<WhatsAppSendResult>;
 type SendAttachmentFn = (to: string, att: JkaiAttachment, caption?: string) => Promise<WhatsAppSendResult>;
@@ -71,6 +75,18 @@ export class OrchestratorBridge {
 	async handleMessage(msg: WhatsAppInboundMessage): Promise<void> {
 		const { from, text, replyJid } = msg;
 		const replyTo = replyJid || from;
+
+		// Owner only. The allow-list decides who the socket listens to; it does
+		// not make anyone the owner, and every turn below runs with the owner's
+		// tools, memory and private reads (the thread row carries no member
+		// principal). An allow-listed non-owner number is refused here, before
+		// the intercepts (daydream feedback is not owner-gated) and before any
+		// conversation row or chatTurn.
+		if (!isOwnerNumber(from)) {
+			console.log('[whatsapp] Refused a message from an allow-listed number that is not the owner');
+			await this.sendFn(replyTo, NON_OWNER_REPLY).catch(() => {});
+			return;
+		}
 
 		if (this.isResetCommand(text)) {
 			await this.clearConversation(from);
