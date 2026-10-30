@@ -64,6 +64,10 @@
 /api/native/daydream/follow
 /api/native/daydream/shelf
 /api/native/daydream/solve
+/api/native/drive
+/api/native/drive/files
+/api/native/drive/files/[id]
+/api/native/drive/folders
 /api/native/family/alarm
 /api/native/family/alarm/cancel
 /api/native/family/backlog

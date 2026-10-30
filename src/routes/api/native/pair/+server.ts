@@ -190,6 +190,7 @@ async function mayHoldDevice(email: string): Promise<boolean> {
       (satisfies(member.grants, 'news:self') ||
         satisfies(member.grants, 'jkai.chat:self') ||
         satisfies(member.grants, 'games:self') ||
+        satisfies(member.grants, 'drive:self') ||
         // The family circle pairs from the one code too: the site credential
         // is how the phone then fetches its health & location pairing.
         satisfies(member.grants, 'family:circle'))

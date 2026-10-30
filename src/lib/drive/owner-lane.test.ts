@@ -17,6 +17,8 @@ const OWNER_LANE = [
   'src/lib/jkai/media/drive-link.ts',
   'src/routes/api/drive/folders/+server.ts',
   'src/lib/file-index/store.ts',
+  // The phone's drive writes owner rows only from the owner's own space.
+  'src/lib/drive/native-drive.ts',
 ] as const;
 
 describe("the owner lane reads and writes the owner's files only", () => {

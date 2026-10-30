@@ -79,6 +79,7 @@ export const AREA_COPY: Record<string, string> = {
   'companion-policy': 'what the companion may collect',
   connections: 'which accounts are connected',
   daydream: 'daydream notes and verdicts',
+  drive: 'your own files and the family’s shared folder',
   family: 'steps, tasks, forecasts and alarms',
   games: 'game rooms and the leaderboard',
   health: 'the health hub, activities, routes and recordings',
