@@ -89,7 +89,14 @@ async function call(
   let res: RawExtractedResponse;
   try {
     res = await requestExtracted('drive', method, path, {
-      headers: { ...forHeaders(caller), ...(options.contentType ? { 'content-type': options.contentType } : {}) },
+      // `accept` decides how SvelteKit renders Drive's `error()`: without it a
+      // refusal comes back as an HTML page, and the phone heard "Drive is not
+      // answering" for a 404 or a 400 that had a sentence of its own.
+      headers: {
+        accept: 'application/json',
+        ...forHeaders(caller),
+        ...(options.contentType ? { 'content-type': options.contentType } : {}),
+      },
       body: options.body,
       timeoutMs: options.timeoutMs ?? 15_000,
     });
