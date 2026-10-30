@@ -36,6 +36,11 @@ const APPS = {
 	// token — the same credential Core presents when it runs Main's tools, so
 	// Main already holds it. See $lib/intel-client/chat-context.
 	'jkai-core': { port: 5330, tokenEnv: 'JKAI_INVOKE_TOKEN' },
+	// SR-Drive's gateway service lane: signs the owner, whom Drive's app-lane
+	// routes (/api/files/app/*) then narrow to the person on the phone. The
+	// SR app's Drive goes this way because Drive owns the bytes — see
+	// $lib/drive/native-drive.
+	drive: { port: 5300, tokenEnv: 'DRIVE_SERVICE_TOKEN' },
 } as const satisfies Record<string, { port: number; tokenEnv: string }>;
 
 export type ExtractedApp = keyof typeof APPS;
@@ -135,4 +140,77 @@ export function deleteFromExtracted<T>(
 	options: { timeoutMs?: number; port?: number } = {},
 ): Promise<T> {
 	return call<T>(app, 'DELETE', path, undefined, options);
+}
+
+export interface RawExtractedResponse {
+	status: number;
+	headers: http.IncomingHttpHeaders;
+	body: Buffer;
+}
+
+/**
+ * One request, answered as it came — any status, the headers and the raw
+ * bytes. For callers that relay a refusal's own words or stream a file, which
+ * the JSON helpers above cannot (they throw on any non-2xx).
+ */
+export function requestExtracted(
+	app: ExtractedApp,
+	method: 'GET' | 'POST' | 'DELETE',
+	path: string,
+	{
+		headers = {},
+		body,
+		timeoutMs = 10_000,
+		maxBytes = 64 * 1024 * 1024,
+	}: { headers?: Record<string, string>; body?: Buffer; timeoutMs?: number; maxBytes?: number } = {},
+): Promise<RawExtractedResponse> {
+	const token = process.env[APPS[app].tokenEnv];
+	if (!token) {
+		return Promise.reject(
+			new ExtractedAppError(`${APPS[app].tokenEnv} is not set, so the ${app} service lane is closed`),
+		);
+	}
+	return new Promise<RawExtractedResponse>((resolve, reject) => {
+		const request = http.request(
+			{
+				host: '127.0.0.1',
+				port: APPS[app].port,
+				path,
+				method,
+				headers: {
+					...headers,
+					Host: CANONICAL_HOST,
+					Authorization: `Bearer ${token}`,
+					...(body ? { 'content-length': body.length } : {}),
+				},
+				timeout: timeoutMs,
+			},
+			(response) => {
+				const chunks: Buffer[] = [];
+				let size = 0;
+				response.on('data', (chunk: Buffer) => {
+					size += chunk.length;
+					if (size > maxBytes) {
+						request.destroy(new ExtractedAppError(`${app}${path} answered more than ${maxBytes} bytes`));
+						return;
+					}
+					chunks.push(chunk);
+				});
+				response.on('end', () =>
+					resolve({ status: response.statusCode ?? 0, headers: response.headers, body: Buffer.concat(chunks) }),
+				);
+			},
+		);
+		const deadline = setTimeout(() => {
+			request.destroy(new ExtractedAppError(`${app}${path} exceeded ${timeoutMs}ms`));
+		}, timeoutMs);
+		deadline.unref?.();
+		request.on('close', () => clearTimeout(deadline));
+		request.on('timeout', () => request.destroy(new ExtractedAppError(`${app}${path} timed out after ${timeoutMs}ms`)));
+		request.on('error', (error) =>
+			reject(error instanceof ExtractedAppError ? error : new ExtractedAppError(String(error))),
+		);
+		if (body) request.write(body);
+		request.end();
+	});
 }

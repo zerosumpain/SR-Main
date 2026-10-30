@@ -1,12 +1,11 @@
 import type { RequestHandler } from './$types';
 import { error } from '@sveltejs/kit';
 import { withNativeAccess } from '$lib/server/native-handler';
-import { driveCaller, listSpace } from '$lib/drive/native-drive';
-import { parseSpace } from '$lib/drive/app-lane';
+import { driveCaller, listSpace, parseSpace } from '$lib/drive/native-drive';
 
 /**
  * GET /api/native/drive?space=mine|shared&folder=a/b — one folder of one of the
- * caller's two spaces ($lib/drive/app-lane): their own, or the family's shared
+ * caller's two spaces (SR-Drive's $lib/drive/app-lane decides): their own, or the family's shared
  * folder. `drive:self` (the owner holds everything). Nothing else of the drive
  * is reachable from the phone — not another member's folder, whatever their
  * level, and the owner's files only from the owner's phone.

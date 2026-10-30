@@ -1,8 +1,7 @@
 import type { RequestHandler } from './$types';
 import { error, json } from '@sveltejs/kit';
 import { withNativeAccess } from '$lib/server/native-handler';
-import { MAX_UPLOAD_BYTES, driveCaller, uploadFile } from '$lib/drive/native-drive';
-import { parseSpace } from '$lib/drive/app-lane';
+import { MAX_UPLOAD_BYTES, driveCaller, parseSpace, uploadFile } from '$lib/drive/native-drive';
 
 /**
  * POST /api/native/drive/files?space=&folder=&filename= — one file, as the raw
@@ -25,7 +24,10 @@ export const POST: RequestHandler = withNativeAccess('drive', async (event, iden
     space,
     folder: url.searchParams.get('folder'),
     filename: url.searchParams.get('filename'),
-    mimeType: (request.headers.get('content-type') ?? 'application/octet-stream').slice(0, 120),
+    // The file's real type rides in `type`: the phone sends every body as
+    // application/octet-stream, because SvelteKit refuses a text/plain POST
+    // without a matching Origin as a cross-site form.
+    mimeType: (url.searchParams.get('type') || request.headers.get('content-type') || 'application/octet-stream').slice(0, 120),
     bytes: Buffer.from(body),
   });
   return json({ file }, { status: 201 });
