@@ -103,6 +103,13 @@ describe('every native route gates itself', () => {
         '/chat/conversations/[id]/messages/+server.ts',
         '/chat/conversations/[id]/model/+server.ts',
         '/companion-pair/+server.ts',
+        // Drive on the phone: drive:self, and then only the caller's own space
+        // and the family's shared folder ($lib/drive/app-lane) — never another
+        // member's folder, and the owner's files only from the owner's phone.
+        '/drive/+server.ts',
+        '/drive/files/+server.ts',
+        '/drive/files/[id]/+server.ts',
+        '/drive/folders/+server.ts',
         // The family alarm: raise, stand down and list active alarms. The
         // forecast's audience (owner, or a family:circle/admin member via
         // `peopleViewerOf` + `familyCaller`); everyone else 403s. Standing one

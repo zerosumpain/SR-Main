@@ -442,7 +442,7 @@ async function sitePairFor(
   wanted: string | null | undefined,
   now: Date,
 ): Promise<SitePair | null> {
-  if (access.owner || !(access.chat || access.news || access.games) || !sitePairWanted(wanted, now)) {
+  if (access.owner || !(access.chat || access.news || access.games || access.drive) || !sitePairWanted(wanted, now)) {
     forgetPairingCode(email, 'pair');
     return null;
   }

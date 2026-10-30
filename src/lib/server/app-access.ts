@@ -25,6 +25,8 @@ export interface AppAccess {
   intel: boolean;
   /** games:self — the Games tab. */
   games: boolean;
+  /** drive:self — Drive in the hub: their own space and the family's shared folder. */
+  drive: boolean;
   /** Sees the household: the owner, or Family Circle + a household row (`peopleViewerForEmail`). */
   family: boolean;
 }
@@ -37,6 +39,7 @@ export const NO_APP_ACCESS: Readonly<AppAccess> = Object.freeze({
   notes: false,
   intel: false,
   games: false,
+  drive: false,
   family: false,
 });
 
@@ -47,7 +50,7 @@ export function appAccessFrom(input: {
   family: boolean;
 }): AppAccess {
   if (input.owner) {
-    return { owner: true, chat: true, news: true, research: true, notes: true, intel: true, games: true, family: true };
+    return { owner: true, chat: true, news: true, research: true, notes: true, intel: true, games: true, drive: true, family: true };
   }
   if (!input.grants) return { ...NO_APP_ACCESS, family: input.family };
   const held = [...input.grants];
@@ -59,6 +62,7 @@ export function appAccessFrom(input: {
     notes: satisfies(held, 'jkai.notes:self'),
     intel: satisfies(held, 'jkai.intel:self'),
     games: satisfies(held, 'games:self'),
+    drive: satisfies(held, 'drive:self'),
     family: input.family,
   };
 }
