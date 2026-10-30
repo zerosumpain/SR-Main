@@ -49,6 +49,8 @@ describe('who Main names to Drive', () => {
     expect(h.calls[0].headers['x-sr-app-for']).toBe('ann@example.test');
     expect(h.calls[1].headers['x-sr-app-for']).toBeUndefined();
     expect(h.calls[0].path).toBe('/api/files/app?space=mine');
+    // Or Drive's refusals arrive as an HTML page instead of their sentence.
+    expect(h.calls[0].headers.accept).toBe('application/json');
   });
 
   it('escapes the folder and names into the query', async () => {
