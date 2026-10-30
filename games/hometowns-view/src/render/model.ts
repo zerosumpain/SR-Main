@@ -71,8 +71,24 @@ export interface MapModel {
   scaffold: Uint8Array;
   /** Lens step per tile (0–4), or 255 where the lens says nothing (or no lens). */
   lens: Uint8Array;
+  /** True while a lens greys the map: the painter greys its own trim colours too. */
+  lensOn: boolean;
+  /** What the painter dresses each tile as (time-lapse masks applied): */
+  /** road kind + 1 (ROAD_KINDS), RAIL_TILE for a railway, 0 for anything else. */
+  road: Uint8Array;
+  /** zone + 1 (ZONES) on a zoned tile, else 0. */
+  zone: Uint8Array;
+  /** TERRAIN_KINDS index under the tile. */
+  terrain: Uint8Array;
+  /** 1 under a placed building's footprint. */
+  built: Uint8Array;
+  /** 1 on land in an open parcel (the town's own land). */
+  open: Uint8Array;
   buildings: BuildingRect[];
 }
+
+/** `road` value for a railway tile. */
+export const RAIL_TILE = 9;
 
 /**
  * The ground colour of one tile, before any lens. `planes` and `terrain`
@@ -105,16 +121,29 @@ export function mapModel(t: TownState, lens: LensData | null = null, mask: Uint8
   const tier = new Uint8Array(TILES);
   const block = new Uint32Array(TILES);
   const scaffold = new Uint8Array(TILES);
+  const road = new Uint8Array(TILES);
+  const zone = new Uint8Array(TILES);
+  const kind = new Uint8Array(TILES);
+  const built = new Uint8Array(TILES);
+  const open = new Uint8Array(TILES);
   const terrain = terrainOf(t);
   for (let i = 0; i < TILES; i++) {
     const m = mask ? mask[i] : MASK_SHOWN;
+    kind[i] = terrainKind(terrain[i]);
+    const x = i % MAP;
+    open[i] = parcelOpen(t, x, (i - x) / MAP) ? 1 : 0;
     if (m === MASK_TERRAIN) {
-      ground[i] = TERRAIN[terrainKind(terrain[i])] ?? TERRAIN[0];
+      ground[i] = TERRAIN[kind[i]] ?? TERRAIN[0];
       continue;
     }
     ground[i] = groundColour(t, i, p, terrain);
     const u = p.use[i];
-    if (useCat(u) !== CAT_ZONE) continue;
+    const cat = useCat(u);
+    if (cat === CAT_ROAD) road[i] = usePayload(u) + 1;
+    else if (cat === CAT_RAIL) road[i] = RAIL_TILE;
+    else if (cat === CAT_BUILDING) built[i] = 1;
+    if (cat !== CAT_ZONE) continue;
+    zone[i] = usePayload(u) + 1;
     if (m === MASK_LOT || m === MASK_SCAFFOLD) {
       scaffold[i] = m === MASK_SCAFFOLD ? 1 : 0;
       continue;
@@ -139,7 +168,7 @@ export function mapModel(t: TownState, lens: LensData | null = null, mask: Uint8
   const buildings = buildingRects(t).filter((b) => !mask || mask[tileIndex(b.x, b.y)] === MASK_SHOWN || mask[tileIndex(b.x, b.y)] === MASK_SCAFFOLD);
   if (mask) for (const b of buildings) if (mask[tileIndex(b.x, b.y)] === MASK_SCAFFOLD) b.building = Math.max(1, b.building);
   if (lens) for (const b of buildings) b.colour = grey(b.colour);
-  return { ground, level, tier, block, scaffold, lens: steps, buildings };
+  return { ground, level, tier, block, scaffold, lens: steps, lensOn: !!lens, road, zone, terrain: kind, built, open, buildings };
 }
 
 /** Placed buildings as rectangles in tile space, in record order. */
