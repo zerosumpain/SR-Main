@@ -60,7 +60,6 @@ import {
   type ParamsVersion,
   type SeatSettings,
 } from './engine/index';
-import type { RoomBase } from '../catalogue';
 import { eraseMayor, formerSeat } from './erase-mayor';
 import { closePushWindow, emptyPush, openPushWindow, prunePushWindow, type PushState } from './push';
 import { SOLO_PAUSE_MESSAGE, seatedMayors, soloMayor, soloPauser } from './solo';
@@ -585,8 +584,12 @@ export const durable = {
   schema: SCHEMA,
   revive,
   reviveAll: true,
-  erasePlayer: (room: RoomBase, playerId: string, now: number): RoomBase | null =>
-    erasePlayer(room as unknown as Room, playerId, now) as unknown as RoomBase | null,
+  // Method syntax, so it is checked against the catalogue's RoomBase bivariantly
+  // without importing the catalogue: that would pull every game, Quiz Night's
+  // server half and its $lib imports into the map page's type check.
+  erasePlayer(room: Room, playerId: string, now: number): Room | null {
+    return erasePlayer(room, playerId, now);
+  },
 };
 export const paces = ['async'] as const;
 export const maxPlayers = MAX_SEATS;
