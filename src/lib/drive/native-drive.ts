@@ -1,347 +1,46 @@
-// The phone's Drive, against the one `workflow_files` table and byte store that
-// SR-Drive also serves. WHICH rows a caller reaches is $lib/drive/app-lane;
-// this module only reads and writes what that has already allowed.
+// The SR app's Drive, as Main relays it.
 //
-// Why here and not proxied to SR-Drive: the phone's identity is a device
-// credential that only Main can verify, and Drive's gateway signs nothing but
-// a browser session or the owner's service lane. Main already shares the table
-// and the store (`$lib/file-store/storage` is byte-identical with Drive's), and
-// keeps the same invariants Drive's writers keep:
+// Main verifies the PHONE — the device credential and `drive:self`, in
+// `withNativeAccess('drive', …)` — and SR-Drive does everything else: which
+// rows the person reaches (Drive's $lib/drive/app-lane), the bytes, the
+// stores, the quota, the index and the intel jobs. Main calls Drive's
+// owner-only /api/files/app/* over the gateway's service lane and names the
+// person on the phone in `x-sr-app-for`; Drive refuses anyone who is not a
+// drive member right now, and can only NARROW the owner identity it is given.
 //
-//   - principal_id === principalForName(name)       (app-lane `storedName`)
-//   - a member's file is never embedded or fed to intel; an owner upload is
-//     indexed exactly as Drive's upload does it, an owner delete queues the
-//     same `file-deleted` intel job Drive does
-//   - `disk_path` and content hashes never leave the server
-//   - a member's folder holds at most DRIVE_MEMBER_QUOTA_BYTES (2 GB), and so
-//     does the shared one
+// Why a relay and not the table: the store's bytes are Drive's. In production
+// Main's `sr-main` user cannot read WORKFLOW_FILES_ROOT at all (its ACL entry
+// sits under an empty mask), and connected Azure/S3 stores are Drive's job.
+// The first cut of this lane read the table and the disk itself and answered
+// EACCES on the first download.
 //
-// So /drive on the web and the phone show the same files: a member who also
-// holds `drive:self` sees their phone uploads under their own folder there.
+// What Main adds on the way back: the shared folder's uploader emails become
+// first names from the household roster, and the emails are dropped — a
+// phone never receives anyone's address.
 
-import { error } from '@sveltejs/kit';
-import { and, eq, inArray, sql } from 'drizzle-orm';
-import { env } from '$env/dynamic/private';
+import { error, isHttpError } from '@sveltejs/kit';
+import { inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { householdMember, workflowFiles, type WorkflowFile } from '$lib/db/schema';
-import { allocateDiskPath, deleteFile, readBuffer, saveBuffer } from '$lib/file-store/storage';
-import { MEMBER_ROOT } from '$lib/drive/namespace';
-import {
-  FOLDER_MARKER,
-  OWNER_PRINCIPAL,
-  cleanFolder,
-  cleanName,
-  inScope,
-  listFolder,
-  mayDelete,
-  rowScope,
-  spaceScope,
-  storedName,
-  underFolder,
-  viewName,
-  withSuffix,
-  type AppDriveCaller,
-  type DriveSpace,
-  type ListedFolder,
-  type SpaceScope,
-} from '$lib/drive/app-lane';
+import { householdMember } from '$lib/db/schema';
+import { requestExtracted, type RawExtractedResponse } from '$lib/server/extracted-app';
 
-/** Per file, as SR-Drive's upload. */
+export type DriveSpace = 'mine' | 'shared';
+
+export function parseSpace(raw: string | null | undefined): DriveSpace | null {
+  return raw === 'mine' || raw === 'shared' ? raw : null;
+}
+
+/** Who is asking: established by `withNativeAccess('drive', …)`, never by the request. */
+export type AppDriveCaller =
+  | { kind: 'owner'; email: string }
+  | { kind: 'member'; email: string; principalId: string };
+
+/** Per file — SR-Drive's limit; checked here too so a refusal is cheap. */
 export const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 
-/** Mirrors SR-Drive's `memberQuotaBytes`. The owner's drive has no quota. */
-export function memberQuotaBytes(): number {
-  const raw = Number(env.DRIVE_MEMBER_QUOTA_BYTES);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 2 * 1024 ** 3;
-}
+const APP_FOR_HEADER = 'x-sr-app-for';
 
-const PERMISSIONS = { read: true, write: false, append: false, delete: false };
-
-export interface NativeDriveFile {
-  id: string;
-  /** The file's own name. */
-  name: string;
-  /** Relative to its space, folders included. */
-  path: string;
-  mimeType: string;
-  sizeBytes: number;
-  createdAt: string;
-  updatedAt: string;
-  /** Put here by this phone's person. */
-  mine: boolean;
-  /** Who put it there, by first name, in the shared folder only (never an email). */
-  addedBy: string | null;
-  canDelete: boolean;
-}
-
-export interface NativeDriveListing {
-  space: DriveSpace;
-  folder: string;
-  folders: ListedFolder[];
-  files: NativeDriveFile[];
-  usage: { bytes: number; quotaBytes: number | null };
-  maxUploadBytes: number;
-}
-
-/** The scope for a space, or a 403 — a member with no folder of their own has nothing to open. */
-export function requireScope(caller: AppDriveCaller, space: DriveSpace): SpaceScope {
-  const scope = spaceScope(caller, space);
-  if (!scope) throw error(403, 'Your access does not include that.');
-  return scope;
-}
-
-/** The SQL twin of app-lane `inScope`, so a list never fetches a row it would then drop. */
-function scopeWhere(scope: SpaceScope) {
-  const principal = eq(workflowFiles.principalId, scope.principal);
-  if (scope.root === '') return and(principal, sql`left(${workflowFiles.name}, ${MEMBER_ROOT.length}) <> ${MEMBER_ROOT}`);
-  return and(principal, sql`left(${workflowFiles.name}, ${scope.root.length}) = ${scope.root}`);
-}
-
-type Row = Pick<WorkflowFile, 'id' | 'name' | 'principalId' | 'mimeType' | 'sizeBytes' | 'uploadedBy' | 'createdAt' | 'updatedAt'>;
-
-const ROW = {
-  id: workflowFiles.id,
-  name: workflowFiles.name,
-  principalId: workflowFiles.principalId,
-  mimeType: workflowFiles.mimeType,
-  sizeBytes: workflowFiles.sizeBytes,
-  uploadedBy: workflowFiles.uploadedBy,
-  createdAt: workflowFiles.createdAt,
-  updatedAt: workflowFiles.updatedAt,
-};
-
-/** A space's rows: filtered in SQL, and again here, so a query that ever loses its clause still leaks nothing. */
-async function scopeRows(scope: SpaceScope): Promise<Row[]> {
-  const rows = await db.select(ROW).from(workflowFiles).where(scopeWhere(scope));
-  return rows.filter((r) => inScope(r, scope));
-}
-
-/** First names for the shared folder's "added by", from the household roster. Emails never leave. */
-async function firstNames(emails: string[]): Promise<Map<string, string>> {
-  const wanted = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
-  if (!wanted.length) return new Map();
-  const rows = await db
-    .select({ email: householdMember.email, displayName: householdMember.displayName })
-    .from(householdMember)
-    .where(inArray(householdMember.email, wanted));
-  return new Map(
-    rows
-      .filter((r): r is { email: string; displayName: string } => !!r.email)
-      .map((r) => [r.email.toLowerCase(), r.displayName.trim().split(/\s+/)[0] || 'Family']),
-  );
-}
-
-function present(row: Row, scope: SpaceScope, caller: AppDriveCaller, names: Map<string, string>): NativeDriveFile {
-  const path = viewName(row.name, scope);
-  const by = (row.uploadedBy ?? '').trim().toLowerCase();
-  const mine = scope.space === 'mine' || by === caller.email.toLowerCase();
-  return {
-    id: row.id,
-    name: path.slice(path.lastIndexOf('/') + 1),
-    path,
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-    mine,
-    addedBy: scope.space === 'shared' ? (mine ? 'You' : (names.get(by) ?? 'Family')) : null,
-    canDelete: mayDelete(row, scope, caller),
-  };
-}
-
-export async function listSpace(caller: AppDriveCaller, space: DriveSpace, rawFolder: string | null): Promise<NativeDriveListing> {
-  const scope = requireScope(caller, space);
-  const folder = cleanFolder(rawFolder);
-  if (folder === null) throw error(400, 'That is not a folder name.');
-  const rows = await scopeRows(scope);
-  const { folders, files } = listFolder(rows, scope, folder);
-  const names = space === 'shared' ? await firstNames(files.map((f) => f.uploadedBy ?? '')) : new Map<string, string>();
-  const bytes = rows.reduce((sum, r) => sum + r.sizeBytes, 0);
-  return {
-    space,
-    folder,
-    folders,
-    files: files.map((r) => present(r, scope, caller, names)),
-    usage: { bytes, quotaBytes: scope.principal === OWNER_PRINCIPAL ? null : memberQuotaBytes() },
-    maxUploadBytes: MAX_UPLOAD_BYTES,
-  };
-}
-
-/** A row by id, if the caller may see it; otherwise 404, the same as no such file. */
-async function visibleRow(caller: AppDriveCaller, id: string): Promise<{ row: WorkflowFile; scope: SpaceScope }> {
-  const [row] = await db.select().from(workflowFiles).where(eq(workflowFiles.id, id)).limit(1);
-  const scope = row ? rowScope(row, caller) : null;
-  if (!row || !scope) throw error(404, 'No such file.');
-  return { row, scope };
-}
-
-export async function readDriveFile(caller: AppDriveCaller, id: string): Promise<{ row: WorkflowFile; scope: SpaceScope; bytes: Buffer }> {
-  const { row, scope } = await visibleRow(caller, id);
-  if (row.name.endsWith(`/${FOLDER_MARKER}`) || row.name === FOLDER_MARKER) throw error(404, 'No such file.');
-  try {
-    return { row, scope, bytes: await readBuffer(row.diskPath) };
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') throw error(410, 'That file is no longer on the server.');
-    throw err;
-  }
-}
-
-async function bytesHeldBy(principalId: string): Promise<number> {
-  const [row] = await db
-    .select({ n: sql<string>`coalesce(sum(${workflowFiles.sizeBytes}), 0)::bigint` })
-    .from(workflowFiles)
-    .where(eq(workflowFiles.principalId, principalId));
-  return Number(row?.n ?? 0);
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /workflow_files_name_idx|unique|duplicate key|23505/i.test(msg);
-}
-
-/**
- * Store one file. A name already taken gets " (2)", " (3)"… — a phone sending
- * IMG_0001.jpg twice wants two photos, not an error.
- */
-export async function uploadFile(
-  caller: AppDriveCaller,
-  input: { space: DriveSpace; folder: string | null; filename: string | null; mimeType: string; bytes: Buffer },
-): Promise<NativeDriveFile> {
-  const scope = requireScope(caller, input.space);
-  const folder = cleanFolder(input.folder);
-  if (folder === null) throw error(400, 'That is not a folder name.');
-  const name = cleanName(input.filename);
-  if (name === null) throw error(400, 'That file name cannot be used.');
-  if (storedName(scope, folder, name) === null) throw error(400, 'That name cannot be used here.');
-  if (input.bytes.byteLength === 0) throw error(400, 'The upload was empty.');
-  if (input.bytes.byteLength > MAX_UPLOAD_BYTES) {
-    throw error(413, `That file is over ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB.`);
-  }
-  if (scope.principal !== OWNER_PRINCIPAL) {
-    const quota = memberQuotaBytes();
-    if ((await bytesHeldBy(scope.principal)) + input.bytes.byteLength > quota) {
-      throw error(413, `This space is full — ${(quota / 1024 ** 3).toFixed(quota % 1024 ** 3 ? 2 : 0)} GB each.`);
-    }
-  }
-
-  const diskPath = await allocateDiskPath(name);
-  await saveBuffer(diskPath, input.bytes);
-  for (let n = 1; n <= 50; n++) {
-    const stored = storedName(scope, folder, withSuffix(name, n));
-    if (stored === null) break;
-    try {
-      const [inserted] = await db
-        .insert(workflowFiles)
-        .values({
-          name: stored,
-          description: null,
-          mimeType: input.mimeType || 'application/octet-stream',
-          sizeBytes: input.bytes.byteLength,
-          diskPath,
-          permissions: PERMISSIONS,
-          uploadedBy: caller.email.toLowerCase(),
-          principalId: scope.principal,
-        })
-        .returning();
-      if (!inserted) break;
-      // The owner's files are embedded into @files, as Drive's upload does;
-      // a member's or the shared folder's never are.
-      if (scope.principal === OWNER_PRINCIPAL) {
-        const { reindexFileInBackground } = await import('$lib/file-index/store');
-        reindexFileInBackground(inserted.id);
-      }
-      return present(inserted, scope, caller, new Map());
-    } catch (err) {
-      if (isUniqueViolation(err)) continue;
-      await deleteFile(diskPath).catch(() => {});
-      throw err;
-    }
-  }
-  await deleteFile(diskPath).catch(() => {});
-  throw error(409, 'That name is taken. Rename the file and try again.');
-}
-
-/** Make an empty folder: a `.keep` marker, as /drive does. Idempotent. */
-export async function makeFolder(caller: AppDriveCaller, space: DriveSpace, rawParent: string | null, rawName: string | null) {
-  const scope = requireScope(caller, space);
-  const parent = cleanFolder(rawParent);
-  const name = cleanName(rawName);
-  if (parent === null || name === null) throw error(400, 'That folder name cannot be used.');
-  const path = parent ? `${parent}/${name}` : name;
-  if (cleanFolder(path) === null) throw error(400, 'That folder is too deep.');
-  const stored = storedName(scope, path, FOLDER_MARKER);
-  if (stored === null) throw error(400, 'That folder name is too long.');
-  const diskPath = await allocateDiskPath(FOLDER_MARKER);
-  await saveBuffer(diskPath, Buffer.alloc(0));
-  try {
-    await db.insert(workflowFiles).values({
-      name: stored,
-      description: null,
-      mimeType: 'application/x-empty',
-      sizeBytes: 0,
-      diskPath,
-      permissions: PERMISSIONS,
-      uploadedBy: caller.email.toLowerCase(),
-      principalId: scope.principal,
-    });
-  } catch (err) {
-    await deleteFile(diskPath).catch(() => {});
-    if (!isUniqueViolation(err)) throw err;
-  }
-  return { space, path };
-}
-
-async function removeRow(row: WorkflowFile): Promise<void> {
-  await deleteFile(row.diskPath).catch((err) => console.warn('[native-drive] bytes not removed:', (err as Error).message));
-  await db.delete(workflowFiles).where(eq(workflowFiles.id, row.id));
-  // An owner file may have fed his graph; the same job Drive's delete queues.
-  // A member's or the shared folder's never did.
-  if (row.principalId === OWNER_PRINCIPAL) {
-    const { enqueueIntelJob } = await import('$lib/intel-client/outbox');
-    await enqueueIntelJob('file-deleted', row.id, undefined).catch((err) =>
-      console.warn('[native-drive] could not queue intel cleanup:', (err as Error).message),
-    );
-  }
-}
-
-export async function deleteOne(caller: AppDriveCaller, id: string): Promise<void> {
-  const { row, scope } = await visibleRow(caller, id);
-  if (!mayDelete(row, scope, caller)) throw error(403, 'Only whoever added it can delete this.');
-  await removeRow(row);
-}
-
-/**
- * Delete a folder and everything in it — only when every file in it is the
- * caller's to delete. In the shared folder that means a folder somebody else
- * has put things in stays.
- */
-export async function deleteFolder(caller: AppDriveCaller, space: DriveSpace, rawFolder: string | null): Promise<{ deleted: number }> {
-  const scope = requireScope(caller, space);
-  const folder = cleanFolder(rawFolder);
-  if (!folder) throw error(400, 'Choose a folder to delete.');
-  const rows = (await db.select().from(workflowFiles).where(scopeWhere(scope))).filter(
-    (r) => inScope(r, scope) && underFolder(r, scope, folder),
-  );
-  if (!rows.length) throw error(404, 'No such folder.');
-  if (rows.some((r) => !mayDelete(r, scope, caller))) {
-    throw error(409, 'Someone else has files in this folder, so it stays.');
-  }
-  for (const row of rows) await removeRow(row);
-  return { deleted: rows.filter((r) => !r.name.endsWith(`/${FOLDER_MARKER}`)).length };
-}
-
-/** `filename*` per RFC 5987, plus an ASCII fallback. */
-export function contentDisposition(filename: string): string {
-  const ascii = filename.replace(/[^\x20-\x7e]|["\\]/g, '_');
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
-}
-
-/**
- * Who the drive is answering, from what `withNativeAccess('drive', …)` set up —
- * never from anything the request says. The owner's device is the owner; a
- * member's device (or the owner viewing as one) is that member, with the
- * principal the gate resolved.
- */
+/** Who the drive answers, from what the gate set up — never from the request. */
 export async function driveCaller(
   event: { locals: App.Locals },
   identity: { ownerEmail: string },
@@ -352,4 +51,171 @@ export async function driveCaller(
   const viewer = await viewerOf(event);
   if (viewer.kind !== 'member') throw error(403, 'Your access does not include that.');
   return { kind: 'member', email: viewer.email, principalId: viewer.principalId };
+}
+
+/** The owner's own phone sends no header: Drive then answers for the owner. */
+function forHeaders(caller: AppDriveCaller): Record<string, string> {
+  return caller.kind === 'member' ? { [APP_FOR_HEADER]: caller.email } : {};
+}
+
+function query(params: Record<string, string | null | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined && v !== '') q.set(k, v);
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+/** Drive's refusal, in its own words and status; anything unreadable is a plain 502. */
+function refusal(res: RawExtractedResponse): never {
+  let message = 'Drive is not answering. Try again.';
+  try {
+    const body = JSON.parse(res.body.toString('utf8')) as { message?: string; error?: string };
+    message = body.message || body.error || message;
+  } catch {
+    /* keep the plain sentence */
+  }
+  const status = res.status >= 400 && res.status < 600 ? res.status : 502;
+  // A 401/403 from Drive's gateway is about the SERVICE lane, not the phone;
+  // a 401 would sign the phone out, so it is never passed on as one.
+  throw error(status === 401 ? 502 : status, message);
+}
+
+async function call(
+  method: 'GET' | 'POST' | 'DELETE',
+  path: string,
+  caller: AppDriveCaller,
+  options: { body?: Buffer; contentType?: string; timeoutMs?: number } = {},
+): Promise<RawExtractedResponse> {
+  let res: RawExtractedResponse;
+  try {
+    res = await requestExtracted('drive', method, path, {
+      headers: { ...forHeaders(caller), ...(options.contentType ? { 'content-type': options.contentType } : {}) },
+      body: options.body,
+      timeoutMs: options.timeoutMs ?? 15_000,
+    });
+  } catch (err) {
+    if (isHttpError(err)) throw err;
+    console.error('[native-drive] Drive unreachable:', (err as Error).message);
+    throw error(502, 'Drive is not answering. Try again.');
+  }
+  if (res.status < 200 || res.status >= 300) refusal(res);
+  return res;
+}
+
+function parse<T>(res: RawExtractedResponse): T {
+  try {
+    return JSON.parse(res.body.toString('utf8')) as T;
+  } catch {
+    throw error(502, 'Drive sent something unreadable.');
+  }
+}
+
+interface DriveFileWire {
+  id: string;
+  name: string;
+  path: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  updatedAt: string;
+  mine: boolean;
+  uploadedBy: string | null;
+  canDelete: boolean;
+}
+
+export interface NativeDriveFile extends Omit<DriveFileWire, 'uploadedBy'> {
+  /** Who put it there, by first name, in the shared folder only. Never an email. */
+  addedBy: string | null;
+}
+
+interface ListingWire {
+  space: DriveSpace;
+  folder: string;
+  folders: { name: string; path: string; items: number }[];
+  files: DriveFileWire[];
+  usage: { bytes: number; quotaBytes: number | null };
+  maxUploadBytes: number;
+}
+
+/** First names for the shared folder's "added by", from the household roster. */
+async function firstNames(emails: string[]): Promise<Map<string, string>> {
+  const wanted = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  if (!wanted.length) return new Map();
+  const rows: { email: string | null; displayName: string }[] = await db
+    .select({ email: householdMember.email, displayName: householdMember.displayName })
+    .from(householdMember)
+    .where(inArray(householdMember.email, wanted))
+    .catch(() => []);
+  const names = new Map<string, string>();
+  for (const r of rows) {
+    if (r.email) names.set(r.email.toLowerCase(), r.displayName.trim().split(/\s+/)[0] || 'Family');
+  }
+  return names;
+}
+
+/** Drive's file as the phone receives it: the uploader's email becomes a first name, or goes. */
+export function forPhone(file: DriveFileWire, space: DriveSpace, names: Map<string, string>): NativeDriveFile {
+  const { uploadedBy, ...rest } = file;
+  const by = (uploadedBy ?? '').trim().toLowerCase();
+  return {
+    ...rest,
+    addedBy: space === 'shared' ? (file.mine ? 'You' : (names.get(by) ?? 'Family')) : null,
+  };
+}
+
+export async function listSpace(caller: AppDriveCaller, space: DriveSpace, folder: string | null) {
+  const res = await call('GET', `/api/files/app${query({ space, folder })}`, caller);
+  const listing = parse<ListingWire>(res);
+  const names = space === 'shared' ? await firstNames(listing.files.map((f) => f.uploadedBy ?? '')) : new Map<string, string>();
+  return { ...listing, files: listing.files.map((f) => forPhone(f, space, names)) };
+}
+
+export async function uploadFile(
+  caller: AppDriveCaller,
+  input: { space: DriveSpace; folder: string | null; filename: string | null; mimeType: string; bytes: Buffer },
+): Promise<NativeDriveFile> {
+  if (input.bytes.byteLength === 0) throw error(400, 'The upload was empty.');
+  if (input.bytes.byteLength > MAX_UPLOAD_BYTES) {
+    throw error(413, `That file is over ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB.`);
+  }
+  const path = `/api/files/app/files${query({ space: input.space, folder: input.folder, filename: input.filename, type: input.mimeType })}`;
+  // octet-stream on the wire whatever the file is: SvelteKit refuses a
+  // text/plain POST without a matching Origin as a cross-site form.
+  const res = await call('POST', path, caller, { body: input.bytes, contentType: 'application/octet-stream', timeoutMs: 120_000 });
+  const { file } = parse<{ file: DriveFileWire }>(res);
+  return forPhone(file, input.space, new Map());
+}
+
+export async function makeFolder(caller: AppDriveCaller, space: DriveSpace, parent: string | null, name: string | null) {
+  const body = Buffer.from(JSON.stringify({ space, parent: parent ?? '', name }));
+  return parse<{ space: DriveSpace; path: string }>(
+    await call('POST', '/api/files/app/folders', caller, { body, contentType: 'application/json' }),
+  );
+}
+
+export async function deleteFolder(caller: AppDriveCaller, space: DriveSpace, folder: string | null) {
+  return parse<{ deleted: number }>(await call('DELETE', `/api/files/app/folders${query({ space, folder })}`, caller));
+}
+
+export async function deleteOne(caller: AppDriveCaller, id: string): Promise<void> {
+  await call('DELETE', `/api/files/app/files/${encodeURIComponent(id)}`, caller);
+}
+
+/** The bytes, with the headers Drive set (attachment, sandbox CSP, nosniff). */
+export async function download(caller: AppDriveCaller, id: string): Promise<Response> {
+  const res = await call('GET', `/api/files/app/files/${encodeURIComponent(id)}`, caller, { timeoutMs: 120_000 });
+  const pass = (name: string, fallback?: string) => {
+    const v = res.headers[name];
+    return (Array.isArray(v) ? v[0] : v) ?? fallback;
+  };
+  const headers: Record<string, string> = {
+    'Content-Type': pass('content-type', 'application/octet-stream')!,
+    'Content-Length': String(res.body.byteLength),
+    'Content-Security-Policy': 'sandbox',
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'private, max-age=300',
+  };
+  const disposition = pass('content-disposition');
+  headers['Content-Disposition'] = disposition?.startsWith('attachment') ? disposition : 'attachment';
+  return new Response(new Uint8Array(res.body), { status: 200, headers });
 }
