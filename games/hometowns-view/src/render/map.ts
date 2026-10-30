@@ -19,7 +19,8 @@
 import { Application, Container, Graphics, Matrix, RenderTexture, Sprite, Ticker } from 'pixi.js';
 import { CAT_ZONE, MAP, Z_INDUSTRY, parcelOf, planesOf, useCat, usePayload, type TownState } from '../engine';
 import type { GhostMark, PlanPreview } from '../plan/plan';
-import { type MapModel } from './model';
+import { E, N, S, W, building, buildingHeight, car, carColour, chimneyTop, prism, rail, rnd, road, shadow, terrainDetail, terrainSolids, zoneHeight, zoned, type Pen } from './art';
+import { RAIL_TILE, type MapModel } from './model';
 import { shade } from './palette';
 
 export type Projection = 'iso' | 'top';
@@ -29,8 +30,6 @@ export const TILE = 12;
 /** Isometric half-width and half-height of a tile diamond (2:1). */
 export const HW = 12;
 export const HH = 6;
-/** Isometric block height by development level (L0–L5), world units. */
-const LEVEL_HEIGHT = [0, 5, 9, 15, 24, 38];
 
 const CHUNK = 16;
 const CHUNKS = MAP / CHUNK;
@@ -44,6 +43,12 @@ const DOUBLE_TAP_MS = 320;
 const ONE_X_TILE_PX = 32;
 /** Decoration cap (§9.15: at most 300 animated decorations). */
 const MAX_PUFFS = 120;
+/** Cars on the roads at most (decoration, so inside §9.15's 300 with the smoke). */
+const MAX_CARS = 90;
+/** Tiles a car drives in a second. */
+const CAR_SPEED = 1.1;
+/** Below this zoom (camera scale over 1×) the fine detail is left out: it would be a pixel. */
+const FAR_DETAIL = 0.55;
 const LOUPE_PX = 120;
 
 const GHOST_COLOUR: Record<GhostMark, [number, number]> = {
@@ -111,6 +116,9 @@ export function chunkSignatures(m: MapModel): number[] {
     const k = Math.floor(y / CHUNK) * CHUNKS + Math.floor(x / CHUNK);
     mixIn(k, m.ground[i]);
     mixIn(k, m.block[i] ^ (m.level[i] << 24) ^ (m.tier[i] << 28) ^ (m.scaffold[i] << 30));
+    // A road's markings follow its neighbours, which may be in the next chunk.
+    if (m.road[i]) mixIn(k, links(m, x, y) | (junctionsNext(m, x, y) << 4) | (m.road[i] << 8));
+    else if (m.zone[i] || m.built[i]) mixIn(k, m.zone[i] | (m.built[i] << 4));
   }
   for (const b of m.buildings) {
     const k = chunkOfFront(b.x, b.y, b.w, b.h);
@@ -118,6 +126,35 @@ export function chunkSignatures(m: MapModel): number[] {
     mixIn(k, b.colour ^ (b.building << 24) ^ (b.damaged ? 1 << 31 : 0));
   }
   return sig;
+}
+
+/** Which neighbours of a road (or railway) tile it joins: E, S, W, N bits. */
+export function links(m: MapModel, x: number, y: number): number {
+  const r = m.road[y * MAP + x];
+  if (!r) return 0;
+  const rail = r === RAIL_TILE;
+  const joins = (nx: number, ny: number) => {
+    if (nx < 0 || ny < 0 || nx >= MAP || ny >= MAP) return false;
+    const o = m.road[ny * MAP + nx];
+    return o !== 0 && (o === RAIL_TILE) === rail;
+  };
+  return (joins(x + 1, y) ? E : 0) | (joins(x, y + 1) ? S : 0) | (joins(x - 1, y) ? W : 0) | (joins(x, y - 1) ? N : 0);
+}
+
+function bits(v: number): number {
+  return (v & 1) + ((v >> 1) & 1) + ((v >> 2) & 1) + ((v >> 3) & 1);
+}
+
+/** Which of a road tile's joined sides lead into a junction (a road tile joining three or four ways). */
+export function junctionsNext(m: MapModel, x: number, y: number): number {
+  const l = links(m, x, y);
+  if (bits(l) >= 3 || m.road[y * MAP + x] === RAIL_TILE) return 0;
+  let out = 0;
+  if (l & E && bits(links(m, x + 1, y)) >= 3) out |= E;
+  if (l & W && bits(links(m, x - 1, y)) >= 3) out |= W;
+  if (l & S && bits(links(m, x, y + 1)) >= 3) out |= S;
+  if (l & N && bits(links(m, x, y - 1)) >= 3) out |= N;
+  return out;
 }
 
 /** A building is drawn with the chunk of its front corner, so the painter's order holds in isometric. */
@@ -216,11 +253,14 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
   const camera = new Container();
   const world = new Container();
   const groundLayer = new Container();
+  const shadowLayer = new Container();
   const structureLayer = new Container();
   const grounds: Graphics[] = [];
+  const shadows: Graphics[] = [];
   const structures: Graphics[] = [];
   for (let k = 0; k < CHUNKS * CHUNKS; k++) {
     grounds.push(groundLayer.addChild(new Graphics()));
+    shadows.push(shadowLayer.addChild(new Graphics()));
     structures.push(new Graphics());
   }
   // Isometric painter's order: chunks back to front by cx + cy.
@@ -229,7 +269,9 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
   const ghostLayer = new Graphics();
   const overlay = new Graphics();
   const decor = new Graphics();
-  world.addChild(groundLayer, ghostLayer, structureLayer, decor, overlay);
+  // Cars drive under the solids: a block in front of a road hides the car behind it.
+  const traffic = new Graphics();
+  world.addChild(groundLayer, shadowLayer, ghostLayer, traffic, structureLayer, decor, overlay);
   // A render group keeps the world's draw instructions on the GPU side: panning and zooming the camera
   // then only changes one transform, instead of re-batching four thousand tiles every frame.
   world.isRenderGroup = true;
@@ -256,7 +298,11 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
   let lastTown: TownState | null = null;
   let ghosts: PlanPreview | null = null;
   let sparkles: { i: number; at: number }[] = [];
-  let puffs: { x: number; y: number; phase: number }[] = [];
+  let puffs: { x: number; y: number; z: number; phase: number }[] = [];
+  /** Cars: on tile (x, y), heading to the neighbour in direction `dir` (E/S/W/N), `t` of the way. */
+  let cars: { x: number; y: number; dir: number; t: number; speed: number; colour: number }[] = [];
+  /** Fine detail painted (the camera is close enough to see it). */
+  let hi = true;
   let lastFrame = 0;
   /** Industry tiles of the town last painted (smoke comes from these). */
   let lastIndustry: Uint8Array | null = null;
@@ -274,32 +320,38 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     return [a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1]];
   }
 
-  /** A box over tiles [x, x + w) × [y, y + h), `height` world units tall (isometric), or a flat rect (top-down). */
-  function box(g: Graphics, x: number, y: number, w: number, hgt: number, height: number, colour: number, alpha = 1, inset = 0.12): void {
-    if (projection === 'top') {
-      const ins = inset * TILE;
-      g.rect(x * TILE + ins, y * TILE + ins, w * TILE - 2 * ins, hgt * TILE - 2 * ins).fill({ color: colour, alpha });
-      g.rect(x * TILE + ins, y * TILE + ins, w * TILE - 2 * ins, Math.min(hgt * TILE - 2 * ins, 1 + height / 6)).fill({ color: shade(colour, 0.78), alpha });
-      return;
-    }
-    const [ax, ay] = corner(x + inset, y + inset);
-    const [bx, by] = corner(x + w - inset, y + inset);
-    const [cx, cy] = corner(x + w - inset, y + hgt - inset);
-    const [dx, dy] = corner(x + inset, y + hgt - inset);
-    // Left face (d → c, lifted), right face (c → b, lifted), then the roof.
-    g.poly([dx, dy, cx, cy, cx, cy - height, dx, dy - height]).fill({ color: shade(colour, 0.82), alpha });
-    g.poly([cx, cy, bx, by, bx, by - height, cx, cy - height]).fill({ color: shade(colour, 0.66), alpha });
-    // No outline: three shaded faces read as a block, and a stroke would triple the triangles per roof.
-    g.poly([ax, ay - height, bx, by - height, cx, cy - height, dx, dy - height]).fill({ color: colour, alpha });
-  }
+  const pen = (g: Graphics): Pen => ({ g, top: projection === 'top', hi, lens: lensOn });
+  let lensOn = false;
 
   function paintGround(g: Graphics, m: MapModel, cx: number, cy: number): void {
     g.clear();
+    const p = pen(g);
     for (let ty = cy * CHUNK; ty < (cy + 1) * CHUNK; ty++)
       for (let tx = cx * CHUNK; tx < (cx + 1) * CHUNK; tx++) {
         const i = ty * MAP + tx;
-        if (projection === 'top') g.rect(tx * TILE, ty * TILE, TILE, TILE).fill(m.ground[i]);
-        else g.poly(diamond(tx, ty)).fill(m.ground[i]);
+        const r = m.road[i];
+        if (r && m.lens[i] === 255 && m.open[i]) {
+          if (r === RAIL_TILE) rail(p, tx, ty, links(m, tx, ty));
+          else road(p, tx, ty, r, links(m, tx, ty), junctionsNext(m, tx, ty));
+          continue;
+        }
+        // A touch of per-tile variation, so a field of grass is not one flat colour.
+        const base = m.zone[i] || r ? m.ground[i] : shade(m.ground[i], 0.97 + 0.06 * rnd(tx, ty, 90));
+        if (projection === 'top') g.rect(tx * TILE, ty * TILE, TILE, TILE).fill(base);
+        else g.poly(diamond(tx, ty)).fill(base);
+        if (r || m.zone[i] || m.built[i]) {
+          if (m.zone[i] && !m.level[i] && hi && projection === 'iso') {
+            // An empty lot: a pale kerb round it.
+            g.poly(diamond(tx, ty, 0.06)).stroke({ width: 0.5, color: shade(base, 1.08), alpha: 0.9 });
+          }
+        } else {
+          let shore = 0;
+          if (m.terrain[i] === 1) {
+            const land = (nx: number, ny: number) => nx >= 0 && ny >= 0 && nx < MAP && ny < MAP && m.terrain[ny * MAP + nx] !== 1;
+            shore = (land(tx + 1, ty) ? E : 0) | (land(tx, ty + 1) ? S : 0) | (land(tx - 1, ty) ? W : 0) | (land(tx, ty - 1) ? N : 0);
+          }
+          terrainDetail(p, tx, ty, m.terrain[i], base, shore);
+        }
         if (m.scaffold[i] && !m.level[i]) {
           // Scaffolding on an empty lot: a thin frame.
           g.poly(diamond(tx, ty, 0.2)).stroke({ width: 1, color: 0x8a6d3b, alpha: 0.9 });
@@ -326,8 +378,35 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     }
   }
 
-  function paintStructures(g: Graphics, m: MapModel, k: number): void {
+  /** Scaffolding round a solid being built: poles at the corners and two rails. */
+  function scaffolding(p: Pen, x0: number, y0: number, x1: number, y1: number, h: number): void {
+    prism(p, x0, y0, x1, y1, 0, 0.6, 0xb8ab94);
+    if (p.top) {
+      const [ax, ay] = corner(x0, y0);
+      const [bx, by] = corner(x1, y1);
+      p.g.rect(ax, ay, bx - ax, by - ay).stroke({ width: 1, color: 0x8a6d3b, alpha: 0.9 });
+      return;
+    }
+    const pole = (x: number, y: number) => {
+      const [sx, sy] = corner(x, y);
+      p.g.moveTo(sx, sy).lineTo(sx, sy - h).stroke({ width: 0.6, color: 0x8a6d3b, alpha: 0.95 });
+    };
+    pole(x0, y1);
+    pole(x1, y1);
+    pole(x1, y0);
+    for (const z of [h * 0.5, h]) {
+      const [ax, ay] = corner(x0, y1);
+      const [bx, by] = corner(x1, y1);
+      const [cx, cy] = corner(x1, y0);
+      p.g.moveTo(ax, ay - z).lineTo(bx, by - z).lineTo(cx, cy - z).stroke({ width: 0.5, color: 0x8a6d3b, alpha: 0.9 });
+    }
+  }
+
+  function paintStructures(g: Graphics, sg: Graphics, m: MapModel, k: number): void {
     g.clear();
+    sg.clear();
+    const p = pen(g);
+    const sp = pen(sg);
     const cx = k % CHUNKS;
     const cy = Math.floor(k / CHUNKS);
     type Item = { depth: number; draw: () => void };
@@ -336,32 +415,39 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
       for (let tx = cx * CHUNK; tx < (cx + 1) * CHUNK; tx++) {
         const i = ty * MAP + tx;
         const lv = m.level[i];
-        if (!lv) continue;
+        if (!lv) {
+          if (!m.road[i] && !m.zone[i] && !m.built[i] && m.lens[i] === 255 && (m.terrain[i] === 3 || m.terrain[i] === 5 || ((m.terrain[i] === 0 || m.terrain[i] === 4) && hi)))
+            items.push({ depth: tx + ty, draw: () => terrainSolids(p, tx, ty, m.terrain[i], m.open[i] === 1) });
+          continue;
+        }
+        const zone = m.zone[i] - 1;
+        const height = zoneHeight(zone, lv);
+        shadow(sp, tx + 0.12, ty + 0.12, tx + 0.88, ty + 0.88, height);
         items.push({
           depth: tx + ty,
           draw: () => {
-            const height = LEVEL_HEIGHT[lv] ?? 10;
-            box(g, tx, ty, 1, 1, height, m.block[i], 1, Math.max(0.08, 0.3 - 0.04 * lv));
-            if (m.tier[i] > 0 && projection === 'iso') {
-              const [ax, ay] = corner(tx + 0.3, ty + 0.3);
-              g.circle(ax, ay - height - 1, 1.2).fill(m.tier[i] === 2 ? 0x7fc8a9 : 0xf4e3cf); // roof gardens and bay trim
-            }
-            if (m.scaffold[i]) box(g, tx, ty, 1, 1, height + 3, 0x8a6d3b, 0.25, 0.1);
+            zoned(p, tx, ty, zone, lv, m.tier[i], m.block[i]);
+            if (m.scaffold[i]) scaffolding(p, tx + 0.06, ty + 0.06, tx + 0.94, ty + 0.94, height + 2);
           },
         });
       }
     for (const b of m.buildings) {
       if (chunkOfFront(b.x, b.y, b.w, b.h) !== k) continue;
+      const height = buildingHeight(b);
+      if (b.building <= 0) shadow(sp, b.x + 0.1, b.y + 0.1, b.x + b.w - 0.1, b.y + b.h - 0.1, height);
       items.push({
         depth: b.x + b.w - 1 + b.y + b.h - 1,
         draw: () => {
-          const height = 8 + 4 * Math.min(b.w, b.h);
-          const alpha = b.building > 0 ? 0.5 : 1;
-          box(g, b.x, b.y, b.w, b.h, height, b.colour, alpha, 0.08);
-          if (b.building > 0) box(g, b.x, b.y, b.w, b.h, height + 4, 0x8a6d3b, 0.22, 0.04);
+          if (b.building > 0) {
+            // Being built: footings and scaffolding to the height it will be.
+            scaffolding(p, b.x + 0.1, b.y + 0.1, b.x + b.w - 0.1, b.y + b.h - 0.1, Math.min(height, 12));
+            return;
+          }
+          building(p, b);
           if (b.damaged) {
             const [px, py] = corner(b.x + b.w / 2, b.y + b.h / 2);
             g.circle(px, py - height - 4, 3).fill({ color: 0x7a7a7a, alpha: 0.85 });
+            g.circle(px + 2.5, py - height - 7, 2.2).fill({ color: 0x8a8a8a, alpha: 0.7 });
           }
         },
       });
@@ -370,16 +456,57 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     for (const it of items) it.draw();
   }
 
+  /** Chunks whose paint is out of date but which were off screen at the time. */
+  const stale = new Uint8Array(CHUNKS * CHUNKS);
+
+  function paintChunk(m: MapModel, k: number): void {
+    stale[k] = 0;
+    paintGround(grounds[k], m, k % CHUNKS, Math.floor(k / CHUNKS));
+    paintStructures(structures[k], shadows[k], m, k);
+  }
+
+  /** Whether chunk k (with its tallest towers) is on screen or close to it. */
+  function chunkVisible(k: number): boolean {
+    const cx = (k % CHUNKS) * CHUNK;
+    const cy = Math.floor(k / CHUNKS) * CHUNK;
+    const [x0, y0, x1, y1] = boundsOf(projection, cx, cy, cx + CHUNK, cy + CHUNK);
+    const s = camera.scale.x;
+    const lift = projection === 'iso' ? 40 : 0;
+    const left = camera.position.x + x0 * s;
+    const right = camera.position.x + x1 * s;
+    const top = camera.position.y + (y0 - lift) * s;
+    const bottom = camera.position.y + y1 * s;
+    const mx = app.screen.width * 0.25;
+    const my = app.screen.height * 0.25;
+    return right >= -mx && left <= app.screen.width + mx && bottom >= -my && top <= app.screen.height + my;
+  }
+
+  /** Paints the out-of-date chunks that have come into view. Returns whether it painted any. */
+  function paintStale(): boolean {
+    if (!lastModel) return false;
+    let any = false;
+    for (let k = 0; k < stale.length; k++)
+      if (stale[k] && chunkVisible(k)) {
+        paintChunk(lastModel, k);
+        any = true;
+      }
+    return any;
+  }
+
   function paint(m: MapModel, force: boolean): void {
+    lensOn = m.lensOn;
+    lastModel = m;
     const sig = chunkSignatures(m);
     for (let k = 0; k < sig.length; k++) {
       if (!force && sig[k] === lastSig[k]) continue;
-      paintGround(grounds[k], m, k % CHUNKS, Math.floor(k / CHUNKS));
-      paintStructures(structures[k], m, k);
+      // A chunk off screen is painted when it comes into view (paintStale): close up, most of the town is.
+      if (chunkVisible(k)) paintChunk(m, k);
+      else stale[k] = 1;
     }
     lastSig = sig;
     lastModel = m;
     seedPuffs(m);
+    seedCars(m);
     dirty = true;
   }
 
@@ -408,8 +535,77 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     puffs = [];
     if (!decorOn) return;
     for (let i = 0; i < m.level.length && puffs.length < MAX_PUFFS; i++) {
-      // Industry blocks (ZONE_BUILT[3] family) at level 1–4 smoke; level-5 makers' sheds are clean (§9.15).
-      if (m.level[i] > 0 && m.level[i] < 5 && lastIndustry?.[i] === 1) puffs.push({ x: i % MAP, y: Math.floor(i / MAP), phase: (i * 37) % 100 });
+      // Industry blocks at level 1–4 smoke from their chimneys; level-5 makers' sheds are clean (§9.15).
+      if (!(m.level[i] > 0 && m.level[i] < 5 && lastIndustry?.[i] === 1)) continue;
+      const top = chimneyTop(3, m.level[i], i % MAP, Math.floor(i / MAP));
+      if (top) puffs.push({ x: top[0], y: top[1], z: top[2], phase: (i * 37) % 100 });
+    }
+  }
+
+  // ---- Decoration (traffic) ----
+
+  const STEP: Record<number, [number, number]> = { [E]: [1, 0], [S]: [0, 1], [W]: [-1, 0], [N]: [0, -1] };
+  const BACK: Record<number, number> = { [E]: W, [W]: E, [S]: N, [N]: S };
+
+  /** Cars on the town's roads: more roads and more people, more cars, up to the cap. */
+  function seedCars(m: MapModel): void {
+    if (!decorOn || m.lensOn) {
+      cars = [];
+      return;
+    }
+    const tiles: number[] = [];
+    let built = 0;
+    for (let i = 0; i < m.road.length; i++) {
+      if (m.road[i] && m.road[i] !== RAIL_TILE && m.open[i] && links(m, i % MAP, Math.floor(i / MAP))) tiles.push(i);
+      if (m.level[i]) built += m.level[i];
+    }
+    const want = Math.min(MAX_CARS, Math.floor(tiles.length / 5), Math.floor(built / 6));
+    // Keep the cars already driving where their road still is.
+    cars = cars.filter((car) => m.road[car.y * MAP + car.x] && m.road[car.y * MAP + car.x] !== RAIL_TILE).slice(0, want);
+    for (let k = cars.length; k < want; k++) {
+      const i = tiles[Math.floor(rnd(k, tiles.length, 97) * tiles.length)];
+      const x = i % MAP;
+      const y = Math.floor(i / MAP);
+      cars.push({ x, y, dir: nextDir(m, x, y, 0, k), t: rnd(k, 3, 98), speed: CAR_SPEED * (0.75 + 0.5 * rnd(k, 5, 99)), colour: carColour(Math.floor(rnd(k, 7, 96) * 9)) });
+    }
+  }
+
+  /** Where a car on (x, y) goes next: on along the road if it can, else any other way, else back. */
+  function nextDir(m: MapModel, x: number, y: number, from: number, salt: number): number {
+    const l = links(m, x, y);
+    const options = [E, S, W, N].filter((d) => l & d && d !== (from ? BACK[from] : 0));
+    if (!options.length) return from ? BACK[from] : E;
+    if (from && options.includes(from) && rnd(x + salt, y, 95) < 0.6) return from;
+    return options[Math.floor(rnd(x * 7 + salt, y * 3 + Math.floor(performance.now() / 997), 94) * options.length)];
+  }
+
+  function drawTraffic(dt: number): void {
+    traffic.clear();
+    if (!decorOn || !lastModel || !cars.length) return;
+    const m = lastModel;
+    const p = pen(traffic);
+    for (let k = 0; k < cars.length; k++) {
+      const v = cars[k];
+      v.t += (v.speed * dt) / 1000;
+      while (v.t >= 1) {
+        const [dx, dy] = STEP[v.dir] ?? [0, 0];
+        const nx = v.x + dx;
+        const ny = v.y + dy;
+        v.t -= 1;
+        if (nx < 0 || ny < 0 || nx >= MAP || ny >= MAP || !m.road[ny * MAP + nx] || m.road[ny * MAP + nx] === RAIL_TILE) {
+          v.dir = BACK[v.dir] ?? E;
+          continue;
+        }
+        v.x = nx;
+        v.y = ny;
+        v.dir = nextDir(m, nx, ny, v.dir, k);
+      }
+      const [dx, dy] = STEP[v.dir] ?? [0, 0];
+      // Drive on the left: offset to the left of the heading.
+      const off = 0.17;
+      const gx = v.x + 0.5 + dx * (v.t - 0.5) + dy * off;
+      const gy = v.y + 0.5 + dy * (v.t - 0.5) - dx * off;
+      car(p, gx, gy, dx !== 0 ? 'x' : 'y', v.colour);
     }
   }
 
@@ -418,9 +614,8 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     decor.clear();
     if (!decorOn || !lastModel) return;
     for (const p of puffs) {
-      const lv = lastModel.level[p.y * MAP + p.x];
-      const [px, py] = corner(p.x + 0.5, p.y + 0.5);
-      const top = py - (LEVEL_HEIGHT[lv] ?? 8) - 2;
+      const [px, py] = corner(p.x, p.y);
+      const top = py - p.z - 1;
       const t = ((now / 40 + p.phase) % 100) / 100;
       decor.circle(px + t * 4, top - t * 14, 1.5 + t * 2.5).fill({ color: 0xbdb6ab, alpha: 0.55 * (1 - t) });
     }
@@ -449,7 +644,17 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     camera.scale.set(Math.max(minScale(), Math.min(maxScale(), s)));
     camera.position.set(x, y);
     dirty = true;
+    detailFor();
     h.camera?.();
+  }
+
+  /** Paints the fine detail in when the camera comes close, and out when it pulls away (with some slack, so a pinch at the edge does not flicker). */
+  function detailFor(): void {
+    const z = camera.scale.x / oneX();
+    const want = hi ? z >= FAR_DETAIL * 0.8 : z >= FAR_DETAIL;
+    if (want === hi) return;
+    hi = want;
+    if (lastModel) paint(lastModel, true);
   }
 
   function fit(t: TownState | undefined = lastTown ?? undefined): void {
@@ -462,6 +667,7 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     camera.scale.set(s);
     camera.position.set((w - (bx0 + bx1) * s) / 2, (hgt - (by0 + by1) * s) / 2);
     dirty = true;
+    detailFor();
     h.camera?.();
   }
 
@@ -674,7 +880,7 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
       return projection;
     },
     get animating() {
-      return (decorOn && puffs.length > 0) || sparkles.length > 0;
+      return (decorOn && (puffs.length > 0 || cars.length > 0)) || sparkles.length > 0;
     },
     get deferredAt() {
       return deferred;
@@ -713,21 +919,27 @@ export async function createMapView(host: HTMLElement, h: MapHandlers = {}): Pro
     setDecor(on) {
       if (on === decorOn) return;
       decorOn = on;
-      if (lastModel) seedPuffs(lastModel);
+      if (lastModel) {
+        seedPuffs(lastModel);
+        seedCars(lastModel);
+      }
       decor.clear();
+      traffic.clear();
       dirty = true;
     },
     render(now) {
-      const animate = (decorOn && puffs.length > 0) || sparkles.length > 0;
+      const animate = (decorOn && (puffs.length > 0 || cars.length > 0)) || sparkles.length > 0;
       // Animation runs at 30 fps at most (§9.15: decoration is life, not a game loop).
       if (!dirty && !(animate && now - lastFrame >= 33)) return false;
       if (animate) {
         drawDecor(now);
+        drawTraffic(Math.min(100, Math.max(0, now - lastFrame)));
         if (sparkles.length) {
           paintGhosts();
           drawSparkles(now);
         }
       }
+      paintStale();
       drawLoupe();
       dirty = false;
       lastFrame = now;

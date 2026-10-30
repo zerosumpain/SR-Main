@@ -6,8 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { HarnessSession } from '../src/harness/session';
 import { COUNTY_ROAD_END_Y, COUNTY_ROAD_X, MAP, TILES, paramsFor, tileIndex } from '../src/engine';
 import { lensData } from '../src/lenses';
-import { MASK_LOT, MASK_SHOWN, MASK_TERRAIN, buildingRects, describeTile, groundColour, mapModel } from '../src/render/model';
-import { chunkSignatures, project, unproject } from '../src/render/map';
+import { MASK_LOT, MASK_SHOWN, MASK_TERRAIN, RAIL_TILE, buildingRects, describeTile, groundColour, mapModel } from '../src/render/model';
+import { chunkSignatures, links, project, unproject } from '../src/render/map';
+import { E, N, S, W } from '../src/render/art';
 import { LENS_RAMP, LOCKED_SHADE, ROADS, TERRAIN, ZONE_LOT, grey, mix, shade } from '../src/render/palette';
 
 describe('palette arithmetic', () => {
@@ -112,3 +113,35 @@ describe('mapModel on a founded town', () => {
     for (let i = 0; i < m.level.length; i++) if (m.level[i] > 0) expect(m.block[i]).toBeGreaterThan(0);
   });
 });
+
+describe('what the painter dresses each tile as', () => {
+  const s = new HarnessSession({ seed: 3 });
+  const t = s.town;
+  const m = mapModel(t);
+
+  it('marks the County Road as a county road that runs north and south', () => {
+    const i = tileIndex(COUNTY_ROAD_X, 60);
+    expect(m.road[i]).toBe(4);
+    expect(m.road[i]).not.toBe(RAIL_TILE);
+    expect(links(m, COUNTY_ROAD_X, 60) & (N | S)).toBe(N | S);
+    expect(links(m, COUNTY_ROAD_X, 60) & (E | W)).toBe(0);
+  });
+
+  it('marks zoned lots, the Town Hall footprint and the terrain under everything else', () => {
+    expect([...m.zone].filter((z) => z === 1).length).toBe(12);
+    expect(m.built[tileIndex(33, 44)]).toBe(1);
+    expect(m.built[tileIndex(34, 45)]).toBe(1);
+    expect(m.zone[tileIndex(33, 44)]).toBe(0);
+    expect([...m.terrain].every((k) => k <= 5)).toBe(true);
+    expect(m.lensOn).toBe(false);
+    expect(mapModel(t, lensData('landValue', t, null, paramsFor('v1'))).lensOn).toBe(true);
+  });
+
+  it('hides roads and zones the time-lapse has not reached', () => {
+    const mask = new Uint8Array(TILES).fill(MASK_TERRAIN);
+    const hidden = mapModel(t, null, mask);
+    expect([...hidden.road].every((v) => v === 0)).toBe(true);
+    expect([...hidden.zone].every((v) => v === 0)).toBe(true);
+  });
+});
+

@@ -39,9 +39,10 @@ In harness mode `window.__hometowns` exposes `hash()`, `stats()`, `runDays(n)`,
   the request needs, and ahead of time only while a plan or a tool is in hand.
 - **Lenses** (§9.4): all fourteen, two at Hamlet; tap a cell for its value and
   (Land value) its top three terms.
-- **Inspector** (§9.5): a long press with no drawing tool (with one, the
-  finger draws however long it rests first); "What would make it grow?"
-  offers a ghost plan the engine accepts.
+- **Inspector** (§9.5): a long press only, never a tap (a tap while panning
+  kept opening it); with a drawing tool the finger draws however long it
+  rests first. "What would make it grow?" offers a ghost plan the engine
+  accepts. Under a lens a tap reads the cell's value.
 - **Mood, Why and Ledger** (§9.6): wants bubbles on the map; in harness mode a
   top bar, Wants bar, advisor cards, Why popovers, the Ledger from Town.
 - **Welcome back** (§9.9): the tile-log time-lapse (skipped under Reduce
@@ -49,8 +50,16 @@ In harness mode `window.__hometowns` exposes `hash()`, `stats()`, `runDays(n)`,
 - **Exact local ticks and the canary** (§10.9, §10.4): in the app the page runs
   its town forward at each tick boundary and checks the next frame's
   `townHash` against its prediction.
+- **Art** (`src/render/art.ts`): low-poly buildings drawn per zone, level and
+  tier (cottages to towers, corner shops to glass malls, pubs, sawtooth
+  factories with chimneys, offices, barns and silos) and per catalogue
+  building, plus ground shadows, roads with pavements, markings and zebra
+  crossings, railways, trees, water foam and cars driving on the left. Windows,
+  signs and road markings are painted only when the camera is close (below
+  0.55× they would be a pixel).
 - **Rendering** (§9.15): soft 2:1 isometric or a flat top-down planning view;
-  16×16 chunks repainted only when they change; render on demand; decoration
+  16×16 chunks repainted only when they change (and an off-screen chunk only
+  when it pans into view); render on demand; decoration (smoke, cars)
   capped, at 30 fps, and off when the phone is hot, in Low Power Mode or under
   Reduce Motion; nothing runs in the background.
 

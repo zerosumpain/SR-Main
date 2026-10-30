@@ -405,11 +405,11 @@ export class Controller {
       this.hooks.lapseDone?.();
       return;
     }
-    if (kind === 'long' || this.tool.kind === 'none') {
-      if (kind === 'long') this.inspect(tile[0], tile[1]);
-      else if (this.lens !== 'none') this.readCell(tile[0], tile[1]);
-      else this.inspect(tile[0], tile[1]);
-    }
+    // The inspector opens on a long press only: a tap is too easy to make by
+    // accident while panning, and opened a card over the map each time.
+    // Under a lens a tap still reads the cell's value.
+    if (kind === 'long') this.inspect(tile[0], tile[1]);
+    else if (this.tool.kind === 'none' && this.lens !== 'none') this.readCell(tile[0], tile[1]);
   }
 
   private onHover(tile: [number, number] | null): void {
