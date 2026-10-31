@@ -48,7 +48,7 @@ export interface PlaceType {
   category: Category;
   /** "Discount supermarket", "Theme park", "Hospital". */
   type: string;
-  /** The business at an unnamed address, when the lookup was sure of it. */
+  /** The business at an unnamed stop's nearest address — a hint, never the place's name: the stop may be next door. */
   name: string | null;
 }
 
@@ -335,7 +335,13 @@ export async function analysePatterns(
   const home = places.find((p) => p.id === homeId) ?? null;
   const cats = new Map(places.map((p) => [p.id, categoryOf(p, homeId, home)]));
   const placeById = new Map(places.map((p) => [p.id, p]));
-  const name = (id: string) => { const p = placeById.get(id); return (!p?.label && p?.lookup?.name) || placeTitle(p); };
+  const name = (id: string) => placeTitle(placeById.get(id));
+  // What the lookup says it is. A nameless stop on holiday keeps none: the shop at its nearest address says nothing.
+  const typeOf = (id: string) => {
+    const p = placeById.get(id), t = p?.lookup;
+    if (!t || (!p?.label && cats.get(id) === 'far')) return null;
+    return t.name && !p?.label ? `${t.type} (${t.name}?)` : t.type;
+  };
   rows = normaliseReadings(rows.filter((r) => +r.ts >= from && +r.ts <= +now));
 
   // Per person: trips, visits, legs and the bin-by-bin state the grids and
@@ -447,7 +453,7 @@ export async function analysePatterns(
         .filter((w) => w.share >= 0.15).sort((a, b) => b.share - a.share);
       const firstVisit = Math.min(...list.map((v) => v.start));
       return {
-        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: placeById.get(placeId)?.lookup?.type ?? null,
+        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: typeOf(placeId),
         visits: list.length, days: new Set(list.map((v) => v.date)).size, hours: r1(hours),
         medianStay: r0(med(list.map((v) => v.minutes))), medianTravelIn: r0(travel),
         activeShare: ways.length ? r1(ways.filter((v) => v.inMode === 'active').length / ways.length * 100) / 100 : 0,
@@ -639,7 +645,7 @@ export async function analysePatterns(
     household: {
       categories: [...hhCats].map(([category, c]) => ({ category, hours: r1(c.hours), visits: c.visits, people: c.people.size })).sort((a, b) => b.hours - a.hours),
       shared: [...shared].filter(([, s]) => s.people.size >= 2).map(([placeId, s]) => ({
-        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: placeById.get(placeId)?.lookup?.type ?? null, people: [...s.people], visits: s.visits, hours: r1(s.hours),
+        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: typeOf(placeId), people: [...s.people], visits: s.visits, hours: r1(s.hours),
       })).sort((a, b) => b.people.length - a.people.length || b.hours - a.hours).slice(0, 12),
       departures,
     },
