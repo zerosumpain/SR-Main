@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analysePatterns, categoryOf, groupOf, type PatternPlace } from './patterns';
+import { analysePatterns, categoryOf, groupOf, parsePlaceTypes, placeQuery, type PatternPlace } from './patterns';
 import type { InsightFix } from './insights';
 
 const places: PatternPlace[] = [
@@ -50,6 +50,35 @@ describe('categoryOf', () => {
     expect(categoryOf({ id: 'b', label: null, kind: 'unknown', lat: 51.5, lon: -0.1, radiusM: 80, suggestedKind: 'cafe' }, 'home', home)).toBe('food');
     expect(categoryOf({ id: 'c', label: null, kind: 'unknown', lat: 41.9, lon: 12.47, radiusM: 80 }, 'home', home)).toBe('far');
     expect(categoryOf({ id: 'd', label: null, kind: 'unknown', lat: 51.51, lon: -0.1, radiusM: 80 }, 'home', home)).toBe('unnamed');
+  });
+  it('takes what a web lookup found over the words in a name, except for a nameless stop far away', () => {
+    const shop = { category: 'shops' as const, type: 'Discount supermarket', name: null };
+    expect(categoryOf({ id: 'l', label: 'LIDL / Homebargains', kind: 'unknown', lat: 51.5, lon: -0.1, radiusM: 80, lookup: shop }, 'home', home)).toBe('shops');
+    expect(categoryOf({ id: 'h', label: 'Headlam Hall', kind: 'other', lat: 51.5, lon: -0.1, radiusM: 80, lookup: { category: 'stay', type: 'Hotel', name: null } }, 'home', home)).toBe('stay');
+    expect(categoryOf({ id: 'g', label: 'Grandparents', kind: 'home', lat: 51.5, lon: -0.1, radiusM: 80, lookup: shop }, 'home', home)).toBe('family');
+    expect(categoryOf({ id: 'r', label: null, kind: 'unknown', lat: 41.9, lon: 12.47, radiusM: 80, lookup: shop }, 'home', home)).toBe('far');
+    expect(categoryOf({ id: 'o', label: 'Diamond Terrace', kind: 'other', lat: 51.5, lon: -0.1, radiusM: 80, lookup: { category: 'other', type: 'Street', name: null } }, 'home', home)).toBe('other');
+    // Without a lookup the name still says something.
+    expect(categoryOf({ id: 'm', label: 'Darlington Memorial Hospital', kind: 'other', lat: 51.5, lon: -0.1, radiusM: 80 }, 'home', home)).toBe('health');
+    expect(categoryOf({ id: 'f', label: 'Flamingo Land', kind: 'other', lat: 51.5, lon: -0.1, radiusM: 80 }, 'home', home)).toBe('daysout');
+  });
+  it('searches a name with its town, an address as it is, and never a family house', () => {
+    const base = { kind: 'unknown', lat: 51.5, lon: -0.1, radiusM: 80 };
+    expect(placeQuery({ ...base, id: 'a', label: 'LIDL / Homebargains', suggestedAddress: '12 Cockerton Green, Darlington, DL3 9AA, United Kingdom' }, 'home')).toBe('LIDL / Homebargains, Darlington');
+    expect(placeQuery({ ...base, id: 'b', label: 'South Park, Darlington', suggestedAddress: 'Parkside, Darlington, DL1 5TD' }, 'home')).toBe('South Park, Darlington');
+    expect(placeQuery({ ...base, id: 'c', label: null, suggestedLabel: '97 Grange Road', suggestedAddress: '97 Grange Road, Darlington DL1 5NH' }, 'home')).toBe('97 Grange Road, Darlington DL1 5NH');
+    expect(placeQuery({ ...base, id: 'd', label: 'Grandparents', kind: 'home', suggestedAddress: '1 Any Street, Town' }, 'home')).toBeNull();
+    expect(placeQuery({ ...base, id: 'home', label: 'Home' }, 'home')).toBeNull();
+    expect(placeQuery({ ...base, id: 'e', label: null }, 'home')).toBeNull();
+  });
+  it('reads only the categories it offered, for the entries it asked about', () => {
+    const text = 'Here you go:\n```json\n[{"id":"1","category":"shops","type":"Discount supermarket","name":null},' +
+      '{"id":"2","category":"castle","type":"Castle"},{"id":"9","category":"food","type":"Cafe"},{"id":"3","category":"HEALTH","type":"Hospital","name":"Memorial"}]\n```';
+    const r = parsePlaceTypes(text, ['1', '2', '3']);
+    expect([...r.keys()]).toEqual(['1', '3']);
+    expect(r.get('1')).toEqual({ category: 'shops', type: 'Discount supermarket', name: null });
+    expect(r.get('3')?.category).toBe('health');
+    expect(parsePlaceTypes('no idea', ['1']).size).toBe(0);
   });
   it('folds every slot into one of the six colour groups', () => {
     expect(groupOf('school')).toBe('duty');

@@ -1,6 +1,7 @@
 <script lang="ts">
   /**
-   * One person's destinations, most time first: what kind of place, how often
+   * One person's destinations, most time first: what kind of place (and what
+   * the web lookup says it is), how often
    * and for how long, when they usually arrive, the journey in against the
    * stay, the walking once there, the steps it is worth (an estimate: the
    * day's steps above a day at home, shared by minutes on foot), and who from
@@ -42,7 +43,7 @@
       <tbody>
         {#each rows as r (r.placeId)}
           <tr>
-            <th scope="row"><span class="pl">{r.name}</span><small>{categoryLabel(r.category)}{r.isNew ? ' · new' : ''}</small></th>
+            <th scope="row"><span class="pl">{r.name}</span><small>{categoryLabel(r.category)}{r.type ? ` · ${r.type}` : ''}{r.isNew ? ' · new' : ''}</small></th>
             <td>
               <div class="bar-c">
                 <span class="bar" style:width={`${Math.max(3, (r.hours / peak) * 100)}%`}></span>

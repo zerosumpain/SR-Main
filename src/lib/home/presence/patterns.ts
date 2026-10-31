@@ -40,19 +40,35 @@ const NEW_MS = 28 * DAY;
 export interface PatternPlace extends InsightPlace {
   suggestedKind?: string | null;
   firstSeenAt?: Date | string | null;
+  /** What a web lookup says is there (`place-types.server`): its category, a short type, and its name. */
+  lookup?: PlaceType | null;
+}
+
+export interface PlaceType {
+  category: Category;
+  /** "Discount supermarket", "Theme park", "Hospital". */
+  type: string;
+  /** The business at an unnamed address, when the lookup was sure of it. */
+  name: string | null;
 }
 
 export const CATEGORIES = [
   { id: 'home', label: 'Home' },
   { id: 'family', label: 'Family & friends' },
+  { id: 'homes', label: 'Other houses' },
   { id: 'school', label: 'School' },
   { id: 'work', label: 'Work' },
-  { id: 'shops', label: 'Shops & town' },
+  { id: 'shops', label: 'Shops & retail' },
   { id: 'food', label: 'Food & drink' },
   { id: 'outdoors', label: 'Parks & outdoors' },
-  { id: 'leisure', label: 'Days out & leisure' },
-  { id: 'sport', label: 'Sport' },
-  { id: 'transport', label: 'Stations' },
+  { id: 'daysout', label: 'Attractions & days out' },
+  { id: 'leisure', label: 'Leisure & entertainment' },
+  { id: 'sport', label: 'Sport & fitness' },
+  { id: 'health', label: 'Health & care' },
+  { id: 'services', label: 'Services & errands' },
+  { id: 'community', label: 'Community & worship' },
+  { id: 'stay', label: 'Hotels & stays' },
+  { id: 'transport', label: 'Stations & travel' },
   { id: 'far', label: 'Far afield' },
   { id: 'other', label: 'Other named' },
   { id: 'unnamed', label: 'Unnamed stops' },
@@ -60,8 +76,10 @@ export const CATEGORIES = [
 export type Category = (typeof CATEGORIES)[number]['id'];
 export const categoryLabel = (c: Category) => CATEGORIES.find((x) => x.id === c)!.label;
 const PHRASES: Partial<Record<Category, string>> = {
-  family: 'on days at family or friends', school: 'on school days', work: 'on days at work', shops: 'on days in the shops or town',
-  food: 'on days out to eat', outdoors: 'on days with a park or a walk', leisure: 'on days out', sport: 'on days with sport',
+  family: 'on days at family or friends', homes: "on days at someone else's house", school: 'on school days', work: 'on days at work',
+  shops: 'on days in the shops', food: 'on days out to eat', outdoors: 'on days with a park or a walk', daysout: 'on days out',
+  leisure: 'on days at the cinema, bowling and the like', sport: 'on days with sport', health: 'on days at the doctor, dentist or hospital',
+  services: 'on days running errands', community: 'on days at church or a community place', stay: 'on days at a hotel',
   transport: 'on days through a station', far: 'on days far from home', other: 'on days at their other named places',
 };
 export const categoryPhrase = (c: Category) => PHRASES[c] ?? `on days at ${categoryLabel(c).toLowerCase()}`;
@@ -70,13 +88,17 @@ export const categoryPhrase = (c: Category) => PHRASES[c] ?? `on days at ${categ
 export const GROUPS = [
   { id: 'home', label: 'Home', slots: ['home'] },
   { id: 'duty', label: 'School & work', slots: ['school', 'work'] },
-  { id: 'family', label: 'Family & friends', slots: ['family'] },
+  { id: 'family', label: 'Family & friends', slots: ['family', 'homes'] },
   { id: 'far', label: 'Far afield', slots: ['far'] },
-  { id: 'about', label: 'Out & about', slots: ['shops', 'food', 'outdoors', 'leisure', 'sport', 'transport', 'other', 'unnamed', 'unplaced'] },
+  { id: 'about', label: 'Out & about', slots: ['shops', 'food', 'outdoors', 'daysout', 'leisure', 'sport', 'health', 'services', 'community', 'stay', 'transport', 'other', 'unnamed', 'unplaced'] },
   { id: 'travel', label: 'Travelling', slots: ['travel'] },
 ] as const;
 export type Group = (typeof GROUPS)[number]['id'];
 export const groupOf = (slot: string): Group => GROUPS.find((g) => (g.slots as readonly string[]).includes(slot))?.id ?? 'about';
+
+/** The categories a web lookup may answer with; the rest are the owner's or the trail's to say. */
+export const LOOKUP_CATEGORIES = ['shops', 'food', 'daysout', 'leisure', 'outdoors', 'sport', 'health', 'services', 'community', 'stay',
+  'transport', 'school', 'work', 'homes', 'other'] as const satisfies readonly Category[];
 
 // Words in a name that say what a place is, when its kind does not. Checked in
 // order: "Stanhope Park" is outdoors, "Dalton Park" shopping — the retail list
@@ -85,17 +107,21 @@ const WORDS: Array<[Category, RegExp]> = [
   ['shops', /\b(aldi|lidl|tesco|asda|sainsbury|morrisons|co-?op|m&s|marks|home ?bargains|b&m|primark|retail|outlet|dalton park|town|city cent(re|er)|high street|market|mall|jewell?er|samuel)\b/i],
   ['food', /\b(caf[eé]|coffee|costa|starbucks|greggs|pub|inn|arms|restaurant|pizza|kitchen|bar|bistro|tea ?room|mcdonald|kfc|nando)\b/i],
   ['transport', /\b(station|airport|bus|interchange|terminal|metro|port|ferry)\b/i],
+  ['health', /\b(hospital|surgery|medical|clinic|dentist|dental|pharmacy|chemist|optician|health cent(re|er)|gp)\b/i],
+  ['stay', /\b(hotel|hostel|lodge|b&b|holiday park|campsite|caravan)\b/i],
   ['sport', /\b(gym|leisure cent(re|er)|pool|swim|football|rugby|cricket|tennis|golf|ski(ing)?|climb|dojo|stadium|pitch|sports?)\b/i],
-  ['leisure', /\b(towers|land|zoo|aquarium|cinema|bowling|museum|gallery|castle|theatre|theater|arena|activity|adventure|theme|fair|farm|race|show|festival)\b/i],
-  ['outdoors', /\b(park|green|wood|woods|forest|beach|abbey|walk|lake|moor|garden|gardens|hill|fell|river|reservoir|nature|country ?park|trail|bridge|pier|coast|bay|falls)\b/i],
+  ['community', /\b(church|chapel|cathedral|mosque|temple|library|community cent(re|er)|village hall|scouts?)\b/i],
+  ['daysout', /\b(towers|land|zoo|aquarium|museum|gallery|castle|abbey|hall|theme|safari|farm|rapids)\b/i],
+  ['leisure', /\b(cinema|bowling|theatre|theater|arena|activity|adventure|trampoline|soft play|arcade|fair|race|show|festival)\b/i],
+  ['outdoors', /\b(park|green|wood|woods|forest|beach|walk|lake|moor|garden|gardens|hill|fell|river|reservoir|nature|country ?park|trail|bridge|pier|coast|bay|falls)\b/i],
   ['school', /\b(school|college|academy|university|nursery|campus)\b/i],
 ];
 
 /**
  * What kind of place this is, for grouping. The owner's own kind first, then
- * the words in its name, then the geocoder's guess; a nameless place far from
- * home is "far afield" (a holiday, a day trip) rather than lost among the
- * unnamed stops at home.
+ * what a web lookup found there, then the words in its name, then the
+ * geocoder's guess; a nameless place far from home is "far afield" (a holiday,
+ * a day trip) rather than lost among the unnamed stops at home.
  */
 export function categoryOf(p: PatternPlace, homeId: string | null, home: { lat: number; lon: number } | null): Category {
   if (p.id === homeId) return 'home';
@@ -105,9 +131,12 @@ export function categoryOf(p: PatternPlace, homeId: string | null, home: { lat: 
   if (p.kind === 'cafe') return 'food';
   if (p.kind === 'gym') return 'sport';
   const name = p.label || '';
+  const far = home && metresBetween(home.lat, home.lon, p.lat, p.lon) / 1000 > FAR_KM;
+  // A lookup's "other" says nothing; nor does any lookup of a nameless address on holiday.
+  const looked = p.lookup && p.lookup.category !== 'other' && (name || !far) ? p.lookup.category : null;
+  if (looked) return looked;
   for (const [cat, re] of WORDS) if (name && re.test(name)) return cat;
   if (p.kind === 'shop') return 'shops';
-  const far = home && metresBetween(home.lat, home.lon, p.lat, p.lon) / 1000 > FAR_KM;
   if (far) return 'far';
   if (p.suggestedKind === 'cafe') return 'food';
   if (p.suggestedKind === 'shop') return 'shops';
@@ -223,6 +252,8 @@ export const SLOT_ORDER: Slot[] = ['home', 'family', 'school', 'work', 'shops', 
 
 export interface PlacePattern {
   placeId: string; name: string; category: Category;
+  /** What the lookup says it is: "Discount supermarket". */
+  type: string | null;
   visits: number; days: number; hours: number; medianStay: number;
   medianTravelIn: number; activeShare: number; arrives: string; weekdayShare: number;
   onFootPerVisit: number; stayPerTravel: number | null;
@@ -270,7 +301,7 @@ export interface PatternsReport {
   };
   household: {
     categories: Array<{ category: Category; hours: number; visits: number; people: number }>;
-    shared: Array<{ placeId: string; name: string; category: Category; people: string[]; visits: number; hours: number }>;
+    shared: Array<{ placeId: string; name: string; category: Category; type: string | null; people: string[]; visits: number; hours: number }>;
     departures: number[][];
   };
   findings: Array<{ subject: string | null; text: string; weight: number }>;
@@ -304,7 +335,7 @@ export async function analysePatterns(
   const home = places.find((p) => p.id === homeId) ?? null;
   const cats = new Map(places.map((p) => [p.id, categoryOf(p, homeId, home)]));
   const placeById = new Map(places.map((p) => [p.id, p]));
-  const name = (id: string) => placeTitle(placeById.get(id));
+  const name = (id: string) => { const p = placeById.get(id); return (!p?.label && p?.lookup?.name) || placeTitle(p); };
   rows = normaliseReadings(rows.filter((r) => +r.ts >= from && +r.ts <= +now));
 
   // Per person: trips, visits, legs and the bin-by-bin state the grids and
@@ -416,7 +447,7 @@ export async function analysePatterns(
         .filter((w) => w.share >= 0.15).sort((a, b) => b.share - a.share);
       const firstVisit = Math.min(...list.map((v) => v.start));
       return {
-        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed',
+        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: placeById.get(placeId)?.lookup?.type ?? null,
         visits: list.length, days: new Set(list.map((v) => v.date)).size, hours: r1(hours),
         medianStay: r0(med(list.map((v) => v.minutes))), medianTravelIn: r0(travel),
         activeShare: ways.length ? r1(ways.filter((v) => v.inMode === 'active').length / ways.length * 100) / 100 : 0,
@@ -608,7 +639,7 @@ export async function analysePatterns(
     household: {
       categories: [...hhCats].map(([category, c]) => ({ category, hours: r1(c.hours), visits: c.visits, people: c.people.size })).sort((a, b) => b.hours - a.hours),
       shared: [...shared].filter(([, s]) => s.people.size >= 2).map(([placeId, s]) => ({
-        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', people: [...s.people], visits: s.visits, hours: r1(s.hours),
+        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: placeById.get(placeId)?.lookup?.type ?? null, people: [...s.people], visits: s.visits, hours: r1(s.hours),
       })).sort((a, b) => b.people.length - a.people.length || b.hours - a.hours).slice(0, 12),
       departures,
     },
@@ -650,4 +681,42 @@ export function findingsOf(r: PatternsReport, nameOf: (s: string) => string): Pa
   const busiest = r.household.shared[0];
   if (busiest) out.push({ subject: null, weight: 0.4, text: `${busiest.name} is the most shared place: ${busiest.people.length} people, ${busiest.visits} visits between them.` });
   return out.sort((a, b) => b.weight - a.weight);
+}
+
+/**
+ * What to search for to learn what a place is: its own name with the town the
+ * map put it in, or the map's address for a nameless stop. Null when there is
+ * nothing to search, or when it is somebody's house the owner already named —
+ * a family address never goes to a search engine.
+ */
+export function placeQuery(p: PatternPlace & { suggestedAddress?: string | null }, homeId: string | null): string | null {
+  if (p.id === homeId || p.kind === 'home') return null;
+  const address = (p.suggestedAddress || '').trim();
+  if (p.label) {
+    const town = address.split(',').slice(1).map((s) => s.trim()).filter(Boolean)[0];
+    return town && !p.label.toLowerCase().includes(town.toLowerCase().split(' ')[0]) ? `${p.label}, ${town}` : p.label;
+  }
+  return address || p.suggestedLabel || null;
+}
+
+/**
+ * Read the model's answer: a JSON array of `{ id, category, type, name }`.
+ * Anything outside the fixed categories, or for an id it was not asked about,
+ * is dropped rather than guessed.
+ */
+export function parsePlaceTypes(text: string, ids: string[]): Map<string, PlaceType> {
+  const out = new Map<string, PlaceType>();
+  const start = text.indexOf('['), end = text.lastIndexOf(']');
+  if (start < 0 || end <= start) return out;
+  let rows: unknown;
+  try { rows = JSON.parse(text.slice(start, end + 1)); } catch { return out; }
+  if (!Array.isArray(rows)) return out;
+  const asked = new Set(ids), cats = new Set<string>(LOOKUP_CATEGORIES);
+  const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+  for (const r of rows as Array<Record<string, unknown>>) {
+    const id = str(r?.id, 64), category = str(r?.category, 20)?.toLowerCase();
+    if (!id || !asked.has(id) || !category || !cats.has(category)) continue;
+    out.set(id, { category: category as Category, type: str(r.type, 40) ?? categoryLabel(category as Category), name: str(r.name, 60) });
+  }
+  return out;
 }
