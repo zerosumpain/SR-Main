@@ -8,7 +8,7 @@
   import Stat from '../../components/viz/Stat.svelte';
   import ThoughtClock from '../../components/art/daydream/ThoughtClock.svelte';
   import TwoRooms from '../../components/art/daydream/TwoRooms.svelte';
-  import { DAYDREAM_COPY as C } from '../../lib/daydream';
+  import { DAYDREAM_COPY as C, SITUATION_ROWS } from '../../lib/daydream';
   import { app } from '../../lib/appState.svelte';
   import { cascade, reveal } from '../../lib/motion';
 
@@ -99,6 +99,41 @@
   </div>
 </Band>
 
+<Band surface="ink" part="daydream" label="Right now">
+  <div class="rhythm">
+    <div class="r-words">
+      <span class="er-kicker">Right now</span>
+      <h2 class="er-display r-title" {@attach reveal({ y: 30 })}>It reads my day<br />before it thinks</h2>
+      <p class="er-lede">{t(C.questions.situation)}</p>
+      <p class="aside">{t(C.questions.capabilities)}</p>
+    </div>
+    <div>
+      <ol class="card" {@attach cascade()} aria-label="What the Right now card holds">
+        {#each SITUATION_ROWS as row, i (i)}
+          <li><span class="c-n" aria-hidden="true">{i + 1}</span><span>{t(row)}</span></li>
+        {/each}
+      </ol>
+      <div class="stats one">
+        <Stat value={f.capabilitiesKnown} label="things the site already does, listed in every prompt" />
+      </div>
+    </div>
+  </div>
+</Band>
+
+<Band surface="paper" part="daydream" label="Running the numbers">
+  <header class="g-head">
+    <span class="er-kicker">Running the numbers</span>
+    <h2 class="er-display g-title" {@attach reveal({ y: 30 })}>Tested once,<br />not twice</h2>
+    <p class="er-lede">{t(C.questions.correlate)}</p>
+  </header>
+  <div class="stats four" {@attach cascade()}>
+    <Stat value={f.correlate.series} label="day series it can test against each other" lead />
+    <Stat value={`${f.correlate.minDays}–${f.correlate.maxDays}`} unit="days" label="of history a single test may span" />
+    <Stat value={f.correlate.retestDays} unit="days" label="before a tested pair may be tested again without new data" />
+    <Stat value={f.correlate.summaryEveryDays} unit="days" label="between summaries of everything it has tested" />
+  </div>
+</Band>
+
 <Band surface="ink" part="daydream" label="Private or the web">
   <div class="rooms-head">
     <span class="er-kicker">Two kinds of thought</span>
@@ -106,6 +141,20 @@
     <p class="er-lede">{t(C.questions.privacy)}</p>
   </div>
   <TwoRooms {privateChannels} privateTools={f.tools.private} webTools={f.tools.web} />
+</Band>
+
+<Band surface="paper" part="daydream" label="One interest at a time">
+  <div class="rhythm">
+    <div class="r-words">
+      <span class="er-kicker">On the web</span>
+      <h2 class="er-display r-title" {@attach reveal({ y: 30 })}>One interest<br />at a time</h2>
+      <p class="er-lede">{t(C.questions.interests)}</p>
+    </div>
+    <div class="stats" {@attach cascade()}>
+      <Stat value={f.interests.restDays} unit="days" label="an interest rests after a visit" lead />
+      <Stat value={f.interests.declinedRestDays} unit="days" label="it rests after I’ve said no to it twice" />
+    </div>
+  </div>
 </Band>
 
 <PageFoot />
@@ -116,6 +165,13 @@
   .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 24px; }
   @media (max-width: 860px) { .rhythm { grid-template-columns: minmax(0, 1fr); } }
 
+  .aside { margin: 18px 0 0; font-size: var(--fs-body); line-height: 1.6; color: var(--fg-2); max-width: 60ch; }
+  .card { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .card li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: baseline; padding: 14px 18px; background: var(--lift, transparent); font-size: var(--fs-body); line-height: 1.5; color: var(--fg); }
+  .c-n { font-family: var(--er-mono); font-size: var(--fs-label-xs); color: var(--tone-text); }
+  .stats.one { grid-template-columns: minmax(0, 1fr); margin-top: 22px; }
+  .stats.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 860px) { .stats.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .g-head, .rooms-head { max-width: 860px; margin-bottom: clamp(24px, 3vw, 40px); }
 
   .grid-wrap { overflow-x: auto; padding-bottom: 6px; }

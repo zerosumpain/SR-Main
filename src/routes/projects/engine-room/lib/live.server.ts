@@ -13,6 +13,8 @@ import { isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { codegraphLessons, jkaiBuildDeliveries } from '$lib/db/schema';
 import { loadImpact } from '$lib/daydream/impact.server';
+import { loadRegisterRoom } from '$lib/daydream/register.server';
+import { registerSummary } from '$lib/daydream/register';
 import { developmentLane, type DevelopmentLane } from '$lib/builds/development-progress';
 
 export interface LiveDaydream {
@@ -23,6 +25,8 @@ export interface LiveDaydream {
   funnel: { spotted: number; decided: number; useful: number; actedOn: number; result: number };
   weeks: Array<{ start: string; useful: number; notUseful: number; undecided: number }>;
   checks: { awaiting: number; running: number; completed: number };
+  /** Solutions, steps and follow-ups carried out, and trackers still running. Null when unreadable. */
+  solutions: { carriedOut: number; trackersRunning: number } | null;
 }
 
 export interface LiveBuild {
@@ -51,9 +55,20 @@ async function daydream(now: Date): Promise<LiveDaydream | null> {
       funnel: { ...impact.funnel },
       weeks: impact.weeks.map((w) => ({ start: w.start, useful: w.useful, notUseful: w.notUseful, undecided: w.undecided })),
       checks: { ...impact.checks },
+      solutions: await solutions(now),
     };
   } catch (err) {
     console.error('[engine-room] live daydream counts unavailable:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+async function solutions(now: Date): Promise<LiveDaydream['solutions']> {
+  try {
+    const s = registerSummary((await loadRegisterRoom(now)).entries, now);
+    return { carriedOut: s.total, trackersRunning: s.running };
+  } catch (err) {
+    console.error('[engine-room] live solution counts unavailable:', err instanceof Error ? err.message : err);
     return null;
   }
 }

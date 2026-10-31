@@ -28,9 +28,14 @@ import { GATE_NAMES } from '$lib/codegraph/gates';
 import { ACT_KINDS } from '$lib/daydream/act/plan';
 import { FOLLOW_KINDS } from '$lib/daydream/act/follow';
 import { RED_TEAM_VERDICTS } from '$lib/daydream/red-team';
+import { SOLVE_KINDS } from '$lib/daydream/act/solution';
+import { REASONS } from '$lib/daydream/reasons';
 import { ROUTE_MANIFEST } from 'virtual:sr-route-manifest';
 
-import { STAGE_ENG, COMMISSION_COPY, DAYDREAM_COPY, ACT_COPY, VERDICT_COPY, STAGE_TURN, ACT_BADGE, FOLLOW_COPY } from './daydream';
+import {
+  STAGE_ENG, COMMISSION_COPY, DAYDREAM_COPY, ACT_COPY, VERDICT_COPY, STAGE_TURN, ACT_BADGE, FOLLOW_COPY,
+  SOLVE_COPY, REASON_COPY, SHELF_COPY, SITUATION_ROWS,
+} from './daydream';
 import { ROUTE_LEDGER, ROUTE_SCOPE } from './routes';
 import {
   SOURCE_COPY, POLICY_COPY, BRIEF_LANE_COPY, EDGE_COPY, GATE_COPY, HEARTBEAT_ACTIVITIES, HIDDEN_ACTIVITIES, ACTIVITY_COPY,
@@ -56,6 +61,8 @@ describe('copy maps cover exactly what the feature declares', () => {
     ['do it for me kinds', ACT_COPY, ACT_KINDS],
     ['take it further follow-ups', FOLLOW_COPY, FOLLOW_KINDS],
     ['double-check verdicts', VERDICT_COPY, RED_TEAM_VERDICTS],
+    ['one-press solutions', SOLVE_COPY, SOLVE_KINDS],
+    ['reasons after a verdict', REASON_COPY, REASONS],
     ['backlog idea sources', SOURCE_COPY, IDEA_SOURCES],
     ['release policies', POLICY_COPY, RELEASE_POLICIES],
     ['brief lanes', BRIEF_LANE_COPY, BRIEF_LANES],
@@ -160,6 +167,7 @@ describe('explainer copy carries no figures', () => {
       WATCH_COPY, BACKGROUND_COPY, PERMISSION_COPY, ENTITLEMENT_COPY, SURFACE_COPY, AREA_COPY, ACT_COPY, VERDICT_COPY,
       ROUTE_LEDGER, STORY, OVERVIEW_COPY, STAGE_TURN, ACT_BADGE, PAIRING_COPY, DOORWAY_COPY,
       BACKLOG_COPY, DEVELOP_COPY, VERIFY_EXTRA, CODEGRAPH_EXTRA, BUILD_HUB_COPY,
+      SOLVE_COPY, REASON_COPY, SHELF_COPY, SITUATION_ROWS,
       PARTS: PARTS.map(({ strap, headline, lede, leaves }) => ({ strap, headline, lede, leaves })),
     };
     for (const [name, m] of Object.entries(maps)) strings(m, name, all);

@@ -12,7 +12,7 @@
 import { loadFacts } from './facts.server';
 import { PARTS, href, B } from './nav';
 import { STORY } from './story';
-import { DAYDREAM_COPY, STAGE_ENG, COMMISSION_COPY, ACT_COPY, VERDICT_COPY } from './daydream';
+import { DAYDREAM_COPY, STAGE_ENG, COMMISSION_COPY, ACT_COPY, VERDICT_COPY, SOLVE_COPY, REASON_COPY, SHELF_COPY, SITUATION_ROWS } from './daydream';
 import { WHO_LABEL } from './routes';
 import {
   BUILD_COPY, DELIVERY_COPY, POLICY_COPY, BRIEF_LANE_COPY, VERIFY_COPY, GATE_COPY, PHASE_COPY,
@@ -77,6 +77,22 @@ function buildChunks(): Chunk[] {
     `${both(DAYDREAM_COPY.inbox.act)} ` + d.actKinds.map((k) => `${k.replace(/_/g, ' ')}: ${both(ACT_COPY[k as keyof typeof ACT_COPY])}`).join(' '));
   add('daydream', 'inbox', 'The double-check arguing back, and rulings', I,
     `${both(DAYDREAM_COPY.inbox.ruling)} ` + d.checkVerdicts.map((v) => `${v}: ${both(VERDICT_COPY[v as keyof typeof VERDICT_COPY])}`).join(' '));
+  add('daydream', 'questions', 'The Right now card', Q,
+    `${both(DAYDREAM_COPY.questions.situation)} The card holds: ${SITUATION_ROWS.map(both).join(' ')} ${both(DAYDREAM_COPY.questions.capabilities)} The prompt lists ${d.capabilitiesKnown} things the site already does.`);
+  add('daydream', 'questions', 'Correlations and the test ledger', Q,
+    `${both(DAYDREAM_COPY.questions.correlate)} It can test ${d.correlate.series} day series over ${d.correlate.minDays} to ${d.correlate.maxDays} days. A tested pair is not retested for ${d.correlate.retestDays} days without new data, and the ledger is summarised every ${d.correlate.summaryEveryDays} days.`);
+  add('daydream', 'questions', 'One research interest at a time', Q,
+    `${both(DAYDREAM_COPY.questions.interests)} An interest rests ${d.interests.restDays} days after a visit, or ${d.interests.declinedRestDays} days after two declines.`);
+  add('daydream', 'inbox', 'One-press solutions and the Solutions register', I,
+    `${both(DAYDREAM_COPY.inbox.solve)} ` + d.solve.kinds.map((k) => `${k}: ${both(SOLVE_COPY[k])}`).join(' ') +
+    ` A tracker runs ${d.solve.trackMinDays} to ${d.solve.trackMaxDays} days on one of ${d.solve.trackSeries} series, at most ${d.solve.maxTrackers} at once; one home press turns off at most ${d.solve.homeMaxEntities} lights or switches.`);
+  add('daydream', 'inbox', 'Why? — the reasons after a verdict', I,
+    `${both(DAYDREAM_COPY.inbox.reasons)} ` + d.reasons.map((r) => `${r.label}: ${both(REASON_COPY[r.id])}`).join(' '));
+  add('daydream', 'inbox', 'Found again, revisions and the week plan', I,
+    `${both(DAYDREAM_COPY.inbox.subjects)} ${both(DAYDREAM_COPY.inbox.plan)} Subjects are remembered for ${d.subjects.windowDays} days; the plan is revised at most every ${d.subjects.planMinHours} hours and stays pinned for ${d.subjects.planFreshDays} days.`);
+  add('daydream', 'inbox', 'Probably past its date', I,
+    `${both(DAYDREAM_COPY.inbox.shelf)} The date comes from, in order: ${(['stated', 'date', 'age'] as const).map((b) => both(SHELF_COPY[b])).join(' ')} The age fallback is ${d.shelf.ageDays} days; Still relevant adds ${d.shelf.keepDays} days; a flagged note files itself after ${d.shelf.graceDays} days.`);
+  add('daydream', 'inbox', 'Daydream in JKai chat', I, both(DAYDREAM_COPY.inbox.chat));
   add('daydream', 'impact', 'How daydream is judged', M,
     `${both(DAYDREAM_COPY.impact.line)} The window is ${d.impactWindowDays} days.`);
   add('daydream', 'impact', 'Daydream caps and limits', M,

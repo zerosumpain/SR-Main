@@ -23,6 +23,15 @@ import { IMPACT_WINDOW_DAYS } from '$lib/daydream/impact';
 import { ACT_KINDS } from '$lib/daydream/act/plan';
 import { FOLLOW_COST, FOLLOW_KINDS } from '$lib/daydream/act/follow';
 import { RED_TEAM_VERDICTS } from '$lib/daydream/red-team';
+import { SOLVE_KINDS, HOME_MAX_ENTITIES, TRACK_MIN_DAYS, TRACK_MAX_DAYS, TRACK_METRICS } from '$lib/daydream/act/solution';
+import { MAX_RUNNING_TRACKERS } from '$lib/daydream/act/track';
+import { REASONS, REASON_LABEL, REASON_VERDICT } from '$lib/daydream/reasons';
+import { SHELF_DAYS, SWEEP_GRACE_DAYS, KEEP_DAYS } from '$lib/daydream/think/shelf';
+import { SUBJECT_WINDOW_DAYS, PLAN_MIN_HOURS, PLAN_FRESH_DAYS } from '$lib/daydream/think/subjects';
+import { INTEREST_COOLDOWN_DAYS, INTEREST_COOLDOWN_DECLINED_DAYS } from '$lib/daydream/think/interests';
+import { CORRELATE_METRICS, CORRELATE_MIN_DAYS, CORRELATE_MAX_DAYS } from '$lib/daydream/think/correlate';
+import { RETEST_DAYS, SUMMARY_EVERY_DAYS } from '$lib/daydream/think/ledger';
+import { capabilityLines } from '$lib/daydream/think/capability-lines';
 import { IDEA_SOURCES, WORK_STAGES, STAGE_META } from '$lib/selfimprove/board';
 import { BUDGET_CAPS, WORK_CAPS } from '$lib/selfimprove/types';
 import { RELEASE_POLICIES, RELEASE_POLICY_LABELS, AUTOPILOT_ROUNDS, BRIEF_LANES } from '$lib/constants/development';
@@ -139,6 +148,26 @@ export function loadFacts(now = new Date()) {
       actKinds: [...ACT_KINDS],
       follow: FOLLOW_KINDS.map((id) => ({ id, cost: FOLLOW_COST[id] })),
       checkVerdicts: [...RED_TEAM_VERDICTS],
+      solve: {
+        kinds: [...SOLVE_KINDS],
+        homeMaxEntities: HOME_MAX_ENTITIES,
+        maxTrackers: MAX_RUNNING_TRACKERS,
+        trackMinDays: TRACK_MIN_DAYS,
+        trackMaxDays: TRACK_MAX_DAYS,
+        trackSeries: TRACK_METRICS.length,
+      },
+      reasons: REASONS.map((id) => ({ id, label: REASON_LABEL[id], verdict: REASON_VERDICT[id] })),
+      shelf: { ageDays: SHELF_DAYS, graceDays: SWEEP_GRACE_DAYS, keepDays: KEEP_DAYS },
+      subjects: { windowDays: SUBJECT_WINDOW_DAYS, planMinHours: PLAN_MIN_HOURS, planFreshDays: PLAN_FRESH_DAYS },
+      interests: { restDays: INTEREST_COOLDOWN_DAYS, declinedRestDays: INTEREST_COOLDOWN_DECLINED_DAYS },
+      correlate: {
+        series: CORRELATE_METRICS.length,
+        minDays: CORRELATE_MIN_DAYS,
+        maxDays: CORRELATE_MAX_DAYS,
+        retestDays: RETEST_DAYS,
+        summaryEveryDays: SUMMARY_EVERY_DAYS,
+      },
+      capabilitiesKnown: capabilityLines().length,
       upcoming: upcoming(now, 8),
     },
     build: {
