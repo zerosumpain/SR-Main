@@ -211,6 +211,7 @@
                         <thead>
                           <tr>
                             <th>Value</th><th class="right">Price</th><th>Listing</th>
+                            {#if i.criteria.constraints.some((c) => c.field === 'dates')}<th class="wl-spec">When</th>{/if}
                             {#each row.factors as f (f.label)}<th class="wl-spec">{f.label}</th>{/each}
                           </tr>
                         </thead>
@@ -232,8 +233,9 @@
                               <td class="cell-wrap">
                                 <a class="link" href={r.url} target="_blank" rel="noopener noreferrer">{r.title}</a>
                                 <br /><small class="dim">{r.merchant ? `${r.merchant} · ` : ''}{host(r.url)} · <span class="pill {VERDICT[r.verdict].tone}">{VERDICT[r.verdict].label}</span></small>
-                                {#if r.factors.length}<br /><small class="wl-specline">{specLine(r)}</small>{/if}
+                                {#if r.factors.length || r.when}<br /><small class="wl-specline">{[r.when, r.factors.length ? specLine(r) : null].filter(Boolean).join(' · ')}</small>{/if}
                               </td>
+                              {#if i.criteria.constraints.some((c) => c.field === 'dates')}<td class="wl-spec">{r.when ?? '—'}</td>{/if}
                               {#each r.factors as f (f.label)}
                                 <td class="nowrap wl-spec">{f.shown ?? '—'}{#if f.sub}<br /><small class="dim">{f.sub}</small>{/if}</td>
                               {/each}

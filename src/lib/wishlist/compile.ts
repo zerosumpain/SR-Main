@@ -13,6 +13,7 @@ import { isAllowedPricerunnerUrl, isPricerunnerCategory } from './sources/pricer
 import { isRedditSub } from './sources/reddit';
 import { isScanCategory } from './sources/scan';
 import { isUnit } from './units';
+import { SCHOOL_HOLIDAYS } from './dates';
 import type { Constraint, FeedRef, ValueFactor, WishCriteria, WishKind } from './types';
 
 export interface CompiledWish {
@@ -34,6 +35,12 @@ const words = (v: unknown, max = 8, len = 40): string[] =>
     .map((w) => w.trim().slice(0, len))
     .filter(Boolean)
     .slice(0, max);
+
+/** Words that describe a wish rather than a listing. */
+const VAGUE = new Set([
+  'sunny', 'sun', 'warm', 'hot', 'cheap', 'budget', 'affordable', 'good', 'great', 'nice', 'best', 'big', 'small',
+  'family', 'family-friendly', 'fun', 'luxury', 'luxurious', 'relaxing', 'quiet', 'romantic', 'decent', 'quality',
+]);
 
 const pounds = (v: unknown): number | null => {
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v.replace(/[£,]/g, '')) : NaN;
@@ -75,6 +82,13 @@ function constraintOf(raw: unknown, dropped: string[]): Constraint | null {
     case 'text': {
       const op = r.op === 'excludes_any' ? 'excludes_any' : 'contains_any';
       const value = words(r.value);
+      // A "must mention" made only of words that describe the wish, not the
+      // listing, rules out everything: the model asked twice for "sunny" on a
+      // holiday, despite the prompt, and no deal title says it (2026-10-31).
+      if (op === 'contains_any' && value.length && value.every((w) => VAGUE.has(w.toLowerCase()))) {
+        dropped.push(`"must mention ${value.join(' / ')}" — listings do not say that`);
+        return null;
+      }
       return value.length ? { field: 'text', op, value } : null;
     }
     default:
@@ -113,6 +127,33 @@ function feedsOf(raw: Record<string, unknown>, dropped: string[]): FeedRef[] {
     feeds.push({ source: 'tavily', value: raw.searchQuery.trim().slice(0, 120) });
   }
   return feeds;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MS = 86_400_000;
+
+/**
+ * The travel window: a named school holiday from the table (so "February half
+ * term" is the table's dates, not the model's recollection), or explicit dates.
+ */
+function datesOf(raw: unknown, dropped: string[]): Constraint | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.schoolHoliday === 'string' && r.schoolHoliday.trim()) {
+    const hit = SCHOOL_HOLIDAYS.find((h) => h.name.toLowerCase() === (r.schoolHoliday as string).trim().toLowerCase());
+    if (hit) return { field: 'dates', from: hit.from, to: hit.to, label: hit.name };
+    dropped.push(`school holiday "${r.schoolHoliday}" is not in the table`);
+  }
+  const from = typeof r.from === 'string' && ISO_DATE.test(r.from) ? r.from : null;
+  const to = typeof r.to === 'string' && ISO_DATE.test(r.to) ? r.to : from;
+  if (!from || !to) return null;
+  const span = (Date.parse(to) - Date.parse(from)) / DAY_MS;
+  if (!(span >= 0 && span <= 400)) {
+    dropped.push(`travel dates ${from} to ${to}`);
+    return null;
+  }
+  const label = typeof r.label === 'string' ? r.label.trim().slice(0, 60) : '';
+  return { field: 'dates', from, to, label };
 }
 
 const PC_MEASURES = ['gpu', 'cpu', 'ram_gb', 'storage_gb'] as const;
@@ -156,7 +197,12 @@ export function validateCompiled(raw: unknown, ask: string): CompiledWish {
     .map((c) => constraintOf(c, dropped))
     .filter((c): c is Constraint => c !== null)
     .slice(0, 12);
-  const deadline = typeof r.deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.deadline) ? r.deadline : null;
+  const travel = datesOf(r.travelDates, dropped);
+  if (travel) constraints.push(travel);
+  // A trip's hunt is over once the trip has started.
+  const asked = typeof r.deadline === 'string' && ISO_DATE.test(r.deadline) ? r.deadline : null;
+  const leaves = travel?.field === 'dates' ? travel.from : null;
+  const deadline = asked && leaves ? (asked < leaves ? asked : leaves) : (asked ?? leaves);
   const title = (typeof r.title === 'string' && r.title.trim() ? r.title.trim() : ask.trim()).slice(0, 120);
 
   return {

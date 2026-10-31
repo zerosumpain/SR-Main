@@ -41,10 +41,11 @@ export const UNITS = {
   // Travel
   nights: {
     format: plain(' nights'),
-    // "7 nights", "7-night", "a week" (= 7), "fortnight" (= 14). A "week" is a
-    // stay unless it is a deal's lifetime ("this week only", "per week").
+    // "7 nights", "7-night", "7 Nts", "a week" (= 7), "fortnight" (= 14). A
+    // "week" is a stay unless it is a deal's lifetime ("this week only", "per
+    // week"). Over 120 is not a stay — "Feb 2027 … nights" read as 2,027.
     read: (text) => [
-      ...all(new RegExp(`${NUM}\\s*-?\\s*nights?\\b`, 'gi'))(text),
+      ...all(new RegExp(`${NUM}\\s*-?\\s*(?:nights?|nts?)\\b`, 'gi'))(text).filter((n) => n >= 1 && n <= 120),
       ...(/\bfortnight\b/i.test(text) ? [14] : []),
       ...(/\b(?<!(?:this|next|last|per|every|each)\s)week(?!end|s\b|day)\b/i.test(text) ? [7] : []),
     ],
