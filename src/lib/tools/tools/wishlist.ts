@@ -1,13 +1,13 @@
 // `wishlist` toolset — things to buy. wishlist_add turns "I want X, under £Y,
 // with Z" into a hunt (or, given a product link, a price watch) that the
-// `wishlist-sweep` heartbeat checks against hotukdeals and PriceRunner;
-// wishlist_list shows what is on it and the best listings found;
-// wishlist_update pauses, settles or deletes an item. The page is /home/wishlist.
+// `wishlist-sweep` heartbeat checks against hotukdeals, PriceRunner,
+// Overclockers, Scan and r/buildapcsalesuk; wishlist_list shows what is on it and the best listings found;
+// wishlist_update pauses, settles, re-reads or deletes an item. The page is /home/wishlist.
 //
 // Owner only (not member-safe): phase 1 lists are the owner's, and an item can
 // name who a gift is for.
 import { register } from '../registry-internal';
-import { addWish } from '$lib/wishlist/add.server';
+import { addWish, rereadWish } from '$lib/wishlist/add.server';
 import { checkItem, rankOffers } from '$lib/wishlist/sweep.server';
 import { deleteItem, getItem, listItems, listOffers, saveItem } from '$lib/wishlist/store.server';
 import { describeConstraint, formatPence } from '$lib/wishlist/match';
@@ -38,7 +38,7 @@ register({
   effect: 'mutate',
   confirm: 'never',
   description:
-    'Add something to the WISH LIST. Give the user\'s words: either criteria to HUNT for ("a gaming PC under £1,100 with 16GB DDR5 and an RTX 5060 or better, for Christmas") or a product link to WATCH for a price drop (optionally "tell me under £X"). The wish list checks hotukdeals and PriceRunner on a schedule and messages the user when a listing meets every criterion, nearly does, or a watched price falls. Returns what it understood — show the user the criteria so a misread can be fixed. Prefer this over monitor_create for anything that is shopping.',
+    'Add something to the WISH LIST. Give the user\'s words: either criteria to HUNT for ("a gaming PC under £1,100 with 16GB DDR5 and an RTX 5060 or better, for Christmas") or a product link to WATCH for a price drop (optionally "tell me under £X"). The wish list checks hotukdeals, PriceRunner, Overclockers, Scan and r/buildapcsalesuk on a schedule and messages the user when a listing meets every criterion, nearly does, or a watched price falls. Returns what it understood — show the user the criteria so a misread can be fixed. Prefer this over monitor_create for anything that is shopping.',
   parameters: {
     type: 'object',
     properties: {
@@ -99,12 +99,12 @@ register({
   effect: 'mutate',
   confirm: 'never',
   description:
-    'Change a wish list item: set its status (watching, paused, bought, dropped), run a check now, or delete it. Use the id from wishlist_list.',
+    'Change a wish list item: set its status (watching, paused, bought, dropped), run a check now, "reread" its ask (picks up sources added since it was made), or delete it. Use the id from wishlist_list.',
   parameters: {
     type: 'object',
     properties: {
       id: { type: 'string', description: 'The item id (w_…).' },
-      action: { type: 'string', enum: ['watching', 'paused', 'bought', 'dropped', 'check', 'delete'], description: 'A new status, "check" to look now, or "delete".' },
+      action: { type: 'string', enum: ['watching', 'paused', 'bought', 'dropped', 'check', 'reread', 'delete'], description: 'A new status, "check" to look now, "reread" to re-read the ask, or "delete".' },
     },
     required: ['id', 'action'],
   },
@@ -120,6 +120,10 @@ register({
       if (action === 'check') {
         const res = await checkItem(item);
         return { success: true, data: { checked: res.candidates, kept: res.kept, alerts: res.events, errors: res.errors, page: `${PAGE}#${id}` } };
+      }
+      if (action === 'reread') {
+        const { dropped } = await rereadWish(item);
+        return { success: true, data: { item: summary(item), leftOut: dropped, page: `${PAGE}#${id}` } };
       }
       if (!STATUSES.includes(action as WishStatus)) return { success: false, error: `unknown action ${action}` };
       item.status = action as WishStatus;

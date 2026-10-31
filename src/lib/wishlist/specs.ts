@@ -4,10 +4,12 @@
 // scanned ("32GB DDR5 | RTX 5060 Ti | 1TB NVMe"), and a regex reads that more
 // reliably than a model asked to summarise it.
 
+import { parseCpu, type CpuReading } from './cpu';
 import { parseGpu, type GpuReading } from './gpu';
 
 export interface Specs {
   gpu: GpuReading | null;
+  cpu: CpuReading | null;
   ramGb: number | null;
   ramType: string | null;
   storageGb: number | null;
@@ -60,6 +62,7 @@ export function readSpecs(title: string, description = ''): Specs {
   const ram = parseRam(text);
   return {
     gpu: parseGpu(title, description),
+    cpu: parseCpu(title, description),
     ramGb: ram.gb,
     ramType: ram.type,
     storageGb: parseStorageGb(text),

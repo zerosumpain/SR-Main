@@ -114,7 +114,7 @@ export interface ProductPage {
   offers: SellerOffer[];
 }
 
-function availability(v: unknown): boolean | null {
+export function availability(v: unknown): boolean | null {
   if (typeof v !== 'string') return null;
   if (/InStock|LimitedAvailability|PreOrder|OnlineOnly/i.test(v)) return true;
   if (/OutOfStock|SoldOut|Discontinued/i.test(v)) return false;
