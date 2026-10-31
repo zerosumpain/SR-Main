@@ -1410,6 +1410,38 @@ export function subscribe(
   return stop;
 }
 
+/**
+ * The game of a room a shared screen may show — one whose rules have a
+ * `toScreen` — or a 404 / 400 GameError. No player check: the caller has
+ * already been let in (a player pairing it, or a screen holding a ticket).
+ */
+export function screenGame(id: string): GameId {
+  const live = rooms.get(id);
+  if (!live || live.dead) throw new GameError(404, 'That game has finished.');
+  if (!live.rules.toScreen) throw new GameError(400, 'This game has no TV board yet.');
+  return live.room.game;
+}
+
+/**
+ * Follow a room as a shared screen (the TV board): the game's `toScreen` now
+ * and on every change, `onGone` once when the room is dropped. A screen is
+ * nobody at the table — it neither counts as a player watching (pushes still
+ * go) nor keeps a durable room from being evicted. Returns the unsubscribe.
+ */
+export function watch(id: string, onRoom: (room: WireRoom) => void, onGone: () => void): () => void {
+  const live = get(id);
+  const toScreen = live.rules.toScreen;
+  if (!toScreen) throw new GameError(400, 'This game has no TV board yet.');
+  const change = () => onRoom(toScreen(live.room, Date.now()) as WireRoom);
+  live.emitter.on('change', change);
+  live.emitter.once('gone', onGone);
+  change();
+  return () => {
+    live.emitter.off('change', change);
+    live.emitter.off('gone', onGone);
+  };
+}
+
 /** Tests only. */
 export function _resetRooms(): void {
   for (const live of rooms.values()) {
