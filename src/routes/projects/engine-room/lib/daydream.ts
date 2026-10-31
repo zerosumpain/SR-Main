@@ -104,7 +104,7 @@ export const FOLLOW_COPY = {
   },
   prototype: {
     plain: 'Builds a one-page sketch in the sandbox so I can see if an idea is worth a real build.',
-    eng: 'Guided. A sandbox build with a 45-minute, 1.5M-token ceiling; refused when the subscription window is nearly used.',
+    eng: 'Guided. A sandbox build under its own token and time ceiling, shown in the cost line; refused when the subscription window is nearly used.',
   },
   watch: {
     plain: 'Instead of building something, it watches for the thing and tells me when it happens. Stop removes it.',
