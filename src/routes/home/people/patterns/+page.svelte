@@ -167,7 +167,7 @@
           <p class="strap">Away from home, somewhere two or more people stay. Pick a person above for their own destinations in full.</p>
           <ul class="rows">
             {#each report.household.shared as s (s.placeId)}
-              <li><span><strong>{s.name}</strong><small>{s.people.map((x) => names[x] ?? x).join(', ')}</small></span><span class="num">{s.visits} visits · {Math.round(s.hours)} h</span></li>
+              <li><span><strong>{s.name}</strong><small>{s.type ?? categoryLabel(s.category)} · {s.people.map((x) => names[x] ?? x).join(', ')}</small></span><span class="num">{s.visits} visits · {Math.round(s.hours)} h</span></li>
             {/each}
           </ul>
         {/if}

@@ -26,7 +26,8 @@ export const actions: Actions = {
     if (!(await isOwnerRequest(event))) error(403, 'Forbidden');
     const { runPatterns } = await import('$lib/home/presence/patterns.server');
     try {
-      const r = await runPatterns();
+      // Three batches of new place lookups at most: the owner is waiting; the night does the rest.
+      const r = await runPatterns(new Date(), 3);
       return { rebuilt: r.people.length };
     } catch (err) {
       return fail(500, { error: errMsg(err) });

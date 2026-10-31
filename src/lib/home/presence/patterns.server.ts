@@ -4,7 +4,8 @@
 // everyone's trail, the places, and each person's daily step count from the
 // app, run through `analysePatterns` and kept in app_settings. Built nightly
 // with the forecast (`forecast-nightly`) — seconds of CPU and a few hundred
-// small pilot calls, so never on a page load. Owner-only: the page refuses
+// small pilot calls, so never on a page load. First, any place not yet
+// looked up gets a web search for what it is (`place-types.server`). Owner-only: the page refuses
 // anyone else, and so does the rebuild.
 
 import { eq } from 'drizzle-orm';
@@ -15,7 +16,8 @@ import { pilotSteps } from './companion-accounts';
 import { localClock } from './forecast';
 import { insightMembers, trailRows } from './insights.server';
 import { getHomePlace } from './places';
-import { analysePatterns, type PatternPlace, type PatternsReport } from './patterns';
+import { analysePatterns, placeQuery, type PatternPlace, type PatternsReport } from './patterns';
+import { loadPlaceTypes, refreshPlaceTypes } from './place-types.server';
 
 export const PATTERNS_KEY = 'home.patterns.report';
 export const PATTERNS_DAYS = 90;
@@ -49,13 +51,23 @@ export async function dailySteps(email: string, days: number, now: Date): Promis
   return out;
 }
 
-export async function runPatterns(now = new Date()): Promise<PatternsReport> {
+/** `lookups`: how many batches of place lookups to run first; 0 uses only the cache. */
+export async function runPatterns(now = new Date(), lookups = 20): Promise<PatternsReport> {
   const [members, home] = await Promise.all([insightMembers({ kind: 'owner' }), getHomePlace().catch(() => null)]);
   const placeRows = await db.select().from(daydreamPlaces).where(eq(daydreamPlaces.status, 'active'));
-  const places: PatternPlace[] = placeRows.map((p) => ({
+  const places: Array<PatternPlace & { suggestedAddress: string | null }> = placeRows.map((p) => ({
     id: p.id, label: p.label, kind: p.kind, lat: p.lat, lon: p.lon, radiusM: p.radiusM, source: p.source,
-    suggestedLabel: p.suggestedLabel, suggestedKind: p.suggestedKind, firstSeenAt: p.firstSeenAt,
+    suggestedLabel: p.suggestedLabel, suggestedKind: p.suggestedKind, suggestedAddress: p.suggestedAddress, firstSeenAt: p.firstSeenAt,
   }));
+  // A failed lookup costs the categories nothing they had: the cache still answers.
+  const types = lookups > 0
+    ? await refreshPlaceTypes(places, home?.id ?? null, lookups).then((r) => r.cache).catch(() => loadPlaceTypes())
+    : await loadPlaceTypes();
+  for (const p of places) {
+    const t = types[p.id];
+    // An answer for a name the place no longer has is stale.
+    if (t && t.query === placeQuery(p, home?.id ?? null)) p.lookup = { category: t.category, type: t.type, name: t.name };
+  }
   const rows = members.length ? await trailRows('patterns', members.map((m) => m.subject), PATTERNS_DAYS, now) : [];
   const steps = new Map<string, Map<string, number>>();
   // One person at a time: the pilot is a small box and this is not urgent.
