@@ -9,7 +9,8 @@
   import Band from '../../components/kit/Band.svelte';
   import NoteJourney from '../../components/art/daydream/NoteJourney.svelte';
   import VerdictScales from '../../components/art/daydream/VerdictScales.svelte';
-  import { DAYDREAM_COPY as C, STAGE_ENG, STAGE_TURN, COMMISSION_COPY, ACT_COPY, ACT_BADGE, VERDICT_COPY, FOLLOW_COPY } from '../../lib/daydream';
+  import { DAYDREAM_COPY as C, STAGE_ENG, STAGE_TURN, COMMISSION_COPY, ACT_COPY, ACT_BADGE, VERDICT_COPY, FOLLOW_COPY, SOLVE_COPY, REASON_COPY, SHELF_COPY } from '../../lib/daydream';
+  import Stat from '../../components/viz/Stat.svelte';
   import { app } from '../../lib/appState.svelte';
   import { cascade, reveal } from '../../lib/motion';
   import { words } from '../../lib/format';
@@ -18,6 +19,9 @@
   import type { ActKind } from '$lib/daydream/act/plan';
   import type { FollowKind } from '$lib/daydream/act/follow';
   import type { RedTeamVerdict } from '$lib/daydream/red-team';
+  import type { SolveKind } from '$lib/daydream/act/solution';
+  import type { Reason } from '$lib/daydream/reasons';
+  import type { ShelfBasis } from '$lib/daydream/think/shelf';
 
   let { data } = $props();
   const f = $derived(data.facts.daydream);
@@ -42,6 +46,13 @@
 
   let done = $state<Record<string, boolean>>({});
   let verdict = $state<string | null>('holds');
+  const live = $derived(data.live.daydream);
+
+  let reason = $state<string | null>(null);
+  const pickedReason = $derived(f.reasons.find((r) => r.id === reason) ?? null);
+  const VERDICT_WORD: Record<string, string> = { useful: 'counts as a yes', not_useful: 'counts as a no' };
+  const SHELF_ORDER: ShelfBasis[] = ['stated', 'date', 'age'];
+  const SHELF_HEAD: Record<ShelfBasis, string> = { stated: 'Its own estimate', date: 'A date it names', age: 'Its age' };
 </script>
 
 <svelte:head><title>Inbox — Daydream — The Engine Room</title></svelte:head>
@@ -128,6 +139,49 @@
   {/if}
 </Band>
 
+<Band surface="ink" part="daydream" label="Solutions">
+  <div class="split top">
+    <header>
+      <span class="er-kicker">Solutions</span>
+      <h2 class="er-display sec-title" {@attach reveal({ y: 30 })}>One press,<br />and the site<br />does it</h2>
+      <p class="er-lede">{t(C.inbox.solve)}</p>
+      <div class="stats" {@attach cascade()}>
+        <Stat value={live?.solutions?.carriedOut ?? null} label="things notes have carried out, on the register" lead />
+        <Stat value={live?.solutions?.trackersRunning ?? null} label="trackers running right now" />
+        <Stat value={`${f.solve.trackMinDays}–${f.solve.trackMaxDays}`} unit="days" label="a tracker may run, on one of {f.solve.trackSeries} measured series" />
+        <Stat value={f.solve.homeMaxEntities} label="lights or switches one press may turn off" />
+      </div>
+    </header>
+    <ol class="solve" {@attach cascade()}>
+      {#each f.solve.kinds as k (k)}
+        <li data-k={k}>
+          <b>{words(k)}</b>
+          <p>{t(SOLVE_COPY[k as SolveKind])}</p>
+        </li>
+      {/each}
+    </ol>
+  </div>
+</Band>
+
+<Band surface="paper" part="daydream" label="Why?">
+  <div class="split">
+    <header>
+      <span class="er-kicker">Why?</span>
+      <h2 class="er-display sec-title" {@attach reveal({ y: 30 })}>Three kinds<br />of no</h2>
+      <p class="er-lede">{t(C.inbox.reasons)}</p>
+    </header>
+    <div>
+      <div class="reasons" role="group" aria-label="The reasons after a verdict">
+        {#each f.reasons as r (r.id)}
+          <button class="chip" class:on={reason === r.id} aria-pressed={reason === r.id}
+            onclick={() => (reason = reason === r.id ? null : r.id)}>{r.label}</button>
+        {/each}
+      </div>
+      <p class="say" aria-live="polite">{#if pickedReason}<b>{pickedReason.label}: {pickedReason.verdict ? VERDICT_WORD[pickedReason.verdict] : 'no verdict at all'}.</b> {t(REASON_COPY[pickedReason.id as Reason])}{:else}One tap after a verdict. Pick one to see what it teaches.{/if}</p>
+    </div>
+  </div>
+</Band>
+
 <Band surface="ink" part="daydream" label="What the double-check can conclude">
   <div class="split">
     <header>
@@ -145,6 +199,51 @@
   <p class="ruling"><span class="r-k">And my own ruling</span>{t(C.inbox.ruling)}</p>
 </Band>
 
+<Band surface="paper" part="daydream" label="Found again">
+  <div class="split top">
+    <header>
+      <span class="er-kicker">Found again</span>
+      <h2 class="er-display sec-title" {@attach reveal({ y: 30 })}>Said once,<br />then only<br />what changed</h2>
+      <p class="er-lede">{t(C.inbox.subjects)}</p>
+    </header>
+    <div>
+      <p class="aside">{t(C.inbox.plan)}</p>
+      <div class="stats" {@attach cascade()}>
+        <Stat value={f.subjects.windowDays} unit="days" label="it remembers what each note was about" lead />
+        <Stat value={f.subjects.planMinHours} unit="hours" label="at least, between revisions of the week plan" />
+        <Stat value={f.subjects.planFreshDays} unit="days" label="the week plan stays pinned without a revision" />
+      </div>
+    </div>
+  </div>
+</Band>
+
+<Band surface="ink" part="daydream" label="Past its date">
+  <div class="split top">
+    <header>
+      <span class="er-kicker">Past its date</span>
+      <h2 class="er-display sec-title" {@attach reveal({ y: 30 })}>Old news<br />files itself</h2>
+      <p class="er-lede">{t(C.inbox.shelf)}</p>
+      <div class="stats" {@attach cascade()}>
+        <Stat value={f.shelf.keepDays} unit="days" label="more that Still relevant gives a note" lead />
+        <Stat value={f.shelf.graceDays} unit="days" label="a flagged note waits before it files itself" />
+      </div>
+    </header>
+    <ol class="solve" {@attach cascade()} aria-label="Where the date comes from, in order">
+      {#each SHELF_ORDER as b (b)}
+        <li><b>{SHELF_HEAD[b]}{b === 'age' ? ` · ${f.shelf.ageDays} days` : ''}</b><p>{t(SHELF_COPY[b])}</p></li>
+      {/each}
+    </ol>
+  </div>
+</Band>
+
+<Band surface="paper" part="daydream" label="In chat">
+  <div class="head">
+    <span class="er-kicker">In chat</span>
+    <h2 class="er-display sec-title" {@attach reveal({ y: 30 })}>Talking it<br />over with JKai</h2>
+    <p class="er-lede">{t(C.inbox.chat)}</p>
+  </div>
+</Band>
+
 <PageFoot />
 
 <style>
@@ -153,6 +252,14 @@
   .head { max-width: 860px; margin-bottom: clamp(24px, 3vw, 40px); }
   @media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } }
 
+  .split.top { align-items: start; }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 20px; margin-top: 28px; }
+  .aside { margin: 0 0 8px; font-size: var(--fs-body); line-height: 1.6; color: var(--fg-2); }
+  .solve { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .solve li { background: var(--lift); padding: 18px 22px; display: grid; gap: 6px; }
+  .solve b { font-family: var(--er-display); font-weight: 400; text-transform: uppercase; font-size: 22px; color: var(--tone-text); }
+  .solve p { margin: 0; font-size: var(--fs-label); line-height: 1.55; color: var(--fg-2); }
+  .reasons { display: flex; flex-wrap: wrap; gap: 8px; }
   .lanes { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
   .lane { border-top: 4px solid var(--fg-3); padding: 14px 0 0; display: flex; flex-direction: column; gap: 12px; }
   .lane[data-k='me'] { border-top-color: var(--you); }

@@ -10,6 +10,9 @@ import type { CommissionState } from '$lib/daydream/commissioning';
 import type { ActKind } from '$lib/daydream/act/plan';
 import type { FollowKind } from '$lib/daydream/act/follow';
 import type { RedTeamVerdict } from '$lib/daydream/red-team';
+import type { SolveKind } from '$lib/daydream/act/solution';
+import type { Reason } from '$lib/daydream/reasons';
+import type { ShelfBasis } from '$lib/daydream/think/shelf';
 
 export interface Twin {
   /** Plain English — the default register. */
@@ -101,7 +104,7 @@ export const FOLLOW_COPY = {
   },
   prototype: {
     plain: 'Builds a one-page sketch in the sandbox so I can see if an idea is worth a real build.',
-    eng: 'Guided. A sandbox build with a 45-minute, 1.5M-token ceiling; refused when the subscription window is nearly used.',
+    eng: 'Guided. A sandbox build under its own token and time ceiling, shown in the cost line; refused when the subscription window is nearly used.',
   },
   watch: {
     plain: 'Instead of building something, it watches for the thing and tells me when it happens. Stop removes it.',
@@ -133,6 +136,77 @@ export const VERDICT_COPY = {
   },
 } satisfies Record<RedTeamVerdict, Twin>;
 
+/** One-press solutions: what each kind does, and the line it may not cross. */
+export const SOLVE_COPY = {
+  track: {
+    plain: 'Starts a tracker on one thing my devices already measure, with a daily target and an end day. It checks every day and tells me once how it went.',
+    eng: 'One press. A tracker on one measured series, with a goal, a target, a start and an end day, stored in app settings. The think activity checks progress each cycle and reports the result once. Stop ends it.',
+  },
+  home: {
+    plain: 'Turns off lights or switches the note itself names. Only off, only lights and switches, never a lock, the alarm or the heating. Undo turns them back on.',
+    eng: 'One press. Calls turn_off on light and switch entities named in the note’s cited cards, up to a fixed limit. Every other domain fails the check. Undo calls turn_on on the same entities.',
+  },
+  open: {
+    plain: 'Opens the page that already does it: one of the site’s own pages, or a link the note actually read, like an unsubscribe page.',
+    eng: 'A link press. The path must be a page the capability manifest lists, or a URL that appears in a cited card. Nothing the model makes up can pass.',
+  },
+  build: {
+    plain: 'When the site can’t do it yet, one press puts it on the build list, already agreed, so it’s built overnight.',
+    eng: 'One press. Files the gap through the backlog intake, drafts the brief and stamps it accepted, which is what the nightly builder picks up.',
+  },
+  watch: {
+    plain: 'Sets up a standing watch, in the note’s own words, that tells me when the thing happens.',
+    eng: 'One press. Creates a monitor workflow briefed with the note’s text, the same machinery as Take it further. Stop deletes it.',
+  },
+} satisfies Record<SolveKind, Twin>;
+
+/** The "Why?" chips after a verdict: what each tells it. */
+export const REASON_COPY = {
+  already_knew: {
+    plain: 'Counts as a no for the note, and tells it what isn’t news to me, so it stops telling me.',
+    eng: 'Sets not useful. The title rides in the think prompt’s taste block as something the owner already knows.',
+  },
+  not_my_thing: {
+    plain: 'A no, and a taste: fewer notes like this one.',
+    eng: 'Sets not useful. Feeds the taste block, so later cycles weigh the kind down.',
+  },
+  not_now: {
+    plain: 'Not a no. The note is put away with no verdict, so a bad day doesn’t teach it the wrong lesson.',
+    eng: 'Files the note as expired and clears any verdict, so the kind’s learned weight doesn’t move.',
+  },
+  did_it: {
+    plain: 'A yes, and I acted on it. Do it for me and a solution say this for me when they finish.',
+    eng: 'Sets useful. Written automatically when a one-tap step or a solution completes.',
+  },
+} satisfies Record<Reason, Twin>;
+
+/** Where a note's "probably past its date" day comes from, in the order it is tried. */
+export const SHELF_COPY = {
+  stated: {
+    plain: 'The note said itself how long it would matter, or I pressed Still relevant.',
+    eng: 'relevant_until: the think loop’s own until estimate, or the owner’s keep, which pushes it out.',
+  },
+  date: {
+    plain: 'Otherwise, the last date it names that was still ahead when it was written.',
+    eng: 'The latest future date found in the title or narrative. A date already past when written is data it read, not its subject.',
+  },
+  age: {
+    plain: 'Otherwise, a few days after it was written.',
+    eng: 'Fallback: a fixed shelf life from the day it was written, in London time.',
+  },
+} satisfies Record<ShelfBasis, Twin>;
+
+/** What the "Right now" card puts in front of every private thought. Copy only: the card's
+ *  rows are built by code in think/situation.server.ts, and none of their values leave it. */
+export const SITUATION_ROWS: readonly Twin[] = [
+  { plain: 'Where I am, by name: home, away, or a named place. Never a map position.', eng: 'A named place or home, with a distance band. Coordinates never enter the card.' },
+  { plain: 'Whether I’m on a trip, and where.', eng: 'The current trip from the trip planner, if today falls inside it.' },
+  { plain: 'Who in the family is with me.', eng: 'Household members at the same named place, or both at home, on fresh fixes only.' },
+  { plain: 'How I slept, how recovered I am, and my heart-rate variability against my usual.', eng: 'Last night’s sleep, today’s recovery and HRV against baseline, from the health read.' },
+  { plain: 'My mood lately.', eng: 'The latest State of Mind valence, with this week’s mean against the week before.' },
+  { plain: 'What’s in my diary today and tomorrow.', eng: 'The diary tool’s render of today and tomorrow. Unreadable is said as unknown, not empty.' },
+];
+
 export const DAYDREAM_COPY = {
   hub: {
     strap: 'It thinks about my life while I’m busy',
@@ -146,6 +220,22 @@ export const DAYDREAM_COPY = {
   questions: {
     line: { plain: 'It doesn’t browse everything at once. Each cycle asks one narrow question, and a clock decides which.', eng: 'One channel × outcome pair per cycle, chosen by a clock-keyed schedule, with a read-only toolset scoped to that pair.' },
     why: { plain: 'Rotating what it looked at over the same pile of data mostly produced echoes. A narrow question fetches only what it needs, so every part of my life gets the same share of attention.', eng: 'The schedule is clock-derived, so there’s no cursor to drift and two machines agree on the current slot. Each channel gets the same number of visits per period, and pairs that make no sense are excluded by a skip table the tests pin.' },
+    situation: {
+      plain: 'Before a private thought starts, code writes it a card about my day as a whole, and any suggestion that ignores the card counts as wrong. That came from a trip: abroad with the family, it suggested an easy run at home pace because my recovery looked good.',
+      eng: 'A situation card is seeded into every private cycle before the model reads anything, and it is citable like any other card. Standing prompt rules say a suggestion that ignores it is wrong and ask for the interaction between factors, not one signal. Location is context only: no note may be about where I am.',
+    },
+    capabilities: {
+      plain: 'It is also told what the site can already do and what is already on the build list, so it stops suggesting I build something I have.',
+      eng: 'The prompt carries the live and preview rows of the capability manifest and the open backlog titles, passed in by the think activity because daydream may not import the backlog.',
+    },
+    correlate: {
+      plain: 'When it wonders whether two things in my life move together, it runs the numbers rather than guessing, and keeps a ledger, so the same pair isn’t tested again until there is enough new data to change the answer.',
+      eng: 'correlate runs a Spearman test over day series and can hold a third series fixed (a partial correlation); compare_days runs a Mann–Whitney test between two groups of days. Every test is written to a ledger; a pair with no new data comes back already tested, and a note resting on it is refused. A periodic summary note is written over the ledger.',
+    },
+    interests: {
+      plain: 'A web thought follows one of my interests at a time, chosen by code. An interest rests after a visit, and rests longer after I’ve said no twice. If nothing is due, it doesn’t think at all.',
+      eng: 'Interests come from my notebook and research sessions, minus anything daydream started itself, with near-duplicates merged. Code picks one per cycle with a cooldown, longer after two declines, and skips the cycle without a model call when none is due. A research note must carry an action.',
+    },
     privacy: { plain: 'A cycle can read my private data or the open web, never both in the same cycle. That’s how a web search can’t carry anything of mine out with it.', eng: 'Private cycles get local and site tools only. Research cycles get web search and fetch only, so they hold no owner data, which is why only a research cycle may produce the research outcome.' },
   },
   inbox: {
@@ -157,6 +247,30 @@ export const DAYDREAM_COPY = {
     ruling: {
       plain: 'I can also rule on a note myself. Saying it’s wrong needs a reason, and that reason is remembered, so the same mistake is less likely next time.',
       eng: 'An owner ruling goes through the same writer as the double-check. A wrong ruling requires a why, which is stored as a ruling memory; re-ruling supersedes the earlier memory rather than leaving two that disagree.',
+    },
+    solve: {
+      plain: 'A note is meant to end in a solution, not a thought. When it can, it offers one press that makes the site do the thing, and pressing it counts as my yes. Everything it carried out goes on a register, so I can see what came of it.',
+      eng: 'The model proposes at most one solution, stored as a solve entry in the note’s proposed actions. Code checks it against the note’s own cited cards before it is offered. Pressing it carries the step out and marks the note useful. The Solutions room lists every solution, step and follow-up carried out, with trackers’ live progress.',
+    },
+    reasons: {
+      plain: 'After I say yes or no, it asks why with a row of one-tap chips. The reason matters more than the verdict: already knew, not my thing and not now are three very different noes.',
+      eng: 'A reason is stored in the feedback note column the verdict writer already fills, so no schema change. The no reasons feed a taste block in the think prompt; a research cycle sees only research titles. It is wrong is not a chip: it opens the ruling form instead.',
+    },
+    subjects: {
+      plain: 'Every note is about something, and it remembers what. If it finds the same thing again with nothing new to say, it doesn’t write a second note; the first one just says it was seen again. If something did change, the new note says what, and replaces the old one.',
+      eng: 'Each note gets a subject key checked by code. A repeat with no new figure folds into the earlier note as seen again, even if that note has expired. A revision must name a new figure its own cards hold, opens with What changed, and archives older unanswered notes on the subject.',
+    },
+    plan: {
+      plain: 'Health plans are one living plan for the week, pinned at the top, rather than a new plan every few hours.',
+      eng: 'Every health plan shares one subject, so it is revised in place, no more often than a minimum interval, and pinned above the Inbox and at the head of the phone’s Today notes while fresh.',
+    },
+    shelf: {
+      plain: 'A note I haven’t answered gets flagged Probably past its date once the day it mattered has gone. I can file it, keep it a while longer, or file them all. If I leave it flagged, it files itself after a grace period.',
+      eng: 'Only a note still at Spotted can be flagged: nothing rated, ruled, acted on, checked or followed up. Filing sets it expired, which is not a verdict, so learned weights don’t move. The server re-reads which notes are flagged before filing. A heartbeat sweep files what has stayed flagged past its grace period.',
+    },
+    chat: {
+      plain: 'I can also talk about the notes with JKai in chat. It can find a note, rate it, correct it in my words, and get a double-check ready, but carrying a step out always needs a confirm card, and approving a double-check stays on the Inbox.',
+      eng: 'An owner-only daydream toolset on the chat tool registry: inbox and note reads, rate, correct and prepare a double-check as light mutates, and do it for me behind an always-confirm card. Results are labelled derived, nothing is written to personal memory, and the tools are refused for any other principal.',
     },
     check: { plain: 'If I’m not sure a note is right, I can ask for a double-check. It re-reads its sources and argues against its own note before reporting back.', eng: 'A commission is an approval-gated re-run against the cited evidence, with its own state machine. It never runs without an owner approval.' },
   },
