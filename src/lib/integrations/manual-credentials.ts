@@ -44,3 +44,31 @@ export const MANUAL_CREDENTIAL_SPECS: Record<string, ManualCredentialSpec> = {
 export function getManualCredentialSpec(integrationType: string): ManualCredentialSpec | undefined {
   return MANUAL_CREDENTIAL_SPECS[integrationType];
 }
+
+/**
+ * The kind-specific payload for a spec, from submitted field values.
+ *
+ * Creating needs every field. Replacing passes the stored payload as `existing`:
+ * a blank field keeps its stored value, so renewing an app-specific password is
+ * one field, and the credential keeps its id — workflows that name it carry on.
+ * At least one field must still be given, or there is nothing to replace.
+ */
+export function buildManualPayload(
+  spec: ManualCredentialSpec,
+  input: Record<string, unknown>,
+  existing?: Record<string, unknown>,
+): { payload: Record<string, string> } | { error: string } {
+  const values: Record<string, string> = {};
+  let given = 0;
+  for (const f of spec.fields) {
+    const v = typeof input[f.key] === 'string' ? (input[f.key] as string).trim() : '';
+    if (v) given++;
+    const kept = typeof existing?.[f.key] === 'string' ? (existing[f.key] as string) : '';
+    if (!v && !kept) return { error: `${f.label} is required` };
+    values[f.key] = v || kept;
+  }
+  if (existing && !given) return { error: 'Enter the new value to replace' };
+  return spec.kind === 'basic'
+    ? { payload: { username: values.username, password: values.password } }
+    : { payload: { key: values.key } };
+}

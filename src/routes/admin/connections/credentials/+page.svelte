@@ -141,6 +141,53 @@
   type ManualField = { key: string; label: string; type: 'text' | 'password'; placeholder?: string };
   type ManualSpec = { kind: string; fields: ManualField[]; helpText?: string; helpUrl?: string };
 
+  // ——— Replace a manual credential's secret in place ———
+  // Same row, same id, so workflows and remembered ids keep working. Blank
+  // fields keep their stored value; the server re-tests straight away.
+  // `?replace=<id>` opens the form — the calendar tool's 401 message links here.
+  let replacingId = $state<string | null>(
+    untrack(() => (typeof location === 'undefined' ? null : new URL(location.href).searchParams.get('replace'))),
+  );
+  let replaceFields = $state<Record<string, string>>({});
+  let replaceError = $state<string | null>(null);
+
+  function startReplace(c: CredRow) {
+    replacingId = c.id;
+    replaceFields = {};
+    replaceError = null;
+  }
+
+  function cancelReplace() {
+    replacingId = null;
+    replaceError = null;
+  }
+
+  async function saveReplace(c: CredRow) {
+    busyId = c.id;
+    busyAction = 'replacing';
+    replaceError = null;
+    try {
+      const res = await fetch(`/admin/connections/credentials/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ payload: { ...replaceFields } }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { replaceError = body.message || `HTTP ${res.status}`; return; }
+      const test = body.test as { status: string; error?: string; at: string } | null;
+      grouped[c.integrationType] = grouped[c.integrationType].map((row) =>
+        row.id === c.id
+          ? { ...row, lastTestedAt: test ? new Date(test.at) : null, lastTestStatus: test?.status ?? null, lastTestError: test?.error ?? null }
+          : row,
+      );
+      if (test?.status === 'failed') { replaceError = `Saved, but the test failed: ${test.error ?? 'unknown error'}`; return; }
+      cancelReplace();
+    } finally {
+      busyId = null;
+      busyAction = null;
+    }
+  }
+
   let connectingType = $state<string | null>(null);
   let connectLabel = $state('');
   let connectFields = $state<Record<string, string>>({});
@@ -275,6 +322,14 @@
                         {busyId === c.id && busyAction === 'testing' ? 'Testing…' : 'Test'}
                       </button>
                     {/if}
+                    {#if adapter.manualCredential && adapter.manualCredential.kind === c.kind}
+                      <button
+                        type="button"
+                        class="row-link"
+                        disabled={busyId === c.id}
+                        onclick={() => startReplace(c)}
+                      >Replace {adapter.manualCredential.kind === 'basic' ? 'password' : 'key'}</button>
+                    {/if}
                     <button
                       type="button"
                       class="row-link"
@@ -291,6 +346,39 @@
                     </button>
                   </div>
                 </div>
+                {#if replacingId === c.id && adapter.manualCredential}
+                  <div class="connect-form">
+                    {#if adapter.manualCredential.helpText}
+                      <p class="connect-help">
+                        {adapter.manualCredential.helpText}
+                        {#if adapter.manualCredential.helpUrl}
+                          <a href={adapter.manualCredential.helpUrl} target="_blank" rel="noreferrer">Learn how →</a>
+                        {/if}
+                      </p>
+                    {/if}
+                    <p class="connect-help">Leave a field blank to keep what is stored. This connection keeps its id, so anything using it carries on.</p>
+                    {#each adapter.manualCredential.fields as f (f.key)}
+                      <label class="connect-field">
+                        <span class="connect-label">{f.label}</span>
+                        <input
+                          class="nm-text-input"
+                          type={f.type}
+                          placeholder={f.type === 'password' ? (f.placeholder ?? '') : 'unchanged'}
+                          autocomplete="off"
+                          value={replaceFields[f.key] ?? ''}
+                          oninput={(e) => (replaceFields = { ...replaceFields, [f.key]: (e.currentTarget as HTMLInputElement).value })}
+                        />
+                      </label>
+                    {/each}
+                    {#if replaceError}<p class="connect-err">{replaceError}</p>{/if}
+                    <div class="connect-actions">
+                      <button type="button" class="nm-save-btn" disabled={busyId === c.id} onclick={() => saveReplace(c)}>
+                        {busyId === c.id && busyAction === 'replacing' ? 'Saving and testing…' : 'Save and test'}
+                      </button>
+                      <button type="button" class="btn-ghost" onclick={cancelReplace}>Cancel</button>
+                    </div>
+                  </div>
+                {/if}
               {/if}
             {/each}
           </div>

@@ -44,7 +44,12 @@ export function resolveCalendarSelection(
   requested: unknown,
 ): CalendarOption[] | { error: string } {
   if (requested === undefined || requested === null || requested === '') return options;
-  const wanted = Array.isArray(requested) ? requested : [requested];
+  // An empty list is "no filter", not "none of them". Codex sends `calendar: []`
+  // for the optional argument, and on 2026-10-31 every read answered "This
+  // Apple Calendar credential exposes no calendars" over seven live calendars.
+  const wanted = (Array.isArray(requested) ? requested : [requested])
+    .filter((one) => !(typeof one === 'string' && one.trim() === ''));
+  if (!wanted.length) return options;
   const chosen: CalendarOption[] = [];
   for (const one of wanted) {
     const resolved = resolveCalendar(options, one);
@@ -262,13 +267,17 @@ export async function resolveAppleCredential(
   requested: unknown,
 ): Promise<{ credentialId: string } | { error: string; credentials?: Array<{ id: string; label: string }> }> {
   const explicit = typeof requested === 'string' ? requested.trim() : '';
-  if (explicit) return { credentialId: explicit };
   let credentials: Array<{ id: string; label: string; integrationType?: string }>;
   try {
     credentials = await listCredentials('apple-calendar');
   } catch (err) {
     return { error: err instanceof Error ? `Unable to list Apple Calendar credentials: ${err.message}` : 'Unable to list Apple Calendar credentials.' };
   }
+  // A named credential that still exists wins. One that has been deleted —
+  // replaced by a new connection, as John did on 2026-10-31 — falls through to
+  // whatever is configured now, so a workflow or a remembered id follows the
+  // replacement instead of failing on "Credential not found".
+  if (explicit && credentials.some((c) => c.id === explicit)) return { credentialId: explicit };
   if (!credentials.length) {
     return { error: 'No Apple Calendar credentials are configured. Add an iCloud app-specific-password credential before reading calendars.' };
   }
@@ -309,7 +318,7 @@ export async function calendarAccessError(err: unknown, credentialId: string): P
   return (
     'iCloud rejected the stored Apple Calendar credential (HTTP 401), so no calendar can be read until it is replaced. ' +
     'This is not transient: do not retry. Tell John his iCloud app-specific password has been revoked or changed, and that he ' +
-    `needs to create a new one at appleid.apple.com and paste it into the credential at /admin/connections/credentials/${credentialId}.`
+    `needs to create a new one at appleid.apple.com and paste it in with "Replace password" at /admin/connections/credentials?replace=${credentialId}.`
   );
 }
 
