@@ -1,12 +1,92 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { isOcukCategory, parseOcukItemList } from './sources/ocuk';
 import { isScanCategory, parseScanList, parseScanProduct } from './sources/scan';
 import { parseRedditAtom } from './sources/reddit';
 import { validateCompiled } from './compile';
 
 // The first three products of the real Overclockers gaming-pcs ItemList, 2026-10-31.
-const OCUK = readFileSync(new URL('./fixtures/ocuk-gaming-pcs.json', import.meta.url), 'utf8');
+const OCUK = JSON.stringify({
+  "@context": "https://schema.org/",
+  "@type": "ItemList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "item": {
+        "@type": "Product",
+        "name": "OcUK Gaming Halo - Ryzen 9 9950X3D RTX 5090 Powered by MSI Pre-Built Gaming PC",
+        "url": "https://www.overclockers.co.uk/ocuk-gaming-halo-ryzen-9-9950x3d-rtx-5090-powered-by-msi-pre-built-gaming-pc/FS-MSIHALO-EP.html",
+        "description": "Pre-built gaming PC Powered by MSI, AMD Ryzen 9 9950X3D CPU, NVIDIA GeForce RTX 5090 GPU, 96GB DDR5 RAM, 4TB PCIe 5.0 SSD",
+        "sku": "FS-MSIHALO-EP",
+        "brand": {
+          "@type": "Brand",
+          "name": "OCUK"
+        },
+        "offers": {
+          "@type": "Offer",
+          "priceCurrency": "GBP",
+          "price": 10499.99,
+          "availability": "https://schema.org/InStock",
+          "url": "https://www.overclockers.co.uk/ocuk-gaming-halo-ryzen-9-9950x3d-rtx-5090-powered-by-msi-pre-built-gaming-pc/FS-MSIHALO-EP.html"
+        }
+      }
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "item": {
+        "@type": "Product",
+        "name": "OcUK Gaming Mach 6 - Ryzen 9800X3D, RTX 5080 Pre-Built Gaming PC",
+        "url": "https://www.overclockers.co.uk/ocuk-gaming-mach-6-ryzen-9800x3d-rtx-5080-pre-built-gaming-pc/FS-PB08-EP.html",
+        "description": "1440p and 4K gaming PC, Perfect for cinematic games like God of War: Ragnarök, NVIDIA GeForce RTX 5080 GPU, Pre-built and ready to ship, 32GB RAM, Three years parts and labour warranty",
+        "sku": "FS-PB08-EP",
+        "brand": {
+          "@type": "Brand",
+          "name": "OCUK"
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": 5,
+          "reviewCount": 21
+        },
+        "offers": {
+          "@type": "Offer",
+          "priceCurrency": "GBP",
+          "price": 3199.99,
+          "availability": "https://schema.org/InStock",
+          "url": "https://www.overclockers.co.uk/ocuk-gaming-mach-6-ryzen-9800x3d-rtx-5080-pre-built-gaming-pc/FS-PB08-EP.html"
+        }
+      }
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "item": {
+        "@type": "Product",
+        "name": "OcUK Gaming Mach 1.1 - Ryzen 5600 RTX 5060 Pre-Built Gaming PC",
+        "url": "https://www.overclockers.co.uk/ocuk-gaming-mach-1.1-ryzen-5600-rtx-5060-pre-built-gaming-pc/FS-PB14-EP.html",
+        "description": "Value 1080p gaming PC, Perfect for high-octane games like Rocket League, NVIDIA GeForce RTX 5060 GPU, Pre-built and ready to ship, 16GB RAM, Three years parts and labour warranty",
+        "sku": "FS-PB14-EP",
+        "brand": {
+          "@type": "Brand",
+          "name": "OCUK"
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": 4.733333333333333,
+          "reviewCount": 24
+        },
+        "offers": {
+          "@type": "Offer",
+          "priceCurrency": "GBP",
+          "price": 1099.99,
+          "availability": "https://schema.org/InStock",
+          "url": "https://www.overclockers.co.uk/ocuk-gaming-mach-1.1-ryzen-5600-rtx-5060-pre-built-gaming-pc/FS-PB14-EP.html"
+        }
+      }
+    }
+  ]
+});
 
 describe('Overclockers', () => {
   it('reads every product in the category ItemList with price, stock and specs text', () => {
