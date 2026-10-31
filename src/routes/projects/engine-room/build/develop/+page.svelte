@@ -4,7 +4,10 @@
   // the builder grows appears here or the type check fails.
   //
   // Bands: the assembly line under the headline, the brief lanes on paper, how far it may
-  // travel on ink, and autopilot's limits on paper as a strip of rounds.
+  // travel on ink, autopilot's limits on paper as a strip of rounds, then asking for a build
+  // in chat on ink (where an ask may come from, the card and its guards) and how it reports
+  // back on paper. Commission sources, caps and push budget come from $lib/jkai/commission
+  // and $lib/jkai/delivery-push through facts.server.ts.
   import LeafHead from '../../components/LeafHead.svelte';
   import PageFoot from '../../components/PageFoot.svelte';
   import Band from '../../components/kit/Band.svelte';
@@ -12,10 +15,10 @@
   import Stat from '../../components/viz/Stat.svelte';
   import AssemblyLine from '../../components/art/build/AssemblyLine.svelte';
   import ReleaseTrack from '../../components/art/build/ReleaseTrack.svelte';
-  import { BUILD_COPY as C, DELIVERY_COPY, POLICY_COPY, BRIEF_LANE_COPY, DEVELOP_COPY } from '../../lib/build';
+  import { BUILD_COPY as C, DELIVERY_COPY, POLICY_COPY, BRIEF_LANE_COPY, DEVELOP_COPY, COMMISSION_SOURCE_COPY, CHAT_BUILD_COPY as K } from '../../lib/build';
   import { app } from '../../lib/appState.svelte';
   import { cascade, shown } from '../../lib/motion';
-  import type { DeliveryStage, ReleasePolicy, BriefLaneKind } from '$lib/constants/development';
+  import type { DeliveryStage, ReleasePolicy, BriefLaneKind, CommissionSource } from '$lib/constants/development';
 
   let { data } = $props();
   const f = $derived(data.facts.build);
@@ -29,6 +32,10 @@
   );
   let policy = $state<string>('pull_request');
   const LANE_NAME: Record<BriefLaneKind, string> = { site: 'This site', studio: 'The studio', 'other-repo': 'Another repo' };
+
+  const k = $derived(f.commissions);
+  const live = $derived(data.live.build?.commissions ?? null);
+  let source = $state<CommissionSource>('chat');
 </script>
 
 <svelte:head><title>Develop — Build — The Engine Room</title></svelte:head>
@@ -80,6 +87,52 @@
   </div>
 </Band>
 
+<Band surface="ink" part="build" label="Asking for a build in chat">
+  <div class="split top">
+    <header>
+      <Masthead kicker="In conversation" lines={['Ask for it', 'in *chat*']} strap={t(K.line)} size="md" />
+      <p class="aside">{t(K.card)}</p>
+    </header>
+    <div>
+      <div class="chipset" role="group" aria-label="Where a build can be asked for">
+        {#each k.sources as s (s)}
+          <button class="chip" class:on={source === s} aria-pressed={source === s}
+            onclick={() => (source = s as CommissionSource)}>{COMMISSION_SOURCE_COPY[s as CommissionSource].label}</button>
+        {/each}
+      </div>
+      <p class="say" aria-live="polite"><b>{COMMISSION_SOURCE_COPY[source].label}.</b> {t(COMMISSION_SOURCE_COPY[source])}</p>
+      <p class="aside">{t(K.refuse)}</p>
+    </div>
+  </div>
+  <div class="guard">
+    <h3 class="g-h">What the card checks before it may start</h3>
+    <p class="aside">{t(K.guards)}</p>
+    <div class="stats">
+      <Stat value={live?.running ?? null} label="of my commissioned builds running right now" lead />
+      <Stat value={k.maxLive} label="running at once, at most" />
+      <Stat value={k.quotaCeiling.fiveHourPct} unit="%" label="of the five-hour ChatGPT window, and it won’t start" />
+      <Stat value={k.quotaCeiling.weeklyPct} unit="%" label="of the ChatGPT week, and it won’t start" />
+      <Stat value={k.budget.maxIterations} label="rounds a commissioned build may take" />
+      <Stat value={k.budget.maxMinutes} unit="min" label="on the clock, at most" />
+      <Stat value={k.budget.maxCostUsd} prefix="$" label="the most it may spend" />
+      <Stat value={live?.fromChat ?? null} label="builds I’ve asked for in chat so far" />
+    </div>
+  </div>
+</Band>
+
+<Band surface="paper" part="build" label="How a commissioned build reports back">
+  <div class="split top">
+    <Masthead kicker="Back in the thread" lines={['It tells me', 'how it’s *going*']} strap={t(K.back)} size="md" />
+    <div>
+      <div class="stats two">
+        <Stat value={k.pushesPerDay} label="phone buzzes a day about builds, at most" lead />
+        <Stat value={k.pushGapMinutes} unit="min" label="between buzzes about the same build" />
+      </div>
+      <p class="aside">{t(K.same)}</p>
+    </div>
+  </div>
+</Band>
+
 <PageFoot />
 
 <style>
@@ -100,6 +153,20 @@
   .rounds span.def { background: var(--tone); border-color: var(--tone); color: #fff; }
   .r-key { margin: 14px 0 30px; font-size: var(--fs-body-sm); color: var(--fg-2); max-width: 70ch; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px 24px; }
+  .stats.two { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 22px; }
+  .split { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: clamp(24px, 4vw, 64px); }
+  .split.top { align-items: start; }
+  .aside { margin: 18px 0 0; font-size: var(--fs-body); line-height: 1.6; color: var(--fg-2); max-width: 64ch; }
+  .chipset { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: var(--fs-label); padding: 8px 14px; border-radius: var(--radius-pill); border: 1px solid var(--rule-strong); background: transparent; color: var(--fg); cursor: pointer; transition: background 0.2s, border-color 0.2s; }
+  .chip:hover { border-color: var(--fg); }
+  .chip.on { background: var(--fg); color: var(--ground); border-color: var(--fg); }
+  .say { margin: 22px 0 0; min-height: 4.8em; font-size: var(--fs-body); line-height: 1.6; color: var(--fg-2); }
+  .say b { color: var(--fg); }
+  .guard { margin-top: clamp(36px, 5vw, 64px); padding-top: 24px; border-top: 1px solid var(--rule); }
+  .g-h { font-family: var(--er-mono); font-weight: 500; font-size: var(--fs-label-xs); letter-spacing: 0.16em; text-transform: uppercase; color: var(--fg-3); margin: 0 0 4px; }
+  .guard .stats { margin-top: 24px; }
+  @media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 640px) {
     .fork, .brief { display: none; }
     .lanes { grid-template-columns: minmax(0, 1fr); }

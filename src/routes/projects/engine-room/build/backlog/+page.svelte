@@ -3,8 +3,9 @@
   // stage, phase, cap and schedule is read from the feature (selfimprove/board.ts,
   // selfimprove/types.ts, the heartbeat registry) by the layout load.
   //
-  // Bands: the rivers of ideas on paper, the board on paper, the night shift and its budget
-  // on ink (measurement), the heartbeat clock on paper.
+  // Bands: the rivers of ideas on paper, the board on paper, what never builds without my tap
+  // on paper (capability gaps and the never-autobuild channels from selfimprove/propose.ts),
+  // the night shift and its budget on ink (measurement), the heartbeat clock on paper.
   import LeafHead from '../../components/LeafHead.svelte';
   import PageFoot from '../../components/PageFoot.svelte';
   import Band from '../../components/kit/Band.svelte';
@@ -14,7 +15,7 @@
   import IdeaRivers from '../../components/art/build/IdeaRivers.svelte';
   import NightShift from '../../components/art/build/NightShift.svelte';
   import HeartbeatClock from '../../components/art/build/HeartbeatClock.svelte';
-  import { BUILD_COPY as C, PHASE_COPY, SOURCE_COPY, ACTIVITY_COPY, BACKLOG_COPY } from '../../lib/build';
+  import { BUILD_COPY as C, PHASE_COPY, SOURCE_COPY, ACTIVITY_COPY, BACKLOG_COPY, CHAT_BUILD_COPY as K, NEVER_AUTOBUILD_COPY } from '../../lib/build';
   import { app } from '../../lib/appState.svelte';
   import { words } from '../../lib/format';
   import { reveal } from '../../lib/motion';
@@ -38,6 +39,7 @@
   let stage = $state<string>('proposed');
   const stageInfo = $derived(f.workStages.find((s) => s.id === stage) ?? f.workStages[0]);
   const night = $derived(f.activities.find((a) => a.name === 'daydream-improve'));
+  const waits = $derived(f.commissions.neverAutobuild.map((s) => ({ id: s, label: NEVER_AUTOBUILD_COPY[s] ?? SOURCE_COPY[s as IdeaSource] ?? s })));
   const acts = $derived(f.activities.map((a) => ({ ...a, what: ACTIVITY_COPY[a.name] })));
 </script>
 
@@ -53,6 +55,23 @@
   <Masthead kicker="The board" lines={['What happens', 'to an *idea*']} strap={t(BACKLOG_COPY.board)} />
   <Steps items={f.workStages.map((s) => ({ id: s.id, label: s.label }))} selected={stage} onselect={(id) => (stage = id)} />
   <p class="explain" aria-live="polite" {@attach reveal({ y: 12 })}><b>{stageInfo.label}</b> {stageInfo.question}.</p>
+</Band>
+
+<Band surface="paper" part="build" label="What waits for my yes">
+  <div class="split">
+    <div>
+      <Masthead kicker="Not built yet" lines={['Asked for,', 'and *waiting*']} strap={t(K.gaps)} size="md" />
+      <div class="stats one">
+        <Stat value={f.commissions.gapDrainMinutes} unit="min" label="between sweeps for any ask a restart left behind" />
+      </div>
+    </div>
+    <div>
+      <p class="aside">{t(K.tap)}</p>
+      <ul class="waits">
+        {#each waits as w (w.id)}<li><span class="lock" aria-hidden="true"></span>{w.label}</li>{/each}
+      </ul>
+    </div>
+  </div>
 </Band>
 
 <Band surface="ink" part="build">
@@ -84,4 +103,12 @@
   .budget { margin-top: clamp(36px, 5vw, 64px); padding-top: 24px; border-top: 1px solid var(--rule); }
   .b-h { font-family: var(--er-mono); font-weight: 500; font-size: var(--fs-label-xs); letter-spacing: 0.16em; text-transform: uppercase; color: var(--fg-3); margin: 0 0 18px; }
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px 24px; }
+  .stats.one { grid-template-columns: minmax(0, 1fr); margin-top: 28px; max-width: 360px; }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 64px); align-items: start; }
+  .aside { margin: 0 0 20px; font-size: var(--fs-body); line-height: 1.6; color: var(--fg-2); max-width: 62ch; }
+  .waits { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .waits li { display: flex; align-items: center; gap: 14px; padding: 16px 18px; background: var(--ground); font-size: var(--fs-body); color: var(--fg); }
+  .lock { flex: none; width: 14px; height: 12px; border: 2px solid var(--you); border-radius: 2px; position: relative; margin-top: 6px; }
+  .lock::before { content: ''; position: absolute; left: 1px; bottom: 100%; width: 8px; height: 7px; border: 2px solid var(--you); border-bottom: 0; border-radius: 100px 100px 0 0; }
+  @media (max-width: 860px) { .split { grid-template-columns: minmax(0, 1fr); } }
 </style>

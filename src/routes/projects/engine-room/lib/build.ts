@@ -4,7 +4,7 @@
 // Every map is keyed by the feature's own type with `satisfies`, so a stage, phase, policy
 // or lane added to the builder fails svelte-check here until it has a sentence.
 
-import type { DeliveryStage, ReleasePolicy, BriefLaneKind } from '$lib/constants/development';
+import type { DeliveryStage, ReleasePolicy, BriefLaneKind, CommissionSource } from '$lib/constants/development';
 import type { RepoVerificationPhase } from '$lib/verification/repo';
 import type { DevelopmentLane } from '$lib/builds/development-progress';
 import type { PhaseName } from '$lib/selfimprove/types';
@@ -141,7 +141,7 @@ export const ACTIVITY_COPY = {
   'daydream-memory': 'distils the day into lessons',
   'daydream-bank': 'pulls bank spend for the money questions',
   'daydream-improve': 'the nightly self-improvement run',
-  'daydream-stale-sweep': 'files notes left past their date for a week',
+  'daydream-stale-sweep': 'files notes left past their date after a grace period',
   'backlog-grooming': 'merges twins and tidies the backlog',
   'build-progress-check': 'tells me when a build has gone quiet',
   'forge-schedules': 'fires scheduled builds',
@@ -208,3 +208,37 @@ export const CODEGRAPH_EXTRA = {
 export const BUILD_HUB_COPY = {
   live: { plain: 'Everything I have asked it to build, and where each has got to. Totals only.', eng: 'Commissioned deliveries grouped by the development lane the develop page uses. Counts only.' },
 } as const;
+
+/**
+ * Where a commissioned build can be asked for. Keyed by the commission's own source type, so
+ * a new way in fails svelte-check here until it has a sentence.
+ */
+export const COMMISSION_SOURCE_COPY = {
+  chat: { label: 'Chat', plain: 'I ask for it while talking to jkai in a browser, and confirm a card before anything starts.', eng: 'The develop_commission tool. Confirmed every time, open only to the attended owner in a browser session, and stops at a preview or a draft pull request.' },
+  phone: { label: 'The phone', plain: 'Kept for the app, but switched off until the site can prove it’s really me holding the phone.', eng: 'Reserved. Refused until the server has proof of presence from the device, so a paired phone alone is never enough.' },
+  web: { label: 'The form', plain: 'The new feature form on the develop page. It’s the only way in that may send a build all the way to the live site.', eng: 'The owner’s New feature form at /jkai/develop, and the only source allowed the production release policy.' },
+  daydream: { label: 'Daydream', plain: 'A background thought can suggest a build, but it can never start one by itself.', eng: 'Refused as unattended. A service principal is never the attended owner, whatever it asks for.' },
+  selfimprove: { label: 'The night shift', plain: 'The nightly run starts one change I’ve already agreed to. It has its own nightly limit instead of the chat ones.', eng: 'The propose phase. It skips the chat quota and live-build guards and is bounded by the night’s work cap instead.' },
+} satisfies Record<CommissionSource, Twin & { label: string }>;
+
+/** Asking for a build in conversation. Same rules: no figures, a twin for every line. */
+export const CHAT_BUILD_COPY = {
+  line: { plain: 'I can ask for a change in conversation. It becomes an ordinary delivery on the same line, with the same checks, and it tells me how it’s getting on in that conversation.', eng: 'Chat commissions create an ordinary development delivery with the commission stamped on its state, and a watcher posts its stage back to the thread.' },
+  card: { plain: 'Before it starts, it shows me a card: where the build will stop, the most it may spend, how full my ChatGPT allowance is right now, and how many of my builds are already running. Nothing starts until I confirm.', eng: 'develop_quote builds the card from live facts and a digest of the whole brief, not its first line. develop_commission is confirm-always and is refused when the quote would be.' },
+  refuse: { plain: 'It refuses when it can’t be sure I’m there: not from WhatsApp, a background job or the phone. From chat a build stops at a preview or a draft pull request. Only the form may send one to the live site, and for now it only builds this site.', eng: 'Refused unless the sealed principal is the owner, attended, in a browser session. Production policy is web-form only, and the only target is SR-Main.' },
+  guards: { plain: 'It won’t start a build when my allowance is nearly used up, or when too many of my builds are already running.', eng: 'Quota ceilings on the ChatGPT five-hour and weekly windows, and a live-commission cap counted under an advisory lock so two tabs or two processes can’t both squeeze in.' },
+  same: { plain: 'Asking twice for the same thing in the same conversation gets me the build already working on it, not a second one.', eng: 'Idempotent on an operation key derived from the thread and the outcome. An ask that matches a backlog item already in development returns that delivery.' },
+  back: { plain: 'It reports back in the conversation as the build moves on. It only buzzes my phone a few times a day, unless the build needs me or has shipped.', eng: 'A delivery watcher posts a line on each stage change and retires at a terminal stage. Phone pushes are coalesced per build and capped per day, except needs-you and shipped.' },
+  gaps: { plain: 'When I ask jkai for something it can’t do yet, it doesn’t pretend. It files the ask on the backlog in my words, so it can be built later.', eng: 'A capability gap is queued from the chat call and drained into the backlog out of band, so grooming never runs inside the turn. Kept as quoted data, never as a brief.' },
+  tap: { plain: 'Some ideas always wait for me to say yes, even when it’s allowed to build on its own: anything it couldn’t do when I asked, and any ask from chat or the phone I didn’t actually commission.', eng: 'Autobuild never dispatches these sources, or any item that cites a capability gap, however the appetite setting is configured.' },
+} as const;
+
+/**
+ * The backlog channels autobuild never dispatches, as the waiting list reads them. The source
+ * list is a plain string array in propose.ts, so the drift test checks these keys against it.
+ */
+export const NEVER_AUTOBUILD_COPY: Record<string, string> = {
+  'capability-gap': 'something I asked for that it couldn’t do yet',
+  chat: 'an idea from chat that I didn’t actually commission',
+  phone: 'an idea from the phone that I didn’t actually commission',
+};

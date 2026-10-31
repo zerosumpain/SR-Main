@@ -17,6 +17,7 @@ import { WHO_LABEL } from './routes';
 import {
   BUILD_COPY, DELIVERY_COPY, POLICY_COPY, BRIEF_LANE_COPY, VERIFY_COPY, GATE_COPY, PHASE_COPY,
   SOURCE_COPY, EDGE_COPY, ACTIVITY_COPY, LANE_COPY,
+  COMMISSION_SOURCE_COPY, CHAT_BUILD_COPY, NEVER_AUTOBUILD_COPY,
 } from './build';
 import {
   APP, APP_COPY, TAB_COPY, MORE_COPY, WATCH_COPY, SURFACE_COPY, BACKGROUND_COPY,
@@ -117,6 +118,18 @@ function buildChunks(): Chunk[] {
     `${both(BUILD_COPY.develop.autopilot)} Autopilot takes ${b.autopilotRounds.default} rounds by default and ${b.autopilotRounds.max} at most. ` +
     `A build may take ${b.budget.maxIterations} iterations and ${b.budget.maxMinutes} minutes, and stops after ${b.budget.maxIdleIterations} iterations that change nothing. ` +
     `On the live board deliveries are grouped as: ${list(Object.values(LANE_COPY))}.`);
+  const k = b.commissions;
+  add('build', 'develop', 'Asking for a build in chat', DV,
+    `${both(CHAT_BUILD_COPY.line)} ${both(CHAT_BUILD_COPY.card)} ${both(CHAT_BUILD_COPY.refuse)} ` +
+    `Where a build can be asked for: ` + k.sources.map((s) => `${COMMISSION_SOURCE_COPY[s as keyof typeof COMMISSION_SOURCE_COPY].label}: ${both(COMMISSION_SOURCE_COPY[s as keyof typeof COMMISSION_SOURCE_COPY])}`).join(' ') +
+    ` From chat it stops at: ${list(k.chatPolicies.map((p) => b.releasePolicies.find((r) => r.id === p)?.label ?? p))}.`);
+  add('build', 'develop', 'The limits on a commissioned build', DV,
+    `${both(CHAT_BUILD_COPY.guards)} It won't start above ${k.quotaCeiling.fiveHourPct}% of the five-hour ChatGPT window or ${k.quotaCeiling.weeklyPct}% of the week, ` +
+    `or with ${k.maxLive} commissioned builds already running. A commissioned build may take up to ${k.budget.maxIterations} rounds, ${k.budget.maxMinutes} minutes and $${k.budget.maxCostUsd}. ` +
+    `${both(CHAT_BUILD_COPY.same)} ${both(CHAT_BUILD_COPY.back)} At most ${k.pushesPerDay} phone pushes a day about builds, one per build per ${k.pushGapMinutes} minutes.`);
+  add('build', 'backlog', 'Asks it could not meet, and what waits for my yes', BL,
+    `${both(CHAT_BUILD_COPY.gaps)} A queued ask is filed once the chat has answered, and a sweep every ${k.gapDrainMinutes} minutes picks up any a restart left behind. ${both(CHAT_BUILD_COPY.tap)} ` +
+    `Never built without my yes: ${list(k.neverAutobuild.map((s) => NEVER_AUTOBUILD_COPY[s] ?? s))}.`);
   add('build', 'verify', 'How a build is verified', VF,
     `${both(BUILD_COPY.verify.line)} ` + Object.values(VERIFY_COPY).map((v) => `${v.label}: ${both(v)}`).join(' ') +
     ` Gates: ${list(b.gates.map((g) => `${g} (${GATE_COPY[g as keyof typeof GATE_COPY]})`))}.`);

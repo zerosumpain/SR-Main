@@ -16,6 +16,7 @@ import { loadImpact } from '$lib/daydream/impact.server';
 import { loadRegister } from '$lib/daydream/register.server';
 import { trackerViews } from '$lib/daydream/act/track.server';
 import { developmentLane, type DevelopmentLane } from '$lib/builds/development-progress';
+import { liveCommissionCount } from '$lib/jkai/commission/commission.server';
 
 export interface LiveDaydream {
   windowDays: number;
@@ -33,6 +34,8 @@ export interface LiveBuild {
   lanes: Partial<Record<DevelopmentLane, number>>;
   deliveries: number;
   lessons: number | null;
+  /** Deliveries asked for in chat, and commissioned builds still spending now (null when unreadable). */
+  commissions: { fromChat: number; running: number | null };
 }
 
 export interface Live {
@@ -80,7 +83,9 @@ async function build(): Promise<LiveBuild | null> {
     const rows = await db.select({ state: jkaiBuildDeliveries.state }).from(jkaiBuildDeliveries);
     const lanes: Partial<Record<DevelopmentLane, number>> = {};
     let deliveries = 0;
+    let fromChat = 0;
     for (const { state } of rows) {
+      if (state?.commission?.source === 'chat') fromChat += 1;
       // Same rule as /jkai/develop: a delivery row created only so a stray build could ask
       // a question is not a commissioned feature.
       if (!state || state.commissioned === false) continue;
@@ -95,7 +100,14 @@ async function build(): Promise<LiveBuild | null> {
     } catch {
       lessons = null;
     }
-    return { lanes, deliveries, lessons };
+    let running: number | null = null;
+    try {
+      // The same count the live-commission cap reads, so the page and the refusal agree.
+      running = await liveCommissionCount();
+    } catch {
+      running = null;
+    }
+    return { lanes, deliveries, lessons, commissions: { fromChat, running } };
   } catch (err) {
     console.error('[engine-room] live build counts unavailable:', err instanceof Error ? err.message : err);
     return null;
