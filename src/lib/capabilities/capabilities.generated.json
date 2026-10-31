@@ -1,5 +1,5 @@
 {
-  "version": "c1-8b343b72",
+  "version": "c1-43e7b824",
   "capabilities": [
     {
       "id": "discovery",
@@ -600,6 +600,29 @@
       ],
       "pages": [
         "/jkai/daydreams/watches"
+      ],
+      "memberSafe": false
+    },
+    {
+      "id": "wishlist",
+      "title": "Wish list",
+      "blurb": "Wish list — things to buy: hunt hotukdeals and PriceRunner for listings meeting criteria (price ceiling, specs), or watch a product link for a price drop; alerts by message (manage on /home/wishlist)",
+      "app": "main",
+      "repo": "SR-Main",
+      "status": "live",
+      "toolsets": [
+        "wishlist"
+      ],
+      "tools": [
+        "wishlist_add",
+        "wishlist_list",
+        "wishlist_update"
+      ],
+      "keywords": [
+        "\\bwish\\s*list\\b|\\bwant\\s+to\\s+buy\\b|\\bbuy\\s+(?:me|my|a|an)\\b|\\bprice\\s+(?:drop|watch|alert)s?\\b|\\bdeals?\\s+on\\b|\\bhotukdeals\\b|\\bpricerunner\\b|\\bfor\\s+christmas\\b|\\bcheapest\\b"
+      ],
+      "pages": [
+        "/home/wishlist"
       ],
       "memberSafe": false
     },

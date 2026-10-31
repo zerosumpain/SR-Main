@@ -22,6 +22,7 @@ import { backlogGrooming } from './activities/backlog-grooming';
 import { forgeSchedulesActivity } from './activities/forge-schedules';
 import { modelRouting } from './activities/model-routing';
 import { voiceDrift } from './activities/voice-drift';
+import { wishlistSweep } from './activities/wishlist-sweep';
 
 /**
  * The full set of available heartbeat activity handlers. The engine looks
@@ -55,6 +56,7 @@ const handlers: ActivityHandler[] = [
   forgeSchedulesActivity,
   modelRouting,
   voiceDrift,
+  wishlistSweep,
 ];
 
 const byName = new Map(handlers.map((h) => [h.name, h]));
