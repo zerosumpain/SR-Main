@@ -13,8 +13,8 @@ import { isNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { codegraphLessons, jkaiBuildDeliveries } from '$lib/db/schema';
 import { loadImpact } from '$lib/daydream/impact.server';
-import { loadRegisterRoom } from '$lib/daydream/register.server';
-import { registerSummary } from '$lib/daydream/register';
+import { loadRegister } from '$lib/daydream/register.server';
+import { trackerViews } from '$lib/daydream/act/track.server';
 import { developmentLane, type DevelopmentLane } from '$lib/builds/development-progress';
 
 export interface LiveDaydream {
@@ -65,8 +65,10 @@ async function daydream(now: Date): Promise<LiveDaydream | null> {
 
 async function solutions(now: Date): Promise<LiveDaydream['solutions']> {
   try {
-    const s = registerSummary((await loadRegisterRoom(now)).entries, now);
-    return { carriedOut: s.total, trackersRunning: s.running };
+    // loadRegisterRoom() reads a page of the register for the room; a count must not stop at a page.
+    const [entries, trackers] = await Promise.all([loadRegister(100_000), trackerViews(now)]);
+    const running = trackers.filter((t) => !t.stoppedAt && t.progress.status === 'running').length;
+    return { carriedOut: entries.length, trackersRunning: running };
   } catch (err) {
     console.error('[engine-room] live solution counts unavailable:', err instanceof Error ? err.message : err);
     return null;
