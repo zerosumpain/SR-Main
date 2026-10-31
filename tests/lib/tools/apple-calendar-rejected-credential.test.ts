@@ -45,7 +45,7 @@ describe('apple_calendar_list when iCloud rejects the credential', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('do not retry');
     expect(result.error).toContain('app-specific password');
-    expect(result.error).toContain('/admin/connections/credentials/cred-1');
+    expect(result.error).toContain('/admin/connections/credentials?replace=cred-1');
     expect(caldav.runAppleCalendar).not.toHaveBeenCalled();
   });
 

@@ -486,14 +486,14 @@ async function probeIntegrationCredentials(): Promise<ConnectorReport[]> {
                 live: false,
                 lastOkAt,
                 impact,
-                fixUrl: '/admin/connections/credentials',
+                fixUrl: `/admin/connections/credentials?replace=${cred.id}`,
                 fixHint:
                   type === 'apple-calendar'
                     ? 'App-specific passwords are revoked when you change your Apple ID password — generate a new one'
                     : 'Re-enter the credential',
                 actions: [
                   test,
-                  { kind: 'link', target: '/admin/connections/credentials', label: 'Re-enter' },
+                  { kind: 'link', target: `/admin/connections/credentials?replace=${cred.id}`, label: 'Re-enter' },
                 ],
               };
             }

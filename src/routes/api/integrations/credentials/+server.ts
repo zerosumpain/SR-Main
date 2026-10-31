@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getIntegrationAdapter } from '$lib/integrations/registry';
-import { getManualCredentialSpec } from '$lib/integrations/manual-credentials';
+import { buildManualPayload, getManualCredentialSpec } from '$lib/integrations/manual-credentials';
 import { createCredential } from '$lib/integrations/credentials';
 
 /**
@@ -34,13 +34,8 @@ export const POST: RequestHandler = async ({ request }) => {
   const label = (typeof body.label === 'string' ? body.label : '').trim();
   if (!label) throw error(400, 'A label is required');
 
-  const input = (body.payload ?? {}) as Record<string, unknown>;
-  const values: Record<string, string> = {};
-  for (const f of spec.fields) {
-    const v = typeof input[f.key] === 'string' ? (input[f.key] as string).trim() : '';
-    if (!v) throw error(400, `${f.label} is required`);
-    values[f.key] = v;
-  }
+  const built = buildManualPayload(spec, (body.payload ?? {}) as Record<string, unknown>);
+  if ('error' in built) throw error(400, built.error);
 
   // Build the kind-specific payload from the validated fields (see the contract
   // in manual-credentials.ts: basic → username/password, apikey → key).
@@ -50,14 +45,14 @@ export const POST: RequestHandler = async ({ request }) => {
       integrationType,
       label,
       kind: 'basic',
-      payload: { username: values.username, password: values.password },
+      payload: built.payload as { username: string; password: string },
     });
   } else {
     id = await createCredential({
       integrationType,
       label,
       kind: 'apikey',
-      payload: { key: values.key },
+      payload: built.payload as { key: string },
     });
   }
 
