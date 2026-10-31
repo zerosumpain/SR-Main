@@ -27,6 +27,12 @@ export type Constraint =
 export type FeedRef =
   | { source: 'hukd-tag'; value: string }
   | { source: 'pricerunner-cl'; value: string }
+  /** An Overclockers category path, e.g. `pc-systems/pcs-by-price/gaming-pcs-under-1000`. */
+  | { source: 'ocuk-cat'; value: string }
+  /** A Scan category path from `SCAN_CATEGORIES`. */
+  | { source: 'scan-cat'; value: string }
+  /** A subreddit from `REDDIT_SUBS`. */
+  | { source: 'reddit'; value: string }
   | { source: 'tavily'; value: string };
 
 export interface WishCriteria {
@@ -85,7 +91,7 @@ export interface WishOffer {
   itemId: string;
   /** Stable per listing — see `offerKey`. */
   key: string;
-  source: 'hukd' | 'pricerunner' | 'retailer';
+  source: 'hukd' | 'pricerunner' | 'retailer' | 'reddit';
   title: string;
   description: string;
   url: string;

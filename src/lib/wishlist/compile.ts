@@ -8,7 +8,10 @@
 
 import { canonicalGpu, gpuScore } from './gpu';
 import { isHukdTag } from './sources/hukd';
+import { isOcukCategory } from './sources/ocuk';
 import { isAllowedPricerunnerUrl, isPricerunnerCategory } from './sources/pricerunner';
+import { isRedditSub } from './sources/reddit';
+import { isScanCategory } from './sources/scan';
 import type { Constraint, FeedRef, WishCriteria, WishKind } from './types';
 
 export interface CompiledWish {
@@ -24,10 +27,10 @@ export interface CompiledWish {
   dropped: string[];
 }
 
-const words = (v: unknown, max = 8): string[] =>
+const words = (v: unknown, max = 8, len = 40): string[] =>
   (Array.isArray(v) ? v : [])
     .filter((w): w is string => typeof w === 'string')
-    .map((w) => w.trim().slice(0, 40))
+    .map((w) => w.trim().slice(0, len))
     .filter(Boolean)
     .slice(0, max);
 
@@ -76,9 +79,23 @@ function feedsOf(raw: Record<string, unknown>, dropped: string[]): FeedRef[] {
     if (isHukdTag(slug)) feeds.push({ source: 'hukd-tag', value: slug });
     else dropped.push(`hotukdeals tag "${t}"`);
   }
-  for (const c of words(raw.pricerunnerCategories, 3)) {
+  for (const c of words(raw.pricerunnerCategories, 3, 120)) {
     if (isPricerunnerCategory(c)) feeds.push({ source: 'pricerunner-cl', value: c });
     else dropped.push(`PriceRunner category "${c}"`);
+  }
+  for (const c of words(raw.overclockersCategories, 2, 200)) {
+    const path = c.toLowerCase().replace(/^\/+|\/+$/g, '');
+    if (isOcukCategory(path)) feeds.push({ source: 'ocuk-cat', value: path });
+    else dropped.push(`Overclockers category "${c}"`);
+  }
+  for (const c of words(raw.scanCategories, 2, 200)) {
+    if (isScanCategory(c)) feeds.push({ source: 'scan-cat', value: c });
+    else dropped.push(`Scan category "${c}"`);
+  }
+  for (const c of words(raw.subreddits, 2)) {
+    const sub = c.toLowerCase().replace(/^r\//, '');
+    if (isRedditSub(sub)) feeds.push({ source: 'reddit', value: sub });
+    else dropped.push(`subreddit "${c}"`);
   }
   if (typeof raw.searchQuery === 'string' && raw.searchQuery.trim()) {
     feeds.push({ source: 'tavily', value: raw.searchQuery.trim().slice(0, 120) });
@@ -89,7 +106,7 @@ function feedsOf(raw: Record<string, unknown>, dropped: string[]): FeedRef[] {
 export function validateCompiled(raw: unknown, ask: string): CompiledWish {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const dropped: string[] = [];
-  const urls = words(r.urls, 5).filter((u) => {
+  const urls = words(r.urls, 5, 500).filter((u) => {
     try {
       const url = new URL(u);
       if (url.protocol !== 'https:') return false;

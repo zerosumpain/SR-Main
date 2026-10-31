@@ -10,12 +10,37 @@
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import { describeConstraint, formatPence } from '$lib/wishlist/match';
+  import { SCAN_CATEGORIES } from '$lib/wishlist/sources/scan';
   import type { FeedRef, Verdict, WishItem, WishOffer } from '$lib/wishlist/types';
+  import type { CompareRow } from '$lib/wishlist/value';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
   let adding = $state(false);
   let busyId = $state<string | null>(null);
+  /** Per item: the listings table, or the side-by-side spec comparison. */
+  let views = $state<Record<string, 'list' | 'compare'>>({});
+  let sorts = $state<Record<string, SortKey>>({});
+
+  type SortKey = 'value' | 'price' | 'gpu';
+  const SORTS: [SortKey, string][] = [['value', 'Best value'], ['price', 'Cheapest'], ['gpu', 'Fastest GPU']];
+  // Unscored rows sort last whatever the key — an unknown is not a zero.
+  const last = (n: number | null, dir: 1 | -1) => (n === null ? Infinity : dir * n);
+  function sorted(rows: CompareRow[], key: SortKey): CompareRow[] {
+    const by: Record<SortKey, (r: CompareRow) => number> = {
+      value: (r) => last(r.value, -1),
+      price: (r) => r.pricePence,
+      gpu: (r) => last(r.gpuScore, -1),
+    };
+    return [...rows].sort((a, b) => by[key](a) - by[key](b) || a.pricePence - b.pricePence);
+  }
+  const cpuName = (c: string | null) => c?.replace(/^RYZEN /, 'Ryzen ').replace(/^ULTRA /, 'Core Ultra ') ?? null;
+  /** The spec columns as one line, for a phone, where the columns are hidden. */
+  const specLine = (r: CompareRow) =>
+    [r.gpu, cpuName(r.cpu), r.ramGb === null ? null : `${r.ramGb}GB${r.ramType ? ' ' + r.ramType : ''}`, r.storageGb === null ? null : storage(r.storageGb)]
+      .filter(Boolean)
+      .join(' · ') || 'no specs stated';
+  const storage = (gb: number | null) => (gb === null ? '—' : gb >= 1000 ? `${+(gb / 1000).toFixed(1)}TB` : `${gb}GB`);
 
   const WHEN = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/London',
@@ -48,6 +73,9 @@
   function feedLabel(f: FeedRef): string {
     if (f.source === 'hukd-tag') return `hotukdeals · ${f.value}`;
     if (f.source === 'pricerunner-cl') return `PriceRunner · ${f.value.split('/')[1]?.replace(/-/g, ' ') ?? f.value}`;
+    if (f.source === 'ocuk-cat') return `Overclockers · ${f.value.split('/').at(-1)?.replace(/-/g, ' ') ?? f.value}`;
+    if (f.source === 'scan-cat') return `Scan · ${SCAN_CATEGORIES[f.value] ?? f.value}`;
+    if (f.source === 'reddit') return `r/${f.value}`;
     return `search · “${f.value}”`;
   }
 
@@ -87,9 +115,9 @@
   path="/home/wishlist"
   kicker="Home · Wish list"
   title={['Things to buy,', 'watched for you']}
-  standfirst="Say what you want — a product link to watch for a price drop, or what it has to be (“gaming PC under £1,100, 16GB DDR5, RTX 5060 or better”). The sweep reads hotukdeals and PriceRunner and messages you when something meets it."
+  standfirst="Say what you want — a product link to watch for a price drop, or what it has to be (“gaming PC under £1,100, 16GB DDR5, RTX 5060 or better”). The sweep reads hotukdeals, PriceRunner, Overclockers, Scan and r/buildapcsalesuk and messages you when something meets it."
   {summary}
-  footer={['strangeramblings.com/home/wishlist', 'hotukdeals · PriceRunner', 'The owner only, for now']}
+  footer={['strangeramblings.com/home/wishlist', 'hotukdeals · PriceRunner · Overclockers · Scan · Reddit', 'The owner only, for now']}
 >
   <section class="band flush-top">
     <div class="inner">
@@ -151,31 +179,84 @@
                 {#if i.lastError}<p class="note warn">{i.lastError}</p>{/if}
 
                 {#if row.offers.length}
-                  <div class="tbl-wrap">
-                    <table class="tbl compact wl-offers">
-                      <thead><tr><th>Verdict</th><th class="right">Price</th><th>Listing</th><th>Why</th><th>History</th></tr></thead>
-                      <tbody>
-                        {#each row.offers as o (o.key)}
-                          <tr>
-                            <td class="nowrap"><span class="pill {VERDICT[o.verdict].tone}">{VERDICT[o.verdict].label}</span></td>
-                            <td class="right num nowrap">
-                              {formatPence(o.pricePence)}
-                              {#if o.inStock === false}<br /><small class="dim">out of stock</small>{/if}
-                            </td>
-                            <td class="cell-wrap">
-                              <a class="link" href={o.url} target="_blank" rel="noopener noreferrer">{o.title}</a>
-                              <br /><small class="dim">{o.merchant ? `${o.merchant} · ` : ''}{host(o.url)} · seen {WHEN.format(new Date(o.lastSeenAt))}</small>
-                              {#if o.sellers && o.sellers.length > 1}
-                                <br /><small class="dim">{o.sellers.slice(0, 4).map((s) => `${s.merchant} ${formatPence(s.pricePence)}`).join(' · ')}</small>
-                              {/if}
-                            </td>
-                            <td class="cell-wrap"><small>{reasons(o)}</small></td>
-                            <td class="nowrap"><small class="dim">{history(o)}</small></td>
-                          </tr>
+                  {@const view = views[i.id] ?? 'list'}
+                  {@const sortKey = sorts[i.id] ?? 'value'}
+                  {#if row.compare.some((r) => r.gpu || r.cpu)}<div class="wl-viewbar" role="group" aria-label="How to show the listings">
+                    <button class="btn sm" type="button" aria-pressed={view === 'list'} onclick={() => (views[i.id] = 'list')}>Listings</button>
+                    <button class="btn sm" type="button" aria-pressed={view === 'compare'} onclick={() => (views[i.id] = 'compare')}>Compare specs</button>
+                    {#if view === 'compare'}
+                      <span class="wl-sort">
+                        <small class="dim">Sort</small>
+                        {#each SORTS as [k, label] (k)}
+                          <button class="btn sm" type="button" aria-pressed={sortKey === k} onclick={() => (sorts[i.id] = k)}>{label}</button>
                         {/each}
-                      </tbody>
-                    </table>
-                  </div>
+                      </span>
+                    {/if}
+                  </div>{/if}
+                  {#if view === 'compare' && row.compare.some((r) => r.gpu || r.cpu)}
+                    <div class="tbl-wrap">
+                      <table class="tbl compact wl-compare">
+                        <thead>
+                          <tr><th>Value</th><th class="right">Price</th><th>Listing</th><th class="wl-spec">GPU</th><th class="wl-spec">CPU</th><th class="right wl-spec">RAM</th><th class="right wl-spec">Storage</th></tr>
+                        </thead>
+                        <tbody>
+                          {#each sorted(row.compare, sortKey) as r (r.key)}
+                            <tr>
+                              <td class="nowrap">
+                                {#if r.value !== null}
+                                  <span class="num">{r.value}</span>
+                                  <span class="wl-meter" aria-hidden="true"><span style:width="{r.value}%"></span></span>
+                                  {#if r.coverage < 1}<br /><small class="dim" title="Scored on the parts the listing states">on {Math.round(r.coverage * 100)}% of specs</small>{/if}
+                                {:else}
+                                  <small class="dim">no GPU stated</small>
+                                {/if}
+                              </td>
+                              <td class="right num nowrap">{r.priceLabel}</td>
+                              <td class="cell-wrap">
+                                <a class="link" href={r.url} target="_blank" rel="noopener noreferrer">{r.title}</a>
+                                <br /><small class="dim">{r.merchant ? `${r.merchant} · ` : ''}{host(r.url)} · <span class="pill {VERDICT[r.verdict].tone}">{VERDICT[r.verdict].label}</span></small>
+                                <br /><small class="wl-specline">{specLine(r)}</small>
+                              </td>
+                              <td class="nowrap wl-spec">{r.gpu ?? '—'}{#if r.gpuScore !== null}<br /><small class="dim">score {r.gpuScore}</small>{/if}</td>
+                              <td class="nowrap wl-spec">{cpuName(r.cpu) ?? '—'}{#if r.cpuScore !== null}<br /><small class="dim">score {r.cpuScore}</small>{/if}</td>
+                              <td class="right nowrap wl-spec">{r.ramGb === null ? '—' : `${r.ramGb}GB`}{#if r.ramType}<br /><small class="dim">{r.ramType}</small>{/if}</td>
+                              <td class="right nowrap wl-spec">{storage(r.storageGb)}</td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p class="card-body sm dim">
+                      Value is performance per pound, best here = 100. Performance weighs the GPU 55%, CPU 20%, RAM 15% and storage 10%,
+                      each against an RTX 5060 / Ryzen 5 7600 / 16GB / 1TB build. A part a listing does not state counts as a modest one, so hiding a spec never helps.
+                    </p>
+                  {:else}
+                    <div class="tbl-wrap">
+                      <table class="tbl compact wl-offers">
+                        <thead><tr><th>Verdict</th><th class="right">Price</th><th>Listing</th><th>Why</th><th>History</th></tr></thead>
+                        <tbody>
+                          {#each row.offers as o (o.key)}
+                            <tr>
+                              <td class="nowrap"><span class="pill {VERDICT[o.verdict].tone}">{VERDICT[o.verdict].label}</span></td>
+                              <td class="right num nowrap">
+                                {formatPence(o.pricePence)}
+                                {#if o.inStock === false}<br /><small class="dim">out of stock</small>{/if}
+                              </td>
+                              <td class="cell-wrap">
+                                <a class="link" href={o.url} target="_blank" rel="noopener noreferrer">{o.title}</a>
+                                <br /><small class="dim">{o.merchant ? `${o.merchant} · ` : ''}{host(o.url)} · seen {WHEN.format(new Date(o.lastSeenAt))}</small>
+                                {#if o.sellers && o.sellers.length > 1}
+                                  <br /><small class="dim">{o.sellers.slice(0, 4).map((s) => `${s.merchant} ${formatPence(s.pricePence)}`).join(' · ')}</small>
+                                {/if}
+                              </td>
+                              <td class="cell-wrap"><small>{reasons(o)}</small></td>
+                              <td class="nowrap"><small class="dim">{history(o)}</small></td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  {/if}
                 {:else if i.lastCheckedAt}
                   <p class="card-body sm dim">Nothing worth a look yet{row.hidden ? ` — ${row.hidden} seen that do not fit` : ''}.</p>
                 {/if}
@@ -188,6 +269,10 @@
                       <button class="btn sm" type="submit" disabled={busyId === i.id}>{busyId === i.id ? 'Checking…' : 'Check now'}</button>
                     </form>
                   {/if}
+                  <form method="POST" action="?/reread" use:enhance={() => { busyId = i.id; return async ({ update }) => { await update(); busyId = null; }; }}>
+                    <input type="hidden" name="id" value={i.id} />
+                    <button class="btn sm" type="submit" disabled={busyId === i.id} title="Read the ask again — picks up sources added since">Re-read</button>
+                  </form>
                   {#each (i.status === 'watching' ? [['paused', 'Pause'], ['bought', 'Bought it'], ['dropped', 'Drop']] : [['watching', 'Watch again']]) as [status, label] (status)}
                     <form method="POST" action="?/status" use:enhance>
                       <input type="hidden" name="id" value={i.id} />
@@ -239,6 +324,42 @@
     gap: 0.375rem;
     margin: 0.5rem 0 0.75rem;
   }
+  .wl-viewbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    margin-bottom: 0.5rem;
+  }
+  .wl-sort {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    margin-left: auto;
+  }
+  .wl-viewbar :global(.btn[aria-pressed='true']) {
+    background: var(--text-primary);
+    color: var(--bg);
+  }
+  .wl-specline {
+    display: none;
+  }
+  .wl-meter {
+    display: inline-block;
+    width: 3.5rem;
+    height: 6px;
+    margin-left: 0.375rem;
+    vertical-align: middle;
+    background: var(--line-strong);
+    border-radius: 2px;
+  }
+  .wl-meter span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
   .card-actions form {
     display: inline;
   }
@@ -248,29 +369,43 @@
     overflow-wrap: anywhere;
   }
   /* A phone cannot hold five columns: each listing becomes a block — verdict
-     and price on one line, then the listing, why, and history in full width. */
+     and price on one line, then the listing, why, and history in full width.
+     The comparison stacks the same way, value and price first, its spec
+     columns folded into one line under the listing (`.wl-specline`). */
   @media (max-width: 640px) {
-    .wl-offers thead {
+    .wl-compare .wl-spec {
+      display: none;
+    }
+    .wl-specline {
+      display: inline;
+    }
+    .wl-offers thead,
+    .wl-compare thead {
       display: none;
     }
     .wl-offers,
-    .wl-offers tbody {
+    .wl-offers tbody,
+    .wl-compare,
+    .wl-compare tbody {
       display: block;
     }
-    .wl-offers tr {
+    .wl-offers tr,
+    .wl-compare tr {
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 0.25rem 0.75rem;
       padding: 0.75rem 0;
     }
-    .wl-offers td {
+    .wl-offers td,
+    .wl-compare td {
       display: block;
       padding: 0;
       border: 0;
       text-align: left;
       white-space: normal;
     }
-    .wl-offers td:nth-child(n + 3) {
+    .wl-offers td:nth-child(n + 3),
+    .wl-compare td:nth-child(3) {
       grid-column: 1 / -1;
     }
   }

@@ -12,7 +12,10 @@ import { eventFor, mergeOffer, offerKey, summarise, type AlertEvent } from './al
 import { isDue, searchDue } from './due';
 import { ALERTABLE } from './match';
 import { fetchHukdTag } from './sources/hukd';
-import { fetchPageScripts } from './sources/fetch.server';
+import { fetchPageScripts, fetchScanCards } from './sources/fetch.server';
+import { ocukCategoryUrl, parseOcukItemList } from './sources/ocuk';
+import { fetchSubreddit } from './sources/reddit';
+import { parseScanList, scanCategoryUrl } from './sources/scan';
 import { categoryUrl, isAllowedPricerunnerUrl, parseCategoryPayload, parseProductLd } from './sources/pricerunner';
 import { getItem, listItems, listOffers, saveItem, saveOffer } from './store.server';
 import type { Candidate, FeedRef, WishItem, WishOffer } from './types';
@@ -49,6 +52,16 @@ async function readFeed(feed: FeedRef, item: WishItem, now: Date): Promise<Candi
       if (!page.payload) throw new Error(`PriceRunner ${feed.value}: no product list`);
       return parseCategoryPayload(page.payload);
     }
+    case 'ocuk-cat': {
+      const page = await fetchPageScripts(ocukCategoryUrl(feed.value));
+      const list = parseOcukItemList(page.ld);
+      if (!list.length) throw new Error(`Overclockers ${feed.value}: no product list`);
+      return list;
+    }
+    case 'scan-cat':
+      return parseScanList(await fetchScanCards(scanCategoryUrl(feed.value)));
+    case 'reddit':
+      return fetchSubreddit(feed.value);
     case 'tavily': {
       if (!searchDue(item, now)) return [];
       item.lastSearchedAt = now.toISOString();

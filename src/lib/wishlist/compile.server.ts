@@ -10,6 +10,8 @@ import { withActivity } from '$lib/context/activity';
 import { SITE_WORKLOADS } from '$lib/models/workloads';
 import { resolveWorkloadModel } from '$lib/server/models/workload-settings';
 import { knownGpus } from './gpu';
+import { REDDIT_SUBS } from './sources/reddit';
+import { SCAN_CATEGORIES } from './sources/scan';
 import { parseModelJson, validateCompiled, type CompiledWish } from './compile';
 
 const MAX_TOKENS = 1_200;
@@ -32,6 +34,9 @@ Reply with ONE JSON object and nothing else:
      {"field":"text","op":"excludes_any","value":["laptop","refurbished"]}
   "hukdTags": string[],               // hotukdeals tag slugs from hotukdeals.com/tag/<slug>, e.g. "gaming-pc", "lego", "air-fryer"
   "pricerunnerCategories": string[],  // PriceRunner "<id>/<Name>" from pricerunner.com/cl/<id>/<Name>, e.g. "223/Desktop-Computers"; [] if unsure
+  "overclockersCategories": string[], // PC things only: Overclockers UK category paths, the NARROWEST that fits (each lists only 40), e.g. "pc-systems/pcs-by-price/gaming-pcs-under-1000", "pc-systems/pcs-by-price/budget-gaming-pcs", "pc-systems/gaming-pcs/nvidia-gaming-pcs", "pc-systems/gaming-pcs"; [] otherwise
+  "scanCategories": string[],         // PC parts only, from this list: ${Object.keys(SCAN_CATEGORIES).join(', ')}; [] otherwise
+  "subreddits": string[],             // PC parts or PCs only, from this list: ${Object.keys(REDDIT_SUBS).join(', ')}; [] otherwise
   "searchQuery": string,              // a short web search that would find matching UK product pages
   "urls": string[],                   // product URLs the user gave, verbatim
   "forPerson": string | null,         // who it is for, if said

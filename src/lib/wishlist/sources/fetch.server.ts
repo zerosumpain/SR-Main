@@ -72,3 +72,26 @@ export async function fetchPageScripts(url: string, deps: FetchDeps = DEFAULT_DE
   const ld = Array.isArray(fields.ld) ? fields.ld.filter((s): s is string => typeof s === 'string') : typeof fields.ld === 'string' ? [fields.ld] : [];
   return { payload, ld, via: 'residential' };
 }
+
+/**
+ * A Scan category page's product cards, through the residential scraper only:
+ * Scan turns a plain fetch away from every host, so trying it first would cost
+ * a timeout for nothing. The cards come back as inner HTML for `scan.ts` to read.
+ */
+export async function fetchScanCards(url: string, deps: Pick<FetchDeps, 'scrape'> = DEFAULT_DEPS): Promise<string[]> {
+  const job = {
+    url,
+    profile: 'wishlist',
+    waitFor: { type: 'networkidle' as const },
+    extract: [{ field: 'cards', selector: 'li.product', attr: 'html', multi: true }],
+    screenshotOnFailure: false,
+  };
+  let result = await deps.scrape(job);
+  if (!result.success && result.needsInteractive) result = await deps.scrape(job);
+  if (!result.success) {
+    const why = result.challengeReason ? `blocked (${result.challengeReason})` : (result.error ?? 'scrape failed');
+    throw new Error(`could not read scan.co.uk: ${why}`);
+  }
+  const cards = result.pages?.[0]?.fields?.cards;
+  return Array.isArray(cards) ? cards.filter((s): s is string => typeof s === 'string') : [];
+}
