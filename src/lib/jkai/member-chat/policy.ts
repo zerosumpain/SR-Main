@@ -80,6 +80,9 @@ export const MEMBER_FORBIDDEN_TOOLSETS = [
   'nodes',
   'develop',
   'self-improve',
+  // The owner's wish list names who each gift is for — the people most likely
+  // to be on the other end of a member turn.
+  'wishlist',
 ] as const;
 
 /** A turn restricted to one principal and a closed tool list. */

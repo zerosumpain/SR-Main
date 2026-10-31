@@ -117,6 +117,17 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     minIntervalSeconds: 24 * 60 * 60,
   },
   {
+    id: 'wishlist',
+    label: 'Wish list',
+    description: 'A listing that meets what you asked for, or a price you are watching that fell.',
+    whatsapp: true,
+    native: true,
+    // No floor: the sweep already folds one item's finds into one message and
+    // only re-alerts a listing when its price falls again, so a second message
+    // is always news.
+    minIntervalSeconds: 0,
+  },
+  {
     id: 'connections',
     label: 'Connections that need you',
     description: 'An account that needs signing in again, or a service that stopped working.',
