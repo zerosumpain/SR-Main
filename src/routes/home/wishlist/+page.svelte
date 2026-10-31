@@ -9,7 +9,6 @@
   import type { ActionData, PageData } from './$types';
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
-  import Sparkline from '$lib/components/jkai/daydream/Sparkline.svelte';
   import { describeConstraint, formatPence } from '$lib/wishlist/match';
   import type { FeedRef, Verdict, WishItem, WishOffer } from '$lib/wishlist/types';
 
@@ -60,8 +59,15 @@
     }
   }
 
-  function history(o: WishOffer) {
-    return o.history.map((h) => ({ label: WHEN.format(new Date(h.at)), value: h.pence / 100 }));
+  /** "was £999.99 · low £949.99" — a chart in a table cell this narrow is all axis labels. */
+  function history(o: WishOffer): string {
+    if (o.history.length < 2) return 'one price so far';
+    const first = o.history[0].pence;
+    const low = Math.min(...o.history.map((h) => h.pence));
+    const parts = [`was ${formatPence(first)}`];
+    if (low < o.pricePence) parts.push(`low ${formatPence(low)}`);
+    else if (low === o.pricePence && o.pricePence < first) parts.push('lowest yet');
+    return parts.join(' · ');
   }
 
   const reasons = (o: WishOffer) => o.results.map((r) => (r.ok === false ? '✕ ' : r.ok === null ? '? ' : '') + r.reason).join(' · ');
@@ -146,7 +152,7 @@
 
                 {#if row.offers.length}
                   <div class="tbl-wrap">
-                    <table class="tbl compact">
+                    <table class="tbl compact wl-offers">
                       <thead><tr><th>Verdict</th><th class="right">Price</th><th>Listing</th><th>Why</th><th>History</th></tr></thead>
                       <tbody>
                         {#each row.offers as o (o.key)}
@@ -164,9 +170,7 @@
                               {/if}
                             </td>
                             <td class="cell-wrap"><small>{reasons(o)}</small></td>
-                            <td class="wl-spark">
-                              {#if o.history.length > 1}<Sparkline points={history(o)} height={32} fit format={(v) => `£${v}`} />{:else}<small class="dim">one price</small>{/if}
-                            </td>
+                            <td class="nowrap"><small class="dim">{history(o)}</small></td>
                           </tr>
                         {/each}
                       </tbody>
@@ -235,11 +239,39 @@
     gap: 0.375rem;
     margin: 0.5rem 0 0.75rem;
   }
-  .wl-spark {
-    width: 8rem;
-    min-width: 6rem;
-  }
   .card-actions form {
     display: inline;
+  }
+  .wl-chips :global(.pill) {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* A phone cannot hold five columns: each listing becomes a block — verdict
+     and price on one line, then the listing, why, and history in full width. */
+  @media (max-width: 640px) {
+    .wl-offers thead {
+      display: none;
+    }
+    .wl-offers,
+    .wl-offers tbody {
+      display: block;
+    }
+    .wl-offers tr {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.25rem 0.75rem;
+      padding: 0.75rem 0;
+    }
+    .wl-offers td {
+      display: block;
+      padding: 0;
+      border: 0;
+      text-align: left;
+      white-space: normal;
+    }
+    .wl-offers td:nth-child(n + 3) {
+      grid-column: 1 / -1;
+    }
   }
 </style>
