@@ -21,6 +21,7 @@ import { parseCpu } from './cpu';
 import { formatPence, comparablePrice } from './match';
 import { readSpecs } from './specs';
 import { formatUnit, readUnit } from './units';
+import { formatSpan, readTravelDates } from './dates';
 import type { ValueFactor, WishCriteria, WishOffer } from './types';
 
 const UNSTATED = 0.5;
@@ -70,6 +71,8 @@ export interface CompareRow {
   priceNote: string;
   verdict: WishOffer['verdict'];
   factors: FactorReading[];
+  /** Trips only: the dates the listing states ("12 Jan–17 Jan", "Dec 2026 · other dates"). */
+  when: string | null;
   /** Performance against the reference (1.0), or null. */
   perf: number | null;
   /** Share of the weight the listing actually states, 0–1. */
@@ -131,6 +134,11 @@ export function compareRow(o: WishOffer, criteria: WishCriteria): Omit<CompareRo
     }
   }
   const { pence, note } = comparablePrice(o, criteria);
+  let when: string | null = null;
+  if (criteria.constraints.some((c) => c.field === 'dates')) {
+    const read = readTravelDates(o.title, o.description, new Date(o.firstSeenAt || Date.now()));
+    when = [[...new Set(read.spans.map(formatSpan))].slice(0, 2).join(', '), read.flexible ? 'other dates' : ''].filter(Boolean).join(' · ') || null;
+  }
   const comparePence = pence ?? o.pricePence;
   return {
     key: o.key,
@@ -139,10 +147,13 @@ export function compareRow(o: WishOffer, criteria: WishCriteria): Omit<CompareRo
     merchant: o.merchant,
     pricePence: o.pricePence,
     comparePence,
-    priceLabel: formatPence(o.pricePence),
-    priceNote: note.trim(),
+    // The column shows what is held against the budget; a per-person price
+    // shows its working underneath ("£100pp × 2").
+    priceLabel: formatPence(comparePence),
+    priceNote: note.trim().replace(/^\((.*)\)$/, '$1').replace(/^pp$/, 'per person'),
     verdict: o.verdict,
     factors,
+    when,
     // No model: every listing is "1.0" and the index is price alone.
     perf: total === 0 ? 1 : missingKey ? null : Math.round((perf / total) * 100) / 100,
     coverage: total === 0 ? 1 : Math.round((stated / total) * 100) / 100,

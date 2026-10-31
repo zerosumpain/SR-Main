@@ -88,7 +88,7 @@ describe('value index — anything else', () => {
       offer('week', '4⭐ Tenerife family holiday', 300, { description: 'a 7-night stay from £300', perPerson: true }),
       offer('short', '5-star Lisbon city break, 3 nights', 1000),
     ], hol);
-    expect(row(rows, 'week')).toMatchObject({ comparePence: 120_000, priceNote: '(£300pp × 4)' });
+    expect(row(rows, 'week')).toMatchObject({ comparePence: 120_000, priceLabel: '£1,200', priceNote: '£300pp × 4' });
     expect(row(rows, 'week').factors.map((f) => f.shown)).toEqual(['7 nights', '4★']);
     expect(row(rows, 'week').value).toBe(100);
   });

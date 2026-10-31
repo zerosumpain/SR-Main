@@ -17,7 +17,7 @@ export type WishStatus = 'watching' | 'paused' | 'bought' | 'dropped';
  * matches", because a match the code cannot show its working for is a match
  * nobody should be alerted about.
  */
-export type SpecField = 'gpu' | 'ram_gb' | 'ram_type' | 'storage_gb' | 'text' | 'attr';
+export type SpecField = 'gpu' | 'ram_gb' | 'ram_type' | 'storage_gb' | 'text' | 'attr' | 'dates';
 
 export type Constraint =
   | { field: 'gpu'; op: 'rank_gte'; value: string }
@@ -31,7 +31,12 @@ export type Constraint =
    * `essential`: a listing that does not state it is not one we can vouch for
    * (the GPU rule, generalised) — otherwise one unstated detail is a "Check".
    */
-  | { field: 'attr'; label: string; unit: UnitId; op: 'gte' | 'lte'; value: number; essential?: boolean };
+  | { field: 'attr'; label: string; unit: UnitId; op: 'gte' | 'lte'; value: number; essential?: boolean }
+  /**
+   * When it is for — a holiday's travel window, inclusive ISO dates. `label`
+   * is how the ask put it ("February half term"). See `dates.ts`.
+   */
+  | { field: 'dates'; from: string; to: string; label: string };
 
 /**
  * One thing the value score weighs. `measure` is a unit from `units.ts`, or one

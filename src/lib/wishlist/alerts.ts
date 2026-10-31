@@ -36,7 +36,7 @@ export function offerKey(itemId: string, url: string): string {
 /** Merge a freshly seen candidate into the stored offer (or start one). */
 export function mergeOffer(item: WishItem, prev: WishOffer | null, c: Candidate & { pricePence: number }, now: Date): WishOffer {
   const at = now.toISOString();
-  const { verdict, results } = evaluate(c, item.criteria);
+  const { verdict, results } = evaluate(c, item.criteria, now);
   const point: PricePoint = { at, pence: c.pricePence, inStock: c.inStock };
   const history = prev ? [...prev.history] : [];
   const last = history[history.length - 1];

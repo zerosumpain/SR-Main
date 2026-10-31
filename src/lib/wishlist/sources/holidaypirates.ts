@@ -21,7 +21,7 @@ const MAX_FEED_CHARS = 3_000_000;
 const FETCH_TIMEOUT_MS = 15_000;
 
 /** "from £225", "under £900", "for £399" — the deal's headline price, not an upgrade's "extra £80". */
-const HEADLINE = /(?:from|for|only|just|under|at)\s+£\s*[\d,]+(?:\.\d{1,2})?/i;
+const HEADLINE = /(?:from|for|only|just|under|at)\s+£\s*[\d,]+(?:\.\d{1,2})?(?:\s*k\b)?/i;
 
 export async function parseHolidayPiratesFeed(xml: string): Promise<Candidate[]> {
   if (xml.length > MAX_FEED_CHARS || /<!DOCTYPE/i.test(xml)) throw new Error('Invalid HolidayPirates feed');

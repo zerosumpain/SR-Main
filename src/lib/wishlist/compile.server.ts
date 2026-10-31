@@ -13,6 +13,7 @@ import { knownGpus } from './gpu';
 import { REDDIT_SUBS } from './sources/reddit';
 import { SCAN_CATEGORIES } from './sources/scan';
 import { UNITS } from './units';
+import { SCHOOL_HOLIDAYS } from './dates';
 import { parseModelJson, validateCompiled, type CompiledWish } from './compile';
 
 const MAX_TOKENS = 1_600;
@@ -39,11 +40,13 @@ Reply with ONE JSON object and nothing else:
   "value": [ ... ],                   // 2–4 things that make one listing better value than another, beyond price:
      {"label":"Screen","measure":"inch","weight":0.5,"ref":55,"better":"higher"}
      // ref = what a typical good one has; for a PC use measures "gpu" (ref 43), "cpu" (ref 65), "ram_gb" (ref 16), "storage_gb" (ref 1000); [] when nothing measurable matters (e.g. one specific LEGO set)
-  "hukdTags": string[],               // hotukdeals tag slugs from hotukdeals.com/tag/<slug>, e.g. "gaming-pc", "tv", "lego", "air-fryer", "holiday", "hotel", "flight", "city-breaks", "cruise"
+  "hukdTags": string[],               // hotukdeals tag slugs from hotukdeals.com/tag/<slug>, e.g. "gaming-pc", "tv", "lego", "air-fryer", "holiday", "hotel", "flight", "city-breaks", "cruise" (a city break: "city-breaks" AND "hotel"; a package holiday: "holiday" AND "hotel")
   "pricerunnerCategories": string[],  // goods only: PriceRunner "<id>/<Name>" from pricerunner.com/cl/<id>/<Name>, e.g. "223/Desktop-Computers"; [] if unsure
   "overclockersCategories": string[], // PC things only: Overclockers UK category paths, the NARROWEST that fits (each lists only 40), e.g. "pc-systems/pcs-by-price/gaming-pcs-under-1000", "pc-systems/gaming-pcs/nvidia-gaming-pcs"; [] otherwise
   "scanCategories": string[],         // PC parts only, from: ${Object.keys(SCAN_CATEGORIES).join(', ')}; [] otherwise
   "subreddits": string[],             // PC parts or PCs only, from: ${Object.keys(REDDIT_SUBS).join(', ')}; [] otherwise
+  "travelDates": null | {"schoolHoliday": string} | {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "label": string},
+                                      // holidays/travel/tickets only: when. A school holiday by its exact name from: ${SCHOOL_HOLIDAYS.map((h) => h.name).join(', ')}; otherwise the window as dates ("in March" = the whole month; "Christmas" = 20 Dec to 2 Jan), dates in the future
   "holidayPirates": boolean,          // true for package holidays, city breaks, hotels with flights
   "searchQuery": string,              // goods only (it searches PriceRunner product pages): a short search that would find them; "" for holidays, travel and tickets
   "urls": string[],                   // product URLs the user gave, verbatim

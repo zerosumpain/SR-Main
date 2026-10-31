@@ -11,6 +11,7 @@
 import { gpuScore } from './gpu';
 import { readSpecs, type Specs } from './specs';
 import { formatUnit, readUnit } from './units';
+import { fitDates, formatWindow, readTravelDates } from './dates';
 import type { Constraint, ConstraintResult, Evaluation, WishCriteria } from './types';
 
 export function formatPence(p: number): string {
@@ -18,7 +19,7 @@ export function formatPence(p: number): string {
   return `£${pounds.toLocaleString('en-GB', { minimumFractionDigits: p % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
-function checkOne(c: Constraint, specs: Specs, title: string, description: string): ConstraintResult {
+function checkOne(c: Constraint, specs: Specs, title: string, description: string, asOf: Date): ConstraintResult {
   const text = `${title}\n${description}`;
   switch (c.field) {
     case 'gpu': {
@@ -55,6 +56,10 @@ function checkOne(c: Constraint, specs: Specs, title: string, description: strin
       const ok = c.op === 'gte' ? got >= c.value : got <= c.value;
       return { field: 'attr', ok, reason: ok ? `${c.label} ${formatUnit(c.unit, got)}` : `${c.label} ${formatUnit(c.unit, got)}, not ${want}` };
     }
+    case 'dates': {
+      const fit = fitDates(readTravelDates(title, description, asOf), c);
+      return { field: 'dates', ok: fit.ok, reason: fit.reason };
+    }
     case 'text': {
       const lower = text.toLowerCase();
       const hits = c.value.filter((w) => lower.includes(w.toLowerCase()));
@@ -79,6 +84,8 @@ export interface Listing {
   pricePence: number | null;
   /** The source prices per person whatever the text says (HolidayPirates). */
   perPerson?: boolean;
+  /** When the deal was posted — a date with no year is the next one after it. */
+  postedAt?: string | null;
 }
 
 /**
@@ -96,9 +103,10 @@ export function comparablePrice(listing: Listing, criteria: WishCriteria): { pen
   return { pence: listing.pricePence * basis.party, note: ` (${formatPence(listing.pricePence)}pp × ${basis.party})` };
 }
 
-export function evaluate(listing: Listing, criteria: WishCriteria): Evaluation {
+export function evaluate(listing: Listing, criteria: WishCriteria, now = new Date()): Evaluation {
   const specs = readSpecs(listing.title, listing.description);
-  const results = criteria.constraints.map((c) => checkOne(c, specs, listing.title, listing.description));
+  const asOf = listing.postedAt ? new Date(listing.postedAt) : now;
+  const results = criteria.constraints.map((c) => checkOne(c, specs, listing.title, listing.description, asOf));
 
   let priceOk: boolean | null = true;
   let priceNear = false;
@@ -152,6 +160,8 @@ export function describeConstraint(c: import('./types').Constraint): string {
       return c.value.join(' / ');
     case 'text':
       return c.op === 'contains_any' ? `mentions ${c.value.join(' / ')}` : `not ${c.value.join(' / ')}`;
+    case 'dates':
+      return c.label ? `${c.label}: ${formatWindow(c.from, c.to)}` : formatWindow(c.from, c.to);
     case 'attr': {
       // "≥ 7 nights", not "Nights ≥ 7 nights" — the unit already says what it is.
       const amount = formatUnit(c.unit, c.value);
