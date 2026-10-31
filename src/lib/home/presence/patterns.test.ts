@@ -58,6 +58,7 @@ describe('categoryOf', () => {
     expect(categoryOf({ id: 'g', label: 'Grandparents', kind: 'home', lat: 51.5, lon: -0.1, radiusM: 80, lookup: shop }, 'home', home)).toBe('family');
     expect(categoryOf({ id: 'r', label: null, kind: 'unknown', lat: 41.9, lon: 12.47, radiusM: 80, lookup: shop }, 'home', home)).toBe('far');
     expect(categoryOf({ id: 'o', label: 'Diamond Terrace', kind: 'other', lat: 51.5, lon: -0.1, radiusM: 80, lookup: { category: 'other', type: 'Street', name: null } }, 'home', home)).toBe('other');
+    expect(categoryOf({ id: 'w', label: null, suggestedLabel: '1a Duke Street', kind: 'unknown', lat: 51.5, lon: -0.1, radiusM: 80, lookup: { category: 'work', type: 'Building firm', name: 'DPS' } }, 'home', home)).toBe('unnamed');
     // Without a lookup the name still says something.
     expect(categoryOf({ id: 'm', label: 'Darlington Memorial Hospital', kind: 'other', lat: 51.5, lon: -0.1, radiusM: 80 }, 'home', home)).toBe('health');
     expect(categoryOf({ id: 'f', label: 'Flamingo Land', kind: 'other', lat: 51.5, lon: -0.1, radiusM: 80 }, 'home', home)).toBe('daysout');

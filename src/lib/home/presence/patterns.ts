@@ -132,8 +132,10 @@ export function categoryOf(p: PatternPlace, homeId: string | null, home: { lat: 
   if (p.kind === 'gym') return 'sport';
   const name = p.label || '';
   const far = home && metresBetween(home.lat, home.lon, p.lat, p.lon) / 1000 > FAR_KM;
-  // A lookup's "other" says nothing; nor does any lookup of a nameless address on holiday.
-  const looked = p.lookup && p.lookup.category !== 'other' && (name || !far) ? p.lookup.category : null;
+  // A lookup's "other" says nothing; nor does any lookup of a nameless address on holiday. And the
+  // business next door to a nameless stop never makes it someone's school or work: that is the owner's to say.
+  const looked = p.lookup && p.lookup.category !== 'other' && (name || (!far && !['school', 'work'].includes(p.lookup.category)))
+    ? p.lookup.category : null;
   if (looked) return looked;
   for (const [cat, re] of WORDS) if (name && re.test(name)) return cat;
   if (p.kind === 'shop') return 'shops';
