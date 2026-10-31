@@ -144,7 +144,8 @@ export function categoryOf(p: PatternPlace, homeId: string | null, home: { lat: 
   if (p.suggestedKind === 'shop') return 'shops';
   if (p.suggestedKind === 'school') return 'school';
   if (name) return 'other';
-  for (const [cat, re] of WORDS) if (p.suggestedLabel && re.test(p.suggestedLabel)) return cat;
+  // A street's words ("Park Place") guess only when no lookup has seen the address.
+  if (!p.lookup) for (const [cat, re] of WORDS) if (p.suggestedLabel && re.test(p.suggestedLabel)) return cat;
   return 'unnamed';
 }
 
