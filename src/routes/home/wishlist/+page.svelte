@@ -112,7 +112,7 @@
           class="text-input area"
           rows="3"
           placeholder="A gaming PC for Christmas: under £1,100, at least 16GB DDR5, RTX 5060 or better"
-          value={form && 'ask' in form ? (form.ask ?? '') : ''}
+          value={form && 'ask' in form && typeof form.ask === 'string' ? form.ask : ''}
         ></textarea>
         <div class="wl-add-row">
           <button class="cta" type="submit" disabled={adding}>{adding ? 'Reading that…' : 'Add to the list'}</button>

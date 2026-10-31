@@ -12,7 +12,6 @@ import { resolveWorkloadModel } from '$lib/server/models/workload-settings';
 import { knownGpus } from './gpu';
 import { parseModelJson, validateCompiled, type CompiledWish } from './compile';
 
-const WORKLOAD = 'extraction';
 const MAX_TOKENS = 1_200;
 
 function system(today: string): string {
@@ -45,10 +44,12 @@ Rules: a GPU value must be one of: ${knownGpus().join(', ')}. For a desktop PC, 
 export async function compileWish(ask: string, now = new Date()): Promise<CompiledWish> {
   const text = ask.trim().slice(0, 2_000);
   if (!text) throw new Error('Say what you want.');
-  const def = SITE_WORKLOADS.find((w) => w.id === WORKLOAD);
-  if (!def) throw new Error(`workload ${WORKLOAD} missing`);
+  const def = SITE_WORKLOADS.find((w) => w.id === 'extraction');
+  if (!def) throw new Error('workload extraction missing');
   const { client, model } = await getLLMClient(await resolveWorkloadModel(def));
-  const res = await withActivity(WORKLOAD, () =>
+  // A literal tag, not a constant: workloads.test greps call sites so the
+  // spend ledger and the model registry stay joinable on one key.
+  const res = await withActivity('extraction', () =>
     client.chat.completions.create({
       model,
       messages: [

@@ -1,5 +1,4 @@
 import os from 'node:os';
-import { sweepWishlist } from '$lib/wishlist/sweep.server';
 import type { ActivityHandler } from '../types';
 
 const NAME = 'wishlist-sweep';
@@ -32,6 +31,10 @@ export const wishlistSweep: ActivityHandler = {
     if (os.hostname() === 'homeserv' && process.env.WISHLIST_ALLOW_DEV !== '1') {
       return { outcome: 'skipped', summary: 'host is homeserv — the sweep runs on prod only' };
     }
+    // Loaded on the first tick, not with the registry: the sweep reaches the
+    // scraper, Tavily and notify, and every reader of the registry (the Engine
+    // Room drift test timed out on it) would otherwise pay for all three.
+    const { sweepWishlist } = await import('$lib/wishlist/sweep.server');
     const result = await sweepWishlist(new Date(ctx.now));
     if (result.checked.length === 0) {
       return { outcome: 'ok', summary: result.due ? `${result.due} due, none checked` : 'nothing due' };
