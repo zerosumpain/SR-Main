@@ -176,6 +176,7 @@
       {/if}
       {#if ahead?.isOwner}
         <p class="more"><a class="link" href="/home/people/forecast">How good the forecast is, what changed, and where next →</a></p>
+        <p class="more"><a class="link" href="/home/people/patterns">Ninety days of movement patterns: places, times, who is with whom, steps →</a></p>
       {:else}
         <p class="more"><a class="link" href="/home/people">Your routines, what changed, and your week →</a></p>
       {/if}
