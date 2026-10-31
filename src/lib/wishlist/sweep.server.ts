@@ -15,6 +15,7 @@ import { fetchHukdTag } from './sources/hukd';
 import { fetchPageScripts, fetchScanCards } from './sources/fetch.server';
 import { ocukCategoryUrl, parseOcukItemList } from './sources/ocuk';
 import { fetchSubreddit } from './sources/reddit';
+import { fetchHolidayPirates } from './sources/holidaypirates';
 import { parseScanList, scanCategoryUrl } from './sources/scan';
 import { categoryUrl, isAllowedPricerunnerUrl, parseCategoryPayload, parseProductLd } from './sources/pricerunner';
 import { getItem, listItems, listOffers, saveItem, saveOffer } from './store.server';
@@ -62,6 +63,8 @@ async function readFeed(feed: FeedRef, item: WishItem, now: Date): Promise<Candi
       return parseScanList(await fetchScanCards(scanCategoryUrl(feed.value)));
     case 'reddit':
       return fetchSubreddit(feed.value);
+    case 'holidaypirates':
+      return fetchHolidayPirates();
     case 'tavily': {
       if (!searchDue(item, now)) return [];
       item.lastSearchedAt = now.toISOString();

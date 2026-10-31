@@ -5,7 +5,7 @@ import { addWish, rereadWish } from '$lib/wishlist/add.server';
 import { checkItem, rankOffers } from '$lib/wishlist/sweep.server';
 import { deleteItem, getItem, listItems, listOffers, saveItem } from '$lib/wishlist/store.server';
 import { cadenceMs } from '$lib/wishlist/due';
-import { compareRows } from '$lib/wishlist/value';
+import { compareRows, valueModel } from '$lib/wishlist/value';
 import type { WishStatus } from '$lib/wishlist/types';
 
 // The wish list: things to buy, each either a product watched for price or a
@@ -29,7 +29,8 @@ export const load: PageServerLoad = async (event) => {
       return {
         item,
         offers: shown,
-        compare: compareRows(shown),
+        compare: compareRows(shown, item.criteria),
+        factors: valueModel(item.criteria).map((f) => ({ label: f.label, weight: f.weight })),
         hidden: offers.filter((o) => o.verdict === 'no').length,
         nextCheckAt: item.lastCheckedAt ? new Date(Date.parse(item.lastCheckedAt) + cadenceMs(item, now)).toISOString() : null,
       };

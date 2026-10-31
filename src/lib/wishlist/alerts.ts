@@ -59,6 +59,7 @@ export function mergeOffer(item: WishItem, prev: WishOffer | null, c: Candidate 
     history: history.slice(-HISTORY_CAP),
     alertedPence: prev?.alertedPence ?? null,
     ...(c.sellers ? { sellers: c.sellers.slice(0, 12) } : {}),
+    ...(c.perPerson ? { perPerson: true } : {}),
   };
 }
 
