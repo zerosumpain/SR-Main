@@ -23,7 +23,7 @@ export interface InsightPlace {
   source?: string; suggestedLabel?: string | null; alerts?: boolean;
 }
 export interface InsightPerson { subject: string; displayName: string }
-type Fix = InsightFix & { lat: number; lon: number };
+export type Fix = InsightFix & { lat: number; lon: number };
 interface Leg { a: Fix; b: Fix; start: number; end: number; moving: boolean; active: boolean }
 export interface Trip {
   subject: string; from: string; to: string; start: number; end: number; minutes: number;
@@ -97,7 +97,7 @@ export function usableFix(f: InsightFix, now: number): f is Fix {
     && (f.accuracyM == null || (f.accuracyM >= 0 && f.accuracyM <= MAX_USABLE_ACCURACY_M))
     && (f.readingAgeS == null || (f.readingAgeS >= 0 && f.readingAgeS <= 120));
 }
-function continuous(a: Fix, b: Fix): boolean {
+export function continuous(a: Fix, b: Fix): boolean {
   const dt = b.ts.getTime() - a.ts.getTime();
   return dt > 0 && dt <= CONTINUOUS_GAP_MINS * MINUTE && metresBetween(a.lat, a.lon, b.lat, b.lon) / dt * 3600 <= 200;
 }
@@ -153,7 +153,7 @@ export function qualifiedStop(rows: InsightFix[], now: Date): Fix[] | null {
   }
   return null;
 }
-function located(f: Fix, places: InsightPlace[]): Fix {
+export function located(f: Fix, places: InsightPlace[]): Fix {
   // The latitude gap alone rules out almost every place before the haversine:
   // ~100k fixes against ~130 places is otherwise 13M haversines per analysis.
   const candidates = places.filter(p => Math.abs(f.lat - p.lat) * 111_320 <= p.radiusM && metresBetween(f.lat, f.lon, p.lat, p.lon) <= p.radiusM

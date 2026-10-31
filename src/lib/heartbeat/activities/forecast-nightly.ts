@@ -6,14 +6,15 @@ import type { ActivityHandler } from '../types';
  * real trips replayed through the forecast and scored against what then
  * happened) and the digest (what changed in everyone's movements, and each
  * person's week of health from the app), both kept for /home and
- * /home/people. Every 15 minutes inside a half-hour window after 2am; a
+ * /home/people, and the ninety-day movement patterns for
+ * /home/people/patterns. Every 15 minutes inside a half-hour window after 2am; a
  * second run the same night replaces the first. Each half reports on its own,
  * so one failing does not lose the other. No LLM.
  */
 export const forecastNightly: ActivityHandler = {
   name: 'forecast-nightly',
   description:
-    'Scores the family forecast against the last 28 days of real trips, and builds the weekly digest (what changed in movements, each person\'s week of app health) for /home and /home/people. Nightly, London. No LLM.',
+    'Scores the family forecast against the last 28 days of real trips, builds the weekly digest (what changed in movements, each person\'s week of app health) for /home and /home/people, and the 90-day movement patterns for /home/people/patterns. Nightly, London. No LLM.',
   defaultCadenceSeconds: 900,
   defaultEnabled: true,
   defaultActiveHours: { start: '02:00', end: '02:30', tz: 'Europe/London' },
@@ -44,6 +45,14 @@ export const forecastNightly: ActivityHandler = {
       failed++;
       parts.push(`digest failed: ${errMsg(err).slice(0, 80)}`);
     }
-    return { outcome: failed === 2 ? 'error' : 'ok', summary: parts.join(' · ').slice(0, 200), details };
+    try {
+      const { runPatterns } = await import('$lib/home/presence/patterns.server');
+      const r = await runPatterns(now);
+      parts.push(`patterns for ${r.people.length}`);
+    } catch (err) {
+      failed++;
+      parts.push(`patterns failed: ${errMsg(err).slice(0, 60)}`);
+    }
+    return { outcome: failed === 3 ? 'error' : 'ok', summary: parts.join(' · ').slice(0, 200), details };
   },
 };
