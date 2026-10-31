@@ -25,6 +25,7 @@ import * as fireworks from './fireworks';
 import * as manhunt from './manhunt';
 import * as homestead from './homestead';
 import * as hometowns from './hometowns/hometowns';
+import * as azul from './azul';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -49,6 +50,7 @@ export const GAME_IDS = [
   'manhunt',
   'homestead',
   'hometowns',
+  'azul',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -195,6 +197,13 @@ export interface GameRules {
    * re-marked). Never called for a lobby.
    */
   seat?(room: RoomBase, player: { id: string; name: string }, now: number): void;
+  /**
+   * The room as a shared screen sees it — the TV board at `/games/<game>`,
+   * paired from a phone in the room (`screens.server`). Public information
+   * only: whatever this returns reaches a browser with no login, holding
+   * nothing but a pairing ticket. Absent: the game has no TV board.
+   */
+  toScreen?(room: RoomBase, now: number): { id: string; phase: string; serverNow: number };
   /** The paces a host may pick; absent = ['live']. */
   paces?: readonly Pace[];
   /**
@@ -445,5 +454,15 @@ export const GAMES: Record<GameId, GameRules> = {
     moves: Object.fromEntries(
       Object.entries(hometowns.moves).map(([name, fn]): [string, Move] => [name, (room, p, b, now) => fn(room as hometowns.Room, p, b, now)]),
     ),
+  },
+  // Tile drafting for two to four, on phones alone or with the TV board (spec 2026-10-31 Azul).
+  // Exports durable = { schema: 1 }, paces = ['live', 'async'], waitingOn, resume and toScreen.
+  azul: {
+    ...azul,
+    maxPlayers: azul.MAX_PLAYERS,
+    moves: {
+      // Raw on purpose: `take` types its own fields (400 with a sentence for a line that cannot take it).
+      take: (room, p, b, now) => azul.take(room as azul.Room, p, { source: b.source, colour: b.colour, line: b.line }, now),
+    },
   },
 };

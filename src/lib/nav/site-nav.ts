@@ -88,6 +88,10 @@ export const CHROME_EXCLUSIONS: { prefix: string; exact?: boolean; why: string }
   },
   { prefix: '/auth-error', why: 'The auth gate’s failure page — same reason as /login.' },
   {
+    prefix: '/games',
+    why: 'TV boards for family games (`/games/<game>`), cast to a television across the room: a full-viewport 16:9 stage with no pointer and no login, so every cell on a nav bar would be a dead end.',
+  },
+  {
     prefix: '/deepdive/share',
     why: 'A full-viewport research desk — `position: fixed; inset: 0` declared on both the host and ResearchDesk’s own shell — already wearing CommandBar.',
   },

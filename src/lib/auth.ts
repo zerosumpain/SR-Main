@@ -96,6 +96,15 @@ const PUBLIC_PATHS = [
   // deleted and evicted all 404 alike ($lib/family/backlog-cast). A PREFIX, so
   // check-public-routes.mjs is what stops a sibling becoming anonymous.
   '/cast',
+  // A family game's TV board, cast to the television: /games/<game> and its one
+  // stream. A TV has no login, so the pairing is the permission: the page
+  // shows a code, a player in a room types it on their phone, and the stream
+  // then follows that room with an HMAC ticket ($lib/games/screens), carrying
+  // only the game's `toScreen` — the table everyone in the room can see.
+  // PREFIXES, so check-public-routes.mjs is what stops a sibling becoming
+  // anonymous; the games API itself (/api/native/games) is untouched.
+  '/games',
+  '/api/games/screens',
   // The iPhone app for a phone that cannot use TestFlight (a child's):
   // /app (the family's one address), /app/<code> (a join link) and
   // /install/<token> (the manifest and the app). Safari on that phone has no

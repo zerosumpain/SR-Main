@@ -39,6 +39,7 @@ export const TITLES: Record<GameId, string> = {
   manhunt: 'Manhunt',
   homestead: 'Homestead',
   hometowns: 'Hometowns',
+  azul: 'Azul',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };

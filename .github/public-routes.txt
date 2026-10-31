@@ -20,6 +20,7 @@
 /api/daydream/observe
 /api/deepdive/index-sources
 /api/deepdive/reindex-facts
+/api/games/screens/stream
 /api/health/workflow-engine
 /api/internal/session
 /api/jkai/codegraph/ingest
@@ -189,6 +190,7 @@
 /cast/[ticket]
 /decks/[...path]
 /follow/[token]
+/games/[game]
 /install/[token]
 /install/[token]/app.ipa
 /install/[token]/manifest.plist
