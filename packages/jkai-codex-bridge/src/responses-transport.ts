@@ -31,7 +31,7 @@ import {
 import type { ChatMessage } from './messages';
 import type { StreamChunk, CapturedToolCall } from './codex-runner';
 import type { CapturedSearch } from './web-search';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 const RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
 
@@ -136,8 +136,22 @@ export function buildBody(req: ResponsesRunRequest): Record<string, unknown> {
   };
 }
 
+/**
+ * The `session_id` header for a request. The upstream prompt cache is routed by
+ * session, not by `prompt_cache_key` alone: with a fresh id on every request,
+ * identical 27k-token prompts cached 0 tokens (2026-10-31); with one id per
+ * cache key the second call cached 99.5%. So a request with a cache key always
+ * gets the same id, derived from the key. Exported for tests.
+ */
+export function sessionIdFor(cacheKey: unknown): string {
+  if (typeof cacheKey !== 'string' || !cacheKey) return randomUUID();
+  const h = createHash('sha256').update(`jkai-codex-bridge:${cacheKey}`).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${((parseInt(h[16], 16) & 3) | 8).toString(16)}${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+
 async function openStream(req: ResponsesRunRequest, rejectedToken?: string): Promise<Response> {
   const auth = await getCodexAuth(rejectedToken === undefined ? {} : { rejectedToken });
+  const body = buildBody(req);
   const res = await fetch(RESPONSES_URL, {
     method: 'POST',
     headers: {
@@ -148,9 +162,9 @@ async function openStream(req: ResponsesRunRequest, rejectedToken?: string): Pro
       // The endpoint gates on this; it is how the CLI identifies itself and a
       // request without it is refused.
       originator: 'codex_cli_rs',
-      session_id: randomUUID(),
+      session_id: sessionIdFor(body.prompt_cache_key),
     },
-    body: JSON.stringify(buildBody(req)),
+    body: JSON.stringify(body),
     ...(req.signal ? { signal: req.signal } : {}),
   });
 
