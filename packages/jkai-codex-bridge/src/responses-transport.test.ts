@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sseEvents, buildBody } from './responses-transport';
+import { sseEvents, buildBody, sessionIdFor } from './responses-transport';
 
 /**
  * The SSE reader.
@@ -94,5 +94,20 @@ describe('buildBody cache key', () => {
 
   it('falls back to hashing the instructions', () => {
     expect(buildBody({ model: 'm', messages }).prompt_cache_key).toMatch(/^jkai_/);
+  });
+});
+
+describe('sessionIdFor', () => {
+  it('gives one cache key the same session, so the upstream prompt cache can hit', () => {
+    expect(sessionIdFor('wildmind:mind:JKai')).toBe(sessionIdFor('wildmind:mind:JKai'));
+    expect(sessionIdFor('wildmind:mind:JKai')).not.toBe(sessionIdFor('wildmind:mind:Wren'));
+  });
+
+  it('is shaped like a v4 UUID', () => {
+    expect(sessionIdFor('jkai_stable')).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it('is fresh per request without a key', () => {
+    expect(sessionIdFor(undefined)).not.toBe(sessionIdFor(undefined));
   });
 });
