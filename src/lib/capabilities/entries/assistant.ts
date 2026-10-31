@@ -334,7 +334,7 @@ export const ASSISTANT_ENTRIES: CapabilityEntry[] = [
   {
     id: 'wishlist',
     title: 'Wish list',
-    blurb: 'Wish list — things to buy: hunt hotukdeals, PriceRunner, Overclockers, Scan and Reddit for listings meeting criteria (price ceiling, specs), or watch a product link for a price drop; alerts by message (manage on /home/wishlist)',
+    blurb: 'Wish list — things to buy: any kind of thing (electronics, holidays, toys, PCs): hunt hotukdeals, PriceRunner, HolidayPirates, Overclockers, Scan and Reddit for listings meeting criteria (price ceiling, sizes, nights, stars, specs), compared on value for money, or watch a product link for a price drop; alerts by message (manage on /home/wishlist)',
     app: 'main',
     repo: 'SR-Main',
     status: 'live',

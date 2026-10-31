@@ -22,25 +22,35 @@
   let views = $state<Record<string, 'list' | 'compare'>>({});
   let sorts = $state<Record<string, SortKey>>({});
 
-  type SortKey = 'value' | 'price' | 'gpu';
-  const SORTS: [SortKey, string][] = [['value', 'Best value'], ['price', 'Cheapest'], ['gpu', 'Fastest GPU']];
+  /** `factor` sorts by the item's heaviest value factor — the GPU, the screen, the nights. */
+  type SortKey = 'value' | 'price' | 'factor';
+  const sortsFor = (factors: { label: string }[]): [SortKey, string][] => [
+    ['value', 'Best value'],
+    ['price', 'Cheapest'],
+    ...(factors.length ? ([['factor', `Best ${factors[0].label.toLowerCase()}`]] as [SortKey, string][]) : []),
+  ];
   // Unscored rows sort last whatever the key — an unknown is not a zero.
   const last = (n: number | null, dir: 1 | -1) => (n === null ? Infinity : dir * n);
-  function sorted(rows: CompareRow[], key: SortKey): CompareRow[] {
+  function sorted(rows: CompareRow[], key: SortKey, heaviest: number): CompareRow[] {
     const by: Record<SortKey, (r: CompareRow) => number> = {
       value: (r) => last(r.value, -1),
-      price: (r) => r.pricePence,
-      gpu: (r) => last(r.gpuScore, -1),
+      price: (r) => r.comparePence,
+      factor: (r) => last(r.factors[heaviest]?.score ?? null, -1),
     };
-    return [...rows].sort((a, b) => by[key](a) - by[key](b) || a.pricePence - b.pricePence);
+    return [...rows].sort((a, b) => by[key](a) - by[key](b) || a.comparePence - b.comparePence);
   }
-  const cpuName = (c: string | null) => c?.replace(/^RYZEN /, 'Ryzen ').replace(/^ULTRA /, 'Core Ultra ') ?? null;
-  /** The spec columns as one line, for a phone, where the columns are hidden. */
+  /** The factor columns as one line, for a phone, where the columns are hidden. */
   const specLine = (r: CompareRow) =>
-    [r.gpu, cpuName(r.cpu), r.ramGb === null ? null : `${r.ramGb}GB${r.ramType ? ' ' + r.ramType : ''}`, r.storageGb === null ? null : storage(r.storageGb)]
-      .filter(Boolean)
-      .join(' · ') || 'no specs stated';
-  const storage = (gb: number | null) => (gb === null ? '—' : gb >= 1000 ? `${+(gb / 1000).toFixed(1)}TB` : `${gb}GB`);
+    r.factors
+      .filter((f) => f.shown)
+      .map((f) => `${f.shown}${f.sub && !f.sub.startsWith('score') ? ' ' + f.sub : ''}`)
+      .join(' · ') || 'nothing stated';
+  const heaviestOf = (factors: { weight: number }[]) => factors.reduce((h, f, n) => (f.weight > (factors[h]?.weight ?? -1) ? n : h), 0);
+  const pct = (w: number) => `${Math.round(w * 100)}%`;
+  function explainValue(factors: { label: string; weight: number }[]): string {
+    if (!factors.length) return 'Nothing measurable was asked for, so value is price alone: the cheapest here = 100.';
+    return `Value is performance per pound, best here = 100. Performance weighs ${factors.map((f) => `${f.label} ${pct(f.weight)}`).join(', ')}, each against a typical good one; a factor a listing does not state counts as half that, so hiding a spec never helps.`;
+  }
 
   const WHEN = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/London',
@@ -76,6 +86,7 @@
     if (f.source === 'ocuk-cat') return `Overclockers · ${f.value.split('/').at(-1)?.replace(/-/g, ' ') ?? f.value}`;
     if (f.source === 'scan-cat') return `Scan · ${SCAN_CATEGORIES[f.value] ?? f.value}`;
     if (f.source === 'reddit') return `r/${f.value}`;
+    if (f.source === 'holidaypirates') return 'HolidayPirates';
     return `search · “${f.value}”`;
   }
 
@@ -115,9 +126,9 @@
   path="/home/wishlist"
   kicker="Home · Wish list"
   title={['Things to buy,', 'watched for you']}
-  standfirst="Say what you want — a product link to watch for a price drop, or what it has to be (“gaming PC under £1,100, 16GB DDR5, RTX 5060 or better”). The sweep reads hotukdeals, PriceRunner, Overclockers, Scan and r/buildapcsalesuk and messages you when something meets it."
+  standfirst="Say what you want — a product link to watch for a price drop, or what it has to be — “a 55in+ TV under £600”, “a family week in the sun, 4 stars, under £2,000 for the four of us”, “gaming PC under £1,100, RTX 5060 or better”. The sweep reads hotukdeals, PriceRunner, HolidayPirates and — for PCs — Overclockers, Scan and r/buildapcsalesuk, and messages you when something meets it."
   {summary}
-  footer={['strangeramblings.com/home/wishlist', 'hotukdeals · PriceRunner · Overclockers · Scan · Reddit', 'The owner only, for now']}
+  footer={['strangeramblings.com/home/wishlist', 'hotukdeals · PriceRunner · HolidayPirates · Overclockers · Scan · Reddit', 'The owner only, for now']}
 >
   <section class="band flush-top">
     <div class="inner">
@@ -139,7 +150,7 @@
           name="ask"
           class="text-input area"
           rows="3"
-          placeholder="A gaming PC for Christmas: under £1,100, at least 16GB DDR5, RTX 5060 or better"
+          placeholder="Anything — a 55in+ TV under £600, a 4-star family week in the sun under £2,000 for four, a gaming PC with an RTX 5060…"
           value={form && 'ask' in form && typeof form.ask === 'string' ? form.ask : ''}
         ></textarea>
         <div class="wl-add-row">
@@ -181,55 +192,57 @@
                 {#if row.offers.length}
                   {@const view = views[i.id] ?? 'list'}
                   {@const sortKey = sorts[i.id] ?? 'value'}
-                  {#if row.compare.some((r) => r.gpu || r.cpu)}<div class="wl-viewbar" role="group" aria-label="How to show the listings">
+                  {@const heaviest = heaviestOf(row.factors)}
+                  <div class="wl-viewbar" role="group" aria-label="How to show the listings">
                     <button class="btn sm" type="button" aria-pressed={view === 'list'} onclick={() => (views[i.id] = 'list')}>Listings</button>
-                    <button class="btn sm" type="button" aria-pressed={view === 'compare'} onclick={() => (views[i.id] = 'compare')}>Compare specs</button>
+                    <button class="btn sm" type="button" aria-pressed={view === 'compare'} onclick={() => (views[i.id] = 'compare')}>Compare</button>
                     {#if view === 'compare'}
                       <span class="wl-sort">
                         <small class="dim">Sort</small>
-                        {#each SORTS as [k, label] (k)}
+                        {#each sortsFor(row.factors.length ? [row.factors[heaviest]] : []) as [k, label] (k)}
                           <button class="btn sm" type="button" aria-pressed={sortKey === k} onclick={() => (sorts[i.id] = k)}>{label}</button>
                         {/each}
                       </span>
                     {/if}
-                  </div>{/if}
-                  {#if view === 'compare' && row.compare.some((r) => r.gpu || r.cpu)}
+                  </div>
+                  {#if view === 'compare'}
                     <div class="tbl-wrap">
                       <table class="tbl compact wl-compare">
                         <thead>
-                          <tr><th>Value</th><th class="right">Price</th><th>Listing</th><th class="wl-spec">GPU</th><th class="wl-spec">CPU</th><th class="right wl-spec">RAM</th><th class="right wl-spec">Storage</th></tr>
+                          <tr>
+                            <th>Value</th><th class="right">Price</th><th>Listing</th>
+                            {#each row.factors as f (f.label)}<th class="wl-spec">{f.label}</th>{/each}
+                          </tr>
                         </thead>
                         <tbody>
-                          {#each sorted(row.compare, sortKey) as r (r.key)}
+                          {#each sorted(row.compare, sortKey, heaviest) as r (r.key)}
                             <tr>
                               <td class="nowrap">
                                 {#if r.value !== null}
                                   <span class="num">{r.value}</span>
                                   <span class="wl-meter" aria-hidden="true"><span style:width="{r.value}%"></span></span>
-                                  {#if r.coverage < 1}<br /><small class="dim" title="Scored on the parts the listing states">on {Math.round(r.coverage * 100)}% of specs</small>{/if}
+                                  {#if r.coverage < 1}<br /><small class="dim" title="How much of the value score the listing actually states">states {Math.round(r.coverage * 100)}%</small>{/if}
                                 {:else}
-                                  <small class="dim">no GPU stated</small>
+                                  <small class="dim">no {row.factors[heaviest]?.label ?? 'spec'} stated</small>
                                 {/if}
                               </td>
-                              <td class="right num nowrap">{r.priceLabel}</td>
+                              <td class="right num nowrap">
+                                {r.priceLabel}{#if r.priceNote}<br /><small class="dim">{r.priceNote}</small>{/if}
+                              </td>
                               <td class="cell-wrap">
                                 <a class="link" href={r.url} target="_blank" rel="noopener noreferrer">{r.title}</a>
                                 <br /><small class="dim">{r.merchant ? `${r.merchant} · ` : ''}{host(r.url)} · <span class="pill {VERDICT[r.verdict].tone}">{VERDICT[r.verdict].label}</span></small>
-                                <br /><small class="wl-specline">{specLine(r)}</small>
+                                {#if r.factors.length}<br /><small class="wl-specline">{specLine(r)}</small>{/if}
                               </td>
-                              <td class="nowrap wl-spec">{r.gpu ?? '—'}{#if r.gpuScore !== null}<br /><small class="dim">score {r.gpuScore}</small>{/if}</td>
-                              <td class="nowrap wl-spec">{cpuName(r.cpu) ?? '—'}{#if r.cpuScore !== null}<br /><small class="dim">score {r.cpuScore}</small>{/if}</td>
-                              <td class="right nowrap wl-spec">{r.ramGb === null ? '—' : `${r.ramGb}GB`}{#if r.ramType}<br /><small class="dim">{r.ramType}</small>{/if}</td>
-                              <td class="right nowrap wl-spec">{storage(r.storageGb)}</td>
+                              {#each r.factors as f (f.label)}
+                                <td class="nowrap wl-spec">{f.shown ?? '—'}{#if f.sub}<br /><small class="dim">{f.sub}</small>{/if}</td>
+                              {/each}
                             </tr>
                           {/each}
                         </tbody>
                       </table>
                     </div>
-                    <p class="card-body sm dim">
-                      Value is performance per pound, best here = 100. Performance weighs the GPU 55%, CPU 20%, RAM 15% and storage 10%,
-                      each against an RTX 5060 / Ryzen 5 7600 / 16GB / 1TB build. A part a listing does not state counts as a modest one, so hiding a spec never helps.
-                    </p>
+                    <p class="card-body sm dim">{explainValue(row.factors)}</p>
                   {:else}
                     <div class="tbl-wrap">
                       <table class="tbl compact wl-offers">

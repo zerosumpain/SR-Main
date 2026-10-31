@@ -70,16 +70,18 @@ export function readSpecs(title: string, description = ''): Specs {
 }
 
 /**
- * "£1,099.99" / "1099" / "£999" → pence. Null for anything that is not a
+ * "£1,099.99" / "£999" / "£1.5k" → pence. Null for anything that is not a
  * plain sterling figure — "FREE", "€", a range. Used on deal text only; the
  * structured sources hand over numbers.
  */
 export function parsePounds(text: string): number | null {
-  const m = /£\s*(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d{1,2}))?/.exec(text);
+  // "£1K" / "£1.5k" are thousands — HolidayPirates writes "under £1K", and
+  // reading that as £1 put a Mauritius holiday at a pound (2026-10-31).
+  const m = /£\s*(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d{1,2}))?(\s*k\b)?/i.exec(text);
   if (!m) return null;
   const pounds = Number(m[1].replace(/,/g, ''));
   const pence = m[2] ? Number(m[2].padEnd(2, '0')) : 0;
-  return pounds * 100 + pence;
+  return m[3] ? Math.round((pounds + pence / 100) * 1000) * 100 : pounds * 100 + pence;
 }
 
 /** A structured amount ("1099.00", 1099) → pence, or null. */

@@ -38,7 +38,7 @@ register({
   effect: 'mutate',
   confirm: 'never',
   description:
-    'Add something to the WISH LIST. Give the user\'s words: either criteria to HUNT for ("a gaming PC under £1,100 with 16GB DDR5 and an RTX 5060 or better, for Christmas") or a product link to WATCH for a price drop (optionally "tell me under £X"). The wish list checks hotukdeals, PriceRunner, Overclockers, Scan and r/buildapcsalesuk on a schedule and messages the user when a listing meets every criterion, nearly does, or a watched price falls. Returns what it understood — show the user the criteria so a misread can be fixed. Prefer this over monitor_create for anything that is shopping.',
+    'Add something to the WISH LIST. Works for ANY kind of thing — electronics, holidays, toys, appliances, PCs. Give the user\'s words: either criteria to HUNT for ("a 55in+ TV under £600", "a 4-star family week in the sun under £2,000 for four", "a gaming PC under £1,100 with an RTX 5060 or better") or a product link to WATCH for a price drop (optionally "tell me under £X"). The wish list checks hotukdeals, PriceRunner, HolidayPirates and (for PCs) Overclockers, Scan and r/buildapcsalesuk on a schedule and messages the user when a listing meets every criterion, nearly does, or a watched price falls. Returns what it understood — show the user the criteria so a misread can be fixed. Prefer this over monitor_create for anything that is shopping.',
   parameters: {
     type: 'object',
     properties: {

@@ -55,7 +55,8 @@ export async function parseHukdFeed(xml: string): Promise<Candidate[]> {
       if (url.origin !== HUKD_ORIGIN || !title) continue;
 
       const merchantEl = item.getElementsByTagName('pepper:merchant')[0];
-      const merchant = merchantEl?.getAttribute('name')?.trim() || null;
+      // The feed double-escapes some names ("John Lewis &amp;amp; Partners").
+      const merchant = merchantEl?.getAttribute('name')?.replace(/&amp;/g, '&').trim() || null;
       const priceAttr = merchantEl?.getAttribute('price') ?? '';
       // A space before every tag, so "<strong>£1,299 - Amazon</strong><p>Best"
       // flattens to two words, not "AmazonBest" — the spec regexes need the gap.
