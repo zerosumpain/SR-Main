@@ -18,9 +18,11 @@ import { LOOKUP_CATEGORIES, parsePlaceTypes, placeQuery, type PatternPlace, type
 
 export const PLACE_TYPES_KEY = 'home.patterns.placeTypes';
 const BATCH = 8;
+/** Bump when the prompt changes what an answer means: every place is asked again. */
+const VERSION = 2;
 const CONCURRENCY = 3;
 
-export type PlaceTypeCache = Record<string, PlaceType & { query: string; at: string }>;
+export type PlaceTypeCache = Record<string, PlaceType & { query: string; at: string; v?: number }>;
 
 export const loadPlaceTypes = () => getSetting<PlaceTypeCache>(PLACE_TYPES_KEY).then((v) => v ?? {}).catch((): PlaceTypeCache => ({}));
 
@@ -46,6 +48,7 @@ category is exactly one of: ${LOOKUP_CATEGORIES.join(', ')}
 - school, work: schools, colleges, universities; offices and workplaces
 - homes: a private house or residential street with no business at it
 - other: you cannot tell
+Choose by the place's main purpose: a theme park with lodges is daysout, a pub with rooms is food, a garden centre with a cafe is shops.
 type is a short plain description of the place (at most five words). name is the business or venue at a street address when you are sure of it, else null; always null for a named entry.`;
 
 /**
@@ -61,7 +64,7 @@ export async function refreshPlaceTypes(
   const cache = await loadPlaceTypes();
   const pending = places
     .map((p) => ({ id: p.id, query: placeQuery(p, homeId) }))
-    .filter((p): p is { id: string; query: string } => !!p.query && cache[p.id]?.query !== p.query);
+    .filter((p): p is { id: string; query: string } => !!p.query && (cache[p.id]?.query !== p.query || cache[p.id]?.v !== VERSION));
   const batches: Array<typeof pending> = [];
   for (let i = 0; i < pending.length && batches.length < maxBatches; i += BATCH) batches.push(pending.slice(i, i + BATCH));
   if (!batches.length) return { cache, looked: 0, failed: 0 };
@@ -91,7 +94,7 @@ export async function refreshPlaceTypes(
         batch.forEach((p, i) => {
           const t = found.get(ids[i]);
           // An entry the model skipped is asked again next run.
-          if (t) { cache[p.id] = { ...t, query: p.query, at }; looked++; }
+          if (t) { cache[p.id] = { ...t, query: p.query, at, v: VERSION }; looked++; }
         });
       } catch {
         failed++;
