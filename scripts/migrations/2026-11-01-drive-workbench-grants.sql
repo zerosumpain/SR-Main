@@ -24,9 +24,8 @@
 -- file_analyses, mail_attachment_files; core: file_analyses,
 -- mail_attachment_files) and merge WITH this release: runtime-grants.py
 -- revokes every table it does not list, so a later run would undo this. Its
--- renderer grants SELECT/INSERT/UPDATE/DELETE to whatever it lists, so Drive's
--- read-only use of mail_attachment_files is narrower here than the registry
--- can express unless the registry learns a per-service read-only entry.
+-- renderer holds Drive to SELECT on mail_attachment_files through its
+-- per-service read-only list (`service_read_only`), matching this file.
 BEGIN;
 
 DO $$
