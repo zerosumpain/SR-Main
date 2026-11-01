@@ -107,7 +107,7 @@
         {#if !big}<strong>{s.p.displayName}</strong>{/if}
         <span class="td-read">
           {#if hover != null}
-            {hhmm(hover * 60)} · {#each s.lines as l, i (l.id)}{i ? ' · ' : ''}{l.label.slice(0, 4).toLowerCase()} <b>{pct(l.v[hover])}</b>{/each}
+            {hhmm(hover * 60)} · {#each s.lines as l, i (l.id)}{i ? ' · ' : ''}{l.id === 'weekday' ? 'wkdy' : 'wknd'} <b>{pct(l.v[hover])}</b>{/each}
           {:else}
             {#each s.lines as l, i (l.id)}{i ? ' · ' : ''}{l.label} peak {hhmm(peak(l.v) * 60)} <b>{pct(l.v[peak(l.v)])}</b>{/each}
           {/if}
