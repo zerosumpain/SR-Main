@@ -22,9 +22,11 @@ import { circularMedianMinute, hhmm } from './stats';
 import { habitsOf, mergeOutings, outingsOf, partPhrase, WEEKDAYS, type Habits, type Outing, type Routine } from './habits';
 import { MIN_DWELL_MINS, VISIT_MAX_GAP_MINS } from './types';
 import { isOneShop, venueStops, type Poi, type Point } from './venues';
+import type { PatternsHistoryView } from './patterns-history';
 
 const MINUTE = 60_000;
 const DAY = 86_400_000;
+const HOUR = 60 * MINUTE;
 /** The co-presence and time-of-day grid. Ten minutes: finer only adds noise to a 2-minute trail. */
 const BIN_MS = 10 * MINUTE;
 /** A visit longer than this between two trips is a trail that lost them, not a stay. */
@@ -36,6 +38,8 @@ const SHARED_TRIP_SLACK_MS = 12 * MINUTE;
 const FAR_KM = 80;
 /** Days a category needs on each side before a steps difference is shown. */
 const MIN_STEP_DAYS = 4;
+/** Days on each side before a steps difference is said in words, on "Worth knowing". */
+const FINDING_STEP_DAYS = 8;
 /** "New" is a first visit inside this, with at least as much history before it. */
 const NEW_MS = 28 * DAY;
 
@@ -256,13 +260,15 @@ export function visitsFrom(fixes: InsightFix[], trips: Trip[], legs: Leg[], plac
     // A big place's food and shop stops come out as visits of their own; the rest of the stay stays the place's.
     const p = byId.get(r.placeId);
     const stops = p?.pois?.length ? venueStops(r.points, p.pois, { shops: !isOneShop(p.label, p.pois) }) : [];
+    // The journey in belongs to the big place, never to the café inside it: a
+    // drive into Town is not "42 minutes to a shop for a stay of 30".
     let from = r.start, first = true;
     for (const st of stops) {
       const label = st.name ?? (st.kind === 'food' ? `Café or restaurant in ${placeTitle(p)}` : `A shop in ${placeTitle(p)}`);
       if (st.start - from >= MIN_DWELL_MINS * MINUTE) { push(r.placeId, from, st.start, first ? way : undefined); first = false; }
-      push(`${r.placeId}#${st.name ?? st.kind}`, st.start, st.end, first ? way : undefined,
+      push(`${r.placeId}#${st.name ?? st.kind}`, st.start, st.end, undefined,
         { parentId: r.placeId, label, type: st.name ? `${st.type} in ${placeTitle(p)}` : `${st.kind === 'food' ? 'Food' : 'Shops'}: ${st.type}`, category: st.category, kind: st.kind, lat: st.lat, lon: st.lon });
-      first = false; from = st.end;
+      from = st.end;
     }
     push(r.placeId, from, r.end, first ? way : undefined);
   }
@@ -301,6 +307,10 @@ export interface PersonPattern extends InsightPerson {
   observedHours: number; coverage: number;
   trips: number; travelHours: number; activeTripShare: number; medianTrip: number; distanceKm: number;
   awayHours: number; homeShare: number; homeDays: number; observedDays: number;
+  /** Seen days with a stay more than FAR_KM from home, named or not: holidays and long day trips. */
+  awayDays: number;
+  /** Hours out on the days at home's end of the map, and how many such days were seen (12 h of trail). */
+  localAwayHours: number; localDays: number;
   places: PlacePattern[];
   /** The cafés and shops split out of big places (`venues.ts`), most visits first. */
   inside: InsideStop[];
@@ -318,14 +328,19 @@ export interface PersonPattern extends InsightPerson {
   steps: {
     days: number; mean: number | null;
     homeDay: number | null; outDay: number | null;
-    byCategory: Array<{ category: Category; withMean: number; withoutMean: number; days: number; lift: number }>;
+    byCategory: Array<{ category: Category; withMean: number; withoutMean: number; days: number; against: number; lift: number }>;
+    /** Day counts behind `homeDay` and `outDay`; a mean needs MIN_STEP_DAYS of them. */
+    homeDays: number; outDays: number;
+    /** Mean steps over the days not far from home. */
+    localMean: number | null;
     /** Steps on a day against minutes out of the house on foot: slope per hour and r. */
     perOnFootHour: number | null; r: number | null;
     /** The day's steps shared out by on-foot minutes, summed per place: an estimate. */
     byPlace: Array<{ placeId: string; name: string; steps: number }>;
     week: Array<{ weekday: number; mean: number }>;
   };
-  weekly: Array<{ week: string; trips: number; awayHours: number; places: number; steps: number | null }>;
+  /** `away`: the week had a day far from home. */
+  weekly: Array<{ week: string; trips: number; awayHours: number; places: number; steps: number | null; away: boolean }>;
   /** Routines, outings and the time of day of each kind of place (`habits.ts`). */
   habits: Habits;
 }
@@ -334,7 +349,8 @@ export interface PatternsReport {
   generatedAt: string; days: number; from: string; to: string;
   people: PersonPattern[];
   together: {
-    pairs: Array<{ a: string; b: string; outHours: number; homeHours: number; sharedTrips: number }>;
+    /** `localOutHours`: out together leaving out places far from home. */
+    pairs: Array<{ a: string; b: string; outHours: number; homeHours: number; sharedTrips: number; localOutHours?: number }>;
     groups: Array<{ subjects: string[]; hours: number; places: Array<{ name: string; hours: number }> }>;
     whole: { hours: number; places: Array<{ name: string; hours: number }> };
   };
@@ -347,7 +363,13 @@ export interface PatternsReport {
     /** The household's habits: people out together are one outing. */
     habits: Habits;
   };
-  findings: Array<{ subject: string | null; text: string; weight: number }>;
+  /**
+   * `only`: a line said person by person shows when that person is picked, and
+   * its household summary only when nobody is — so five anchors are one line.
+   */
+  findings: Array<{ subject: string | null; text: string; weight: number; only?: 'person' | 'household' }>;
+  /** Month by month, kept for good (`patterns-history.ts`); absent before the first nightly build. */
+  history?: PatternsHistoryView;
 }
 
 /** Pearson correlation and least-squares slope of y on x. */
@@ -386,6 +408,12 @@ export async function analysePatterns(
     return t.name && !p?.label ? `${t.type} (${t.name}?)` : t.type;
   };
   const where = (id: string) => { const p = placeById.get(id); return { lat: p?.lat ?? 0, lon: p?.lon ?? 0, radiusM: p?.radiusM ?? 0 }; };
+  // Far from home whatever it is called: Rome apartment is a stay and the Vatican
+  // a day out, but a day there is a holiday day all the same.
+  const isFar = (id: string) => {
+    const p = placeById.get(id);
+    return !!(home && p && id !== homeId && metresBetween(home.lat, home.lon, p.lat, p.lon) / 1000 > FAR_KM);
+  };
   rows = normaliseReadings(rows.filter((r) => +r.ts >= from && +r.ts <= +now));
 
   // Per person: trips, visits, legs and the bin-by-bin state the grids and
@@ -420,7 +448,7 @@ export async function analysePatterns(
 
   // ── Together ──────────────────────────────────────────────────────────────
   const pairKey = (a: string, b: string) => [a, b].sort().join('|');
-  const pairs = new Map<string, { out: number; home: number; trips: number }>();
+  const pairs = new Map<string, { out: number; home: number; trips: number; local: number }>();
   const groups = new Map<string, { minutes: number; places: Map<string, number> }>();
   const whole = { minutes: 0, places: new Map<string, number>() };
   const withAt = new Map<string, Map<string, number>>(); // subject → "placeId|other" → minutes
@@ -436,15 +464,16 @@ export async function analysePatterns(
       const list = at.get(s) ?? []; list.push(subject); at.set(s, list);
     }
     for (const [placeId, subs] of at) {
-      const isHome = placeId === homeId;
-      if (!isHome) for (const s of subs) {
+      const isHome = placeId === homeId, far = isFar(placeId);
+      // On holiday everyone is together: "out alone" is a measure of home's end of the map.
+      if (!isHome && !far) for (const s of subs) {
         const a = aloneOut.get(s) ?? { alone: 0, out: 0 };
         a.out += binMins; if (subs.length === 1) a.alone += binMins; aloneOut.set(s, a);
       }
       if (subs.length < 2) continue;
       for (let i = 0; i < subs.length; i++) for (let j = i + 1; j < subs.length; j++) {
-        const k = pairKey(subs[i], subs[j]), e = pairs.get(k) ?? { out: 0, home: 0, trips: 0 };
-        if (isHome) e.home += binMins; else e.out += binMins;
+        const k = pairKey(subs[i], subs[j]), e = pairs.get(k) ?? { out: 0, home: 0, trips: 0, local: 0 };
+        if (isHome) e.home += binMins; else { e.out += binMins; if (!far) e.local += binMins; }
         pairs.set(k, e);
       }
       if (isHome) continue;
@@ -466,7 +495,7 @@ export async function analysePatterns(
     const a = perPerson.get(subjects[i])!.trips, b = perPerson.get(subjects[j])!.trips;
     let n = 0;
     for (const t of a) if (b.some((u) => u.from === t.from && u.to === t.to && Math.abs(u.start - t.start) <= SHARED_TRIP_SLACK_MS && Math.abs(u.end - t.end) <= SHARED_TRIP_SLACK_MS)) n++;
-    if (n) { const k = pairKey(subjects[i], subjects[j]), e = pairs.get(k) ?? { out: 0, home: 0, trips: 0 }; e.trips = n; pairs.set(k, e); }
+    if (n) { const k = pairKey(subjects[i], subjects[j]), e = pairs.get(k) ?? { out: 0, home: 0, trips: 0, local: 0 }; e.trips = n; pairs.set(k, e); }
   }
   const topPlaces = (m: Map<string, number>, n = 4) => [...m].sort((x, y) => y[1] - x[1]).slice(0, n).map(([id, mins]) => ({ name: name(id), hours: r1(mins / 60) }));
 
@@ -513,7 +542,8 @@ export async function analysePatterns(
         weekdayShare: r1(list.filter((v) => v.weekday < 5).length / list.length * 100) / 100,
         onFootPerVisit: r0(sum(list.map((v) => v.onFoot)) / list.length),
         stayPerTravel: travel > 0 ? r1(med(list.map((v) => v.minutes)) / travel) : null,
-        with: withList, isNew: +now - from > 2 * NEW_MS && firstVisit >= +now - NEW_MS,
+        // A holiday's sights are not exploring: "new" is near home.
+        with: withList, isNew: +now - from > 2 * NEW_MS && firstVisit >= +now - NEW_MS && !isFar(placeId),
       };
     }).sort((a, b) => b.hours - a.hours);
 
@@ -543,11 +573,11 @@ export async function analysePatterns(
 
     // Per day: away time, trips, categories, on-foot minutes out, steps.
     const daySteps = steps.get(person.subject) ?? new Map<string, number>();
-    const dayStats = new Map<string, { weekday: number; trips: number; away: number; onFoot: number; cats: Set<Category>; observed: number; places: Set<string> }>();
+    const dayStats = new Map<string, { weekday: number; trips: number; away: number; onFoot: number; cats: Set<Category>; observed: number; places: Set<string>; far: boolean }>();
     const dayOf = (t: number) => {
       const c = clockAt(t);
       let d = dayStats.get(c.date);
-      if (!d) { d = { weekday: c.weekday, trips: 0, away: 0, onFoot: 0, cats: new Set(), observed: 0, places: new Set() }; dayStats.set(c.date, d); }
+      if (!d) { d = { weekday: c.weekday, trips: 0, away: 0, onFoot: 0, cats: new Set(), observed: 0, places: new Set(), far: false }; dayStats.set(c.date, d); }
       return d;
     };
     for (const l of legs) dayOf(l.start).observed += (l.end - l.start) / MINUTE;
@@ -555,10 +585,17 @@ export async function analysePatterns(
     for (const v of visits) {
       if (v.placeId === homeId) continue;
       const d = dayOf(v.start); d.away += v.minutes; d.onFoot += v.onFoot; d.cats.add(v.category); d.places.add(v.placeId);
+      // Every comparison below that leaves holidays out keys on 'far' — on
+      // every day a far stay runs through, not just the day it began.
+      if (isFar(v.placeId)) for (let t = v.start; ; t += HOUR) {
+        const e = dayOf(Math.min(t, v.end)); e.far = true; e.cats.add('far');
+        if (t >= v.end) break;
+      }
     }
     // A day counts once most of it was seen: 16 hours of trail.
     const fullDays = [...dayStats].filter(([, d]) => d.observed >= 16 * 60);
-    const atHome = (d: { trips: number; places: Set<string> }) => d.trips === 0 && d.places.size === 0;
+    // The middle days of a week away have no trips and no new place: they are not days at home.
+    const atHome = (d: { trips: number; places: Set<string>; far: boolean }) => d.trips === 0 && d.places.size === 0 && !d.far;
     const homeDays = fullDays.filter(([, d]) => atHome(d)).length;
 
     // First out and last home.
@@ -574,9 +611,11 @@ export async function analysePatterns(
     }
     const timeOf = (v: number[]) => (v.length >= 3 ? hhmm(v.length ? percentile(v, 0.5) : 0) : null);
 
-    // Roaming: the radius of each week's places, weighted by time there.
+    // Roaming: the radius of each week's places, weighted by time there — near
+    // home: a week with a flight in it is not a week of roaming 1,700 km.
     const weeks = new Map<string, Visit[]>();
-    for (const v of visits) { const k = weekOf(v.date, v.weekday), l = weeks.get(k) ?? []; l.push(v); weeks.set(k, l); }
+    for (const v of visits) {
+      if (isFar(v.placeId)) continue; const k = weekOf(v.date, v.weekday), l = weeks.get(k) ?? []; l.push(v); weeks.set(k, l); }
     const radii: number[] = [];
     for (const list of weeks.values()) {
       const pts = list.map((v) => ({ p: placeById.get(v.placeId)!, w: v.minutes })).filter((x) => x.p);
@@ -605,19 +644,22 @@ export async function analysePatterns(
     // A holiday's walking would flatter every category it shares days with:
     // other categories compare only the days at home's end of the map.
     const byCategory = CATEGORIES.map(({ id }) => {
-      const pool = id === 'far' ? stepDays : stepDays.filter((x) => !x.d.cats.has('far'));
+      const pool = id === 'far' ? stepDays : stepDays.filter((x) => !x.d.far);
       const w = pool.filter((x) => x.d.cats.has(id)).map((x) => x.steps);
       const wo = pool.filter((x) => !x.d.cats.has(id)).map((x) => x.steps);
       if (id === 'home' || id === 'unnamed' || w.length < MIN_STEP_DAYS || wo.length < MIN_STEP_DAYS) return null;
       const withMean = sum(w) / w.length, withoutMean = sum(wo) / wo.length;
-      return { category: id as Category, withMean: r0(withMean), withoutMean: r0(withoutMean), days: w.length, lift: r0(withMean - withoutMean) };
+      return { category: id as Category, withMean: r0(withMean), withoutMean: r0(withoutMean), days: w.length, against: wo.length, lift: r0(withMean - withoutMean) };
     }).filter((x): x is NonNullable<typeof x> => x != null).sort((a, b) => b.lift - a.lift);
     const f = fit(stepDays.map((x) => x.d.onFoot / 60), stepDays.map((x) => x.steps));
     // Each day's steps shared over the day's on-foot minutes: trips on foot to
     // a place, and walking about once there. An estimate, said so on the page.
     const placeSteps = new Map<string, number>();
     // Only the steps above an at-home day's are walking out.
-    const base = mean(stepDays.filter((y) => atHome(y.d)).map((y) => y.steps)) ?? 0;
+    const homeStepDays = stepDays.filter((y) => atHome(y.d)).map((y) => y.steps);
+    // A day out is a day out from home, not a day in Rome.
+    const outStepDays = stepDays.filter((y) => y.d.places.size > 0 && !y.d.far).map((y) => y.steps);
+    const base = mean(homeStepDays) ?? 0;
     for (const x of stepDays) {
       const onFoot: Array<[string, number]> = [];
       for (const v of visits) if (v.date === x.date && v.placeId !== homeId) onFoot.push([v.placeId, v.onFoot + (v.inMode === 'active' ? v.inMinutes : 0)]);
@@ -628,16 +670,20 @@ export async function analysePatterns(
     const week = Array.from({ length: 7 }, (_, wd) => ({ weekday: wd, mean: mean(stepDays.filter((x) => x.d.weekday === wd).map((x) => x.steps)) ?? 0 }));
 
     // Weekly trend.
-    const weekly = new Map<string, { trips: number; away: number; places: Set<string>; steps: number[] }>();
+    const weekly = new Map<string, { trips: number; away: number; places: Set<string>; steps: number[]; far: boolean }>();
     for (const [date, d] of dayStats) {
-      const k = weekOf(date, d.weekday), w = weekly.get(k) ?? { trips: 0, away: 0, places: new Set(), steps: [] };
-      w.trips += d.trips; w.away += d.away; for (const p of d.places) w.places.add(p);
+      const k = weekOf(date, d.weekday), w = weekly.get(k) ?? { trips: 0, away: 0, places: new Set(), steps: [], far: false };
+      w.trips += d.trips; w.away += d.away; w.far ||= d.far; for (const p of d.places) w.places.add(p);
       if (daySteps.has(date)) w.steps.push(daySteps.get(date)!);
       weekly.set(k, w);
     }
 
-    // Habits: a date counts as seen with twelve hours of trail.
-    const seenDates = new Map([...dayStats].filter(([, d]) => d.observed >= 12 * 60).map(([date, d]) => [date, d.weekday]));
+    // Habits: a date counts as seen with twelve hours of trail, and not on
+    // holiday — a week in Rome is not four Tuesdays without the grandparents.
+    const seenDates = new Map([...dayStats].filter(([, d]) => d.observed >= 12 * 60 && !d.far).map(([date, d]) => [date, d.weekday]));
+    const awayDays = [...dayStats.values()].filter((d) => d.far && d.observed >= 12 * 60).length;
+    const localAway = sum([...dayStats].filter(([date]) => seenDates.has(date)).map(([, d]) => d.away));
+    const localSteps = [...daySteps].filter(([date]) => !dayStats.get(date)?.far && Date.parse(`${date}T12:00:00Z`) >= from && Date.parse(`${date}T12:00:00Z`) <= +now).map(([, v]) => v);
     const outings = outingsOf(person.subject, visits, trips, homeId, (a, b) => onFootBetween(legs, a, b), clockAt);
     for (const [d, wd] of seenDates) hhSeen.set(d, wd);
     allOutings.push(...outings); allVisits.push(...visits);
@@ -655,6 +701,7 @@ export async function analysePatterns(
       }))),
       awayHours: r1(awayHours), homeShare: r1(homeHours / Math.max(1, homeHours + awayHours) * 100) / 100,
       homeDays, observedDays: fullDays.length,
+      awayDays, localAwayHours: r1(localAway / 60), localDays: seenDates.size,
       places: placesOut.slice(0, 25), categories,
       inside: placesOut.filter((pl) => pl.placeId.includes('#')).map((pl) => ({
         placeId: pl.placeId, name: pl.name, type: pl.type, category: pl.category, parent: name(pl.placeId.split('#')[0]), ...where(pl.placeId),
@@ -670,14 +717,15 @@ export async function analysePatterns(
       aloneOutShare: ao && ao.out ? r1(ao.alone / ao.out * 100) / 100 : 0,
       steps: {
         days: allStepDays.length, mean: mean(allStepDays.map(([, s]) => s)),
-        homeDay: mean(stepDays.filter((x) => atHome(x.d)).map((x) => x.steps)),
-        outDay: mean(stepDays.filter((x) => x.d.places.size > 0).map((x) => x.steps)),
+        homeDay: homeStepDays.length >= MIN_STEP_DAYS ? mean(homeStepDays) : null,
+        outDay: outStepDays.length >= MIN_STEP_DAYS ? mean(outStepDays) : null,
+        homeDays: homeStepDays.length, outDays: outStepDays.length, localMean: mean(localSteps),
         byCategory, perOnFootHour: f ? r0(f.slope) : null, r: f ? Math.round(f.r * 100) / 100 : null,
         byPlace: [...placeSteps].map(([placeId, s]) => ({ placeId, name: name(placeId), steps: r0(s) })).sort((a, b) => b.steps - a.steps).slice(0, 8),
         week,
       },
       weekly: [...weekly].sort((a, b) => a[0].localeCompare(b[0])).map(([wk, w]) => ({
-        week: wk, trips: w.trips, awayHours: r1(w.away / 60), places: w.places.size, steps: mean(w.steps),
+        week: wk, trips: w.trips, awayHours: r1(w.away / 60), places: w.places.size, steps: mean(w.steps), away: w.far,
       })),
       habits: habitsOf(visits, outings, seenDates, name, nameOfPerson),
     });
@@ -693,7 +741,7 @@ export async function analysePatterns(
     const s = shared.get(pl.placeId) ?? { people: new Set(), visits: 0, hours: 0 };
     s.people.add(p.subject); s.visits += pl.visits; s.hours += pl.hours; shared.set(pl.placeId, s);
   }
-  const pairList = [...pairs].map(([k, e]) => { const [a, b] = k.split('|'); return { a, b, outHours: r1(e.out / 60), homeHours: r1(e.home / 60), sharedTrips: e.trips }; })
+  const pairList = [...pairs].map(([k, e]) => { const [a, b] = k.split('|'); return { a, b, outHours: r1(e.out / 60), homeHours: r1(e.home / 60), sharedTrips: e.trips, localOutHours: r1(e.local / 60) }; })
     .sort((x, y) => y.outHours - x.outHours);
   const report: PatternsReport = {
     generatedAt: now.toISOString(), days, from: new Date(from).toISOString(), to: now.toISOString(),
@@ -726,55 +774,90 @@ export async function analysePatterns(
 
 /**
  * The few things worth saying in words, strongest first. Each is a figure the
- * page also shows; nothing here is inferred beyond it.
+ * page also shows; nothing here is inferred beyond it. A steps difference needs
+ * FINDING_STEP_DAYS days on each side and counts for more the more days it
+ * stands on. What each person has in common (an anchor, what a day at home
+ * costs, a routine the household shares) is one household line, and the
+ * person's own version shows when they are picked (`only`).
  */
 export function findingsOf(r: PatternsReport, nameOf: (s: string) => string): PatternsReport['findings'] {
   const out: PatternsReport['findings'] = [];
   const pct = (n: number) => `${Math.round(n * 100)}%`;
+  const num = (n: number) => n.toLocaleString('en-GB');
+  const days = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
+  const list = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
+  const evidence = (n: number) => Math.min(1, n / 14);
+  const seen = r.people.filter((p) => p.coverage >= 0.15);
+  const hh = r.household.habits;
+  // The household's strong routines: a person's same routine is said once, there.
+  const shared = hh.routines.filter((h) => h.people.length >= 2);
+  const inShared = (p: PersonPattern, x: Routine) => shared.some((h) => h.category === x.category && h.weekday === x.weekday && h.people.includes(p.displayName));
+
   for (const p of r.people) {
     if (p.coverage < 0.15) { out.push({ subject: p.subject, text: `${p.displayName}'s phone was seen only ${pct(p.coverage)} of the window, so their patterns are thin.`, weight: 0.2 }); continue; }
-    const lift = p.steps.byCategory[0];
-    if (lift && lift.lift > 1500) out.push({ subject: p.subject, weight: Math.min(1, lift.lift / 8000),
-      text: `${p.displayName} walks ${lift.lift.toLocaleString('en-GB')} more steps ${categoryPhrase(lift.category)} (${lift.withMean.toLocaleString('en-GB')} against ${lift.withoutMean.toLocaleString('en-GB')}, ${lift.days} days).` });
+    const lift = p.steps.byCategory.find((c) => c.days >= FINDING_STEP_DAYS && c.against >= FINDING_STEP_DAYS);
+    if (lift && lift.lift > 1500) out.push({ subject: p.subject, weight: Math.min(1, lift.lift / 8000) * evidence(lift.days),
+      text: `${p.displayName} walks ${num(lift.lift)} more steps ${categoryPhrase(lift.category)} (${num(lift.withMean)} against ${num(lift.withoutMean)}, ${days(lift.days)}).` });
     if (p.steps.homeDay != null && p.steps.outDay != null && p.steps.outDay > p.steps.homeDay * 1.4)
-      out.push({ subject: p.subject, weight: 0.5, text: `A day at home costs ${p.displayName} about ${(p.steps.outDay - p.steps.homeDay).toLocaleString('en-GB')} steps: ${p.steps.homeDay.toLocaleString('en-GB')} against ${p.steps.outDay.toLocaleString('en-GB')} on days out.` });
+      out.push({ subject: p.subject, only: 'person', weight: 0.5 * evidence(p.steps.homeDays),
+        text: `A day at home costs ${p.displayName} about ${num(p.steps.outDay - p.steps.homeDay)} steps: ${num(p.steps.homeDay)} on ${days(p.steps.homeDays)} at home against ${num(p.steps.outDay)} on ${days(p.steps.outDays)} out.` });
     const anchor = p.places.find((pl) => pl.category !== 'home');
-    if (anchor) out.push({ subject: p.subject, weight: 0.45, text: `${p.displayName}'s anchor away from home is ${anchor.name}: ${anchor.hours} hours over ${anchor.days} days, usually arriving ${anchor.arrives}.` });
+    if (anchor) out.push({ subject: p.subject, only: 'person', weight: 0.45, text: `${p.displayName}'s anchor away from home is ${anchor.name}: ${anchor.hours} hours over ${days(anchor.days)}, usually arriving ${anchor.arrives}.` });
     const worst = p.places.filter((pl) => pl.visits >= 3 && pl.stayPerTravel != null && pl.category !== 'home').sort((a, b) => a.stayPerTravel! - b.stayPerTravel!)[0];
-    if (worst && worst.stayPerTravel! < 1.5) out.push({ subject: p.subject, weight: 0.35, text: `${p.displayName}'s dearest trip for the time there: ${worst.medianTravelIn} minutes to ${worst.name} for a stay of about ${worst.medianStay}.` });
+    if (worst && worst.stayPerTravel! < 1.5) out.push({ subject: p.subject, only: 'person', weight: 0.35, text: `${p.displayName}'s dearest trip for the time there: ${worst.medianTravelIn} minutes to ${worst.name} for a stay of about ${worst.medianStay}.` });
     if (p.aloneOutShare >= 0.6 && p.awayHours > 10) out.push({ subject: p.subject, weight: 0.3, text: `Out of the house, ${p.displayName} is mostly on their own: ${pct(p.aloneOutShare)} of their time away has nobody else from home there.` });
+    // Their strongest routine that is not the household's (which already says it).
+    const x = p.habits.routines.find((r) => !inShared(p, r));
+    if (x) out.push({ subject: p.subject, weight: 0.3 + x.rate * 0.3,
+      text: `${p.displayName}'s habit: ${routine(x).replace(/^./, (c) => c.toLowerCase())}` });
   }
-  const seen = r.people.filter((p) => p.coverage >= 0.15);
+
+  // The household lines that stand for the person-by-person ones above.
+  const costs = seen.filter((p) => p.steps.homeDay != null && p.steps.outDay != null && p.steps.outDay > p.steps.homeDay * 1.4);
+  if (costs.length >= 2) out.push({ subject: null, only: 'household', weight: 0.45,
+    text: `A day at home costs everyone steps: ${list(costs.map((p) => `${p.displayName} ${num(p.steps.outDay! - p.steps.homeDay!)}`))} fewer than on a day out.` });
+  const anchors = new Map<string, string[]>();
+  for (const p of seen) { const a = p.places.find((pl) => pl.category !== 'home'); if (a) anchors.set(a.name, [...(anchors.get(a.name) ?? []), p.displayName]); }
+  if (anchors.size && seen.length >= 2) out.push({ subject: null, only: 'household', weight: 0.4,
+    text: `Away from home, the anchors are ${list([...anchors].sort((a, b) => b[1].length - a[1].length).map(([place, who]) => `${place} for ${list(who)}`))}.` });
+
   const byHabit = [...seen].sort((a, b) => b.predictability - a.predictability);
   if (byHabit.length >= 2 && byHabit[0].predictability - byHabit.at(-1)!.predictability >= 0.05)
     out.push({ subject: null, weight: 0.3, text: `${byHabit[0].displayName} keeps the steadiest rhythm (${pct(byHabit[0].predictability)} of their time is where they usually are at that hour); ${byHabit.at(-1)!.displayName} the loosest (${pct(byHabit.at(-1)!.predictability)}).` });
   const explorer = [...seen].sort((a, b) => b.newPlaces - a.newPlaces)[0];
-  if (explorer && explorer.newPlaces >= 5) out.push({ subject: explorer.subject, weight: 0.25, text: `${explorer.displayName} is the explorer: ${explorer.newPlaces} places first visited in the last four weeks.` });
+  if (explorer && explorer.newPlaces >= 5) out.push({ subject: explorer.subject, weight: 0.25, text: `${explorer.displayName} is the explorer: ${explorer.newPlaces} places near home first visited in the last four weeks.` });
   const pair = r.together.pairs[0];
   if (pair && pair.outHours > 2) out.push({ subject: null, weight: 0.6, text: `${nameOf(pair.a)} and ${nameOf(pair.b)} spend the most time together out of the house: ${pair.outHours} hours${pair.sharedTrips ? `, and ${pair.sharedTrips} journeys made together` : ''}.` });
   if (r.together.whole.hours > 0) out.push({ subject: null, weight: 0.5, text: `The whole household was out in one place for ${r.together.whole.hours} hours${r.together.whole.places[0] ? `, most of it at ${r.together.whole.places[0].name}` : ''}.` });
   // Habits: the household's strongest routine, what an outing is like, what goes together, when.
   const label = (c: Category) => categoryLabel(c).toLowerCase();
   const span = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`);
-  const routine = (who: string | null, x: Routine) => `${who ? `${who}: ` : ''}${categoryLabel(x.category)} on ${WEEKDAYS[x.weekday]}s, ${x.hits} of the ${x.of} seen, usually arriving about ${x.usual} ${partPhrase(x.part)}${x.places.length ? ` (${x.places.slice(0, 2).join(', ')})` : ''}.`;
-  const hh = r.household.habits;
-  if (hh.routines[0]) out.push({ subject: null, weight: 0.55 + hh.routines[0].rate * 0.3, text: `A household habit: ${routine(null, hh.routines[0]).replace(/^./, (c) => c.toLowerCase())}` });
-  for (const p of r.people) {
-    const x = p.habits.routines[0];
-    if (x && p.coverage >= 0.15) out.push({ subject: p.subject, weight: 0.3 + x.rate * 0.3, text: `${p.displayName}'s habit: ${routine(null, x).replace(/^./, (c) => c.toLowerCase())}` });
-  }
+  // The household's strongest habit, and the next one two or more people share (each person's copy is not said).
+  const habits = [hh.routines[0], hh.routines.slice(1).find((h) => h.people.length >= 2)].filter((h): h is Routine => !!h);
+  for (const [i, h] of habits.entries()) out.push({ subject: null, weight: 0.55 + h.rate * 0.3 - i * 0.1,
+    text: `A household habit: ${routine(h).replace(/^./, (c) => c.toLowerCase())}${i && h.people.length < r.people.length ? ` For ${list(h.people)}.` : ''}` });
   const a = hh.outings.about;
   if (a && a.outings >= 8) out.push({ subject: null, weight: 0.5,
     text: `Out and about (not school, work or a holiday), an outing lasts a median ${span(a.medianMinutes)}: ${pct(a.longShare)} run past three hours, ${pct(a.walkShare)} include an hour or more on foot, and ${pct(a.foodShare)} stop somewhere to eat.` });
-  const pairing = hh.outings.pairs.find((x) => x.lift >= 1.5);
-  if (pairing) out.push({ subject: null, weight: 0.45,
+  // Five outings with both, not three: a lift off a handful is a coincidence.
+  const pairing = hh.outings.pairs.find((x) => x.lift >= 1.5 && x.both >= 5);
+  if (pairing) out.push({ subject: null, weight: 0.45 * evidence(pairing.both * 2),
     text: `An outing with ${label(pairing.a)} is ${pairing.lift}× as likely to take in ${label(pairing.b)}: ${pct(pairing.rate)} of ${pairing.ofA}, against ${pct(pairing.base)} of all outings.` });
   const meal = hh.times.find((t) => t.category === 'food');
   if (meal && meal.visits >= 8 && meal.peak.share >= 0.35) out.push({ subject: null, weight: 0.4,
     text: `Eating out bunches up: ${pct(meal.peak.share)} of ${meal.visits} visits to food places start between ${meal.peak.from} and ${meal.peak.to}${meal.weekendShare >= 0.5 ? `, and ${pct(meal.weekendShare)} are at the weekend` : ''}.` });
   const busiest = r.household.shared[0];
   if (busiest) out.push({ subject: null, weight: 0.4, text: `${busiest.name} is the most shared place: ${busiest.people.length} people, ${busiest.visits} visits between them.` });
+  // Month on month, from the kept history: new, so the strongest few lead; the
+  // month card has the rest. A person's own show when they are picked.
+  const changes = r.history?.changes ?? [];
+  for (const c of changes.slice(0, 4)) out.push({ subject: c.subject, weight: c.weight, text: c.text });
+  for (const c of changes.slice(4)) if (c.subject) out.push({ subject: c.subject, weight: c.weight, text: c.text, only: 'person' });
   return out.sort((a, b) => b.weight - a.weight);
+}
+
+function routine(x: Routine) {
+  return `${categoryLabel(x.category)} on ${WEEKDAYS[x.weekday]}s, ${x.hits} of the ${x.of} seen, usually arriving about ${x.usual} ${partPhrase(x.part)}${x.places.length ? ` (${x.places.slice(0, 2).join(', ')})` : ''}.`;
 }
 
 /**

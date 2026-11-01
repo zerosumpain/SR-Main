@@ -135,4 +135,35 @@ describe('analysePatterns', () => {
     expect(school.visits).toBe(6);
     expect(school.hours).toBeLessThan(5 * 7.7);
   });
+
+  it('reads a day at a named place far from home as a holiday day, out of every other comparison', async () => {
+    const rome: PatternPlace = { id: 'rome', label: 'Rome apartment', kind: 'other', lat: 41.9, lon: 12.5, radiusM: 100 };
+    const homeDays = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11'];
+    const romeDays = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17'];
+    const at = (d: string, h: number) => Date.parse(`${d}T00:00:00Z`) + h * 60 * MIN;
+    const trail = [
+      ...homeDays.flatMap((d) => stay('alex', at(d, 0), at(d, 24) - 2 * MIN, 51.5)),
+      ...romeDays.flatMap((d) => stay('alex', at(d, 0), at(d, 24) - 2 * MIN, 41.9).map((f) => ({ ...f, lon: 12.5, isHome: false }))),
+      ...DAYS.flatMap((d) => schoolDay('alex', d)),
+    ];
+    const daily = new Map([...homeDays.map((d) => [d, 3000] as const), ...romeDays.map((d) => [d, 30000] as const), ...DAYS.map((d) => [d, 9000] as const)]);
+    const r = await analysePatterns(trail, [...places, rome], [people[0]], new Map([['alex', daily]]), now, 21, 'home');
+    const alex = r.people[0];
+    expect(alex.awayDays).toBe(4);
+    // A day out is a day out from home: Rome's 30,000 stays out of it.
+    expect(alex.steps).toMatchObject({ homeDay: 3000, homeDays: 5, outDay: 9000, outDays: 5 });
+    expect(alex.steps.byCategory.find((c) => c.category === 'other')).toBeUndefined();
+    expect(alex.steps.byCategory.find((c) => c.category === 'far')).toMatchObject({ days: 4, withMean: 30000 });
+    expect(alex.weekly.find((w) => w.week === '2026-09-14')?.away).toBe(true);
+    // Too few days on each side to be said in words on "Worth knowing".
+    expect(r.findings.some((f) => f.text.includes('more steps on days far from home'))).toBe(false);
+  });
+
+  it('says what everyone shares once for the household, and each person’s own when they are picked', async () => {
+    const r = await analysePatterns(rows, places, people, steps, now, 7, 'home');
+    const anchors = r.findings.filter((f) => f.text.includes('anchor'));
+    expect(anchors.filter((f) => f.only === 'household')).toHaveLength(1);
+    expect(anchors.find((f) => f.only === 'household')?.text).toContain('Sample College for Alex and Sam');
+    expect(anchors.filter((f) => f.only === 'person').map((f) => f.subject).sort()).toEqual(['alex', 'sam']);
+  });
 });

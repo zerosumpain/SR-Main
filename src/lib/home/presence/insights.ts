@@ -17,6 +17,8 @@ export interface InsightFix {
   subject: string; ts: Date; lat: number | null; lon: number | null;
   accuracyM?: number | null; readingAgeS?: number | null; placeId?: string | null;
   mode?: string | null; speedKmh?: number | null; isHome?: boolean | null;
+  /** The writer: 'companion' (the app), 'life360', 'backfill'. Only month-on-month comparisons read it. */
+  source?: string | null;
 }
 export interface InsightPlace {
   id: string; label: string | null; kind: string; lat: number; lon: number; radiusM: number;

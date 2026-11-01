@@ -32,7 +32,7 @@ import {
   MIN_DWELL_MINS,
   MIN_VISITS_FOR_PLACE,
   MIN_VISITS_TO_ASK,
-  TRAIL_RETENTION_DAYS,
+  TRAIL_WINDOW_DAYS,
   type ClusterPoint,
 } from './types';
 import { trailChanged } from './trail-generation';
@@ -158,7 +158,7 @@ export function quietPlaceOutcome(
  * the owner set on the places map (`radiusPinned`).
  */
 export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise<RefreshResult> {
-  const windowDays = opts.windowDays ?? TRAIL_RETENTION_DAYS;
+  const windowDays = opts.windowDays ?? TRAIL_WINDOW_DAYS;
   const since = new Date(Date.now() - windowDays * 86_400_000);
 
   const fixes = await db

@@ -20,6 +20,7 @@
   import PatternSteps from '$lib/components/home/people/PatternSteps.svelte';
   import PatternStepsCompare from '$lib/components/home/people/PatternStepsCompare.svelte';
   import PatternHabits from '$lib/components/home/people/PatternHabits.svelte';
+  import PatternMonths from '$lib/components/home/people/PatternMonths.svelte';
   import { GROUPS, categoryLabel, groupOf, type Group } from '$lib/home/presence/patterns';
   import { dayLabel } from '$lib/components/home/people/format';
   import { emphasise } from '$lib/components/home/people/emphasis';
@@ -47,7 +48,10 @@
   const hrefFor = (next: { person?: string | null }) => (next.person ? `?person=${encodeURIComponent(next.person)}` : '?');
 
   const findings = $derived(
-    (report?.findings ?? []).filter((f) => !focus || f.subject === focus.subject || f.subject == null).slice(0, focus ? 8 : 10),
+    // A person's own copy of a household line shows only when they are picked; the household line only when nobody is.
+    (report?.findings ?? [])
+      .filter((f) => (focus ? (f.subject === focus.subject || (f.subject == null && f.only !== 'household')) : f.only !== 'person'))
+      .slice(0, focus ? 8 : 10),
   );
 
   const kpis = $derived.by(() => {
@@ -219,7 +223,7 @@
         <p class="strap">Daily steps from the app, person by person: the average day, weekdays against weekends, and the week day by day.</p>
         <PatternStepsCompare people={report.people} {focus} />
         <h3>A day at home against a day out</h3>
-        <p class="strap">The same steps against the days' movement. Only days the trail saw for 16 hours or more are compared.</p>
+        <p class="strap">The same steps against the days' movement. Only days the trail saw for 16 hours or more are compared, and a day with a stay more than 80 km from home (a holiday, a long day trip) counts only as "far from home", never towards the others.</p>
         <PatternSteps people={report.people} {focus} />
       </section>
 
@@ -266,16 +270,25 @@
             <span class="wk-name">{p.displayName}</span>
             <div class="wk-charts">
               <div class="wk-bars" aria-label={`${p.displayName}: hours out by week`} role="img">
-                {#each p.weekly as w (w.week)}<span class="wk-plot" title={`Week of ${dayLabel(`${w.week}T12:00:00Z`)}: ${w.awayHours} h out, ${w.trips} journeys, ${w.places} places`}><span style:height={`${(w.awayHours / weekPeak) * 100}%`}></span></span>{/each}
+                {#each p.weekly as w (w.week)}<span class="wk-plot" class:away={w.away} title={`Week of ${dayLabel(`${w.week}T12:00:00Z`)}: ${w.awayHours} h out, ${w.trips} journeys, ${w.places} places${w.away ? ', with days far from home' : ''}`}><span style:height={`${(w.awayHours / weekPeak) * 100}%`}></span></span>{/each}
               </div>
               <div class="wk-bars steps" aria-label={`${p.displayName}: mean steps by week`} role="img">
-                {#each p.weekly as w (w.week)}<span class="wk-plot" title={`Week of ${dayLabel(`${w.week}T12:00:00Z`)}: ${n(w.steps)} steps a day`}><span style:height={`${((w.steps ?? 0) / stepPeak) * 100}%`}></span></span>{/each}
+                {#each p.weekly as w (w.week)}<span class="wk-plot" class:away={w.away} class:none={w.steps == null} title={`Week of ${dayLabel(`${w.week}T12:00:00Z`)}: ${w.steps == null ? 'no step count' : `${n(w.steps)} steps a day`}${w.away ? ', with days far from home' : ''}`}><span style:height={`${((w.steps ?? 0) / stepPeak) * 100}%`}></span></span>{/each}
               </div>
             </div>
           </div>
         {/each}
-        <p class="wk-key"><span class="sw out"></span>Hours out <span class="sw stp"></span>Steps a day</p>
+        <p class="wk-key"><span class="sw out"></span>Hours out <span class="sw stp"></span>Steps a day <span class="sw far"></span>Week with days far from home <span class="sw none"></span>No step count</p>
       </section>
+
+      {#if report.history?.months.length}
+        <section class="card wide" aria-labelledby="mo-h">
+          <p class="kicker">Month by month</p>
+          <h2 id="mo-h">How the months compare</h2>
+          <p class="strap">Each calendar month summed on its own and kept for good, so this grows as the months go by. Hours out are per day, leaving out days far from home; a month is compared with the one before only once both are over, and only for someone the same tracker saw in both.</p>
+          <PatternMonths history={report.history} focus={data.person} />
+        </section>
+      {/if}
 
       <section class="card" aria-labelledby="dep-h">
         <p class="kicker">Departures</p>
@@ -552,6 +565,17 @@
   }
   .sw.out {
     background: var(--accent-ink);
+  }
+  .wk-bars .wk-plot.away span,
+  .sw.far {
+    background: var(--chart-cat-4);
+  }
+  .wk-plot.none {
+    border-bottom: 1px dashed var(--line-strong);
+  }
+  .sw.none {
+    background: none;
+    border: 1px dashed var(--line-strong);
   }
   .rebuild {
     display: flex;

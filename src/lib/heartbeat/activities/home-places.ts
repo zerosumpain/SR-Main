@@ -1,6 +1,5 @@
-import { pruneTrail } from '$lib/home/presence/observe';
 import { refreshPlaces } from '$lib/home/presence/places';
-import { TRAIL_RETENTION_DAYS } from '$lib/home/presence/types';
+import { TRAIL_WINDOW_DAYS } from '$lib/home/presence/types';
 import type { ActivityHandler } from '../types';
 
 // The name is the heartbeat_actions row's identity: it stays 'daydream-places'
@@ -8,20 +7,15 @@ import type { ActivityHandler } from '../types';
 const NAME = 'daydream-places';
 
 interface PlacesConfig {
-  /** How far back to recluster. Defaults to the retention horizon, so the
-   *  place graph reflects everything the trail still holds. */
+  /** How far back to recluster. Defaults to the places window. */
   windowDays?: number;
-  /** Drop raw fixes past retention. Places are aggregates and survive. */
-  prune?: boolean;
-  retentionDays?: number;
+  // A `prune` or `retentionDays` left in a stored config is ignored: the trail
+  // is never pruned (the owner's decision, 2026-11-01).
 }
 
 const DEFAULTS: Required<PlacesConfig> = {
-  windowDays: TRAIL_RETENTION_DAYS,
-  prune: true,
-  retentionDays: TRAIL_RETENTION_DAYS,
+  windowDays: TRAIL_WINDOW_DAYS,
 };
-
 /**
  * Re-derive the place graph from the trail, hourly.
  *
@@ -37,7 +31,7 @@ const DEFAULTS: Required<PlacesConfig> = {
 export const homePlaces: ActivityHandler = {
   name: NAME,
   description:
-    'Reclusters the daydream trail into places hourly, refreshes their visit counts and rhythms, and prunes raw fixes past retention. A place needs one stay of 10+ still minutes to exist; a cluster the trail only passes through is retired as transit. No LLM.',
+    'Reclusters the daydream trail into places hourly, and refreshes their visit counts and rhythms. Never deletes trail. A place needs one stay of 10+ still minutes to exist; a cluster the trail only passes through is retired as transit. No LLM.',
   defaultCadenceSeconds: 3600,
   defaultEnabled: true,
   defaultConfig: DEFAULTS as unknown as Record<string, unknown>,
@@ -48,7 +42,6 @@ export const homePlaces: ActivityHandler = {
     const refresh = await refreshPlaces({ windowDays: cfg.windowDays });
     const { geocodePendingPlaces } = await import('$lib/home/presence/geocode.server');
     await geocodePendingPlaces();
-    const pruned = cfg.prune ? await pruneTrail(cfg.retentionDays) : 0;
 
     if (refresh.fixes === 0) {
       return {
@@ -66,7 +59,7 @@ export const homePlaces: ActivityHandler = {
         // is the engine reclassifying somewhere it had previously called a
         // place, and a count that quietly shrinks is the thing to avoid.
         (refresh.retired ? `, ${refresh.retired} retired as transit` : ''),
-      details: { ...refresh, pruned },
+      details: { ...refresh },
     };
   },
 };
