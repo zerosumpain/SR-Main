@@ -754,6 +754,25 @@ async function probeTavily(): Promise<ConnectorReport> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Brave Search — presence only, like Tavily. Optional: without it the search
+// balancer sends every search to Tavily, so a missing key is absent, not broken.
+// ---------------------------------------------------------------------------
+async function probeBrave(): Promise<ConnectorReport> {
+  return guard('brave', 'Brave Search (web search)', 'AI', 'service', async () => {
+    const { getBraveApiKey } = await import('$lib/deepdive/brave');
+    const key = await getBraveApiKey();
+    return key
+      ? { status: 'ok' as ConnectorStatus, detail: 'key present (not test-searched — searches use the allowance)', live: false }
+      : {
+          status: 'unconfigured' as ConnectorStatus,
+          detail: 'no key — every search goes to Tavily alone',
+          live: false,
+          fixHint: 'Save a Brave Search key at /admin/ai/keys',
+        };
+  });
+}
+
 /** Probe everything, concurrently. Never throws. */
 export async function probeAll(): Promise<ConnectorReport[]> {
   const [gmail, integrations, oauthSecrets, ...rest] = await Promise.all([
@@ -767,6 +786,7 @@ export async function probeAll(): Promise<ConnectorReport[]> {
     probeOpenRouter(),
     probeWhatsApp(),
     probeTavily(),
+    probeBrave(),
   ]);
   return [...gmail, ...integrations, ...oauthSecrets, ...(rest as ConnectorReport[])];
 }

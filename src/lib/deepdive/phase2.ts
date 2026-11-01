@@ -7,7 +7,7 @@ import { toVectorLiteral } from './vector';
 import { extractContent } from './extract-content';
 import { indexSourceContent } from './source-index';
 import { getEmbeddingModel } from '$lib/llm/keys';
-import { search as tavilySearch } from './tavily';
+import { search as webSearch } from './web-search';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import { emitArtefact } from './desk-events';
 import { hasOpenRouter } from '$lib/llm/keys';
@@ -517,7 +517,7 @@ export async function runPhase2(
           linkedinSearched.add(pe.name.toLowerCase());
 
           try {
-            const liResults = await tavilySearch(
+            const liResults = await webSearch(
               `site:linkedin.com/in/ "${pe.name}"`,
               { purpose: 'research.phase2.linkedin', maxResults: 3, searchDepth: 'basic' },
             );

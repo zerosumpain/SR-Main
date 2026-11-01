@@ -3,7 +3,7 @@ import { facts, sources, researchSessions } from '$lib/db/schema';
 import type { ResearchSession, Fact } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion } from './ai';
-import { search } from './tavily';
+import { search } from './web-search';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import { emitArtefact } from './desk-events';
 import type { SessionConfig, SessionStats, RedTeamReport } from './types';

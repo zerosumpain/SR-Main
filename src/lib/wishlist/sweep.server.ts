@@ -7,7 +7,7 @@
 // as `lastError`, where the page shows it.
 
 import { notifyOwner } from '$lib/server/notify';
-import { search as tavilySearch } from '$lib/deepdive/tavily';
+import { search as webSearch } from '$lib/deepdive/web-search';
 import { eventFor, mergeOffer, offerKey, summarise, type AlertEvent } from './alerts';
 import { isDue, searchDue } from './due';
 import { ALERTABLE } from './match';
@@ -68,7 +68,7 @@ async function readFeed(feed: FeedRef, item: WishItem, now: Date): Promise<Candi
     case 'tavily': {
       if (!searchDue(item, now)) return [];
       item.lastSearchedAt = now.toISOString();
-      const res = await tavilySearch(feed.value, { purpose: 'wishlist', maxResults: 8, includeDomains: ['pricerunner.com'] });
+      const res = await webSearch(feed.value, { purpose: 'wishlist', maxResults: 8, includeDomains: ['pricerunner.com'] });
       const urls = res.results.map((r) => r.url).filter(isAllowedPricerunnerUrl).slice(0, SEARCH_PRODUCT_PAGES);
       const out: Candidate[] = [];
       for (const u of urls) {

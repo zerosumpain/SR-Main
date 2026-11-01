@@ -129,6 +129,13 @@ const REF_SOURCES: Record<string, { label: string; resolve: () => Promise<string
       return loadKeys().tavilyApiKey;
     },
   },
+  brave: {
+    label: 'Brave Search API key (app_settings brave.api_key → env BRAVE_SEARCH_API_KEY)',
+    resolve: async () => {
+      const { getBraveApiKey } = await import('$lib/deepdive/brave');
+      return getBraveApiKey();
+    },
+  },
   elevenlabs: {
     label: 'ElevenLabs API key (keys.json / env ELEVENLABS_API_KEY)',
     resolve: async () => {
