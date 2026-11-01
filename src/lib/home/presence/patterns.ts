@@ -790,7 +790,7 @@ export function findingsOf(r: PatternsReport, nameOf: (s: string) => string): Pa
   const seen = r.people.filter((p) => p.coverage >= 0.15);
   const hh = r.household.habits;
   // The household's strong routines: a person's same routine is said once, there.
-  const shared = hh.routines.slice(0, 3);
+  const shared = hh.routines.filter((h) => h.people.length >= 2);
   const inShared = (p: PersonPattern, x: Routine) => shared.some((h) => h.category === x.category && h.weekday === x.weekday && h.people.includes(p.displayName));
 
   for (const p of r.people) {
@@ -806,8 +806,9 @@ export function findingsOf(r: PatternsReport, nameOf: (s: string) => string): Pa
     const worst = p.places.filter((pl) => pl.visits >= 3 && pl.stayPerTravel != null && pl.category !== 'home').sort((a, b) => a.stayPerTravel! - b.stayPerTravel!)[0];
     if (worst && worst.stayPerTravel! < 1.5) out.push({ subject: p.subject, only: 'person', weight: 0.35, text: `${p.displayName}'s dearest trip for the time there: ${worst.medianTravelIn} minutes to ${worst.name} for a stay of about ${worst.medianStay}.` });
     if (p.aloneOutShare >= 0.6 && p.awayHours > 10) out.push({ subject: p.subject, weight: 0.3, text: `Out of the house, ${p.displayName} is mostly on their own: ${pct(p.aloneOutShare)} of their time away has nobody else from home there.` });
-    const x = p.habits.routines[0];
-    if (x) out.push({ subject: p.subject, weight: 0.3 + x.rate * 0.3, ...(inShared(p, x) ? { only: 'person' as const } : {}),
+    // Their strongest routine that is not the household's (which already says it).
+    const x = p.habits.routines.find((r) => !inShared(p, r));
+    if (x) out.push({ subject: p.subject, weight: 0.3 + x.rate * 0.3,
       text: `${p.displayName}'s habit: ${routine(x).replace(/^./, (c) => c.toLowerCase())}` });
   }
 
@@ -831,7 +832,10 @@ export function findingsOf(r: PatternsReport, nameOf: (s: string) => string): Pa
   // Habits: the household's strongest routine, what an outing is like, what goes together, when.
   const label = (c: Category) => categoryLabel(c).toLowerCase();
   const span = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`);
-  if (hh.routines[0]) out.push({ subject: null, weight: 0.55 + hh.routines[0].rate * 0.3, text: `A household habit: ${routine(hh.routines[0]).replace(/^./, (c) => c.toLowerCase())}` });
+  // The household's strongest habit, and the next one two or more people share (each person's copy is not said).
+  const habits = [hh.routines[0], hh.routines.slice(1).find((h) => h.people.length >= 2)].filter((h): h is Routine => !!h);
+  for (const [i, h] of habits.entries()) out.push({ subject: null, weight: 0.55 + h.rate * 0.3 - i * 0.1,
+    text: `A household habit: ${routine(h).replace(/^./, (c) => c.toLowerCase())}${i && h.people.length < r.people.length ? ` For ${list(h.people)}.` : ''}` });
   const a = hh.outings.about;
   if (a && a.outings >= 8) out.push({ subject: null, weight: 0.5,
     text: `Out and about (not school, work or a holiday), an outing lasts a median ${span(a.medianMinutes)}: ${pct(a.longShare)} run past three hours, ${pct(a.walkShare)} include an hour or more on foot, and ${pct(a.foodShare)} stop somewhere to eat.` });

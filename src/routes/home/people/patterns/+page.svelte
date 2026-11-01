@@ -566,7 +566,7 @@
   .sw.out {
     background: var(--accent-ink);
   }
-  .wk-plot.away span,
+  .wk-bars .wk-plot.away span,
   .sw.far {
     background: var(--chart-cat-4);
   }

@@ -103,6 +103,8 @@ export async function runPatterns(now = new Date(), lookups = 20, venueFetches =
       const from = Math.max(m.start, windowFrom), to = Math.min(m.end, +now);
       if (to - from < 86_400_000) continue;
       const inMonth = rows.filter((r) => +r.ts >= from && +r.ts < to);
+      // A month before anyone was tracked is not a month of staying in.
+      if (!inMonth.length) continue;
       const monthly = await analysePatterns(inMonth, places, people, steps, new Date(to), (to - from) / 86_400_000, home?.id ?? null);
       history = mergeMonth(history, summariseMonth(monthly, m, +now, windowFrom, dominantSources(inMonth)));
     }

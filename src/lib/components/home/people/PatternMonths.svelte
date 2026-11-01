@@ -41,6 +41,12 @@
     return '';
   };
   const changes = $derived(history.changes.filter((c) => !focus || c.subject === focus || c.subject == null));
+  // Newest months are on the right: a narrow screen starts scrolled to them.
+  let wrap = $state<HTMLDivElement>();
+  $effect(() => {
+    void months.length;
+    if (wrap) wrap.scrollLeft = wrap.scrollWidth;
+  });
 </script>
 
 <div class="mo-pick" role="group" aria-label="Figure">
@@ -49,7 +55,7 @@
   {/each}
 </div>
 
-<div class="mo-wrap">
+<div class="mo-wrap" bind:this={wrap}>
   <table class="mo">
     <thead>
       <tr>
@@ -128,6 +134,15 @@
     padding: 6px 12px 6px 0;
     border-bottom: 1px solid var(--line);
     min-width: 84px;
+  }
+  /* The names stay put while the months scroll under them on a phone. */
+  .mo th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    min-width: 72px;
+    /* The card's own surface (cards sit on --surface-card, the page on --bg). */
+    background: var(--surface-card);
   }
   .mo thead th {
     font: 500 var(--fs-label-xs) var(--font-mono);
