@@ -143,7 +143,7 @@ const round5 = (n: unknown): number | null => (typeof n === 'number' && Number.i
 
 /** An unnamed face cluster, so the model can still say "the same unnamed person". */
 const personLabel = (p: { id?: string | null; name?: string | null }): string =>
-  p.name?.trim() || `unnamed:${String(p.id ?? '').slice(0, 8)}`;
+  p.name?.trim() || `unnamed:${String(p.id ?? '')}`;
 
 export interface CompactAsset {
   id: string;
@@ -208,4 +208,4 @@ export function summarise(assets: CompactAsset[]) {
 }
 
 export const NOT_CONNECTED =
-  'Photos are not connected: SR-Drive has no photo library (Immich) linked, so there is nothing to read. Say so plainly; do not guess.';
+  'Photos are not connected right now (the reason says why), so there is nothing to read. Tell John that plainly, with the reason; do not guess or describe photos.';

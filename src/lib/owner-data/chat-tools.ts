@@ -222,7 +222,7 @@ register({
   parameters: {
     type: 'object',
     properties: {
-      filter: { type: 'string', enum: ['all', 'named', 'unnamed'], description: 'Default "all" (named first, then most photos).' },
+      filter: { type: 'string', enum: ['all', 'named', 'unnamed'], description: 'Default "all".' },
       name: { type: 'string', description: 'Optional: part of a name to find, e.g. "sam".' },
       limit: { type: 'number', minimum: 1, maximum: 200, description: 'Most people to list, default 50.' },
     },

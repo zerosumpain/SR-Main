@@ -75,7 +75,7 @@ describe('the shape the model reads', () => {
       place: 'Lisbon, Portugal',
       lat: 38.72235,
       lon: -9.13934,
-      people: ['Sam', 'unnamed:abcdef12'],
+      people: ['Sam', 'unnamed:abcdef1234567890'],
       camera: 'Apple iPhone 15 Pro',
       file: 'Incoming photos/IMG_1.HEIC',
       link: '/drive?file=f1',
@@ -91,7 +91,7 @@ describe('the shape the model reads', () => {
     expect(summarise([a, b, a])).toEqual({
       span: { from: '2026-07-12T09:00:00+01:00', to: '2026-07-14T18:32:05+01:00' },
       places: [{ name: 'Lisbon, Portugal', count: 2 }, { name: 'Sintra, Portugal', count: 1 }],
-      people: [{ name: 'Sam', count: 3 }, { name: 'unnamed:abcdef12', count: 2 }],
+      people: [{ name: 'Sam', count: 3 }, { name: 'unnamed:abcdef1234567890', count: 2 }],
     });
   });
 });
