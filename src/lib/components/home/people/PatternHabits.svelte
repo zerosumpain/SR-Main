@@ -39,7 +39,7 @@
 <h3>The week</h3>
 {#if habits.week.length}
   <div class="hb-wrap">
-    <table class="grid wk">
+    <table class="hb-grid wk">
       <caption>Share of each weekday seen with a visit to that kind of place; the usual arrival beneath.</caption>
       <thead><tr><th scope="col"><span class="sr">Kind of place</span></th>{#each DAYS as d (d)}<th scope="col">{d}</th>{/each}</tr></thead>
       <tbody>
@@ -126,8 +126,8 @@
 <h3>When in the day</h3>
 {#if times.length}
   <div class="hb-wrap">
-    <table class="grid hr">
-      <caption>Arrivals by hour, 06:00 to midnight. The busiest two hours of each are on the right.</caption>
+    <table class="hb-grid hr">
+      <caption>Arrivals by hour, 06:00 to midnight; under each kind, its visits and usual stay. The busiest two hours of each are on the right.</caption>
       <thead>
         <tr>
           <th scope="col"><span class="sr">Kind of place</span></th>
@@ -138,7 +138,7 @@
       <tbody>
         {#each times as t (t.category)}
           <tr>
-            <th scope="row">{categoryLabel(t.category)}<small>{t.visits} visits · stays {mins(t.medianStay)}</small></th>
+            <th scope="row">{categoryLabel(t.category)}<small>{t.visits} · stays {mins(t.medianStay)}</small></th>
             {#each HOURS as h (h)}
               {@const v = t.hours[h] ?? 0}
               {@const s = shade(v, hourPeak)}
@@ -175,39 +175,39 @@
     font: var(--fs-label) var(--font-body);
     color: var(--text-muted);
   }
-  .grid {
+  .hb-grid {
     border-collapse: separate;
     border-spacing: 2px;
     table-layout: fixed;
     font: var(--fs-label-xs) var(--font-mono);
   }
-  .grid th {
+  .hb-grid th {
     font-weight: 500;
     color: var(--text-muted);
     text-align: center;
   }
-  .grid tbody th {
+  .hb-grid tbody th {
     text-align: left;
-    width: 150px;
+    width: 170px;
     font: var(--fs-label) var(--font-body);
     color: var(--text-primary);
   }
-  .grid tbody th small,
-  .grid td small,
+  .hb-grid tbody th small,
+  .hb-grid td small,
   .out small,
   .stats small {
     display: block;
     font: 12px var(--font-mono);
     color: var(--text-muted);
   }
-  .grid td {
+  .hb-grid td {
     text-align: center;
     background: var(--surface-rail);
     color: var(--text-primary);
     border-radius: 1px;
   }
-  .grid td.dark,
-  .grid td.dark small {
+  .hb-grid td.dark,
+  .hb-grid td.dark small {
     color: var(--bg);
   }
   .wk {
