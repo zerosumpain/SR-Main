@@ -6,14 +6,14 @@ import type { AppDriveCaller } from './native-drive';
 // Drive, and what of Drive's answer reaches a phone.
 
 const h = vi.hoisted(() => ({
-  calls: [] as Array<{ method: string; path: string; headers: Record<string, string>; body?: Buffer }>,
+  calls: [] as Array<{ method: string; path: string; headers: Record<string, string>; body?: Buffer; timeoutMs?: number }>,
   answer: { status: 200, headers: {} as Record<string, string>, body: Buffer.from('{}') },
   roster: [] as Array<{ email: string; displayName: string }>,
 }));
 
 vi.mock('$lib/server/extracted-app', () => ({
-  requestExtracted: async (_app: string, method: string, path: string, o: { headers: Record<string, string>; body?: Buffer }) => {
-    h.calls.push({ method, path, headers: o.headers, body: o.body });
+  requestExtracted: async (_app: string, method: string, path: string, o: { headers: Record<string, string>; body?: Buffer; timeoutMs?: number }) => {
+    h.calls.push({ method, path, headers: o.headers, body: o.body, timeoutMs: o.timeoutMs });
     return h.answer;
   },
 }));
@@ -418,5 +418,45 @@ describe('resumable uploads', () => {
   it('only a 200 with duplicate:true is a duplicate; a 201 is new whatever it says', async () => {
     h.answer = json(201, { file: file(), duplicate: true });
     expect(await read(await drive.completeUpload(OWNER, ID, 'mine'))).toMatchObject({ status: 201, body: { duplicate: false } });
+  });
+});
+
+describe('complete is asynchronous: 202 while storing, then GET says how it went', () => {
+  const ID = 'ef'.repeat(16);
+  const base = { uploadId: ID, received: 20, size: 20, chunkBytes: 8388608, expiresAt: '2026-11-02T00:00:00.000Z' };
+  const read = async (res: Response) => ({ status: res.status, body: await res.json() });
+
+  it("passes Drive's 202 through unchanged", async () => {
+    h.answer = json(202, { status: 'storing', received: 20, size: 20 });
+    expect(await read(await drive.completeUpload(ANN, ID, 'mine'))).toEqual({ status: 202, body: { status: 'storing', received: 20, size: 20 } });
+  });
+
+  it('waits about 60 s for complete, not minutes', async () => {
+    h.answer = json(202, { status: 'storing', received: 20, size: 20 });
+    await drive.completeUpload(OWNER, ID, 'mine');
+    expect(h.calls[0].timeoutMs).toBe(60_000);
+  });
+
+  it('passes status through while uploading or storing, with no file', async () => {
+    for (const st of ['uploading', 'storing']) {
+      h.answer = json(200, { ...base, status: st });
+      expect(await read(await drive.uploadStatus(ANN, ID, 'mine'))).toEqual({ status: 200, body: { ...base, status: st } });
+    }
+  });
+
+  it('maps a done file through forPhone, with duplicate, and never an email', async () => {
+    h.answer = json(200, { ...base, status: 'done', duplicate: false, file: file({ uploadedBy: 'bob@example.test' }) });
+    const done = await read(await drive.uploadStatus(ANN, ID, 'shared'));
+    expect(done.body).toMatchObject({ ...base, status: 'done', duplicate: false, file: { id: 'f1', addedBy: 'Family' } });
+    expect('uploadedBy' in done.body.file).toBe(false);
+    expect(JSON.stringify(done.body)).not.toMatch(/@/);
+  });
+
+  it("passes a failure's message, and an older Drive's bare session as it was", async () => {
+    const message = 'The file changed while it was sending — it will be sent again.';
+    h.answer = json(200, { ...base, status: 'failed', message });
+    expect((await read(await drive.uploadStatus(ANN, ID, 'mine'))).body).toEqual({ ...base, status: 'failed', message });
+    h.answer = json(200, { ...base, chatter: 'x' });
+    expect((await read(await drive.uploadStatus(ANN, ID, 'mine'))).body).toEqual(base);
   });
 });

@@ -9,7 +9,11 @@ function spaceOf(url: URL) {
   return space;
 }
 
-/** GET /api/native/drive/uploads/:id?space= — `{uploadId, received, size, chunkBytes, expiresAt}`; 404 when it has gone. */
+/**
+ * GET /api/native/drive/uploads/:id?space= — `{uploadId, received, size, chunkBytes,
+ * expiresAt, status}`; when `done` also `file` (as the phone sees files) and
+ * `duplicate`, when `failed` a `message`. 404 when it has gone.
+ */
 export const GET: RequestHandler = withNativeAccess('drive', async (event, identity, role) => {
   const space = spaceOf(event.url);
   return uploadStatus(await driveCaller(event, identity, role), event.params.id, space);

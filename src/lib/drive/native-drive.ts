@@ -549,6 +549,35 @@ function sessionForPhone(s: UploadSessionWire): UploadSessionWire {
   return { uploadId: s.uploadId, received: s.received, size: s.size, chunkBytes: s.chunkBytes, expiresAt: s.expiresAt };
 }
 
+type UploadState = 'uploading' | 'storing' | 'done' | 'failed';
+
+interface UploadStatusWire extends UploadSessionWire {
+  /** Since `complete` went asynchronous: where the session is. Older Drive omits it. */
+  status?: UploadState;
+  /** When `done`: the stored file, and whether it was already there. */
+  file?: DriveFileWire;
+  duplicate?: boolean;
+  /** When `failed`: Drive's sentence (a hash mismatch says the file will be sent again). */
+  message?: string;
+}
+
+export type NativeUploadStatus = UploadSessionWire & {
+  status?: UploadState;
+  file?: NativeDriveFile;
+  duplicate?: boolean;
+  message?: string;
+};
+
+/** The session as GET answers it: Drive's fields as sent, the file through `forPhone`. */
+function statusForPhone(s: UploadStatusWire, space: DriveSpace): NativeUploadStatus {
+  const out: NativeUploadStatus = sessionForPhone(s);
+  if (typeof s.status === 'string') out.status = s.status;
+  if (s.file && typeof s.file === 'object') out.file = forPhone(s.file, space, new Map());
+  if (typeof s.duplicate === 'boolean') out.duplicate = s.duplicate;
+  if (typeof s.message === 'string') out.message = s.message;
+  return out;
+}
+
 /** A stored file, as the single-shot upload answers it: 201 new, 200 + duplicate:true already there. */
 function storedForPhone(res: RawExtractedResponse, space: DriveSpace): Response {
   const { file, duplicate } = parse<{ file: DriveFileWire; duplicate?: boolean }>(res);
@@ -601,7 +630,7 @@ export async function uploadStatus(caller: AppDriveCaller, rawId: string, space:
   if (!id) throw error(404, NO_SESSION);
   const out = await relay('GET', `${uploadPath(id)}${query({ space })}`, caller);
   if ('refused' in out) return out.refused;
-  return json(sessionForPhone(parse<UploadSessionWire>(out.res)));
+  return json(statusForPhone(parse<UploadStatusWire>(out.res), space));
 }
 
 /** PUT uploads/:id?offset= — one piece, relayed unchanged. 409 `{received}` when the offset is not where Drive is. */
@@ -638,12 +667,14 @@ export async function cancelUpload(caller: AppDriveCaller, rawId: string, space:
 }
 
 /**
- * POST uploads/:id/complete — Drive hashes the staged file and stores it.
- * 201 `{file, duplicate:false}` or 200 `{file, duplicate:true}` (also a repeat
- * complete): only those let "move from phone" delete the original. 409
- * `{received}` when pieces are missing; 422 when the hash did not match.
- * Streaming a 4 GiB file into the store takes minutes, hence the long wait —
- * and a timed-out complete is safe to repeat.
+ * POST uploads/:id/complete — Drive starts hashing and storing the staged file
+ * and waits up to 20 s. 201 `{file, duplicate:false}` or 200
+ * `{file, duplicate:true}` (also a repeat complete): only those, or a GET that
+ * says `done` with a file, let "move from phone" delete the original. 202
+ * `{status:"storing", received, size}` while it is still storing — the phone
+ * polls GET or completes again (both idempotent). 409 `{received}` when pieces
+ * are missing. The store runs in the background because Cloudflare cuts a
+ * request at ~100 s, so 60 s here is plenty for Drive's 20 s wait.
  */
 export async function completeUpload(caller: AppDriveCaller, rawId: string, space: DriveSpace): Promise<Response> {
   const id = parseUploadId(rawId);
@@ -651,8 +682,12 @@ export async function completeUpload(caller: AppDriveCaller, rawId: string, spac
   const out = await relay('POST', `${uploadPath(id, '/complete')}${query({ space })}`, caller, {
     body: Buffer.from('{}'),
     contentType: 'application/json',
-    timeoutMs: 600_000,
+    timeoutMs: 60_000,
   });
   if ('refused' in out) return out.refused;
+  if (out.res.status === 202) {
+    const { status, received, size } = parse<{ status: string; received: number; size: number }>(out.res);
+    return json({ status, received, size }, { status: 202 });
+  }
   return storedForPhone(out.res, space);
 }
