@@ -325,3 +325,17 @@ describe('fast research model selection', () => {
     expect(await workloadBlockReason(wl('research-fast'), 'openai/gpt-4o')).toBeNull();
   });
 });
+
+describe('drive analysis inheritance', () => {
+  it('follows RAG answering, not the site default, until it is pinned itself', async () => {
+    getSetting.mockImplementation(async (key: string) => key === 'jkai.rag.model' ? { modelId: 'codex/gpt-5.6-luna' } : null);
+    expect((await resolveWorkloadModel(wl('drive-analysis'))).modelId).toBe('codex/gpt-5.6-luna');
+    const { describeSiteWorkloads } = await import('./workload-settings');
+    expect((await describeSiteWorkloads()).find((w) => w.id === 'drive-analysis')?.effectiveModelId).toBe('codex/gpt-5.6-luna');
+  });
+  it('honours its own pin over RAG answering', async () => {
+    getSetting.mockImplementation(async (key: string) =>
+      key === 'jkai.drive_analysis.model' ? { modelId: 'z-ai/glm-5.2' } : key === 'jkai.rag.model' ? { modelId: 'codex/gpt-5.6-luna' } : null);
+    expect((await resolveWorkloadModel(wl('drive-analysis'))).modelId).toBe('z-ai/glm-5.2');
+  });
+});
