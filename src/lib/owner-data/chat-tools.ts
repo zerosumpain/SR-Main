@@ -12,7 +12,7 @@
 // (`./household-daily.server`). Toolset 'people', member-forbidden on both
 // sides: the most sensitive data the site holds stays the owner's.
 //
-// All seven are reads, owner-only and NOT member-safe (they are not on the
+// All eleven (with the four photo reads below) are reads, owner-only and NOT member-safe (they are not on the
 // contract's MEMBER_SAFE_TOOLS list, so `executeTool` refuses any member; the
 // handler's `refuseUnlessOwner` is the second wall). Not offered to WhatsApp or
 // the heartbeat, whose whitelists name their tools.
@@ -192,4 +192,107 @@ register({
       return { success: false, error: `household_daily could not be read: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300) };
     }
   },
+});
+
+// The owner's photo library (2026-11-01, owner: "all of that data to be
+// available to jkai, including metadata of the images such as location,
+// date/time"). SR-Drive owns the Immich connection and the names John gives
+// the face clusters on /drive; these four relay Drive's owner-only photo lane
+// (`./photos.server`). Toolset 'people', like the household's reads: who is
+// in John's photos and where he was are as private as where the family is.
+
+type PhotoRun = (args: Record<string, unknown>) => Promise<{ success: boolean; data?: unknown; error?: string }>;
+
+function photoRead(name: string, load: () => Promise<PhotoRun>) {
+  return async (args: Record<string, unknown>, ctx?: Parameters<typeof refuseUnlessOwner>[1]) => {
+    const refused = refuseUnlessOwner(name, ctx);
+    if (refused) return refused;
+    try {
+      return await (await load())(args ?? {});
+    } catch (err) {
+      return { success: false, error: `${name} could not be read: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300) };
+    }
+  };
+}
+
+register({
+  name: 'photo_people',
+  description:
+    "The people in John's photo library (faces SR-Drive's Immich has clustered, with the names John gave them on /drive): name or null for a face not yet named, how many photos, first and last seen. Use for \"who is in my photos\", \"how many photos of Sam\", \"when did I first take a photo of X\", or to check a name before photo_search. An unnamed person can still be searched by id. Read-only.",
+  parameters: {
+    type: 'object',
+    properties: {
+      filter: { type: 'string', enum: ['all', 'named', 'unnamed'], description: 'Default "all" (named first, then most photos).' },
+      name: { type: 'string', description: 'Optional: part of a name to find, e.g. "sam".' },
+      limit: { type: 'number', minimum: 1, maximum: 200, description: 'Most people to list, default 50.' },
+    },
+    required: [],
+  },
+  category: 'Photos',
+  toolset: 'people',
+  effect: 'read',
+  surfaces: ['chat', 'app'],
+  handler: photoRead('photo_people', async () => (await import('./photos.server')).photoPeopleTool),
+});
+
+register({
+  name: 'photo_search',
+  description:
+    "Search John's photos and videos (SR-Drive's photo library) by who is in them, where, when, what they show, or words written in them. Each result: id, taken date/time (ISO with its UTC offset), place as \"City, Country\" with lat/lon, people by name, camera, and the Drive file link; plus where and who the page adds up to. Combine filters freely: \"photos of Sam in Lisbon last summer\" = people [\"Sam\"], place \"Lisbon\", from/to; \"where was I on a date\" = from and to that same date, no other filter, and read the places and times; \"find the photo of the receipt\" = text_in_image \"total\" or text \"receipt\"; \"pictures of the beach\" = text \"beach\". Resolve relative dates (\"last summer\", \"in March\") to YYYY-MM-DD yourself. Newest first unless text is given (then best match). Use photo_detail for one photo's full text and faces. Read-only.",
+  parameters: {
+    type: 'object',
+    properties: {
+      people: { type: 'array', items: { type: 'string' }, description: 'Names (or person ids from photo_people); every one must be in the photo.' },
+      place: { type: 'string', description: 'City, region or country, e.g. "Lisbon" or "Portugal".' },
+      from: { type: 'string', description: 'Earliest date taken, YYYY-MM-DD (inclusive).' },
+      to: { type: 'string', description: 'Latest date taken, YYYY-MM-DD (inclusive).' },
+      text: { type: 'string', description: 'What the photo shows, in plain words (smart search): "dog on a beach", "birthday cake", "receipt".' },
+      text_in_image: { type: 'string', description: 'Words written in the image (OCR): a sign, a receipt, a document.' },
+      type: { type: 'string', enum: ['photo', 'video'], description: 'Only photos or only videos. Default both.' },
+      limit: { type: 'number', minimum: 1, maximum: 100, description: 'Results per page, default 25.' },
+      page: { type: 'number', minimum: 1, description: 'Page of results, default 1.' },
+    },
+    required: [],
+  },
+  category: 'Photos',
+  toolset: 'people',
+  effect: 'read',
+  surfaces: ['chat', 'app'],
+  handler: photoRead('photo_search', async () => (await import('./photos.server')).photoSearchTool),
+});
+
+register({
+  name: 'photo_detail',
+  description:
+    "One photo or video from John's library in full, by the id photo_search returned: when (ISO with offset) and time zone, place with region and lat/lon, camera and lens, size, the people whose faces are in it (named or not), the words written in it (OCR text, e.g. a receipt's lines), and the Drive file link. Use it to read a receipt or sign, or to say exactly who is in a picture. Read-only.",
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'The photo id from photo_search.' },
+    },
+    required: ['id'],
+  },
+  category: 'Photos',
+  toolset: 'people',
+  effect: 'read',
+  surfaces: ['chat', 'app'],
+  handler: photoRead('photo_detail', async () => (await import('./photos.server')).photoDetailTool),
+});
+
+register({
+  name: 'photo_stats',
+  description:
+    "An overview of John's photo library: how many photos and videos, named and unnamed people, the date range it covers, the places with the most photos, and whether Immich is still processing (if so, counts, faces and places are incomplete — say so). Use for \"how many photos have I got\", \"where do I take most photos\", \"is the photo library ready\". Read-only.",
+  parameters: {
+    type: 'object',
+    properties: {
+      top_places: { type: 'number', minimum: 1, maximum: 30, description: 'How many top places to list, default 10.' },
+    },
+    required: [],
+  },
+  category: 'Photos',
+  toolset: 'people',
+  effect: 'read',
+  surfaces: ['chat', 'app'],
+  handler: photoRead('photo_stats', async () => (await import('./photos.server')).photoStatsTool),
 });

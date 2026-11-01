@@ -1,5 +1,5 @@
 {
-  "version": "c1-5cce9b88",
+  "version": "c1-1ec0e7e5",
   "capabilities": [
     {
       "id": "discovery",
@@ -815,8 +815,8 @@
     },
     {
       "id": "household",
-      "title": "Household patterns and health",
-      "blurb": "The household's movement patterns, forecast, weekly digest and month history, and everyone's steps, sleep, workouts and resting heart rate day by day with the sums done. Named places only. Read-only",
+      "title": "Household patterns, health and the photo library",
+      "blurb": "The household's movement patterns, forecast, weekly digest and month history, and everyone's steps, sleep, workouts and resting heart rate day by day with the sums done. Named places only. And John's photo library from SR-Drive: the people in it by name, search by person, place, date, what a photo shows or the words in it, each photo's time, place and camera. Read-only",
       "app": "main",
       "repo": "SR-Main",
       "status": "live",
@@ -825,15 +825,21 @@
       ],
       "tools": [
         "household_patterns",
-        "household_daily"
+        "household_daily",
+        "photo_people",
+        "photo_search",
+        "photo_detail",
+        "photo_stats"
       ],
       "keywords": [
-        "\\bsteps?\\b|\\bfamily\\b|\\bhousehold\\b|\\bkids?\\b|\\bchildren\\b|\\b(?:family|people|movement)\\s+(?:forecast|patterns?)\\b|\\broutines?\\b|\\bwho\\s+(?:has|had|walked|slept)\\b|\\bschool\\s+run\\b"
+        "\\bsteps?\\b|\\bfamily\\b|\\bhousehold\\b|\\bkids?\\b|\\bchildren\\b|\\b(?:family|people|movement)\\s+(?:forecast|patterns?)\\b|\\broutines?\\b|\\bwho\\s+(?:has|had|walked|slept)\\b|\\bschool\\s+run\\b",
+        "\\b(?:my|our|the)\\s+(?:photos?|pictures?|pics|videos?|camera\\s+roll|photo\\s+library)\\b|\\bphotos?\\s+(?:of|from|with|taken)\\b|\\bpictures?\\s+(?:of|from|with)\\b|\\bwho(?:'s|\\s+is)\\s+in\\s+(?:my|the|this|that)\\s+(?:photo|picture)|\\bwhere\\s+was\\s+I\\b|\\bphoto\\s+of\\s+(?:the|a|my)\\b"
       ],
       "domain": "people",
       "pages": [
         "/home/people",
-        "/home/people/patterns"
+        "/home/people/patterns",
+        "/drive"
       ],
       "memberSafe": false
     },
