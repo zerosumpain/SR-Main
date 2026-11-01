@@ -89,9 +89,9 @@ if (!building) {
  * Returns a 429 Response when the caller is over, or null to proceed.
  */
 function rateLimited(pathname: string, method: string, callerKey: string): Response | null {
-  const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname));
+  const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname) && (!r.methods || r.methods.includes(method)));
   if (!limit || method === 'GET') return null;
-  const result = rateLimit(`${callerKey}:${pathname}`, {
+  const result = rateLimit(`${callerKey}:${limit.bucket ?? pathname}`, {
     capacity: limit.capacity,
     refillPerSecond: limit.refillPerSecond,
   });
@@ -109,8 +109,16 @@ function rateLimited(pathname: string, method: string, callerKey: string): Respo
 }
 
 // Expensive endpoints — apply per-user rate limits.
-// Pattern → { capacity (burst), refillPerSecond (steady-state) }.
-const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: number }> = [
+// Pattern → { capacity (burst), refillPerSecond (steady-state) }. `methods`
+// narrows an entry to those verbs; `bucket` shares one bucket across every
+// path the pattern matches (otherwise each path has its own).
+const RATE_LIMITS: Array<{
+  pattern: RegExp;
+  capacity: number;
+  refillPerSecond: number;
+  methods?: string[];
+  bucket?: string;
+}> = [
   // Synthesis is a per-toggle streamed LLM pass — costlier than a deep run kickoff
   // and user-triggerable in bursts. Must precede the broad /api/deepdive rule
   // because RATE_LIMITS.find() returns the FIRST matching pattern.
@@ -145,6 +153,15 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   // what bounds the bytes. Must precede the broad /api/native rule (first
   // match wins). Only the upload paths: `files` exactly (not a file's own
   // rename, delete or jkai calls) and the chunked `uploads` lane (phase 2).
+  //
+  // A chunk PUT of a resumable upload has its own bucket, ONE per device across
+  // every session: a 4 GiB video is 512 sequential 8 MiB PUTs and several files
+  // may go at once, so at ~10/s the 5/s refill above would 429 a long video
+  // part-way. 20/s sustained (160 MiB/s of pieces — more than any phone sends)
+  // with a 600 burst never starves a real upload and still caps a runaway loop;
+  // Drive's 6 open sessions, staging guard and quota bound the bytes. Must
+  // precede the entry below (first match wins).
+  { pattern: /^\/api\/native\/drive\/uploads\/[^/]+$/, methods: ['PUT'], capacity: 600, refillPerSecond: 20, bucket: 'native-drive-chunks' },
   { pattern: /^\/api\/native\/drive\/(files|uploads(\/.*)?)$/, capacity: 300, refillPerSecond: 5 },
   // The phone's writes. Matched nothing until now: the per-device key was being
   // computed and handed to a table with no pattern for it, so `rateLimited`

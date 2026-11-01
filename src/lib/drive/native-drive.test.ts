@@ -6,14 +6,14 @@ import type { AppDriveCaller } from './native-drive';
 // Drive, and what of Drive's answer reaches a phone.
 
 const h = vi.hoisted(() => ({
-  calls: [] as Array<{ method: string; path: string; headers: Record<string, string>; body?: Buffer }>,
+  calls: [] as Array<{ method: string; path: string; headers: Record<string, string>; body?: Buffer; timeoutMs?: number }>,
   answer: { status: 200, headers: {} as Record<string, string>, body: Buffer.from('{}') },
   roster: [] as Array<{ email: string; displayName: string }>,
 }));
 
 vi.mock('$lib/server/extracted-app', () => ({
-  requestExtracted: async (_app: string, method: string, path: string, o: { headers: Record<string, string>; body?: Buffer }) => {
-    h.calls.push({ method, path, headers: o.headers, body: o.body });
+  requestExtracted: async (_app: string, method: string, path: string, o: { headers: Record<string, string>; body?: Buffer; timeoutMs?: number }) => {
+    h.calls.push({ method, path, headers: o.headers, body: o.body, timeoutMs: o.timeoutMs });
     return h.answer;
   },
 }));
@@ -271,5 +271,192 @@ describe('jkai on files is the owner’s alone', () => {
   it("passes Drive's 422 for a file with no text", async () => {
     h.answer = json(422, { message: 'There is no readable text in this file yet.', reason: 'no-text' });
     expect(await status(drive.analyseFile(OWNER, 'f1', false))).toBe(422);
+  });
+});
+
+describe('the listing advertises the chunked lane only when Drive does', () => {
+  const listing = (over: Record<string, unknown> = {}) =>
+    json(200, { space: 'mine', folder: '', folders: [], files: [], usage: { bytes: 0, quotaBytes: null }, maxUploadBytes: 30 * 1024 * 1024, ...over });
+
+  it('passes maxLargeUploadBytes and chunkBytes through', async () => {
+    h.answer = listing({ maxLargeUploadBytes: 4 * 1024 ** 3, chunkBytes: 8388608 });
+    const out = await drive.listSpace(OWNER, 'mine', '');
+    expect(out).toMatchObject({ maxLargeUploadBytes: 4 * 1024 ** 3, chunkBytes: 8388608 });
+  });
+
+  it('omits both when an older Drive sends neither, or only one', async () => {
+    h.answer = listing();
+    const old = await drive.listSpace(OWNER, 'mine', '');
+    expect('maxLargeUploadBytes' in old).toBe(false);
+    expect('chunkBytes' in old).toBe(false);
+    h.answer = listing({ maxLargeUploadBytes: 4 * 1024 ** 3 });
+    const half = await drive.listSpace(OWNER, 'mine', '');
+    expect('maxLargeUploadBytes' in half).toBe(false);
+  });
+
+  it('omits them when Main could not relay a piece that size', () => {
+    expect(drive.chunkedLimits(10, 16 * 1024 * 1024, Number.POSITIVE_INFINITY)).toEqual({});
+    expect(drive.chunkedLimits(10, 8388608, 4 * 1024 * 1024)).toEqual({});
+    expect(drive.chunkedLimits(10, 8388608, 100 * 1024 * 1024)).toEqual({ maxLargeUploadBytes: 10, chunkBytes: 8388608 });
+  });
+});
+
+describe('resumable uploads', () => {
+  const ID = 'ab'.repeat(16);
+  const SHA = 'c'.repeat(64);
+  const session = { uploadId: ID, chunkBytes: 8388608, received: 0, size: 20_000_000, expiresAt: '2026-11-02T00:00:00.000Z' };
+  const read = async (res: Response) => ({ status: res.status, body: await res.json() });
+  const start = (caller: AppDriveCaller, over: Record<string, unknown> = {}) =>
+    drive.startUpload(caller, { space: 'shared', folder: 'Videos', filename: 'IMG_1.MOV', type: 'video/quicktime', size: 20_000_000, sha256: SHA.toUpperCase(), ...over });
+
+  it('relays each step to its path and method, naming a member and nobody for the owner', async () => {
+    h.answer = json(201, session);
+    await start(ANN, { takenAt: '2026-10-31T14:05:09Z' });
+    await start(OWNER);
+    h.answer = json(200, session);
+    await drive.uploadStatus(ANN, ID, 'shared');
+    h.answer = json(200, { received: 8388608 });
+    await drive.putChunk(ANN, ID, { space: 'shared', offset: '0', bytes: Buffer.from([0, 1, 255]) });
+    h.answer = json(200, { ok: true });
+    await drive.cancelUpload(ANN, ID, 'shared');
+    h.answer = json(201, { file: file(), duplicate: false });
+    await drive.completeUpload(ANN, ID, 'shared');
+
+    expect(h.calls.map((c) => [c.method, c.path])).toEqual([
+      ['POST', '/api/files/app/uploads?space=shared'],
+      ['POST', '/api/files/app/uploads?space=shared'],
+      ['GET', `/api/files/app/uploads/${ID}?space=shared`],
+      ['PUT', `/api/files/app/uploads/${ID}?space=shared&offset=0`],
+      ['DELETE', `/api/files/app/uploads/${ID}?space=shared`],
+      ['POST', `/api/files/app/uploads/${ID}/complete?space=shared`],
+    ]);
+    expect(h.calls[0].headers['x-sr-app-for']).toBe('ann@example.test');
+    expect(h.calls[1].headers['x-sr-app-for']).toBeUndefined();
+    for (const c of h.calls) expect(c.headers.accept).toBe('application/json');
+    expect(JSON.parse(h.calls[0].body!.toString())).toEqual({
+      folder: 'Videos', filename: 'IMG_1.MOV', type: 'video/quicktime', size: 20_000_000, sha256: SHA, takenAt: '2026-10-31T14:05:09Z',
+    });
+    expect(h.calls[0].headers['content-type']).toBe('application/json');
+  });
+
+  it('relays a chunk as the raw bytes, as octet-stream', async () => {
+    h.answer = json(200, { received: 3 });
+    const bytes = Buffer.from([0, 1, 255]);
+    const res = await read(await drive.putChunk(OWNER, ID, { space: 'mine', offset: '0', bytes }));
+    expect(res).toEqual({ status: 200, body: { received: 3 } });
+    expect(h.calls[0].body!.equals(bytes)).toBe(true);
+    expect(h.calls[0].headers['content-type']).toBe('application/octet-stream');
+  });
+
+  it('answers the session as Drive opened it, 201', async () => {
+    h.answer = json(201, { ...session, extra: 'x' });
+    expect(await read(await start(ANN))).toEqual({ status: 201, body: session });
+  });
+
+  it('refuses a bad id, offset, piece or hash before Drive is asked', async () => {
+    expect(await status(drive.uploadStatus(ANN, '../x', 'mine'))).toBe(404);
+    expect(await status(drive.completeUpload(ANN, 'a'.repeat(31), 'mine'))).toBe(404);
+    expect(await status(drive.putChunk(ANN, ID, { space: 'mine', offset: '-1', bytes: Buffer.from('x') }))).toBe(400);
+    expect(await status(drive.putChunk(ANN, ID, { space: 'mine', offset: null, bytes: Buffer.from('x') }))).toBe(400);
+    expect(await status(drive.putChunk(ANN, ID, { space: 'mine', offset: '1.5', bytes: Buffer.from('x') }))).toBe(400);
+    expect(await status(drive.putChunk(ANN, ID, { space: 'mine', offset: '0', bytes: Buffer.alloc(0) }))).toBe(400);
+    expect(await status(drive.putChunk(ANN, ID, { space: 'mine', offset: '0', bytes: Buffer.alloc(drive.MAX_CHUNK_BYTES + 1) }))).toBe(413);
+    expect(await status(start(ANN, { sha256: 'abc' }))).toBe(400);
+    expect(await status(start(ANN, { sha256: undefined }))).toBe(400);
+    expect(await status(start(ANN, { size: 0 }))).toBe(400);
+    expect(await status(start(ANN, { size: '5' }))).toBe(400);
+    expect(h.calls).toEqual([]);
+  });
+
+  it.each([409, 413, 422, 429, 507])("passes Drive's %i on in its words, with received where Drive sent it", async (code) => {
+    h.answer = json(code, { message: `Drive said ${code}.`, received: 16777216 });
+    expect(await read(await drive.putChunk(ANN, ID, { space: 'mine', offset: '0', bytes: Buffer.from('x') }))).toEqual({
+      status: code, body: { error: `Drive said ${code}.`, received: 16777216 },
+    });
+    h.answer = json(code, { message: `Drive said ${code}.` });
+    expect(await read(await start(ANN))).toEqual({ status: code, body: { error: `Drive said ${code}.` } });
+  });
+
+  it('passes the 409 of an early complete with received', async () => {
+    h.answer = json(409, { message: 'Not all of it has arrived yet.', error: 'incomplete', received: 8388608 });
+    expect(await read(await drive.completeUpload(OWNER, ID, 'mine'))).toEqual({
+      status: 409, body: { error: 'Not all of it has arrived yet.', received: 8388608 },
+    });
+  });
+
+  it('never passes a 401 that would sign the phone out; an unreadable refusal is a plain sentence', async () => {
+    h.answer = json(401, { error: 'Authentication required' });
+    for (const p of [start(ANN), drive.uploadStatus(ANN, ID, 'mine'), drive.putChunk(ANN, ID, { space: 'mine', offset: '0', bytes: Buffer.from('x') }), drive.cancelUpload(ANN, ID, 'mine'), drive.completeUpload(ANN, ID, 'mine')]) {
+      expect((await p).status).toBe(502);
+    }
+    h.answer = { status: 404, headers: {}, body: Buffer.from('<html>') };
+    expect(await read(await drive.uploadStatus(ANN, ID, 'mine'))).toEqual({ status: 404, body: { error: 'Drive is not answering. Try again.' } });
+  });
+
+  it('maps the stored file through forPhone on complete: no emails, uploadedBy becomes addedBy', async () => {
+    h.answer = json(201, { file: file({ uploadedBy: 'bob@example.test' }), duplicate: false });
+    const made = await read(await drive.completeUpload(ANN, ID, 'shared'));
+    expect(made.status).toBe(201);
+    expect(made.body.duplicate).toBe(false);
+    expect(made.body.file.addedBy).toBe('Family');
+    expect('uploadedBy' in made.body.file).toBe(false);
+    expect(JSON.stringify(made.body)).not.toMatch(/@/);
+
+    h.answer = json(200, { file: file({ mine: true, uploadedBy: 'ann@example.test' }), duplicate: true });
+    const again = await read(await drive.completeUpload(ANN, ID, 'mine'));
+    expect(again).toMatchObject({ status: 200, body: { duplicate: true, file: { addedBy: null } } });
+    expect(JSON.stringify(again.body)).not.toMatch(/@/);
+  });
+
+  it('a 200 duplicate on start is already stored, mapped the same way', async () => {
+    h.answer = json(200, { file: file({ uploadedBy: 'bob@example.test' }), duplicate: true });
+    const res = await read(await start(ANN));
+    expect(res).toMatchObject({ status: 200, body: { duplicate: true, file: { id: 'f1', addedBy: 'Family' } } });
+    expect(JSON.stringify(res.body)).not.toMatch(/@/);
+  });
+
+  it('only a 200 with duplicate:true is a duplicate; a 201 is new whatever it says', async () => {
+    h.answer = json(201, { file: file(), duplicate: true });
+    expect(await read(await drive.completeUpload(OWNER, ID, 'mine'))).toMatchObject({ status: 201, body: { duplicate: false } });
+  });
+});
+
+describe('complete is asynchronous: 202 while storing, then GET says how it went', () => {
+  const ID = 'ef'.repeat(16);
+  const base = { uploadId: ID, received: 20, size: 20, chunkBytes: 8388608, expiresAt: '2026-11-02T00:00:00.000Z' };
+  const read = async (res: Response) => ({ status: res.status, body: await res.json() });
+
+  it("passes Drive's 202 through unchanged", async () => {
+    h.answer = json(202, { status: 'storing', received: 20, size: 20 });
+    expect(await read(await drive.completeUpload(ANN, ID, 'mine'))).toEqual({ status: 202, body: { status: 'storing', received: 20, size: 20 } });
+  });
+
+  it('waits about 60 s for complete, not minutes', async () => {
+    h.answer = json(202, { status: 'storing', received: 20, size: 20 });
+    await drive.completeUpload(OWNER, ID, 'mine');
+    expect(h.calls[0].timeoutMs).toBe(60_000);
+  });
+
+  it('passes status through while uploading or storing, with no file', async () => {
+    for (const st of ['uploading', 'storing']) {
+      h.answer = json(200, { ...base, status: st });
+      expect(await read(await drive.uploadStatus(ANN, ID, 'mine'))).toEqual({ status: 200, body: { ...base, status: st } });
+    }
+  });
+
+  it('maps a done file through forPhone, with duplicate, and never an email', async () => {
+    h.answer = json(200, { ...base, status: 'done', duplicate: false, file: file({ uploadedBy: 'bob@example.test' }) });
+    const done = await read(await drive.uploadStatus(ANN, ID, 'shared'));
+    expect(done.body).toMatchObject({ ...base, status: 'done', duplicate: false, file: { id: 'f1', addedBy: 'Family' } });
+    expect('uploadedBy' in done.body.file).toBe(false);
+    expect(JSON.stringify(done.body)).not.toMatch(/@/);
+  });
+
+  it("passes a failure's message, and an older Drive's bare session as it was", async () => {
+    const message = 'The file changed while it was sending — it will be sent again.';
+    h.answer = json(200, { ...base, status: 'failed', message });
+    expect((await read(await drive.uploadStatus(ANN, ID, 'mine'))).body).toEqual({ ...base, status: 'failed', message });
+    h.answer = json(200, { ...base, chatter: 'x' });
+    expect((await read(await drive.uploadStatus(ANN, ID, 'mine'))).body).toEqual(base);
   });
 });
