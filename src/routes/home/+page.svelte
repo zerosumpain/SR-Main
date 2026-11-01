@@ -227,10 +227,23 @@
   </section>
   {/if}
 
+  {#if data.boards.length}
   <section class="band">
     <div class="inner">
+      <SectionHead kicker="E / Games" title={['On the', 'TV']} strap="Open a board on the television, then type the code it shows into a game room in the app." />
+      <ul class="boards">
+        {#each data.boards as b (b.game)}
+          <li><a class="link" href="/games/{b.game}">{b.title}</a> <span>strangeramblings.com/games/{b.game}</span></li>
+        {/each}
+      </ul>
+    </div>
+  </section>
+  {/if}
+
+  <section class="band{data.boards.length ? ' sunken' : ''}">
+    <div class="inner">
       <SectionHead
-        kicker="E / Devices"
+        kicker="F / Devices"
         title={broken.length ? ['What is', 'not working'] : ['Everything is', 'answering']}
         strap="Home Assistant integrations that are down, or with a quarter or more of their devices unavailable."
       />
@@ -280,6 +293,28 @@
     display: block;
     color: var(--text-muted);
     font-size: var(--fs-body-sm);
+  }
+  .boards {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line);
+  }
+  .boards li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .boards a {
+    font-weight: 700;
+  }
+  .boards span {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
   }
   .reply {
     display: block;
