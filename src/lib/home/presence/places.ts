@@ -49,9 +49,12 @@ export interface RefreshResult {
   retired: number;
   /** Trail rows whose `place_id` was filled in or corrected. */
   reassigned: number;
+  /** Clusters inside a named or drawn place that already had one: counted as that place. */
+  absorbed: number;
 }
 
 export const EMPTY_REFRESH: RefreshResult = {
+  absorbed: 0,
   fixes: 0,
   clusters: 0,
   created: 0,
@@ -109,6 +112,28 @@ export function refreshedGeometry<T extends { lat: number; lon: number; radiusM:
  * `retire`: an inferred active place that no longer qualifies goes to
  * `transit`. `reject`: nothing matched (or it is not active) — noise.
  */
+/**
+ * The named or drawn place a new cluster sits inside, if any — nearest centre
+ * first. A place the owner named or drew (or merged: merges pin) is a
+ * statement that everything inside its circle is it. Only one cluster a pass
+ * can claim a place's row, so before this a second cluster inside "Town" or
+ * a merged "Whitby" became a new nameless place of its own: that is how 59-63
+ * Northgate forked from Town in August, and how forty merged-away stops came
+ * straight back fifteen minutes after the merge. PURE.
+ */
+export function holderOf<T extends { id: string; lat: number; lon: number; radiusM: number; status: string; source: string; radiusPinned: boolean }>(
+  at: { lat: number; lon: number },
+  places: T[],
+): T | undefined {
+  let best: T | undefined, bestD = Infinity;
+  for (const p of places) {
+    if (p.status !== 'active' || !(p.radiusPinned || p.source === 'confirmed')) continue;
+    const d = metresBetween(at.lat, at.lon, p.lat, p.lon);
+    if (d <= p.radiusM && d < bestD) { best = p; bestD = d; }
+  }
+  return best;
+}
+
 export function quietPlaceOutcome(
   matched: { source: string; status: string; radiusPinned: boolean } | undefined,
 ): 'keep' | 'retire' | 'reject' {
@@ -289,6 +314,11 @@ export async function refreshPlaces(opts: { windowDays?: number } = {}): Promise
         .where(eq(daydreamPlaces.id, matched.id));
       placeId = matched.id;
       result.updated++;
+    } else if (holderOf(cluster, existing)) {
+      // Inside a place the owner named or drew, already claimed this pass:
+      // its fixes are that place's, and its stats stay the claiming cluster's.
+      placeId = holderOf(cluster, existing)!.id;
+      result.absorbed++;
     } else {
       const [created] = await db
         .insert(daydreamPlaces)
