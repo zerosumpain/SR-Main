@@ -1,4 +1,5 @@
 import { getCredential, listCredentials } from '$lib/integrations/credentials';
+import { isMapboxPublicToken } from '$lib/maps/public-token';
 
 // The Mapbox browser token, read out of the credential store.
 //
@@ -17,10 +18,7 @@ export const MAPBOX_STYLE = 'mapbox://styles/mapbox/outdoors-v12';
 export const MAPBOX_SETUP_MESSAGE =
   'Add a Mapbox public token in Admin → Connections → Credentials, then reload the map.';
 
-/** Only public, browser-safe tokens may cross the server boundary. */
-export function isMapboxPublicToken(value: unknown): value is string {
-  return typeof value === 'string' && /^pk\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value);
-}
+export { isMapboxPublicToken };
 
 export async function mapboxConfig(): Promise<{ accessToken: string; style: string } | null> {
   const credentials = await listCredentials('mapbox');
