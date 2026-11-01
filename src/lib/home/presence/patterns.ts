@@ -38,6 +38,30 @@ const SHARED_TRIP_SLACK_MS = 12 * MINUTE;
 const FAR_KM = 80;
 /** Days a category needs on each side before a steps difference is shown. */
 const MIN_STEP_DAYS = 4;
+/**
+ * Steps per hour on foot is a slope across days, and it is only a reading of
+ * walking when the days differ in walking. Most days the trail sees a few
+ * minutes on foot, so a fit over them divides the day-to-day swing in steps
+ * by almost nothing: the synthetic household read 70,896 and 15,439 an hour.
+ * So: enough days with real time on foot, a real spread of it, a fit that
+ * explains something, and a figure a walker could reach (a brisk walk is about
+ * 6,500 steps an hour; past ~9,000 the slope is something else on those days).
+ */
+const FOOT_DAY_MIN = 15;
+const FOOT_SPREAD_H = 0.5;
+const FOOT_MIN_R = 0.2;
+const MAX_STEPS_PER_FOOT_HOUR = 9000;
+
+/** Steps per hour out on foot, or null when the days cannot say. Holidays are left out, as everywhere else. */
+export function stepsPerFootHour(days: ReadonlyArray<{ onFootMinutes: number; steps: number; far: boolean }>): { slope: number; r: number } | null {
+  const pool = days.filter((x) => !x.far);
+  if (pool.filter((x) => x.onFootMinutes >= FOOT_DAY_MIN).length < MIN_STEP_DAYS) return null;
+  const hours = pool.map((x) => x.onFootMinutes / 60);
+  if (Math.max(...hours) - Math.min(...hours) < FOOT_SPREAD_H) return null;
+  const f = fit(hours, pool.map((x) => x.steps));
+  if (!f || f.r < FOOT_MIN_R || f.slope <= 0 || f.slope > MAX_STEPS_PER_FOOT_HOUR) return null;
+  return f;
+}
 /** Days on each side before a steps difference is said in words, on "Worth knowing". */
 const FINDING_STEP_DAYS = 8;
 /** "New" is a first visit inside this, with at least as much history before it. */
@@ -651,7 +675,7 @@ export async function analysePatterns(
       const withMean = sum(w) / w.length, withoutMean = sum(wo) / wo.length;
       return { category: id as Category, withMean: r0(withMean), withoutMean: r0(withoutMean), days: w.length, against: wo.length, lift: r0(withMean - withoutMean) };
     }).filter((x): x is NonNullable<typeof x> => x != null).sort((a, b) => b.lift - a.lift);
-    const f = fit(stepDays.map((x) => x.d.onFoot / 60), stepDays.map((x) => x.steps));
+    const f = stepsPerFootHour(stepDays.map((x) => ({ onFootMinutes: x.d.onFoot, steps: x.steps, far: x.d.far })));
     // Each day's steps shared over the day's on-foot minutes: trips on foot to
     // a place, and walking about once there. An estimate, said so on the page.
     const placeSteps = new Map<string, number>();
