@@ -146,7 +146,7 @@ export function renderDaily(read: DailyRead): { text: string; rows: DailyRow[] }
     out.push(`Day by day (${named.map((p) => p.name).join(' | ')}; – is no reading):`);
     for (const d of dates) out.push(`  ${dayLabel(d)}: ${named.map((p) => (p.values![d] != null ? fmt(metric, p.values![d]!) : '–')).join(' | ')}`);
   }
-  if (read.today) {
+  if (read.today && named.length) {
     const t = named.map((p) => `${p.name} ${read.today!.values[p.subject] != null ? fmt(metric, read.today!.values[p.subject]!) : '–'}`);
     out.push(`Today so far (${dayLabel(read.today.date)}, to ${read.today.asOf}; a part day, not in the figures above): ${t.join('; ')}.`);
   }

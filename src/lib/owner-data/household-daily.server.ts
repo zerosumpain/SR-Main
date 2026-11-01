@@ -57,6 +57,10 @@ export async function householdDailyTool(args: Record<string, unknown>, now = ne
     return { label: 'Household health by day', text: `No one called "${args.person}". Name one of: ${all.map((m) => m.displayName).join(', ')}.`, rows: [] };
   }
 
+  if (!members.length) {
+    return { label: 'Household health by day', text: 'No one in the household shares their health with you here: no member is set up, or no one has sharing on in the app.', rows: [] };
+  }
+
   const todayValues: Record<string, number | null> = {};
   const people: PersonDays[] = await Promise.all(members.map(async (m): Promise<PersonDays> => {
     const base = { subject: m.subject, name: m.displayName };
