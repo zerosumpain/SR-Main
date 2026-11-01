@@ -17,16 +17,23 @@ import { pilotSteps } from './companion-accounts';
 import { localClock } from './forecast';
 import { insightMembers, trailRows } from './insights.server';
 import { getHomePlace } from './places';
-import { analysePatterns, placeQuery, type PatternPlace, type PatternsReport } from './patterns';
+import { analysePatterns, findingsOf, placeQuery, type PatternPlace, type PatternsReport } from './patterns';
+import {
+  dominantSources, EMPTY_HISTORY, historyView, mergeMonth, monthsTouching, summariseMonth, type PatternsHistory,
+} from './patterns-history';
 import { loadPlaceTypes, refreshPlaceTypes } from './place-types.server';
 import { attachVenues } from './venues.server';
 
 export const PATTERNS_KEY = 'home.patterns.report';
+/** Month by month, kept for good: never pruned, never overwritten by less (`mergeMonth`). */
+export const HISTORY_KEY = 'home.patterns.history';
 export const PATTERNS_DAYS = 90;
 /** The pilot refuses a steps window over two days. */
 const STEP_WINDOW_DAYS = 2;
 
 export const loadPatterns = () => getSetting<PatternsReport>(PATTERNS_KEY).catch(() => null);
+export const loadHistory = async (): Promise<PatternsHistory> =>
+  (await getSetting<PatternsHistory>(HISTORY_KEY).catch(() => null)) ?? EMPTY_HISTORY;
 
 /**
  * One person's daily steps over the window, by local date. The pilot keeps one
@@ -56,8 +63,10 @@ export async function dailySteps(email: string, days: number, now: Date): Promis
 /**
  * `lookups`: how many batches of place lookups to run first; 0 uses only the
  * cache. `venueFetches`: how many big places' maps to fetch; 0 uses only those kept.
+ * `months`: also sum each calendar month in the window into the kept history
+ * (the nightly build does; the owner's Rebuild now reads what is kept).
  */
-export async function runPatterns(now = new Date(), lookups = 20, venueFetches = 6): Promise<PatternsReport> {
+export async function runPatterns(now = new Date(), lookups = 20, venueFetches = 6, months = true): Promise<PatternsReport> {
   const [members, home] = await Promise.all([insightMembers({ kind: 'owner' }), getHomePlace().catch(() => null)]);
   const placeRows = await db.select().from(daydreamPlaces).where(eq(daydreamPlaces.status, 'active'));
   const places: Array<PatternPlace & { suggestedAddress: string | null }> = placeRows.map((p) => ({
@@ -83,8 +92,25 @@ export async function runPatterns(now = new Date(), lookups = 20, venueFetches =
     const s = await dailySteps(m.email, PATTERNS_DAYS, now).catch(() => null);
     if (s?.size) steps.set(m.subject, s);
   }
-  const report = await analysePatterns(rows, places, members.map((m) => ({ subject: m.subject, displayName: m.displayName })),
-    steps, now, PATTERNS_DAYS, home?.id ?? null);
+  const people = members.map((m) => ({ subject: m.subject, displayName: m.displayName }));
+  const report = await analysePatterns(rows, places, people, steps, now, PATTERNS_DAYS, home?.id ?? null);
+  let history = await loadHistory();
+  if (months) {
+    // Each month alone, through the same analysis: the same day four times
+    // over is still seconds of CPU, once a night.
+    const windowFrom = +now - PATTERNS_DAYS * 86_400_000;
+    for (const m of monthsTouching(windowFrom, +now)) {
+      const from = Math.max(m.start, windowFrom), to = Math.min(m.end, +now);
+      if (to - from < 86_400_000) continue;
+      const inMonth = rows.filter((r) => +r.ts >= from && +r.ts < to);
+      const monthly = await analysePatterns(inMonth, places, people, steps, new Date(to), (to - from) / 86_400_000, home?.id ?? null);
+      history = mergeMonth(history, summariseMonth(monthly, m, +now, windowFrom, dominantSources(inMonth)));
+    }
+    await setSetting(HISTORY_KEY, history);
+  }
+  report.history = historyView(history);
+  const names = new Map(people.map((p) => [p.subject, p.displayName]));
+  report.findings = findingsOf(report, (s) => names.get(s) ?? s);
   await setSetting(PATTERNS_KEY, report);
   return report;
 }

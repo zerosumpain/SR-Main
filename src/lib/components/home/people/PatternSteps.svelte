@@ -33,7 +33,7 @@
     {#each counted as p (p.subject)}
       <div class="st-row" class:lit={focus?.subject === p.subject}>
         <span class="st-name">{p.displayName}</span>
-        <div class="st-track" title={`${p.displayName}: ${n(p.steps.homeDay)} on a day at home, ${n(p.steps.outDay)} on a day out; ${n(p.steps.mean)} a day over ${p.steps.days} days`}>
+        <div class="st-track" title={`${p.displayName}: ${n(p.steps.homeDay)} on a day at home${p.steps.homeDays != null ? ` (${p.steps.homeDays} days)` : ''}, ${n(p.steps.outDay)} on a day out${p.steps.outDays != null ? ` (${p.steps.outDays} days, holidays left out)` : ''}; ${n(p.steps.mean)} a day over ${p.steps.days} days`}>
           {#if p.steps.homeDay != null && p.steps.outDay != null}
             <span class="gap" style:left={x(Math.min(p.steps.homeDay, p.steps.outDay))} style:width={x(Math.abs(p.steps.outDay - p.steps.homeDay))}></span>
           {/if}
