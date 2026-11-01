@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analysePatterns, categoryOf, groupOf, parsePlaceTypes, placeQuery, type PatternPlace } from './patterns';
+import { analysePatterns, categoryOf, groupOf, parsePlaceTypes, placeQuery, stepsPerFootHour, type PatternPlace } from './patterns';
 import type { InsightFix } from './insights';
 
 const places: PatternPlace[] = [
@@ -165,5 +165,32 @@ describe('analysePatterns', () => {
     expect(anchors.filter((f) => f.only === 'household')).toHaveLength(1);
     expect(anchors.find((f) => f.only === 'household')?.text).toContain('Sample College for Alex and Sam');
     expect(anchors.filter((f) => f.only === 'person').map((f) => f.subject).sort()).toEqual(['alex', 'sam']);
+  });
+});
+
+describe('steps per hour on foot', () => {
+  const day = (onFootMinutes: number, steps: number, far = false) => ({ onFootMinutes, steps, far });
+
+  it('gives no figure when the days barely differ in walking (the 70,896-an-hour reading)', () => {
+    // Most days a few minutes on foot; the steps swing for reasons the trail cannot see.
+    const days = [day(0, 6000), day(2, 9000), day(4, 13000), day(1, 7000), day(5, 15000), day(3, 8000), day(0, 5000), day(6, 14000)];
+    expect(stepsPerFootHour(days)).toBeNull();
+  });
+
+  it('reads a walker whose steps follow their time on foot', () => {
+    const days = [day(10, 4000), day(30, 6200), day(60, 9800), day(20, 5300), day(90, 13000), day(45, 8000), day(75, 11200), day(15, 4900)];
+    const f = stepsPerFootHour(days)!;
+    expect(f.slope).toBeGreaterThan(5000);
+    expect(f.slope).toBeLessThan(8000);
+    expect(f.r).toBeGreaterThan(0.9);
+  });
+
+  it('leaves holidays out, and refuses no fit, a negative slope or one past walking pace', () => {
+    const local = [day(20, 5000), day(40, 5100), day(60, 4900), day(30, 5000), day(50, 5050), day(25, 4950)];
+    // A week away with long walking days would make the fit by itself.
+    expect(stepsPerFootHour([...local, day(240, 30000, true), day(300, 32000, true)])).toBeNull();
+    expect(stepsPerFootHour([day(20, 9000), day(40, 7000), day(60, 5000), day(30, 8000), day(50, 6000), day(70, 4000)])).toBeNull();
+    // Half an hour more on foot, 10,000 more steps: not walking.
+    expect(stepsPerFootHour([day(15, 3000), day(45, 13000), day(15, 3500), day(45, 12500), day(20, 4000), day(40, 12000)])).toBeNull();
   });
 });
