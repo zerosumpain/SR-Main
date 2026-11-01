@@ -161,7 +161,12 @@
 </dialog>
 
 <style>
+  /* The site's reset zeroes every margin, which pins a modal dialog to the top left: centre it again. */
   .pm {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    height: fit-content;
     width: min(720px, calc(100vw - 32px));
     max-height: calc(100vh - 32px);
     padding: 0;
