@@ -5,7 +5,8 @@
 // app, run through `analysePatterns` and kept in app_settings. Built nightly
 // with the forecast (`forecast-nightly`) — seconds of CPU and a few hundred
 // small pilot calls, so never on a page load. First, any place not yet
-// looked up gets a web search for what it is (`place-types.server`). Owner-only: the page refuses
+// looked up gets a web search for what it is (`place-types.server`), and each
+// big place gets its map of cafés and shops (`venues.server`). Owner-only: the page refuses
 // anyone else, and so does the rebuild.
 
 import { eq } from 'drizzle-orm';
@@ -18,6 +19,7 @@ import { insightMembers, trailRows } from './insights.server';
 import { getHomePlace } from './places';
 import { analysePatterns, placeQuery, type PatternPlace, type PatternsReport } from './patterns';
 import { loadPlaceTypes, refreshPlaceTypes } from './place-types.server';
+import { attachVenues } from './venues.server';
 
 export const PATTERNS_KEY = 'home.patterns.report';
 export const PATTERNS_DAYS = 90;
@@ -68,6 +70,8 @@ export async function runPatterns(now = new Date(), lookups = 20): Promise<Patte
     // An answer for a name the place no longer has is stale.
     if (t && t.query === placeQuery(p, home?.id ?? null)) p.lookup = { category: t.category, type: t.type, name: t.name };
   }
+  // The cafés and restaurants inside a big place, so a lunch in town is a food stop, not more "Town".
+  await attachVenues(places, home?.id ?? null, now).catch(() => 0);
   const rows = members.length ? await trailRows('patterns', members.map((m) => m.subject), PATTERNS_DAYS, now) : [];
   const steps = new Map<string, Map<string, number>>();
   // One person at a time: the pilot is a small box and this is not urgent.

@@ -21,6 +21,7 @@ import {
 import { circularMedianMinute, hhmm } from './stats';
 import { habitsOf, mergeOutings, outingsOf, partPhrase, WEEKDAYS, type Habits, type Outing, type Routine } from './habits';
 import { MIN_DWELL_MINS, VISIT_MAX_GAP_MINS } from './types';
+import { foodStops, type Poi, type Point } from './venues';
 
 const MINUTE = 60_000;
 const DAY = 86_400_000;
@@ -43,6 +44,8 @@ export interface PatternPlace extends InsightPlace {
   firstSeenAt?: Date | string | null;
   /** What a web lookup says is there (`place-types.server`): its category, a short type, and its name. */
   lookup?: PlaceType | null;
+  /** The map round a big place, for splitting its food stops out (`venues.ts`). */
+  pois?: Poi[] | null;
 }
 
 export interface PlaceType {
@@ -159,6 +162,8 @@ export interface Visit {
   onFoot: number;
   /** Local date and weekday (0 = Monday) of the arrival, minute of day it began. */
   date: string; weekday: number; arriveMin: number;
+  /** A food stop split out of a big place (`venues.ts`): its id is `<parent>#<venue>`. */
+  venue?: { parentId: string; label: string; type: string; lat: number; lon: number };
 }
 
 interface Leg { start: number; end: number; active: boolean; moving: boolean; lat: number; lon: number }
@@ -177,7 +182,7 @@ function clockAt(t: number) {
 }
 
 /** The legs between continuous fixes, classified as `analysePresence` does. */
-function legsOf(fixes: InsightFix[], now: Date): Leg[] {
+export function legsOf(fixes: InsightFix[], now: Date): Leg[] {
   const legs: Leg[] = [];
   for (let i = 0; i + 1 < fixes.length; i++) {
     const a = fixes[i], b = fixes[i + 1];
@@ -211,40 +216,60 @@ function onFootBetween(legs: Leg[], from: number, to: number): number {
  * time on foot. Trips are NOT needed: a trail gap loses the journey in, not
  * the stay. The trip that ends at a visit's start, if one does, is its way in.
  */
-export function visitsFrom(fixes: InsightFix[], trips: Trip[], legs: Leg[], places: InsightPlace[], cats: Map<string, Category>, homeId: string | null, now: Date): Visit[] {
-  const runs: Array<{ placeId: string; start: number; end: number }> = [];
-  let run: { placeId: string; start: number; end: number } | null = null, prev: Fix | null = null;
+export function visitsFrom(fixes: InsightFix[], trips: Trip[], legs: Leg[], places: PatternPlace[], cats: Map<string, Category>, homeId: string | null, now: Date): Visit[] {
+  type Run = { placeId: string; start: number; end: number; points: Point[] };
+  const runs: Run[] = [];
+  let run: Run | null = null, prev: Fix | null = null;
   for (const raw of fixes) {
     if (!usableFix(raw, +now)) { run = null; prev = null; continue; }
     const f = located(raw, places);
     if (prev && !continuous(prev, f)) run = null;
     if (f.placeId) {
-      if (run && run.placeId === f.placeId) run.end = +f.ts;
-      else { run = { placeId: f.placeId, start: +f.ts, end: +f.ts }; runs.push(run); }
+      const point = { t: +f.ts, lat: f.lat, lon: f.lon, accuracyM: f.accuracyM ?? null };
+      if (run && run.placeId === f.placeId) { run.end = +f.ts; run.points.push(point); }
+      else { run = { placeId: f.placeId, start: +f.ts, end: +f.ts, points: [point] }; runs.push(run); }
     } else run = null;
     prev = f;
   }
-  const merged: typeof runs = [];
+  const merged: Run[] = [];
   for (const r of runs) {
     const last = merged.at(-1);
     const cap = r.placeId === homeId ? MAX_HOME_VISIT_MS : MAX_VISIT_MS;
-    if (last && last.placeId === r.placeId && r.start - last.end <= VISIT_MAX_GAP_MINS * MINUTE && r.end - last.start <= cap) last.end = r.end;
-    else merged.push({ ...r });
+    if (last && last.placeId === r.placeId && r.start - last.end <= VISIT_MAX_GAP_MINS * MINUTE && r.end - last.start <= cap) { last.end = r.end; last.points.push(...r.points); }
+    else merged.push({ ...r, points: [...r.points] });
   }
+  const byId = new Map(places.map((p) => [p.id, p]));
   const out: Visit[] = [];
+  const push = (placeId: string, start: number, end: number, way: Trip | undefined, venue?: Visit['venue']) => {
+    if (end - start < MIN_DWELL_MINS * MINUTE) return;
+    const c = clockAt(start);
+    out.push({
+      subject: fixes[0]?.subject ?? '', placeId, category: venue ? 'food' : (cats.get(placeId) ?? 'unnamed'),
+      start, end, minutes: (end - start) / MINUTE,
+      inMinutes: way?.minutes ?? 0, inMode: way?.mode ?? '', fromId: way?.from ?? '',
+      onFoot: onFootBetween(legs, start, end), date: c.date, weekday: c.weekday, arriveMin: c.minute, ...(venue ? { venue } : {}),
+    });
+  };
   for (const r of merged) {
     if (r.end - r.start < MIN_DWELL_MINS * MINUTE) continue;
-    const c = clockAt(r.start);
     const way = trips.find((t) => t.to === r.placeId && Math.abs(t.end - r.start) <= 15 * MINUTE);
-    out.push({
-      subject: fixes[0]?.subject ?? '', placeId: r.placeId, category: cats.get(r.placeId) ?? 'unnamed',
-      start: r.start, end: r.end, minutes: (r.end - r.start) / MINUTE,
-      inMinutes: way?.minutes ?? 0, inMode: way?.mode ?? '', fromId: way?.from ?? '',
-      onFoot: onFootBetween(legs, r.start, r.end), date: c.date, weekday: c.weekday, arriveMin: c.minute,
-    });
+    // A big place's food stops come out as visits of their own; the rest of the stay stays the place's.
+    const p = byId.get(r.placeId);
+    const stops = p?.pois?.length ? foodStops(r.points, p.pois) : [];
+    let from = r.start, first = true;
+    for (const st of stops) {
+      const label = st.name ?? `Café or restaurant in ${placeTitle(p)}`;
+      if (st.start - from >= MIN_DWELL_MINS * MINUTE) { push(r.placeId, from, st.start, first ? way : undefined); first = false; }
+      push(`${r.placeId}#${st.name ?? 'food'}`, st.start, st.end, first ? way : undefined,
+        { parentId: r.placeId, label, type: `${cap(st.type)} in ${placeTitle(p)}`, lat: st.lat, lon: st.lon });
+      first = false; from = st.end;
+    }
+    push(r.placeId, from, r.end, first ? way : undefined);
   }
   return out;
 }
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const r0 = (n: number) => Math.round(n);
@@ -362,6 +387,12 @@ export async function analysePatterns(
     const fixes = analysisFixes(bridgeSleeps(mine, places, now), now);
     const legs = legsOf(fixes, now);
     const visits = visitsFrom(fixes, trips, legs, places, cats, homeId, now);
+    // A food stop split out of a big place is a place of its own from here on: named, food, never located.
+    for (const v of visits) if (v.venue && !placeById.has(v.placeId)) {
+      placeById.set(v.placeId, { id: v.placeId, label: v.venue.label, kind: 'cafe', lat: v.venue.lat, lon: v.venue.lon, radiusM: 20,
+        lookup: { category: 'food', type: v.venue.type, name: null }, firstSeenAt: placeById.get(v.venue.parentId)?.firstSeenAt });
+      cats.set(v.placeId, 'food');
+    }
     // State per bin: a visit's place id, `trip`, `seen` (observed, neither), absent = unseen.
     const bins = new Map<number, string>();
     for (const l of legs) for (let b = Math.floor(l.start / BIN_MS); b * BIN_MS < l.end; b++) bins.set(b, 'seen');
