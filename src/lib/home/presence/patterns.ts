@@ -21,7 +21,7 @@ import {
 import { circularMedianMinute, hhmm } from './stats';
 import { habitsOf, mergeOutings, outingsOf, partPhrase, WEEKDAYS, type Habits, type Outing, type Routine } from './habits';
 import { MIN_DWELL_MINS, VISIT_MAX_GAP_MINS } from './types';
-import { foodStops, type Poi, type Point } from './venues';
+import { isOneShop, venueStops, type Poi, type Point } from './venues';
 
 const MINUTE = 60_000;
 const DAY = 86_400_000;
@@ -44,7 +44,7 @@ export interface PatternPlace extends InsightPlace {
   firstSeenAt?: Date | string | null;
   /** What a web lookup says is there (`place-types.server`): its category, a short type, and its name. */
   lookup?: PlaceType | null;
-  /** The map round a big place, for splitting its food stops out (`venues.ts`). */
+  /** The map round a big place, for splitting its food and shop stops out (`venues.ts`). */
   pois?: Poi[] | null;
 }
 
@@ -162,8 +162,8 @@ export interface Visit {
   onFoot: number;
   /** Local date and weekday (0 = Monday) of the arrival, minute of day it began. */
   date: string; weekday: number; arriveMin: number;
-  /** A food stop split out of a big place (`venues.ts`): its id is `<parent>#<venue>`. */
-  venue?: { parentId: string; label: string; type: string; lat: number; lon: number };
+  /** A food or shop stop split out of a big place (`venues.ts`): its id is `<parent>#<venue>`. */
+  venue?: { parentId: string; label: string; type: string; category: Category; kind: 'food' | 'shop'; lat: number; lon: number };
 }
 
 interface Leg { start: number; end: number; active: boolean; moving: boolean; lat: number; lon: number }
@@ -244,7 +244,7 @@ export function visitsFrom(fixes: InsightFix[], trips: Trip[], legs: Leg[], plac
     if (end - start < MIN_DWELL_MINS * MINUTE) return;
     const c = clockAt(start);
     out.push({
-      subject: fixes[0]?.subject ?? '', placeId, category: venue ? 'food' : (cats.get(placeId) ?? 'unnamed'),
+      subject: fixes[0]?.subject ?? '', placeId, category: venue ? venue.category : (cats.get(placeId) ?? 'unnamed'),
       start, end, minutes: (end - start) / MINUTE,
       inMinutes: way?.minutes ?? 0, inMode: way?.mode ?? '', fromId: way?.from ?? '',
       onFoot: onFootBetween(legs, start, end), date: c.date, weekday: c.weekday, arriveMin: c.minute, ...(venue ? { venue } : {}),
@@ -253,23 +253,21 @@ export function visitsFrom(fixes: InsightFix[], trips: Trip[], legs: Leg[], plac
   for (const r of merged) {
     if (r.end - r.start < MIN_DWELL_MINS * MINUTE) continue;
     const way = trips.find((t) => t.to === r.placeId && Math.abs(t.end - r.start) <= 15 * MINUTE);
-    // A big place's food stops come out as visits of their own; the rest of the stay stays the place's.
+    // A big place's food and shop stops come out as visits of their own; the rest of the stay stays the place's.
     const p = byId.get(r.placeId);
-    const stops = p?.pois?.length ? foodStops(r.points, p.pois) : [];
+    const stops = p?.pois?.length ? venueStops(r.points, p.pois, { shops: !isOneShop(p.label, p.pois) }) : [];
     let from = r.start, first = true;
     for (const st of stops) {
-      const label = st.name ?? `Café or restaurant in ${placeTitle(p)}`;
+      const label = st.name ?? (st.kind === 'food' ? `Café or restaurant in ${placeTitle(p)}` : `A shop in ${placeTitle(p)}`);
       if (st.start - from >= MIN_DWELL_MINS * MINUTE) { push(r.placeId, from, st.start, first ? way : undefined); first = false; }
-      push(`${r.placeId}#${st.name ?? 'food'}`, st.start, st.end, first ? way : undefined,
-        { parentId: r.placeId, label, type: `${cap(st.type)} in ${placeTitle(p)}`, lat: st.lat, lon: st.lon });
+      push(`${r.placeId}#${st.name ?? st.kind}`, st.start, st.end, first ? way : undefined,
+        { parentId: r.placeId, label, type: st.name ? `${st.type} in ${placeTitle(p)}` : `${st.kind === 'food' ? 'Food' : 'Shops'}: ${st.type}`, category: st.category, kind: st.kind, lat: st.lat, lon: st.lon });
       first = false; from = st.end;
     }
     push(r.placeId, from, r.end, first ? way : undefined);
   }
   return out;
 }
-
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const r0 = (n: number) => Math.round(n);
@@ -387,11 +385,11 @@ export async function analysePatterns(
     const fixes = analysisFixes(bridgeSleeps(mine, places, now), now);
     const legs = legsOf(fixes, now);
     const visits = visitsFrom(fixes, trips, legs, places, cats, homeId, now);
-    // A food stop split out of a big place is a place of its own from here on: named, food, never located.
+    // A stop split out of a big place is a place of its own from here on: named, its kind, never located.
     for (const v of visits) if (v.venue && !placeById.has(v.placeId)) {
-      placeById.set(v.placeId, { id: v.placeId, label: v.venue.label, kind: 'cafe', lat: v.venue.lat, lon: v.venue.lon, radiusM: 20,
-        lookup: { category: 'food', type: v.venue.type, name: null }, firstSeenAt: placeById.get(v.venue.parentId)?.firstSeenAt });
-      cats.set(v.placeId, 'food');
+      placeById.set(v.placeId, { id: v.placeId, label: v.venue.label, kind: v.venue.kind === 'food' ? 'cafe' : 'shop', lat: v.venue.lat, lon: v.venue.lon, radiusM: 20,
+        lookup: { category: v.venue.category, type: v.venue.type, name: null }, firstSeenAt: placeById.get(v.venue.parentId)?.firstSeenAt });
+      cats.set(v.placeId, v.venue.category);
     }
     // State per bin: a visit's place id, `trip`, `seen` (observed, neither), absent = unseen.
     const bins = new Map<number, string>();
