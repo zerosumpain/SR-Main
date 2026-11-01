@@ -64,6 +64,9 @@ export type FeedRef =
   | { source: 'reddit'; value: string }
   /** HolidayPirates' deal feed (one feed; value is always "deals"). */
   | { source: 'holidaypirates'; value: string }
+  /** One open-web search query. See `sources/search.server.ts`. */
+  | { source: 'search'; value: string }
+  /** Before 2026-11-01: one daily search of PriceRunner only. Read as `search`. */
   | { source: 'tavily'; value: string };
 
 export interface WishCriteria {
@@ -100,8 +103,13 @@ export interface WishItem {
   deadline: string | null;
   createdAt: string;
   lastCheckedAt: string | null;
-  /** Web search costs credits, so a hunt searches at most daily, whatever its cadence. */
+  /** When the item last searched the web. */
   lastSearchedAt?: string | null;
+  /**
+   * Today's web searches (UTC day): at most `SEARCHES_PER_DAY`, spread over
+   * the day — see `searchesAllowed`. `cursor` rotates through the queries.
+   */
+  searches?: { day: string; count: number; cursor: number };
   lastError: string | null;
 }
 

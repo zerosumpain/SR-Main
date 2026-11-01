@@ -48,7 +48,7 @@ Reply with ONE JSON object and nothing else:
   "travelDates": null | {"schoolHoliday": string} | {"from": "YYYY-MM-DD", "to": "YYYY-MM-DD", "label": string},
                                       // holidays/travel/tickets only: when. A school holiday by its exact name from: ${SCHOOL_HOLIDAYS.map((h) => h.name).join(', ')}; otherwise the window as dates ("in March" = the whole month; "Christmas" = 20 Dec to 2 Jan), dates in the future
   "holidayPirates": boolean,          // true for package holidays, city breaks, hotels with flights
-  "searchQuery": string,              // goods only (it searches PriceRunner product pages): a short search that would find them; "" for holidays, travel and tickets
+  "searchQueries": string[],          // 3–5 DIFFERENT UK web searches that would turn up pages SELLING it with a price — product pages at UK retailers, PriceRunner, brand stores, travel agents — e.g. "RTX 5060 gaming PC DDR5 UK", "prebuilt gaming PC under £1100", "Sony WH-1000XM6 price UK"; vary the angle (model number, category + budget, retailer kind), never the same words reordered
   "urls": string[],                   // product URLs the user gave, verbatim
   "forPerson": string | null,         // who it is for, if said
   "deadline": "YYYY-MM-DD" | null     // when it is needed by, if said or implied (Christmas = ${today.slice(0, 4)}-12-20)

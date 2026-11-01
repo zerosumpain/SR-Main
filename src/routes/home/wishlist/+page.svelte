@@ -11,6 +11,8 @@
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import { describeConstraint, formatPence } from '$lib/wishlist/match';
   import { SCAN_CATEGORIES } from '$lib/wishlist/sources/scan';
+  import { searchQueries } from '$lib/wishlist/sources/search';
+  import { SEARCHES_PER_DAY, searchesToday } from '$lib/wishlist/due';
   import type { FeedRef, Verdict, WishItem, WishOffer } from '$lib/wishlist/types';
   import type { CompareRow } from '$lib/wishlist/value';
 
@@ -87,7 +89,7 @@
     if (f.source === 'scan-cat') return `Scan · ${SCAN_CATEGORIES[f.value] ?? f.value}`;
     if (f.source === 'reddit') return `r/${f.value}`;
     if (f.source === 'holidaypirates') return 'HolidayPirates';
-    return `search · “${f.value}”`;
+    return `web · “${f.value}”`;
   }
 
   function host(url: string): string {
@@ -116,6 +118,7 @@
     if (i.forPerson) parts.push(`for ${i.forPerson}`);
     if (i.deadline) parts.push(`by ${DAY.format(new Date(i.deadline))}`);
     parts.push(i.lastCheckedAt ? `checked ${WHEN.format(new Date(i.lastCheckedAt))}` : 'first check running…');
+    if (i.kind === 'hunt' && searchQueries(i.feeds).length) parts.push(`${searchesToday(i, new Date())} of ${SEARCHES_PER_DAY} web searches today`);
     return parts;
   }
 </script>
@@ -126,9 +129,9 @@
   path="/home/wishlist"
   kicker="Home · Wish list"
   title={['Things to buy,', 'watched for you']}
-  standfirst="Say what you want — a product link to watch for a price drop, or what it has to be — “a 55in+ TV under £600”, “a family week in the sun, 4 stars, under £2,000 for the four of us”, “gaming PC under £1,100, RTX 5060 or better”. The sweep reads hotukdeals, PriceRunner, HolidayPirates and — for PCs — Overclockers, Scan and r/buildapcsalesuk, and messages you when something meets it."
+  standfirst="Say what you want — a product link to watch for a price drop, or what it has to be — “a 55in+ TV under £600”, “a family week in the sun, 4 stars, under £2,000 for the four of us”, “gaming PC under £1,100, RTX 5060 or better”. The sweep reads hotukdeals, PriceRunner, HolidayPirates and — for PCs — Overclockers, Scan and r/buildapcsalesuk, searches the web up to five times a day per item, and messages you when something meets it."
   {summary}
-  footer={['strangeramblings.com/home/wishlist', 'hotukdeals · PriceRunner · HolidayPirates · Overclockers · Scan · Reddit', 'The owner only, for now']}
+  footer={['strangeramblings.com/home/wishlist', 'hotukdeals · PriceRunner · HolidayPirates · Overclockers · Scan · Reddit · the web', 'The owner only, for now']}
 >
   <section class="band flush-top">
     <div class="inner">
