@@ -13,7 +13,7 @@ describe('fetchPageScripts', () => {
       fetchFn: (async () => new Response(page, { status: 200 })) as typeof fetch,
       scrape,
     });
-    expect(out).toEqual({ payload: null, ld: [LD], via: 'direct' });
+    expect(out).toEqual({ payload: null, ld: [LD], meta: null, via: 'direct' });
     expect(scrape).not.toHaveBeenCalled();
   });
 
@@ -27,7 +27,7 @@ describe('fetchPageScripts', () => {
       scrape,
     });
     expect(scrape).toHaveBeenCalledTimes(2);
-    expect(out).toEqual({ payload: '{"a":1}', ld: [LD], via: 'residential' });
+    expect(out).toEqual({ payload: '{"a":1}', ld: [LD], meta: null, via: 'residential' });
   });
 
   it('says it was blocked when the retry is blocked too', async () => {
@@ -38,5 +38,21 @@ describe('fetchPageScripts', () => {
         scrape: vi.fn().mockResolvedValue(blocked),
       }),
     ).rejects.toThrow('blocked (captcha)');
+  });
+
+  it('reads a page whose only price is in its meta tags, without a scrape', async () => {
+    const scrape = vi.fn();
+    const html = '<html><head><meta property="product:price:amount" content="1099.99"/><meta property="product:price:currency" content="GBP"/><meta property="og:title" content="AWD-IT RTX 5060 Ti PC"/></head></html>';
+    const out = await fetchPageScripts('https://www.awd-it.co.uk/pc.html', { fetchFn: (async () => new Response(html, { status: 200 })) as typeof fetch, scrape });
+    expect(out.meta).toEqual({ amount: '1099.99', currency: 'GBP', title: 'AWD-IT RTX 5060 Ti PC', description: null });
+    expect(scrape).not.toHaveBeenCalled();
+  });
+
+  it('gives up without a residential scrape when told to', async () => {
+    const scrape = vi.fn();
+    await expect(
+      fetchPageScripts('https://shop.example/p', { fetchFn: (async () => new Response('', { status: 403 })) as typeof fetch, scrape }, { residential: false }),
+    ).rejects.toThrow('directly');
+    expect(scrape).not.toHaveBeenCalled();
   });
 });

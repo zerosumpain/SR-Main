@@ -9,7 +9,7 @@
 import { notifyOwner } from '$lib/server/notify';
 import { eventFor, mergeOffer, offerKey, summarise, type AlertEvent } from './alerts';
 import { isDue } from './due';
-import { ALERTABLE } from './match';
+import { KEPT } from './match';
 import { fetchHukdTag } from './sources/hukd';
 import { fetchPageScripts, fetchScanCards } from './sources/fetch.server';
 import { ocukCategoryUrl, parseOcukItemList } from './sources/ocuk';
@@ -116,10 +116,12 @@ export async function checkItem(item: WishItem, now = new Date()): Promise<ItemC
     seen.add(key);
     const prev = stored.get(key) ?? null;
     const next = mergeOffer(item, prev, { ...c, pricePence: c.pricePence }, now);
-    // A hunt keeps only listings worth looking at (and any it already holds, so
-    // a match that turns into a "no" is recorded as such). A category page is a
-    // hundred products; storing every one would bury the few that matter.
-    if (item.kind === 'hunt' && !prev && !ALERTABLE.includes(next.verdict)) continue;
+    // A hunt keeps listings worth looking at — including ones that meet every
+    // spec but cost too much, tracked in case the price falls — and any it
+    // already holds, so a match that turns into a "no" is recorded as such. A
+    // category page is a hundred products; storing every one would bury the
+    // few that matter.
+    if (item.kind === 'hunt' && !prev && !KEPT.includes(next.verdict)) continue;
     const event = eventFor(item, prev, next, c.postedAt, now);
     if (event) {
       next.alertedPence = next.pricePence;
@@ -177,6 +179,6 @@ export async function sweepWishlist(now = new Date()): Promise<SweepResult> {
 
 /** Offers for the page, best first. */
 export function rankOffers(offers: WishOffer[]): WishOffer[] {
-  const order = { match: 0, possible: 1, near: 2, no: 3 } as const;
+  const order = { match: 0, possible: 1, near: 2, over: 3, no: 4 } as const;
   return [...offers].sort((a, b) => order[a.verdict] - order[b.verdict] || a.pricePence - b.pricePence);
 }

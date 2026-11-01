@@ -59,6 +59,57 @@ export function nextQueries(item: Pick<WishItem, 'searches'>, queries: string[],
 
 const MAX_LISTINGS_PER_PAGE = 60;
 
+const NAMED: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', pound: '£' };
+
+/**
+ * HTML entities in text a page gave us: AWD-IT's og:title spells every space
+ * `&#x20;` ("RTX&#x20;5060" names no GPU the matcher knows), and JSON-LD
+ * descriptions carry `&amp;`.
+ */
+export function decodeEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === '#') {
+      const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return Number.isFinite(n) && n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+    }
+    return NAMED[e.toLowerCase()] ?? m;
+  });
+}
+
+/** A page's price as its meta tags give it (Open Graph / Facebook product tags, or microdata). */
+export interface PriceMeta {
+  amount: string;
+  currency: string | null;
+  title: string | null;
+  /** og:description or the meta description — where a shop that has no JSON-LD puts the specs, if anywhere. */
+  description?: string | null;
+}
+
+const ATTR = /([a-z:-]+)\s*=\s*("([^"]*)"|'([^']*)')/gi;
+
+/**
+ * `product:price:amount` / `og:price:amount` / `itemprop="price"` and their
+ * currency, plus `og:title`. A shop theme with no JSON-LD Product usually has
+ * these (AWD-IT's RTX 5060 Ti PC at £1,099.99 had only these, 2026-11-01).
+ */
+export function extractPriceMeta(html: string): PriceMeta | null {
+  const tags: Record<string, string> = {};
+  for (const m of html.matchAll(/<meta\b[^>]*>/gi)) {
+    const attrs: Record<string, string> = {};
+    for (const a of m[0].matchAll(ATTR)) attrs[a[1].toLowerCase()] = a[3] ?? a[4] ?? '';
+    const name = (attrs.property ?? attrs.itemprop ?? attrs.name ?? '').toLowerCase();
+    if (name && attrs.content !== undefined && !(name in tags)) tags[name] = decodeEntities(attrs.content).trim();
+  }
+  const amount = tags['product:price:amount'] || tags['og:price:amount'] || tags.price;
+  if (!amount) return null;
+  return {
+    amount,
+    currency: tags['product:price:currency'] || tags['og:price:currency'] || tags.pricecurrency || null,
+    title: tags['og:title'] || null,
+    description: tags['og:description'] || tags.description || null,
+  };
+}
+
 const isProduct = (t: unknown) => t === 'Product' || (Array.isArray(t) && t.includes('Product'));
 
 /** A Product node's lowest GBP price and whether any offer is in stock. */
@@ -85,7 +136,7 @@ const bareHost = (u: URL) => u.hostname.toLowerCase().replace(/^www\./, '');
  * URL must stay on the page's own site (a feed of someone else's links is
  * not that site's price). A single product page keeps its sellers.
  */
-export function listingsFromPage(page: { payload: string | null; ld: string[] }, pageUrl: string): Candidate[] {
+export function listingsFromPage(page: { payload: string | null; ld: string[]; meta?: PriceMeta | null }, pageUrl: string): Candidate[] {
   const base = new URL(pageUrl);
   const site = bareHost(base);
   if (page.payload) {
@@ -113,8 +164,8 @@ export function listingsFromPage(page: { payload: string | null; ld: string[] },
       if (!found.has(url.toString())) {
         found.set(url.toString(), {
           source: site === 'pricerunner.com' ? 'pricerunner' : 'retailer',
-          title: node.name.trim().slice(0, 300),
-          description: typeof node.description === 'string' ? node.description.trim().slice(0, 1_500) : '',
+          title: decodeEntities(node.name).trim().slice(0, 300),
+          description: typeof node.description === 'string' ? decodeEntities(node.description).trim().slice(0, 1_500) : '',
           url: url.toString(),
           merchant: site,
           pricePence: pence,
@@ -133,6 +184,21 @@ export function listingsFromPage(page: { payload: string | null; ld: string[] },
     }
   }
   const out = [...found.values()];
+  // No Product in the JSON-LD: the meta tags' one price, if it is in pounds.
+  if (!out.length && page.meta && (page.meta.currency ?? '').toUpperCase() === 'GBP') {
+    const pence = amountToPence(page.meta.amount.replace(/[£,\s]/g, ''));
+    if (pence !== null && page.meta.title) {
+      return [{
+        source: site === 'pricerunner.com' ? 'pricerunner' : 'retailer',
+        title: page.meta.title.slice(0, 300),
+        description: (page.meta.description ?? '').slice(0, 1_500),
+        url: pageUrl,
+        merchant: site,
+        pricePence: pence,
+        inStock: null,
+      }];
+    }
+  }
   // One product, on its own page: PriceRunner lists every seller — keep them.
   if (out.length === 1) {
     const product = parseProductLd(page.ld);

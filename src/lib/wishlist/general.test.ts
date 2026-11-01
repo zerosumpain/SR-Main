@@ -53,7 +53,8 @@ describe('matching anything', () => {
     const cheap = evaluate({ title: 'Tenerife week £299pp', description: '', pricePence: 29_900 }, hol);
     expect(cheap.verdict).toBe('match');
     expect(cheap.results[0].reason).toBe('£1,196 (£299pp × 4) ≤ £1,500');
-    expect(evaluate({ title: 'Tenerife week', description: '', pricePence: 45_000, perPerson: true }, hol).verdict).toBe('no');
+    expect(evaluate({ title: 'Tenerife week', description: '', pricePence: 45_000, perPerson: true }, hol).verdict).toBe('over');
+    expect(evaluate({ title: 'Tenerife week', description: '', pricePence: 60_000, perPerson: true }, hol).verdict).toBe('no');
     // A total price is not multiplied.
     expect(evaluate({ title: 'Tenerife villa, £1,400 for the week', description: '', pricePence: 140_000 }, hol).verdict).toBe('match');
   });

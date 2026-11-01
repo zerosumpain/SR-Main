@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('$lib/deepdive/web-search', () => ({ search: vi.fn() }));
 import { SEARCHES_PER_DAY, searchesAllowed } from './due';
-import { isReadableResult, listingsFromPage, nextQueries, searchQueries } from './sources/search';
+import { extractPriceMeta, isReadableResult, listingsFromPage, nextQueries, searchQueries } from './sources/search';
+import { parseShopifyProducts, shopifyJsonUrl } from './sources/shopify';
 import { searchTheWeb } from './sources/search.server';
 import type { WishItem } from './types';
 
@@ -123,6 +124,54 @@ describe('listingsFromPage', () => {
   });
 });
 
+describe('meta price tags', () => {
+  it('reads Open Graph / product tags in either attribute order, and microdata', () => {
+    expect(extractPriceMeta(`<meta content="1,339.00" property="og:price:amount"><meta property='og:price:currency' content='GBP'><meta property="og:title" content="ZeroLag RTX 5060">`))
+      .toEqual({ amount: '1,339.00', currency: 'GBP', title: 'ZeroLag RTX 5060', description: null });
+    expect(extractPriceMeta('<meta itemprop="price" content="1099.99" /><meta itemprop="priceCurrency" content="GBP">')).toEqual({ amount: '1099.99', currency: 'GBP', title: null, description: null });
+    expect(extractPriceMeta('<meta name="description" content="x">')).toBeNull();
+    // AWD-IT spells every space as an entity (2026-11-01).
+    expect(extractPriceMeta('<meta property="og:title" content="AWD-IT&#x20;M120R&#x20;RTX&#x20;5060&#x20;Ti &amp; more"><meta property="og:description" content="16GB&#32;DDR5"><meta property="product:price:amount" content="1099.99"/>'))
+      .toEqual({ amount: '1099.99', currency: null, title: 'AWD-IT M120R RTX 5060 Ti & more', description: '16GB DDR5' });
+  });
+
+  it('becomes one listing when the JSON-LD has none — in pounds only', () => {
+    const meta = { amount: '1,339.00', currency: 'GBP', title: 'ZeroLag RTX 5060 16GB DDR5' };
+    expect(listingsFromPage({ payload: null, ld: [], meta }, 'https://www.zerolaguk.com/products/zl')).toEqual([
+      expect.objectContaining({ title: 'ZeroLag RTX 5060 16GB DDR5', pricePence: 133_900, url: 'https://www.zerolaguk.com/products/zl', merchant: 'zerolaguk.com' }),
+    ]);
+    expect(listingsFromPage({ payload: null, ld: [], meta: { ...meta, currency: 'USD' } }, 'https://shop.example/p')).toEqual([]);
+    expect(listingsFromPage({ payload: null, ld: [], meta: { ...meta, currency: null } }, 'https://shop.example/p')).toEqual([]);
+  });
+});
+
+describe('Shopify', () => {
+  it('turns a collection or product URL into its JSON endpoint, and nothing else', () => {
+    expect(shopifyJsonUrl('https://pcgamingcases.co.uk/collections/5060-ti-builds')).toBe('https://pcgamingcases.co.uk/collections/5060-ti-builds/products.json?limit=250');
+    expect(shopifyJsonUrl('https://directcomputers.co.uk/collections/dcg-gaming-pcs/products/dcg-atlas')).toBe('https://directcomputers.co.uk/products/dcg-atlas.json');
+    expect(shopifyJsonUrl('https://www.zerolaguk.com/products/zerolag-gaming-pc?variant=1')).toBe('https://www.zerolaguk.com/products/zerolag-gaming-pc.json');
+    expect(shopifyJsonUrl('https://www.laptopsdirect.co.uk/ct/pcs/geforce-rtx-5060')).toBeNull();
+  });
+
+  // Shaped like pcgamingcases.co.uk and zerolaguk.com's JSON, 2026-11-01.
+  it('prices each product at its cheapest variant, with the description as text', () => {
+    const json = JSON.stringify({
+      products: [
+        { title: 'IONZ Gaming PC RTX 5060 Ti 32GB DDR5', handle: 'ionz-g1', body_html: '<h2>IONZ &amp; <b>RTX 5060 Ti</b></h2><script>x()</script>', variants: [{ price: '1379.95', available: true }] },
+        { title: 'ZeroLag RTX 5060', handle: 'zerolag', body_html: '', variants: [{ price: '1395.00', available: false }, { price: '1339.00', available: false }] },
+        { title: 'Bad handle', handle: '../x', variants: [{ price: '1' }] },
+        { title: 'No price', handle: 'free', variants: [{ price: '0.00' }] },
+      ],
+    });
+    expect(parseShopifyProducts(json, 'https://pcgamingcases.co.uk')).toEqual([
+      expect.objectContaining({ title: 'IONZ Gaming PC RTX 5060 Ti 32GB DDR5', url: 'https://pcgamingcases.co.uk/products/ionz-g1', pricePence: 137_995, inStock: true, description: 'IONZ & RTX 5060 Ti' }),
+      expect.objectContaining({ title: 'ZeroLag RTX 5060', pricePence: 133_900, inStock: false }),
+    ]);
+    expect(parseShopifyProducts(JSON.stringify({ product: { title: 'One', handle: 'one', variants: [{ price: '10' }] } }), 'https://s.example')).toHaveLength(1);
+    expect(parseShopifyProducts('<html>', 'https://s.example')).toEqual([]);
+  });
+});
+
 describe('searchTheWeb', () => {
   const ld = (name: string) => JSON.stringify({ '@type': 'Product', name, offers: { price: 999, priceCurrency: 'GBP' } });
 
@@ -138,14 +187,15 @@ describe('searchTheWeb', () => {
     }));
     const fetchPage = vi.fn(async (u: string) => {
       if (u.endsWith('blocked')) throw new Error('blocked (captcha)');
-      return { payload: null, ld: [ld(u)], via: 'direct' as const };
+      return { payload: null, ld: [ld(u)], meta: null, via: 'direct' as const };
     });
     const now = new Date('2026-11-02T03:00:00Z');
-    const run = await searchTheWeb(item, now, { search: search as never, fetchPage });
+    const run = await searchTheWeb(item, now, { search: search as never, fetchPage, fetchText: async () => null });
     expect(run.searched).toBe(2);
     expect(search.mock.calls.map((c) => c[0])).toEqual(['q1', 'q2']);
     expect(search.mock.calls[0][1]).toMatchObject({ purpose: 'wishlist' });
     expect(search.mock.calls[0][1]).not.toHaveProperty('includeDomains');
+    expect(search.mock.calls[0][1]).toMatchObject({ maxResults: 20 });
     // Currys is never opened; `blocked` is opened once (by the first search) and fails quietly.
     expect(fetchPage.mock.calls.map((c) => c[0])).toEqual(['https://shop.example/q1', 'https://shop.example/blocked', 'https://shop.example/q2']);
     expect(run.candidates.map((c) => c.url)).toEqual(['https://shop.example/q1', 'https://shop.example/q2']);
@@ -154,7 +204,7 @@ describe('searchTheWeb', () => {
 
     // The next check carries on the rotation.
     search.mockClear();
-    await searchTheWeb(item, new Date('2026-11-02T09:00:00Z'), { search: search as never, fetchPage });
+    await searchTheWeb(item, new Date('2026-11-02T09:00:00Z'), { search: search as never, fetchPage, fetchText: async () => null });
     expect(search.mock.calls[0]?.[0]).toBe('q3');
   });
 
@@ -166,5 +216,33 @@ describe('searchTheWeb', () => {
     });
     expect(run.errors[0]).toMatch(/search "q1": 402 plan/);
     expect(item.searches?.count).toBe(1);
+  });
+
+  it('reads a Shopify shop from its JSON when it prices in pounds, and lets only the top results use the scraper', async () => {
+    const item = hunt({ feeds: [{ source: 'search', value: 'q1' }] });
+    const urls = ['https://pcgamingcases.co.uk/collections/5060-ti-builds', ...Array.from({ length: 6 }, (_, i) => `https://shop${i}.example/p`)];
+    const search = vi.fn(async () => ({ query: 'q1', results: urls.map((url) => ({ title: '', url, content: '', score: 1 })) }));
+    const fetchText = vi.fn(async (u: string) => {
+      if (u.endsWith('/cart.js')) return '{"currency":"GBP"}';
+      if (u.includes('products.json')) return JSON.stringify({ products: [{ title: 'IONZ RTX 5060 Ti', handle: 'ionz', variants: [{ price: '1379.95', available: true }] }] });
+      return null;
+    });
+    const fetchPage = vi.fn(async (_url: string, _opts: { residential?: boolean }) => ({ payload: null, ld: [], meta: null, via: 'direct' as const }));
+    const run = await searchTheWeb(item, new Date('2026-11-02T03:00:00Z'), { search: search as never, fetchPage, fetchText });
+    expect(run.candidates.map((c) => c.url)).toEqual(['https://pcgamingcases.co.uk/products/ionz']);
+    // The Shopify result never needed its page; of the rest, results 2-4 may scrape, 5-7 may not.
+    expect(fetchPage.mock.calls.map((c) => [c[0], c[1]])).toEqual(
+      urls.slice(1).map((u, i) => [u, { residential: i + 1 < 4 }]),
+    );
+  });
+
+  it('ignores a Shopify shop that prices in another currency', async () => {
+    const item = hunt({ feeds: [{ source: 'search', value: 'q1' }] });
+    const run = await searchTheWeb(item, new Date('2026-11-02T03:00:00Z'), {
+      search: (async () => ({ query: 'q1', results: [{ title: '', url: 'https://us.example/products/pc', content: '', score: 1 }] })) as never,
+      fetchText: async (u: string) => (u.endsWith('/cart.js') ? '{"currency":"USD"}' : JSON.stringify({ product: { title: 'PC', handle: 'pc', variants: [{ price: '999' }] } })),
+      fetchPage: async () => ({ payload: null, ld: [], meta: null, via: 'direct' as const }),
+    });
+    expect(run.candidates).toEqual([]);
   });
 });

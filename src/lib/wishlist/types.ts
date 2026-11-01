@@ -113,7 +113,12 @@ export interface WishItem {
   lastError: string | null;
 }
 
-export type Verdict = 'match' | 'possible' | 'near' | 'no';
+/**
+ * `over`: meets every spec, but costs more than the near-miss band (up to
+ * `OVER_BUDGET_PCT` over) — an option kept and price-tracked, never alerted
+ * until its price brings it into budget.
+ */
+export type Verdict = 'match' | 'possible' | 'near' | 'over' | 'no';
 
 export interface ConstraintResult {
   field: SpecField | 'price';
