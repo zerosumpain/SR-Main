@@ -61,6 +61,8 @@ describe('journeyNotice', () => {
     const n = journeyNotice({ trip, stats: { mode: 'train', km: 72, topKmh: 160 }, places, name: 'Rory', recipients: ['k@e.t'], events: [] })!;
     expect(n.push.body).toBe('18 min by train from Home, 45 mi, arrived 08:48. Top speed 99 mph.');
     expect(journeyNotice({ trip, stats: { mode: null, km: 1, topKmh: 5 }, places, name: 'Rory', recipients: ['k@e.t'], events: [] })).toBeNull();
+    const unwatched = journeyNotice({ trip, stats: { mode: 'drive', km: 9.4, topKmh: 84 }, places, name: 'Rory', recipients: ['k@e.t'], events: null })!;
+    expect(unwatched.push.body).toBe('18 min drive from Home, 5.8 mi, arrived 08:48. Top speed 52 mph.');
     expect(journeyNotice({ trip, stats: { mode: 'drive', km: 1, topKmh: 5 }, places, name: 'Rory', recipients: [], events: [] })).toBeNull();
   });
 });

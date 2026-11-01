@@ -251,14 +251,14 @@ export async function ingestCompanion(
         result.rejected++;
         continue;
       }
-      const list = raw.get(subject) ?? [];
-      list.push({ ts: recordedMs, lat: f.lat, lon: f.lon, accuracyM: incoming.accuracyM, speedMs: incoming.speedKmh == null ? null : incoming.speedKmh / 3.6 });
-      raw.set(subject, list);
       const newest = latest.get(subject);
       if (newest && recordedMs <= newest.getTime()) {
         result.skipped++;
         continue;
       }
+      const list = raw.get(subject) ?? [];
+      list.push({ ts: recordedMs, lat: f.lat, lon: f.lon, accuracyM: incoming.accuracyM ?? null, speedMs: incoming.speedKmh == null ? null : incoming.speedKmh / 3.6 });
+      raw.set(subject, list);
       if (newest && recordedMs - newest.getTime() < TRAIL_MIN_SPACING_S * 1000) {
         result.thinned = (result.thinned ?? 0) + 1;
         continue;
@@ -268,7 +268,8 @@ export async function ingestCompanion(
         latest.set(subject, new Date(recordedMs));
         result.written++;
       } catch (err) {
-        if (err instanceof Error && err.name === 'CompanionDeletionFloor') { result.skipped++; continue; }
+        // Before the deletion floor: not kept, so not read for braking either.
+        if (err instanceof Error && err.name === 'CompanionDeletionFloor') { result.skipped++; list.pop(); continue; }
         result.error = `write failed: ${errMsg(err)}`;
         return result;
       }

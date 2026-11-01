@@ -9,9 +9,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
-import { emptyDriveState, foldDriveFixes, type DriveFix, type DriveState } from './drive';
-
-export const driveKey = (subject: string) => `home.presence.drive.${subject}`;
+import { driveKey, emptyDriveState, foldDriveFixes, type DriveFix, type DriveState } from './drive';
 
 /** Fold one ingest page's raw fixes into each person's state. Never throws. */
 export async function recordDriveFixes(bySubject: ReadonlyMap<string, DriveFix[]>): Promise<{ events: number; error?: string }> {

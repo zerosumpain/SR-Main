@@ -28,6 +28,8 @@ export const VEHICLE_KMH = 18;
 export const VEHICLE_SHARE = 1 / 3;
 /** Fixes looser than this are left out of distance and top speed. */
 export const STATS_ACCURACY_M = 50;
+/** A drive is called smooth (or not) only when at least this share of it was watched at 1 Hz (`drive`). */
+export const DRIVE_WATCHED_SHARE = 0.5;
 /** Ends at or leaves a station and goes this far: a train, whatever its speed. */
 export const STATION_TRAIN_KM = 15;
 
@@ -126,7 +128,8 @@ export function drivingLine(events: readonly DriveEvent[]): string {
 export function journeyNotice(input: {
   trip: CompletedTrip;
   stats: TripStats;
-  events: readonly DriveEvent[];
+  /** Null when the drive was not watched closely enough to say (`coverageBetween`). */
+  events: readonly DriveEvent[] | null;
   places: readonly InsightPlace[];
   recipients: readonly string[];
   name: string;
@@ -141,7 +144,7 @@ export function journeyNotice(input: {
   const lines = [
     `${how} from ${from}, ${miles(stats.km)}, arrived ${clockFmt.format(new Date(arrived))}.`,
     stats.topKmh != null ? `Top speed ${Math.round(stats.topKmh * MPH)} mph.` : null,
-    stats.mode === 'drive' ? `${drivingLine(events)}.` : null,
+    stats.mode === 'drive' && events ? `${drivingLine(events)}.` : null,
   ].filter(Boolean);
   const id = `journey-${route.subject}-${arrived}`;
   return {

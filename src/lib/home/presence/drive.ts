@@ -25,6 +25,8 @@ export const CAR_KMH = 25;
 /** Fixes looser than this say nothing about a second's speed change. */
 export const DRIVE_ACCURACY_M = 20;
 export const PAIR_MIN_S = 2;
+/** At or below this (m/s) a speed is taken as unknown: the phone sends an unknown speed as 0. */
+export const MOVING_MS = 0.5;
 export const PAIR_MAX_S = 4;
 export const EVENT_GAP_S = 10;
 /** Raw fixes kept between ingest runs, so a stop across two pages is still seen. */
@@ -58,9 +60,19 @@ export interface DriveState {
   tail: DriveFix[];
   /** Newest last, at most KEEP_EVENTS. */
   events: DriveEvent[];
+  /** `[minute epoch ms, seconds that could be judged]`, newest last, at most
+   *  KEEP_MINUTES: a drive is only called smooth when it was watched (a phone
+   *  on 5 s points, or an old build on 30 s, cannot see a three-second stop). */
+  sampled?: Array<[number, number]>;
 }
 
-export const emptyDriveState = (): DriveState => ({ tail: [], events: [] });
+/** Minutes of coverage kept per person: a day. */
+export const KEEP_MINUTES = 1440;
+
+export const emptyDriveState = (): DriveState => ({ tail: [], events: [], sampled: [] });
+
+/** Where a person's state is kept in app_settings (`drive.server`); erased with their trail. */
+export const driveKey = (subject: string) => `home.presence.drive.${subject}`;
 
 const usable = (f: DriveFix) =>
   f.speedMs != null && f.speedMs >= 0 && f.accuracyM != null && f.accuracyM >= 0 && f.accuracyM <= DRIVE_ACCURACY_M;
@@ -78,20 +90,31 @@ export function foldDriveFixes(state: DriveState, incoming: readonly DriveFix[])
   if (!fresh.length) return { state, added: [] };
   const fixes = [...state.tail, ...fresh];
   const added: DriveEvent[] = [];
+  const sampled: Array<[number, number]> = (state.sampled ?? []).map(([m, n]) => [m, n] as [number, number]);
   const lastOf = (kind: DriveEvent['kind']) =>
     [...state.events, ...added].reverse().find((e) => e.kind === kind);
   for (let i = state.tail.length; i < fixes.length; i++) {
     const b = fixes[i];
     if (!usable(b)) continue;
-    // The partner nearest 3 s back.
-    let best: DriveFix | null = null;
+    // The partner nearest 3 s back: any, for coverage; one with a known
+    // (non-zero) speed, for judging — an unknown speed arrives as 0.
+    let any: DriveFix | null = null, best: DriveFix | null = null;
+    const closer = (x: DriveFix, y: DriveFix | null) => !y || Math.abs((b.ts - x.ts) / 1000 - 3) < Math.abs((b.ts - y.ts) / 1000 - 3);
     for (let j = i - 1; j >= 0; j--) {
       const a = fixes[j], dt = (b.ts - a.ts) / 1000;
       if (dt > PAIR_MAX_S) break;
       if (dt < PAIR_MIN_S || !usable(a)) continue;
-      if (!best || Math.abs(dt - 3) < Math.abs((b.ts - best.ts) / 1000 - 3)) best = a;
+      if (closer(a, any)) any = a;
+      if ((a.speedMs as number) > MOVING_MS && closer(a, best)) best = a;
     }
-    if (!best) continue;
+    if (!any) continue;
+    // Watched: this second could have shown a harsh event (at a standstill
+    // too — a queue is part of the drive).
+    const minute = Math.floor(b.ts / 60_000) * 60_000;
+    const last = sampled.at(-1);
+    if (last && last[0] === minute) last[1]++;
+    else sampled.push([minute, 1]);
+    if (!best || (b.speedMs as number) <= MOVING_MS) continue;
     const dt = (b.ts - best.ts) / 1000;
     const v0 = best.speedMs as number, v1 = b.speedMs as number;
     if (Math.max(v0, v1) * 3.6 < CAR_KMH) continue;
@@ -103,8 +126,8 @@ export function foldDriveFixes(state: DriveState, incoming: readonly DriveFix[])
     const metres = metresBetween(best.lat, best.lon, b.lat, b.lon), expected = ((v0 + v1) / 2) * dt;
     if (Math.abs(metres - expected) > 0.25 * expected + ((best.accuracyM as number) + (b.accuracyM as number)) / 2 + 3) continue;
     const kind = a < 0 ? 'brake' : 'accel';
-    const last = lastOf(kind);
-    if (last && b.ts - Date.parse(last.at) < EVENT_GAP_S * 1000) continue;
+    const prior = lastOf(kind);
+    if (prior && b.ts - Date.parse(prior.at) < EVENT_GAP_S * 1000) continue;
     added.push({
       at: new Date(b.ts).toISOString(), kind, fromKmh: kmh(v0), toKmh: kmh(v1),
       ms2: Math.round(Math.abs(a) * 10) / 10, lat: b.lat, lon: b.lon,
@@ -115,9 +138,19 @@ export function foldDriveFixes(state: DriveState, incoming: readonly DriveFix[])
     state: {
       tail: fixes.filter((f) => newest - f.ts <= TAIL_S * 1000),
       events: [...state.events, ...added].slice(-KEEP_EVENTS),
+      sampled: sampled.slice(-KEEP_MINUTES),
     },
     added,
   };
+}
+
+/** The share of a window's seconds that could be judged (0–1). PURE. */
+export function coverageBetween(state: Pick<DriveState, 'sampled'>, from: number, to: number): number {
+  const span = (to - from) / 1000;
+  if (span <= 0) return 0;
+  let seconds = 0;
+  for (const [minute, n] of state.sampled ?? []) if (minute + 60_000 > from && minute <= to) seconds += n;
+  return Math.min(1, seconds / span);
 }
 
 /** The events inside a trip, oldest first. PURE. */

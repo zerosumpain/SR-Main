@@ -48,3 +48,12 @@ John asked for three Life360-parity changes plus one app nicety:
 | Timing | on arrival crossing; on trip end | trip end (~10 min after arriving) | precedent (`stopNotices`), needs the dwell to know it ended | Yes |
 | Late fix into a gap (server) | accept out-of-order; keep skip | keep skip | phone uploads in order; recorded-order paging fixes the real loss | Yes |
 | Flights, phone use | — | not in v1 | no data source yet | — |
+
+## Review fixes (independent review, 2026-11-01)
+
+- A location hold leaves the held owner out of "arrived safely" (his real trips were being told).
+- The harsh-braking store (`home.presence.drive.<subject>`) is erased with the companion trail (delete-my-data and People erase), and fixes rejected by the deletion floor never enter it.
+- "No harsh braking" is only said for a drive watched at 1 Hz for ≥ 50 % of its seconds (`coverageBetween`); a 5 s or 30 s phone gets no driving line rather than a false all-clear.
+- A pair with an unknown speed (sent as 0) is never judged; braking to a standstill is still caught on the pair before 0.
+- The journey step failing cannot stop the stop / school-late notices.
+- Phone: only one-point batches merge (re-joining a refusal's halves made one bad point block the queue); below car speed points write at once; a hand-set cadence stays that cadence in a car.

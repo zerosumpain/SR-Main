@@ -8,10 +8,10 @@ import { and, asc, eq, gte, isNotNull, lte } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamTrail } from '$lib/db/schema';
 import { pilotRecipients } from './alerts';
-import { eventsBetween } from './drive';
+import { coverageBetween, eventsBetween, type DriveEvent } from './drive';
 import { loadDriveState } from './drive.server';
 import type { InsightPlace, RouteInsight } from './insights';
-import { journeyNotice, recentTrips, tripStats, type JourneyNotice } from './journey-alerts';
+import { DRIVE_WATCHED_SHARE, journeyNotice, recentTrips, tripStats, type JourneyNotice } from './journey-alerts';
 import type { HouseholdMember } from './members';
 
 /** One "arrived safely" per drive or train trip that ended in the stop window. */
@@ -44,7 +44,12 @@ export async function journeyNotices(input: {
       to: places.find((p) => p.id === trip.route.toId),
     });
     if (!stats.mode) continue;
-    const events = stats.mode === 'drive' ? eventsBetween((await loadDriveState(trip.route.subject)).events, trip.left, trip.arrived) : [];
+    let events: DriveEvent[] | null = null;
+    if (stats.mode === 'drive') {
+      const drive = await loadDriveState(trip.route.subject);
+      // Only a drive watched at 1 Hz is called smooth: 5 s points cannot see a stop.
+      if (coverageBetween(drive, trip.left, trip.arrived) >= DRIVE_WATCHED_SHARE) events = eventsBetween(drive.events, trip.left, trip.arrived);
+    }
     const notice = journeyNotice({ trip, stats, events, places, recipients, name: names.get(trip.route.subject) ?? trip.route.person });
     if (notice) out.push(notice);
   }

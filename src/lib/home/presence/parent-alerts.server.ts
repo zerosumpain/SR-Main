@@ -20,6 +20,7 @@ import { loadForecast } from './forecast.server';
 import { listMembers } from './members';
 import { guardiansByChild, schoolLateNotices, stopNotices, type ParentNotice } from './parent-alerts';
 import { journeyNotices } from './journey-alerts.server';
+import { getHold, ownerSubjects } from './location-hold.server';
 import type { JourneyNotice } from './journey-alerts';
 
 /** Notices remembered per child: far more than a day of stops. */
@@ -44,7 +45,10 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
       .orderBy(desc(daydreamTrail.ts)).limit(1);
     if (last?.lat != null && last.lon != null) positions.set(subject, { lat: last.lat, lon: last.lon });
   }));
-  const journeys = await journeyNotices({ routes: insights.routes, places, members, names, now });
+  // Never anyone held (`location-hold`): their real trips must not be told.
+  const held = (await getHold(now)) ? new Set(ownerSubjects(members)) : new Set<string>();
+  const journeys = await journeyNotices({ routes: insights.routes.filter((r) => !held.has(r.subject)), places, members, names, now })
+    .catch((err) => { console.warn('[parent-alerts] journeys:', (err as Error).message); return [] as JourneyNotice[]; });
   const covered = new Map(journeys.map((j) => [j.trip, j.recipients]));
   const notices: Array<ParentNotice | JourneyNotice> = [
     ...journeys,

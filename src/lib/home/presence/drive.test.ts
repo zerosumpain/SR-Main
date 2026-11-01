@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyDriveState, eventsBetween, foldDriveFixes, type DriveFix } from './drive';
+import { coverageBetween, emptyDriveState, eventsBetween, foldDriveFixes, type DriveFix } from './drive';
 
 // A straight road north from (54.5, -1.55): one fix a second at the given
 // speeds (m/s), positions integrated from the speeds so they agree.
@@ -44,6 +44,16 @@ describe('foldDriveFixes', () => {
     const second = foldDriveFixes(first.state, fixes.slice(4));
     expect([...first.added, ...second.added].map((e) => e.kind)).toEqual(['brake']);
     expect(foldDriveFixes(second.state, fixes).added).toEqual([]);
+  });
+});
+
+describe('coverageBetween', () => {
+  it('says how much of a window was watched at one fix a second, and a 5 s phone was not', () => {
+    const start = Date.parse('2026-11-01T08:00:00Z');
+    const { state } = foldDriveFixes(emptyDriveState(), drive(Array(120).fill(14), start));
+    expect(coverageBetween(state, start, start + 120_000)).toBeGreaterThan(0.9);
+    const sparse = drive(Array(120).fill(14), start).filter((_, i) => i % 5 === 0);
+    expect(coverageBetween(foldDriveFixes(emptyDriveState(), sparse).state, start, start + 120_000)).toBe(0);
   });
 });
 
