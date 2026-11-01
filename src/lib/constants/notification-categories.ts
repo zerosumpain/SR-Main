@@ -183,6 +183,19 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     minIntervalSeconds: 0,
   },
   {
+    id: 'drive',
+    label: 'Drive',
+    description: 'Attachments saved from important mail, and what jkai found in them.',
+    // Phone only. Raised by SR-Jkai-Core's mail-filing rules, one per email
+    // (keyed by the message), with an `sr://drive?…` url — and the WhatsApp
+    // text prefixes the site origin onto any url, which turns `sr://` into a
+    // dead link. The entry is byte-identical in Core's catalogue: Core maps an
+    // unknown category to `system`.
+    whatsapp: false,
+    native: true,
+    minIntervalSeconds: 0,
+  },
+  {
     id: 'system',
     label: 'Everything else',
     description: 'Anything that has not been given a category of its own yet.',

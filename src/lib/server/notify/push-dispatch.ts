@@ -142,6 +142,31 @@ export function messageFor(row: LedgerRow): PushMessage {
     };
   }
 
+  // Attachments SR-Jkai-Core's mail rules filed into /drive (build map §2.5).
+  // `sr.alert` because the app already registers it — a `sr.drive` category
+  // would need an app release first. One email's files group under one
+  // thread. The app routes on `url` ALONE (`sr://drive?space=&folder=&file=`):
+  // with private pushes on, only `category` and `url` survive, so `fileId` and
+  // `folder` here are conveniences, never the route.
+  if (row.category === 'drive') {
+    const fileIds = Array.isArray(data.fileIds) ? data.fileIds.filter((v): v is string => typeof v === 'string' && !!v) : [];
+    const fileId = str(data.fileId) ?? (fileIds.length === 1 ? fileIds[0] : undefined);
+    if (fileId) userInfo.fileId = fileId;
+    const folder = str(data.folder);
+    if (folder) userInfo.folder = folder;
+    const loudDrive = row.severity === 'alert';
+    return {
+      title: row.title,
+      body: row.body,
+      category: 'sr.alert',
+      threadId: 'drive',
+      level: loudDrive ? 'active' : 'passive',
+      relevance: loudDrive ? 0.8 : 0.4,
+      collapseId: row.id,
+      userInfo,
+    };
+  }
+
   const connections = row.category === 'connections';
   const loud = row.severity === 'alert' || connections;
   const level: InterruptionLevel = loud ? 'active' : 'passive';
