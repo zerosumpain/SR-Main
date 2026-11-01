@@ -38,6 +38,37 @@ export type AppDriveCaller =
 /** Per file — SR-Drive's limit; checked here too so a refusal is cheap. */
 export const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 
+/** `scripts/server-with-ws.mjs` sets `BODY_SIZE_LIMIT ??= '12M'`; the same default here. */
+const DEFAULT_BODY_LIMIT = '12M';
+
+/**
+ * Main's own request-body limit, in bytes, read the way adapter-node reads
+ * `BODY_SIZE_LIMIT` (a number, optionally K/M/G in powers of 1024; `Infinity`
+ * for none). Unreadable means the default, never "no limit".
+ *
+ * Why the phone needs it: a body over this limit is refused by SvelteKit
+ * before any handler runs, so a 20 MB photo against a 12M limit failed with a
+ * bare 413 instead of the friendly one — the phone believed Drive's 30 MB.
+ */
+export function bodyLimitBytes(raw: string | undefined = process.env.BODY_SIZE_LIMIT): number {
+  const parse = (v: string): number | null => {
+    const t = v.trim();
+    if (/^infinity$/i.test(t)) return Number.POSITIVE_INFINITY;
+    const m = /^(\d+(?:\.\d+)?)\s*([KMG])?$/i.exec(t);
+    if (!m) return null;
+    const mult = { K: 1024, M: 1024 ** 2, G: 1024 ** 3 }[(m[2] ?? '').toUpperCase() as 'K' | 'M' | 'G'] ?? 1;
+    const n = Math.floor(Number(m[1]) * mult);
+    return n > 0 ? n : null;
+  };
+  return (raw ? parse(raw) : null) ?? parse(DEFAULT_BODY_LIMIT)!;
+}
+
+/** The largest file the phone may send through Main: Drive's figure, held to Main's own limits. */
+export function clampUploadBytes(driveValue: number, bodyLimit: number = bodyLimitBytes()): number {
+  const drive = Number.isFinite(driveValue) && driveValue > 0 ? driveValue : MAX_UPLOAD_BYTES;
+  return Math.max(0, Math.min(drive, MAX_UPLOAD_BYTES, bodyLimit));
+}
+
 const APP_FOR_HEADER = 'x-sr-app-for';
 
 /** Who the drive answers, from what the gate set up — never from the request. */
@@ -81,7 +112,7 @@ function refusal(res: RawExtractedResponse): never {
 }
 
 async function call(
-  method: 'GET' | 'POST' | 'DELETE',
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   caller: AppDriveCaller,
   options: { body?: Buffer; contentType?: string; timeoutMs?: number } = {},
@@ -174,23 +205,62 @@ export async function listSpace(caller: AppDriveCaller, space: DriveSpace, folde
   const res = await call('GET', `/api/files/app${query({ space, folder })}`, caller);
   const listing = parse<ListingWire>(res);
   const names = space === 'shared' ? await firstNames(listing.files.map((f) => f.uploadedBy ?? '')) : new Map<string, string>();
-  return { ...listing, files: listing.files.map((f) => forPhone(f, space, names)) };
+  return {
+    ...listing,
+    files: listing.files.map((f) => forPhone(f, space, names)),
+    maxUploadBytes: clampUploadBytes(listing.maxUploadBytes),
+  };
+}
+
+/** `sha256` as Drive accepts it: absent, or 64 hex characters (lower-cased). */
+export function parseSha256(raw: string | null | undefined): string | null | undefined {
+  const v = (raw ?? '').trim().toLowerCase();
+  if (!v) return null;
+  return /^[0-9a-f]{64}$/.test(v) ? v : undefined;
+}
+
+/** `takenAt` as an ISO-looking date-time, or nothing: it only ever names a photo. */
+export function parseTakenAt(raw: string | null | undefined): string | null {
+  const v = (raw ?? '').trim();
+  if (!v || v.length > 40) return null;
+  return /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null;
 }
 
 export async function uploadFile(
   caller: AppDriveCaller,
-  input: { space: DriveSpace; folder: string | null; filename: string | null; mimeType: string; bytes: Buffer },
-): Promise<NativeDriveFile> {
+  input: {
+    space: DriveSpace;
+    folder: string | null;
+    filename: string | null;
+    mimeType: string;
+    bytes: Buffer;
+    /** The phone's hash of the bytes: Drive verifies it, and answers an existing file for the same bytes. */
+    sha256?: string | null;
+    /** When the photo was taken: names an unnamed or `IMG_…` image. */
+    takenAt?: string | null;
+  },
+): Promise<{ file: NativeDriveFile; duplicate: boolean }> {
   if (input.bytes.byteLength === 0) throw error(400, 'The upload was empty.');
   if (input.bytes.byteLength > MAX_UPLOAD_BYTES) {
     throw error(413, `That file is over ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB.`);
   }
-  const path = `/api/files/app/files${query({ space: input.space, folder: input.folder, filename: input.filename, type: input.mimeType })}`;
+  const sha256 = parseSha256(input.sha256);
+  if (sha256 === undefined) throw error(400, 'sha256 must be 64 hex characters.');
+  const path = `/api/files/app/files${query({
+    space: input.space,
+    folder: input.folder,
+    filename: input.filename,
+    type: input.mimeType,
+    sha256,
+    takenAt: parseTakenAt(input.takenAt),
+  })}`;
   // octet-stream on the wire whatever the file is: SvelteKit refuses a
   // text/plain POST without a matching Origin as a cross-site form.
   const res = await call('POST', path, caller, { body: input.bytes, contentType: 'application/octet-stream', timeoutMs: 120_000 });
-  const { file } = parse<{ file: DriveFileWire }>(res);
-  return forPhone(file, input.space, new Map());
+  const { file, duplicate } = parse<{ file: DriveFileWire; duplicate?: boolean }>(res);
+  // 200 + duplicate:true is "already safely stored"; only that or a 201 lets
+  // the phone's "move from phone" delete the original.
+  return { file: forPhone(file, input.space, new Map()), duplicate: duplicate === true && res.status === 200 };
 }
 
 export async function makeFolder(caller: AppDriveCaller, space: DriveSpace, parent: string | null, name: string | null) {
@@ -225,4 +295,158 @@ export async function download(caller: AppDriveCaller, id: string): Promise<Resp
   const disposition = pass('content-disposition');
   headers['Content-Disposition'] = disposition?.startsWith('attachment') ? disposition : 'attachment';
   return new Response(new Uint8Array(res.body), { status: 200, headers });
+}
+
+// ── The phone's Info screen, rename/move, search and jkai (build map §2.2) ──
+
+/**
+ * What jkai concluded about one file (build map §2.3) — the same wire shape in
+ * Drive, here, Core and the app. Passed through as Drive sent it.
+ */
+export interface FileAnalysis {
+  fileId: string;
+  contentHash: string | null;
+  source: 'drive' | 'mail-rule';
+  model: string;
+  summary: string;
+  docType: string;
+  keyFacts: { label: string; value: string }[];
+  dates: { label: string; date: string }[];
+  amounts: { label: string; value: number; currency: string }[];
+  actionNeeded: string | null;
+  createdAt: string;
+}
+
+export interface IntelStatus {
+  status: string;
+  outcome: string | null;
+  entityCount: number;
+  attempts?: number;
+  error?: string | null;
+}
+
+interface MetaWire {
+  file: DriveFileWire & { folder: string; description: string | null };
+  analysis: FileAnalysis | null;
+  intel: { status: string; outcome: string | null; entityCount: number } | null;
+  mail: { from: string; subject: string | null; receivedAt: string } | null;
+}
+
+export interface NativeDriveMeta {
+  file: NativeDriveFile & { folder: string; description: string | null };
+  analysis: FileAnalysis | null;
+  intel: { status: string; outcome: string | null; entityCount: number } | null;
+  mail: { from: string; subject: string | null; receivedAt: string } | null;
+}
+
+const OWNER_ONLY_JKAI = 'Only the owner can use jkai on files.';
+
+/** jkai on files is the owner's, from his own phone — never a member's, nor the owner viewing as one. */
+function requireOwner(caller: AppDriveCaller): void {
+  if (caller.kind !== 'owner') throw error(403, OWNER_ONLY_JKAI);
+}
+
+/** A sender as the phone may show them: a name, or the domain — never the address. */
+export function senderForPhone(from: string): string {
+  const v = (from ?? '').trim();
+  if (!v.includes('@')) return v.slice(0, 120) || 'Unknown sender';
+  const domain = v.split('@').pop()?.replace(/[>\s].*$/, '').trim();
+  return domain || 'Unknown sender';
+}
+
+async function namesFor(space: DriveSpace, files: DriveFileWire[]): Promise<Map<string, string>> {
+  return space === 'shared' ? firstNames(files.map((f) => f.uploadedBy ?? '')) : new Map<string, string>();
+}
+
+/** GET files/:id/meta — Drive decides what a member sees; Main still never passes jkai fields to one. */
+export async function fileMeta(caller: AppDriveCaller, id: string, space: DriveSpace): Promise<NativeDriveMeta> {
+  const res = await call('GET', `/api/files/app/files/${encodeURIComponent(id)}/meta${query({ space })}`, caller);
+  const meta = parse<MetaWire>(res);
+  const names = await namesFor(space, [meta.file]);
+  const file = forPhone(meta.file, space, names) as NativeDriveMeta['file'];
+  if (caller.kind !== 'owner') return { file, analysis: null, intel: null, mail: null };
+  return {
+    file,
+    analysis: meta.analysis ?? null,
+    intel: meta.intel ?? null,
+    mail: meta.mail ? { from: senderForPhone(meta.mail.from), subject: meta.mail.subject ?? null, receivedAt: meta.mail.receivedAt } : null,
+  };
+}
+
+/** PATCH files/:id `{space, name?, folder?}` — rename and/or move within the space. */
+export async function renameOrMove(
+  caller: AppDriveCaller,
+  id: string,
+  input: { space: DriveSpace; name?: string | null; folder?: string | null },
+): Promise<{ file: NativeDriveFile }> {
+  const name = typeof input.name === 'string' ? input.name.trim() : null;
+  const folder = typeof input.folder === 'string' ? input.folder : null;
+  if (!name && folder === null) throw error(400, 'Say a new name or a folder.');
+  if (name && name.length > 255) throw error(400, 'That name is too long.');
+  const body: Record<string, string> = { space: input.space };
+  if (name) body.name = name;
+  if (folder !== null) body.folder = folder;
+  const res = await call('PATCH', `/api/files/app/files/${encodeURIComponent(id)}`, caller, {
+    body: Buffer.from(JSON.stringify(body)),
+    contentType: 'application/json',
+  });
+  const { file } = parse<{ file: DriveFileWire }>(res);
+  return { file: forPhone(file, input.space, await namesFor(input.space, [file])) };
+}
+
+export const SEARCH_MAX_QUERY = 200;
+
+/** GET search — names for everyone; contents hits for the owner, in his own space only. */
+export async function searchSpace(caller: AppDriveCaller, space: DriveSpace, rawQ: string | null) {
+  const q = (rawQ ?? '').trim();
+  if (!q) throw error(400, 'Say what to look for.');
+  if (q.length > SEARCH_MAX_QUERY) throw error(400, `Keep the search under ${SEARCH_MAX_QUERY} characters.`);
+  const res = await call('GET', `/api/files/app/search${query({ space, q })}`, caller, { timeoutMs: 20_000 });
+  const wire = parse<{ files: DriveFileWire[]; semantic?: { file: DriveFileWire; score: number; passage: string }[] }>(res);
+  const files = (wire.files ?? []).slice(0, 100);
+  const semanticWire = caller.kind === 'owner' && space === 'mine' ? (wire.semantic ?? []) : [];
+  const names = await namesFor(space, [...files, ...semanticWire.map((s) => s.file)]);
+  const out: {
+    files: NativeDriveFile[];
+    semantic?: { file: NativeDriveFile; score: number; passage: string }[];
+  } = { files: files.map((f) => forPhone(f, space, names)) };
+  if (caller.kind === 'owner' && space === 'mine') {
+    out.semantic = semanticWire.map((s) => ({
+      file: forPhone(s.file, space, names),
+      score: s.score,
+      passage: String(s.passage ?? '').slice(0, 300),
+    }));
+  }
+  return out;
+}
+
+/** POST files/:id/analyse `{refresh?}` — jkai's summary. Owner only; the model call can take a while. */
+export async function analyseFile(caller: AppDriveCaller, id: string, refresh: boolean): Promise<FileAnalysis> {
+  requireOwner(caller);
+  const res = await call('POST', `/api/files/app/files/${encodeURIComponent(id)}/analyse`, caller, {
+    body: Buffer.from(JSON.stringify({ refresh: refresh === true })),
+    contentType: 'application/json',
+    timeoutMs: 120_000,
+  });
+  return parse<FileAnalysis>(res);
+}
+
+/** POST files/:id/intel — queue "Extract entities". Owner only; Drive answers 202. */
+export async function intelFile(caller: AppDriveCaller, id: string): Promise<{ jobId: number; status: 'queued' }> {
+  requireOwner(caller);
+  const res = await call('POST', `/api/files/app/files/${encodeURIComponent(id)}/intel`, caller, {
+    body: Buffer.from('{}'),
+    contentType: 'application/json',
+    timeoutMs: 75_000,
+  });
+  const { jobId, status } = parse<{ jobId: number; status: 'queued' }>(res);
+  return { jobId, status };
+}
+
+/** GET files/:id/intel?job= — that job's state. Owner only; never the note id. */
+export async function intelStatus(caller: AppDriveCaller, id: string, job: number | null): Promise<IntelStatus> {
+  requireOwner(caller);
+  const res = await call('GET', `/api/files/app/files/${encodeURIComponent(id)}/intel${query({ job: job === null ? null : String(job) })}`, caller);
+  const { noteId: _noteId, ...rest } = parse<IntelStatus & { noteId?: unknown }>(res);
+  return rest;
 }
