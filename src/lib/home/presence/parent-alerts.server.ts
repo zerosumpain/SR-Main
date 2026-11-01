@@ -1,7 +1,9 @@
 // src/lib/home/presence/parent-alerts.server.ts
 //
 // Sends ./parent-alerts' notices: a child stopped somewhere, a child not at
-// school when they usually are. Runs on every home-observe (120 s), after the
+// school when they usually are — and ./journey-alerts' "arrived safely" after
+// anyone's drive or train journey, to everyone who follows them, which
+// replaces the "stopped" a guardian would have had for that trip. Runs on every home-observe (120 s), after the
 // stops of that run are discovered, so a new spot is already a place.
 //
 // Push only, no app pull queue: these are worth a banner now or not at all.
@@ -17,6 +19,8 @@ import { pushToEmails } from '$lib/server/push-devices';
 import { loadForecast } from './forecast.server';
 import { listMembers } from './members';
 import { guardiansByChild, schoolLateNotices, stopNotices, type ParentNotice } from './parent-alerts';
+import { journeyNotices } from './journey-alerts.server';
+import type { JourneyNotice } from './journey-alerts';
 
 /** Notices remembered per child: far more than a day of stops. */
 const KEEP = 60;
@@ -27,7 +31,6 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
   if (!isApnsConfigured()) return { sent: 0, owed: 0 };
   const members = await listMembers();
   const guardians = guardiansByChild(members);
-  if (!guardians.size) return { sent: 0, owed: 0 };
   const [{ forecast, insights, cal }, places] = await Promise.all([
     loadForecast({ kind: 'owner' }, 28, null, now),
     db.select().from(daydreamPlaces).where(eq(daydreamPlaces.status, 'active')),
@@ -41,8 +44,11 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
       .orderBy(desc(daydreamTrail.ts)).limit(1);
     if (last?.lat != null && last.lon != null) positions.set(subject, { lat: last.lat, lon: last.lon });
   }));
-  const notices: ParentNotice[] = [
-    ...stopNotices({ routes: insights.routes, places, guardians, names, now }),
+  const journeys = await journeyNotices({ routes: insights.routes, places, members, names, now });
+  const covered = new Map(journeys.map((j) => [j.trip, j.recipients]));
+  const notices: Array<ParentNotice | JourneyNotice> = [
+    ...journeys,
+    ...stopNotices({ routes: insights.routes, places, guardians, names, now, covered }),
     ...schoolLateNotices({ routines: forecast.routines, live: insights.live, places, guardians, names, cal, now, positions }),
   ];
   let sent = 0, owed = 0;
