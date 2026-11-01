@@ -314,9 +314,9 @@ export async function runThink(
       const { situationCard } = await import('./situation.server');
       const text = await situationCard(now).catch(() => null);
       if (text) toolbox.seed('situation', { at: today }, text);
-      // The household's forecast day and patterns (`movement.ts`): its own
+      // The household's forecast day and patterns (`$lib/owner-data/household.ts`): its own
       // card, so it has its own CARD_CHARS and is cited on its own.
-      const { movementCard } = await import('./movement.server');
+      const { movementCard } = await import('$lib/owner-data/household.server');
       const household = await movementCard(now).catch(() => null);
       if (household?.length) toolbox.seed('household', { at: today }, household.join('\n'));
     }

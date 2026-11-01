@@ -55,6 +55,7 @@ import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { compareDaysDescription, createCorrelator, createDayComparer, correlateDescription, type LedgerSession } from './correlate';
 import { HUB_SECTIONS, activitiesTool, healthHubTool, healthSeriesDescription, healthSeriesTool } from './health';
 import { chatThreadsTool, diaryTool, mailFactsTool, spendTool } from './reads';
+import { MOVEMENT_SECTIONS } from '$lib/owner-data/household';
 import { isResearchChannel, type Channel } from './questions';
 import { errMsg } from '../types';
 
@@ -249,7 +250,7 @@ const LOCAL_DEFINITIONS: Record<LocalTool, () => ToolDefinition['function']> = {
     parameters: {
       type: 'object',
       properties: {
-        section: { type: 'string', enum: ['summary', 'person', 'forecast', 'steps', 'together', 'habits'], description: 'Default "summary".' },
+        section: { type: 'string', enum: [...MOVEMENT_SECTIONS], description: 'Default "summary".' },
         person: { type: 'string', description: 'For section "person": their name.' },
       },
     },
@@ -305,7 +306,7 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
       case 'activities':
         return activitiesTool(args);
       case 'household_patterns': {
-        const { householdPatternsTool } = await import('./movement.server');
+        const { householdPatternsTool } = await import('$lib/owner-data/household.server');
         return householdPatternsTool(args, opts.now);
       }
     }

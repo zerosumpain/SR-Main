@@ -1,13 +1,15 @@
-// src/lib/daydream/think/movement.server.ts
+// src/lib/owner-data/household.server.ts
 //
-// Gathering the household's movement for the think loop (`movement.ts`): the
-// nightly patterns report, the live forecast and the forecast's own scorecard.
+// Gathering the household's movement for the think loop and chat
+// (`household.ts`): the nightly patterns report and its month history, the
+// live forecast, the forecast's own scorecard and the weekly digest.
 // Every read is soft, as on the situation card: one that fails is "unknown"
 // in the text and costs the cycle nothing. The forecast is read as the OWNER
 // (`{ kind: 'owner' }`, as the watch and parent alerts read it) — the think
-// loop is his, and only a PRIVATE cycle ever calls this.
+// loop is his, and only a PRIVATE cycle ever calls this; chat's tools are
+// owner-only (`chat-tools.ts`).
 
-import { renderMovement, movementCardLines, MOVEMENT_SECTIONS, type MovementInputs, type MovementSection } from './movement';
+import { renderMovement, movementCardLines, MOVEMENT_SECTIONS, type MovementInputs, type MovementSection } from './household';
 
 const soft = async <T>(p: Promise<T>): Promise<T | null> => {
   try {
@@ -18,22 +20,28 @@ const soft = async <T>(p: Promise<T>): Promise<T | null> => {
 };
 
 export async function loadMovement(now = new Date()): Promise<MovementInputs> {
-  const [{ loadPatterns }, { loadForecast }, { loadScorecard }, { listMembers }] = await Promise.all([
+  const [{ loadPatterns, loadHistory }, { loadForecast }, { loadScorecard }, { loadDigest }, { listMembers }, { historyView }] = await Promise.all([
     import('$lib/home/presence/patterns.server'),
     import('$lib/home/presence/forecast.server'),
     import('$lib/home/presence/forecast-eval.server'),
+    import('$lib/home/presence/forecast-digest.server'),
     import('$lib/home/presence/members'),
+    import('$lib/home/presence/patterns-history'),
   ]);
-  const [report, read, stored, roster] = await Promise.all([
+  const [report, read, stored, digest, history, roster] = await Promise.all([
     soft(loadPatterns()),
     soft(loadForecast({ kind: 'owner' }, 28, null, now)),
     soft(loadScorecard()),
+    soft(loadDigest()),
+    soft(loadHistory()),
     soft(listMembers()),
   ]);
   return {
     report,
     forecast: read?.forecast ?? null,
     scorecard: stored?.latest ?? null,
+    digest,
+    history: history ? historyView(history) : null,
     names: Object.fromEntries((roster ?? []).map((m) => [m.subject, m.displayName])),
   };
 }

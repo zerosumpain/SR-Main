@@ -88,6 +88,8 @@ const TIERS: Record<string, { effect: string; confirm: string }> = {
   health_hub: { effect: 'read', confirm: 'never' },
   health_series: { effect: 'read', confirm: 'never' },
   health_activities: { effect: 'read', confirm: 'never' },
+  household_patterns: { effect: 'read', confirm: 'never' },
+  household_daily: { effect: 'read', confirm: 'never' },
   trip_list: { effect: 'read', confirm: 'never' },
   trip_get: { effect: 'read', confirm: 'never' },
   trip_thread: { effect: 'read', confirm: 'never' },
@@ -127,7 +129,7 @@ describe('slice 7a domain tools', () => {
       expect((MEMBER_FORBIDDEN_TOOLSETS as readonly string[]).includes(t.toolset), `${name} in ${t.toolset}`).toBe(true);
       expect(t.surfaces).toEqual(['chat', 'app']);
     }
-    expect(new Set(NAMES.map((n) => tool(n).toolset))).toEqual(new Set(['money', 'apple-calendar', 'health', 'trips', 'captures', 'daydream']));
+    expect(new Set(NAMES.map((n) => tool(n).toolset))).toEqual(new Set(['money', 'apple-calendar', 'health', 'people', 'trips', 'captures', 'daydream']));
   });
 
   it('names each tool once', () => {

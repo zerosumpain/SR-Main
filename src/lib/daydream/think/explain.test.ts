@@ -92,3 +92,10 @@ describe('noteStage', () => {
     expect(noteStage({ verdict: 'useful', build: { status: 'shipped', accepted: true } }).stage).toBe('result');
   });
 });
+
+describe('describeSource household_patterns', () => {
+  it('names its source plainly on the explain page', () => {
+    expect(describeSource('household_patterns', { section: 'forecast' }).label).toBe('Household forecast');
+    expect(describeSource('household_patterns', { section: 'person', person: 'Alex' })).toEqual({ label: 'Household movement patterns', detail: 'person · Alex' });
+  });
+});
