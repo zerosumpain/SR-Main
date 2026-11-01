@@ -18,7 +18,7 @@
 // first names from the household roster, and the emails are dropped — a
 // phone never receives anyone's address.
 
-import { error, isHttpError } from '@sveltejs/kit';
+import { error, isHttpError, json } from '@sveltejs/kit';
 import { inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { householdMember } from '$lib/db/schema';
@@ -111,15 +111,17 @@ function refusal(res: RawExtractedResponse): never {
   throw error(status === 401 ? 502 : status, message);
 }
 
-async function call(
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+type CallOptions = { body?: Buffer; contentType?: string; timeoutMs?: number };
+
+/** One request to Drive, answered with any status; only an unreachable Drive throws (502). */
+async function send(
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   caller: AppDriveCaller,
-  options: { body?: Buffer; contentType?: string; timeoutMs?: number } = {},
+  options: CallOptions = {},
 ): Promise<RawExtractedResponse> {
-  let res: RawExtractedResponse;
   try {
-    res = await requestExtracted('drive', method, path, {
+    return await requestExtracted('drive', method, path, {
       // `accept` decides how SvelteKit renders Drive's `error()`: without it a
       // refusal comes back as an HTML page, and the phone heard "Drive is not
       // answering" for a 404 or a 400 that had a sentence of its own.
@@ -136,6 +138,15 @@ async function call(
     console.error('[native-drive] Drive unreachable:', (err as Error).message);
     throw error(502, 'Drive is not answering. Try again.');
   }
+}
+
+async function call(
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  path: string,
+  caller: AppDriveCaller,
+  options: CallOptions = {},
+): Promise<RawExtractedResponse> {
+  const res = await send(method, path, caller, options);
   if (res.status < 200 || res.status >= 300) refusal(res);
   return res;
 }
@@ -173,6 +184,9 @@ interface ListingWire {
   files: DriveFileWire[];
   usage: { bytes: number; quotaBytes: number | null };
   maxUploadBytes: number;
+  /** Chunked uploads (a Drive that has them): the largest file, and the piece size. */
+  maxLargeUploadBytes?: number;
+  chunkBytes?: number;
 }
 
 /** First names for the shared folder's "added by", from the household roster. */
@@ -205,11 +219,33 @@ export async function listSpace(caller: AppDriveCaller, space: DriveSpace, folde
   const res = await call('GET', `/api/files/app${query({ space, folder })}`, caller);
   const listing = parse<ListingWire>(res);
   const names = space === 'shared' ? await firstNames(listing.files.map((f) => f.uploadedBy ?? '')) : new Map<string, string>();
+  const { maxLargeUploadBytes, chunkBytes, ...rest } = listing;
   return {
-    ...listing,
+    ...rest,
     files: listing.files.map((f) => forPhone(f, space, names)),
     maxUploadBytes: clampUploadBytes(listing.maxUploadBytes),
+    ...chunkedLimits(maxLargeUploadBytes, chunkBytes),
   };
+}
+
+/** The most Main relays in one chunk PUT: the contract's 8 MiB piece. */
+export const MAX_CHUNK_BYTES = 8 * 1024 * 1024;
+
+const positiveInt = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
+
+/**
+ * The chunked lane's figures for the phone, or nothing. Their absence is how
+ * the app knows the lane is unavailable — an older Drive that does not send
+ * them, or a piece Main could not relay (over 8 MiB or over its body limit).
+ */
+export function chunkedLimits(
+  maxLargeUploadBytes: unknown,
+  chunkBytes: unknown,
+  bodyLimit: number = bodyLimitBytes(),
+): { maxLargeUploadBytes?: number; chunkBytes?: number } {
+  if (!positiveInt(maxLargeUploadBytes) || !positiveInt(chunkBytes)) return {};
+  if (chunkBytes > Math.min(MAX_CHUNK_BYTES, bodyLimit)) return {};
+  return { maxLargeUploadBytes, chunkBytes };
 }
 
 /** `sha256` as Drive accepts it: absent, or 64 hex characters (lower-cased). */
@@ -449,4 +485,174 @@ export async function intelStatus(caller: AppDriveCaller, id: string, job: numbe
   const res = await call('GET', `/api/files/app/files/${encodeURIComponent(id)}/intel${query({ job: job === null ? null : String(job) })}`, caller);
   const { noteId: _noteId, ...rest } = parse<IntelStatus & { noteId?: unknown }>(res);
   return rest;
+}
+
+// ── Resumable chunked uploads (chunked-uploads contract, "Main relays") ──
+//
+// Above the single-shot limit the phone opens a session, sends 8 MiB pieces at
+// `offset=received`, and completes. Main relays each step unchanged to Drive's
+// /api/files/app/uploads; Drive stages, verifies the hash and stores. These
+// relays answer a Response rather than throwing: a 409 carries `received` (where
+// the phone resumes), which `withNativeAccess`'s `{error}` mapping would drop.
+
+/** Drive's upload ids: 32 random hex. Anything else is no session, before Drive is asked. */
+export function parseUploadId(raw: string | null | undefined): string | null {
+  const v = (raw ?? '').trim().toLowerCase();
+  return /^[0-9a-f]{32}$/.test(v) ? v : null;
+}
+
+const NO_SESSION = 'That upload is not there any more. Start it again.';
+
+function uploadPath(id: string, tail = ''): string {
+  return `/api/files/app/uploads/${encodeURIComponent(id)}${tail}`;
+}
+
+/**
+ * Drive's refusal as the phone hears every other one — `{error}` in Drive's
+ * words and status — plus `received` when Drive sent it. A 401 is the service
+ * lane's, never the phone's, so it is a 502.
+ */
+function uploadRefusal(res: RawExtractedResponse): Response {
+  let message = 'Drive is not answering. Try again.';
+  let received: number | undefined;
+  try {
+    const body = JSON.parse(res.body.toString('utf8')) as { message?: string; error?: string; received?: unknown };
+    message = body.message || body.error || message;
+    if (typeof body.received === 'number' && Number.isSafeInteger(body.received) && body.received >= 0) received = body.received;
+  } catch {
+    /* keep the plain sentence */
+  }
+  const status = res.status >= 400 && res.status < 600 && res.status !== 401 ? res.status : 502;
+  return json(received === undefined ? { error: message } : { error: message, received }, { status });
+}
+
+async function relay(
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  path: string,
+  caller: AppDriveCaller,
+  options: CallOptions = {},
+): Promise<{ res: RawExtractedResponse } | { refused: Response }> {
+  const res = await send(method, path, caller, options);
+  if (res.status < 200 || res.status >= 300) return { refused: uploadRefusal(res) };
+  return { res };
+}
+
+interface UploadSessionWire {
+  uploadId: string;
+  received: number;
+  size: number;
+  chunkBytes: number;
+  expiresAt: string;
+}
+
+function sessionForPhone(s: UploadSessionWire): UploadSessionWire {
+  return { uploadId: s.uploadId, received: s.received, size: s.size, chunkBytes: s.chunkBytes, expiresAt: s.expiresAt };
+}
+
+/** A stored file, as the single-shot upload answers it: 201 new, 200 + duplicate:true already there. */
+function storedForPhone(res: RawExtractedResponse, space: DriveSpace): Response {
+  const { file, duplicate } = parse<{ file: DriveFileWire; duplicate?: boolean }>(res);
+  const dup = duplicate === true && res.status === 200;
+  return json({ file: forPhone(file, space, new Map()), duplicate: dup }, { status: dup ? 200 : 201 });
+}
+
+export interface StartUploadInput {
+  space: DriveSpace;
+  folder: unknown;
+  filename: unknown;
+  type: unknown;
+  size: unknown;
+  sha256: unknown;
+  takenAt?: unknown;
+}
+
+/**
+ * POST uploads — open a session. 201 the session; 200 `{file, duplicate:true}`
+ * when these bytes are already in the space (nothing to send). Drive decides
+ * the limits (413), its disk (507) and how many sessions are open (429).
+ */
+export async function startUpload(caller: AppDriveCaller, input: StartUploadInput): Promise<Response> {
+  const size = input.size;
+  if (!positiveInt(size)) throw error(400, 'size must be a whole number of bytes.');
+  const sha256 = parseSha256(typeof input.sha256 === 'string' ? input.sha256 : null);
+  if (!sha256) throw error(400, 'sha256 must be 64 hex characters.');
+  const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
+  const body: Record<string, unknown> = {
+    folder: str(input.folder, 1024),
+    filename: str(input.filename, 255),
+    type: str(input.type, 120) || 'application/octet-stream',
+    size,
+    sha256,
+  };
+  const takenAt = parseTakenAt(typeof input.takenAt === 'string' ? input.takenAt : null);
+  if (takenAt) body.takenAt = takenAt;
+  const out = await relay('POST', `/api/files/app/uploads${query({ space: input.space })}`, caller, {
+    body: Buffer.from(JSON.stringify(body)),
+    contentType: 'application/json',
+  });
+  if ('refused' in out) return out.refused;
+  if (out.res.status === 200) return storedForPhone(out.res, input.space);
+  return json(sessionForPhone(parse<UploadSessionWire>(out.res)), { status: 201 });
+}
+
+/** GET uploads/:id — how far it got. 404 for unknown, expired, or not this caller's. */
+export async function uploadStatus(caller: AppDriveCaller, rawId: string, space: DriveSpace): Promise<Response> {
+  const id = parseUploadId(rawId);
+  if (!id) throw error(404, NO_SESSION);
+  const out = await relay('GET', `${uploadPath(id)}${query({ space })}`, caller);
+  if ('refused' in out) return out.refused;
+  return json(sessionForPhone(parse<UploadSessionWire>(out.res)));
+}
+
+/** PUT uploads/:id?offset= — one piece, relayed unchanged. 409 `{received}` when the offset is not where Drive is. */
+export async function putChunk(
+  caller: AppDriveCaller,
+  rawId: string,
+  input: { space: DriveSpace; offset: string | null; bytes: Buffer },
+): Promise<Response> {
+  const id = parseUploadId(rawId);
+  if (!id) throw error(404, NO_SESSION);
+  const offset = Number(input.offset ?? '');
+  if (input.offset === null || input.offset.trim() === '' || !Number.isSafeInteger(offset) || offset < 0) {
+    throw error(400, 'offset must be a whole number of bytes.');
+  }
+  if (input.bytes.byteLength === 0) throw error(400, 'The piece was empty.');
+  if (input.bytes.byteLength > MAX_CHUNK_BYTES) throw error(413, `A piece is at most ${MAX_CHUNK_BYTES / 1024 / 1024} MB.`);
+  const out = await relay('PUT', `${uploadPath(id)}${query({ space: input.space, offset: String(offset) })}`, caller, {
+    body: input.bytes,
+    contentType: 'application/octet-stream',
+    timeoutMs: 120_000,
+  });
+  if ('refused' in out) return out.refused;
+  const { received } = parse<{ received: number }>(out.res);
+  return json({ received });
+}
+
+/** DELETE uploads/:id — give up; Drive removes the staged bytes. */
+export async function cancelUpload(caller: AppDriveCaller, rawId: string, space: DriveSpace): Promise<Response> {
+  const id = parseUploadId(rawId);
+  if (!id) throw error(404, NO_SESSION);
+  const out = await relay('DELETE', `${uploadPath(id)}${query({ space })}`, caller);
+  if ('refused' in out) return out.refused;
+  return json({ ok: true });
+}
+
+/**
+ * POST uploads/:id/complete — Drive hashes the staged file and stores it.
+ * 201 `{file, duplicate:false}` or 200 `{file, duplicate:true}` (also a repeat
+ * complete): only those let "move from phone" delete the original. 409
+ * `{received}` when pieces are missing; 422 when the hash did not match.
+ * Streaming a 4 GiB file into the store takes minutes, hence the long wait —
+ * and a timed-out complete is safe to repeat.
+ */
+export async function completeUpload(caller: AppDriveCaller, rawId: string, space: DriveSpace): Promise<Response> {
+  const id = parseUploadId(rawId);
+  if (!id) throw error(404, NO_SESSION);
+  const out = await relay('POST', `${uploadPath(id, '/complete')}${query({ space })}`, caller, {
+    body: Buffer.from('{}'),
+    contentType: 'application/json',
+    timeoutMs: 600_000,
+  });
+  if ('refused' in out) return out.refused;
+  return storedForPhone(out.res, space);
 }
