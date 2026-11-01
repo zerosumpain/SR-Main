@@ -117,7 +117,7 @@
         "zerosumpain/SR-DfE-Data-Strategy",
         "zerosumpain/SR-Data-Standard-Designer"
       ],
-      "sha256": "453630c914d4a57b45f12c767f7abf947d1d1cc434bdac6c68d0eb16e45ada21"
+      "sha256": "47e0c0cf5c757638627fe8a86d2add58c5dd8653f3d4641609f0138bcb3d307b"
     },
     "src/lib/llm/client.ts": {
       "peer": [
@@ -127,7 +127,7 @@
         "zerosumpain/SR-DfE-Data-Strategy",
         "zerosumpain/SR-Data-Standard-Designer"
       ],
-      "sha256": "8b34dee5cd4518f933615e06385f8c7a470007df0da00125c42580f5745e3551"
+      "sha256": "af7211c05eecc7c428abc0b9c012101fff46a5da2601cb18ba3a8376f7145a6a"
     },
     "src/lib/datastore/permissions.ts": {
       "peer": [

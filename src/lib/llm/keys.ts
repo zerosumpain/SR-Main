@@ -97,7 +97,8 @@ export async function getOpenRouterClient(): Promise<OpenAI> {
   return installUsageCapture(
     new OpenAI({
       apiKey,
-      baseURL: 'https://openrouter.ai/api/v1',
+      // The same override as $lib/llm/client's `openRouterBaseUrl` (local stub stacks only).
+      baseURL: process.env.OPENROUTER_BASE_URL?.trim() || 'https://openrouter.ai/api/v1',
     }),
     'openrouter',
   );
