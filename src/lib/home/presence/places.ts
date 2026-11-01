@@ -24,7 +24,7 @@ import { and, asc, eq, gte, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import { db, type DbExecutor } from '$lib/db';
 import { daydreamPlaces, daydreamTrail, jkaiMemories } from '$lib/db/schema';
 import { clusterPointsYielding, clusterRadiusM, median, metresBetween, segmentVisits } from './cluster';
-import { RADIUS_MAX_M, RADIUS_MIN_M, validPlaceGeometry } from './geo';
+import { RADIUS_MAX_M, RADIUS_MIN_M, enclosingCircle, validPlaceGeometry } from './geo';
 import {
   CLUSTER_RADIUS_M,
   LOCAL_TZ,
@@ -626,6 +626,59 @@ export async function confirmPlace(
       .returning({ id: daydreamThoughts.id });
 
     return { memoryId: memory.id, thoughtsResolved: resolved.length };
+  });
+}
+
+/** A merged-in stop's own circle counts for this much at most: the 200 m a
+ *  nameless cluster is born with says nothing about where anyone stood. */
+const MERGE_SOURCE_RADIUS_M = 60;
+
+/**
+ * Fold `sourceIds` into `targetId`: one place where the trail found several —
+ * the rides of one theme park, two clusters either side of one shopping park,
+ * an unnamed shadow of a named café. The sources become `merged` (pointing at
+ * the target, never deleted), their trail rows and open thoughts move to the
+ * target, and the target's circle grows to hold them (`'enclose'`) or stays as
+ * drawn (`'keep'`), PINNED either way so the refresh cannot shrink it back
+ * and re-find the sources. Crossing history (`household_event`, journeys) is
+ * left as it happened, by design. The caller names the target (`namePlace`,
+ * `confirmPlace`). OWNER ONLY: the caller checks.
+ */
+export async function mergePlaces(
+  targetId: string,
+  sourceIds: string[],
+  geometry: 'enclose' | 'keep',
+): Promise<{ merged: number; lat: number; lon: number; radiusM: number }> {
+  const ids = [...new Set(sourceIds)].filter((id) => id !== targetId);
+  if (!ids.length) throw new Error('nothing to merge');
+  return db.transaction(async (tx) => {
+    const rows = await tx.select().from(daydreamPlaces).where(inArray(daydreamPlaces.id, [targetId, ...ids]));
+    const target = rows.find((r) => r.id === targetId);
+    if (!target || target.status !== 'active') throw new Error('the place to merge into is not active');
+    const sources = rows.filter((r) => r.id !== targetId && r.status === 'active');
+    if (sources.length !== ids.length) throw new Error('every place merged in must exist and be active');
+    if (sources.some((r) => r.kind === 'home' && r.label)) throw new Error('a home is never merged away');
+    const geo = geometry === 'keep'
+      ? { lat: target.lat, lon: target.lon, radiusM: target.radiusM }
+      : enclosingCircle([
+          { lat: target.lat, lon: target.lon, radiusM: target.radiusM },
+          ...sources.map((r) => ({ lat: r.lat, lon: r.lon, radiusM: Math.min(r.radiusM, MERGE_SOURCE_RADIUS_M) })),
+        ]);
+    const bad = validPlaceGeometry(geo.lat, geo.lon, geo.radiusM);
+    if (bad) throw new Error(bad);
+    const now = new Date();
+    await tx.update(daydreamPlaces).set({ status: 'merged', mergedIntoId: targetId, updatedAt: now }).where(inArray(daydreamPlaces.id, ids));
+    await tx.update(daydreamTrail).set({ placeId: targetId }).where(inArray(daydreamTrail.placeId, ids));
+    const { daydreamThoughts } = await import('$lib/db/schema');
+    await tx.update(daydreamThoughts).set({ placeId: targetId, updatedAt: now }).where(inArray(daydreamThoughts.placeId, ids));
+    const moved = geo.lat !== target.lat || geo.lon !== target.lon;
+    await tx.update(daydreamPlaces).set({
+      lat: geo.lat, lon: geo.lon, radiusM: geo.radiusM, radiusPinned: true, updatedAt: now,
+      // A moved centre makes the map's address guess about somewhere else.
+      ...(moved ? { suggestedLabel: null, suggestedAddress: null, suggestedKind: null, suggestedProvider: null, suggestedPrecision: null, suggestedAt: null } : {}),
+    }).where(eq(daydreamPlaces.id, targetId));
+    trailChanged();
+    return { merged: sources.length, ...geo };
   });
 }
 

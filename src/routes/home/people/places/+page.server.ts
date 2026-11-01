@@ -16,6 +16,7 @@ import {
   ignorePlace,
   isPlaceKind,
   listPanelPlaces,
+  mergePlaces,
   namePlace,
   updatePlaceAlerts,
   updatePlaceGeometry,
@@ -116,6 +117,29 @@ export const actions: Actions = {
     try { await confirmPlace(placeId, label, kind); }
     catch { return { saved: placeId, note: 'Name saved; memory will need updating later.' }; }
     return { saved: placeId };
+  },
+  /** Several places that are one: folded into `targetId` and named. No button
+   *  yet — the owner's assistant calls it with a list of decisions. */
+  merge: async (event) => {
+    if (!(await isOwnerRequest(event))) return OWNER_ONLY();
+    const form = await event.request.formData();
+    const targetId = String(form.get('targetId') ?? '').trim();
+    const sourceIds = String(form.get('sourceIds') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const geometry = form.get('geometry') === 'keep' ? 'keep' : 'enclose';
+    const label = String(form.get('label') ?? '').trim();
+    const kind = form.get('kind');
+    if (!targetId || !sourceIds.length) return fail(400, { error: 'Choose a place and the places to merge into it.' });
+    if (!label || label.length > PLACE_LABEL_MAX || !isPlaceKind(kind) || kind === 'unknown' || kind === 'home') {
+      return fail(400, { error: `Choose a kind and a name of 1–${PLACE_LABEL_MAX} characters.`, placeId: targetId });
+    }
+    let result: Awaited<ReturnType<typeof mergePlaces>>;
+    try { result = await mergePlaces(targetId, sourceIds, geometry); }
+    catch (err) { return fail(400, { error: errMsg(err), placeId: targetId }); }
+    try { await namePlace(targetId, label, kind); }
+    catch { return fail(500, { error: 'Merged, but the name could not be saved.', placeId: targetId }); }
+    try { await confirmPlace(targetId, label, kind); }
+    catch { return { saved: targetId, merged: result.merged, radiusM: result.radiusM, note: 'Merged and named; memory will need updating later.' }; }
+    return { saved: targetId, merged: result.merged, radiusM: result.radiusM };
   },
   lookup: async (event) => {
     if (!(await isOwnerRequest(event))) return OWNER_ONLY();

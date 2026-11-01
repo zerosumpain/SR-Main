@@ -76,3 +76,33 @@ export function validPlaceGeometry(lat: number, lon: number, radiusM: number): s
   }
   return null;
 }
+
+/** Initial bearing from a to b, degrees clockwise from north. */
+function bearingDeg(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const φ1 = toRad(aLat), φ2 = toRad(bLat), Δλ = toRad(bLon - aLon);
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+/**
+ * A circle holding every one of `circles`, grown from the first: each circle
+ * not already inside widens it just enough, the centre moving toward it. Not
+ * always the smallest such circle for three or more, but never far off, and
+ * the first circle's centre stays put when the rest already fit — merging a
+ * stray stop into a place the owner drew leaves the place where he drew it.
+ * Whole metres, rounded up so the edge never cuts a circle it was meant to hold.
+ */
+export function enclosingCircle(circles: Array<{ lat: number; lon: number; radiusM: number }>): { lat: number; lon: number; radiusM: number } {
+  if (!circles.length) throw new Error('no circles to enclose');
+  let { lat, lon, radiusM: r } = circles[0];
+  for (const c of circles.slice(1)) {
+    const d = distanceM(lat, lon, c.lat, c.lon);
+    if (d + c.radiusM <= r) continue;
+    if (d + r <= c.radiusM) { ({ lat, lon } = c); r = c.radiusM; continue; }
+    const next = (d + r + c.radiusM) / 2;
+    ({ lat, lon } = destinationPoint(lat, lon, next - r, bearingDeg(lat, lon, c.lat, c.lon)));
+    r = next;
+  }
+  return { lat, lon, radiusM: Math.ceil(r) };
+}
