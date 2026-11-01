@@ -289,11 +289,18 @@ export interface PlacePattern {
   isNew: boolean;
 }
 
+export interface InsideStop {
+  placeId: string; name: string; type: string | null; category: Category; parent: string;
+  visits: number; hours: number; medianStay: number; arrives: string; people: string[];
+}
+
 export interface PersonPattern extends InsightPerson {
   observedHours: number; coverage: number;
   trips: number; travelHours: number; activeTripShare: number; medianTrip: number; distanceKm: number;
   awayHours: number; homeShare: number; homeDays: number; observedDays: number;
   places: PlacePattern[];
+  /** The cafés and shops split out of big places (`venues.ts`), most visits first. */
+  inside: InsideStop[];
   categories: Array<{ category: Category; hours: number; visits: number; share: number }>;
   /** Share of observed time in each slot, by hour of day — weekday and weekend. */
   dayShape: Record<'weekday' | 'weekend', Array<Partial<Record<Slot, number>>>>;
@@ -331,6 +338,8 @@ export interface PatternsReport {
   household: {
     categories: Array<{ category: Category; hours: number; visits: number; people: number }>;
     shared: Array<{ placeId: string; name: string; category: Category; type: string | null; people: string[]; visits: number; hours: number }>;
+    /** Everyone's stops inside the big places, a venue once with everyone who went. */
+    inside: InsideStop[];
     departures: number[][];
     /** The household's habits: people out together are one outing. */
     habits: Habits;
@@ -643,6 +652,10 @@ export async function analysePatterns(
       awayHours: r1(awayHours), homeShare: r1(homeHours / Math.max(1, homeHours + awayHours) * 100) / 100,
       homeDays, observedDays: fullDays.length,
       places: placesOut.slice(0, 25), categories,
+      inside: placesOut.filter((pl) => pl.placeId.includes('#')).map((pl) => ({
+        placeId: pl.placeId, name: pl.name, type: pl.type, category: pl.category, parent: name(pl.placeId.split('#')[0]),
+        visits: pl.visits, hours: pl.hours, medianStay: pl.medianStay, arrives: pl.arrives, people: [person.subject],
+      })).sort((a, b) => b.visits - a.visits || b.hours - a.hours).slice(0, 40),
       dayShape: { weekday: toShares(shape.weekday), weekend: toShares(shape.weekend) },
       firstOut: { weekday: timeOf(firstOut.weekday), weekend: timeOf(firstOut.weekend) },
       lastHome: { weekday: timeOf(lastHome.weekday), weekend: timeOf(lastHome.weekend) },
@@ -689,6 +702,12 @@ export async function analysePatterns(
     },
     household: {
       categories: [...hhCats].map(([category, c]) => ({ category, hours: r1(c.hours), visits: c.visits, people: c.people.size })).sort((a, b) => b.hours - a.hours),
+      inside: [...peopleOut.flatMap((p) => p.inside).reduce((m, x) => {
+        const e = m.get(x.placeId);
+        if (!e) m.set(x.placeId, { ...x, people: [...x.people] });
+        else { e.visits += x.visits; e.hours = r1(e.hours + x.hours); e.people.push(...x.people); }
+        return m;
+      }, new Map<string, InsideStop>()).values()].sort((a, b) => b.visits - a.visits || b.hours - a.hours).slice(0, 40),
       shared: [...shared].filter(([, s]) => s.people.size >= 2).map(([placeId, s]) => ({
         placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: typeOf(placeId), people: [...s.people], visits: s.visits, hours: r1(s.hours),
       })).sort((a, b) => b.people.length - a.people.length || b.hours - a.hours).slice(0, 12),

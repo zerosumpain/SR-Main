@@ -30,6 +30,8 @@
   const shown = $derived(focus ? [focus] : (report?.people ?? []));
   // A report built before habits existed has none: the card waits for the next build.
   const habits = $derived(focus ? focus.habits : report?.household.habits);
+  // Reports built before the split have no `inside`.
+  const inside = $derived((focus ? focus.inside : report?.household.inside) ?? []);
   const pct = (n: number) => `${Math.round(n * 100)}%`;
   const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString('en-GB'));
   const hrefFor = (next: { person?: string | null }) => (next.person ? `?person=${encodeURIComponent(next.person)}` : '?');
@@ -171,6 +173,18 @@
           <ul class="rows">
             {#each report.household.shared as s (s.placeId)}
               <li><span><strong>{s.name}</strong><small>{s.type ?? categoryLabel(s.category)} · {s.people.map((x) => names[x] ?? x).join(', ')}</small></span><span class="num">{s.visits} visits · {Math.round(s.hours)} h</span></li>
+            {/each}
+          </ul>
+        {/if}
+        {#if inside.length}
+          <h3>Inside the big places</h3>
+          <p class="strap">The cafés and shops inside places like Town, where someone sat still beside one: named when it was clearly the nearest.</p>
+          <ul class="rows">
+            {#each inside.slice(0, 12) as s (s.placeId)}
+              <li>
+                <span><strong>{s.name}</strong><small>{s.type ?? categoryLabel(s.category)} · {focus ? `usually ${s.arrives}, for ${s.medianStay} min` : s.people.map((x) => names[x] ?? x).join(', ')}</small></span>
+                <span class="num">{s.visits} {s.visits === 1 ? 'visit' : 'visits'}</span>
+              </li>
             {/each}
           </ul>
         {/if}
