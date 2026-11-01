@@ -227,11 +227,11 @@ describe('searchTheWeb', () => {
       if (u.includes('products.json')) return JSON.stringify({ products: [{ title: 'IONZ RTX 5060 Ti', handle: 'ionz', variants: [{ price: '1379.95', available: true }] }] });
       return null;
     });
-    const fetchPage = vi.fn(async () => ({ payload: null, ld: [], meta: null, via: 'direct' as const }));
+    const fetchPage = vi.fn(async (_url: string, _opts: { residential?: boolean }) => ({ payload: null, ld: [], meta: null, via: 'direct' as const }));
     const run = await searchTheWeb(item, new Date('2026-11-02T03:00:00Z'), { search: search as never, fetchPage, fetchText });
     expect(run.candidates.map((c) => c.url)).toEqual(['https://pcgamingcases.co.uk/products/ionz']);
     // The Shopify result never needed its page; of the rest, results 2-4 may scrape, 5-7 may not.
-    expect(fetchPage.mock.calls.map((c) => [c[0], (c as unknown[])[1]])).toEqual(
+    expect(fetchPage.mock.calls.map((c) => [c[0], c[1]])).toEqual(
       urls.slice(1).map((u, i) => [u, { residential: i + 1 < 4 }]),
     );
   });
