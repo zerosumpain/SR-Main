@@ -180,7 +180,7 @@
         <section class="card wide" aria-labelledby="hb-h">
           <p class="kicker">Habits</p>
           <h2 id="hb-h">{focus ? `${focus.displayName}'s routines and outings` : 'The household’s routines and outings'}</h2>
-          <p class="strap">{focus ? '' : 'People out together count as one outing, and a day counts once whoever went. '}A routine needs three dates and at least a third of that weekday's seen days.</p>
+          <p class="strap">{focus ? '' : 'People out together count as one outing, and a day counts once whoever went. '}A routine needs three dates and at least a third of that weekday's seen days. A café or restaurant inside a big place like Town counts as a food stop of its own when someone sat still beside it for fifteen minutes; the map of what is where is © OpenStreetMap contributors.</p>
           <PatternHabits {habits} who={focus ? focus.displayName : 'the household'} />
         </section>
       {/if}
