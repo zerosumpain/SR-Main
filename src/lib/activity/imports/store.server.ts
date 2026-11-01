@@ -6,7 +6,7 @@ import {
   activitySyncJobs,
   type ActivityImport,
 } from '$lib/db/schema';
-import { deleteFile, newDiskPath, readBuffer, saveBuffer } from '$lib/file-store/storage';
+import { allocateDiskPath, deleteFile, readBuffer, saveBuffer } from '$lib/file-store/storage';
 import { decryptBuffer, encryptBuffer } from '$lib/secrets/crypto';
 import { getCatalogProvider } from '../providers/catalog';
 import { requireActivityConnection } from '../store/connections.server';
@@ -67,7 +67,7 @@ export async function createActivityImport(input: {
   if (existing) return { activityImport: existing, duplicate: true, jobId };
 
   const filename = safeFilename(input.filename);
-  const storageRef = newDiskPath(`activity-${id}-${filename}`);
+  const storageRef = await allocateDiskPath(`activity-${id}-${filename}`);
   await saveBuffer(storageRef, encryptBuffer(input.bytes));
   try {
     const created = await db.transaction(async (tx) => {
