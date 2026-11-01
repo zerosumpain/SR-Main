@@ -40,6 +40,8 @@
 // through them), every `gmail_*` (picks a mailbox; see reads.ts).
 //
 //   compare_days     the same day store, split by a condition       read
+//   household_patterns  the stored patterns report + live forecast   read
+//                    (owner's view; named places, never coordinates)
 
 // ── Cards ──────────────────────────────────────────────────────────────────
 //
@@ -60,7 +62,7 @@ import { errMsg } from '../types';
 export const PRIVATE_SITE_TOOLS = ['ha_find', 'ha_query_state', 'ha_get_history', 'memory_search', 'health_timeline'] as const;
 
 /** Tools implemented here, over the owner's data. PRIVATE only. */
-export const LOCAL_TOOLS = ['health_hub', 'health_series', 'correlate', 'compare_days', 'mail_facts', 'diary', 'spend', 'chat_threads', 'activities'] as const;
+export const LOCAL_TOOLS = ['health_hub', 'health_series', 'correlate', 'compare_days', 'mail_facts', 'diary', 'spend', 'chat_threads', 'activities', 'household_patterns'] as const;
 export type LocalTool = (typeof LOCAL_TOOLS)[number];
 
 /** Registered site tools a RESEARCH cycle may call. */
@@ -240,6 +242,18 @@ const LOCAL_DEFINITIONS: Record<LocalTool, () => ToolDefinition['function']> = {
       properties: { limit: { type: 'number', description: 'Most recent N, 5–60. Default 30.' } },
     },
   }),
+  household_patterns: () => ({
+    name: 'household_patterns',
+    description:
+      "The household's movement over ninety days (/home/people/patterns) and today's forecast (/home/people): who goes where, when and for how long, their routines, who is out with whom, steps person by person, and each person's forecast rest of today with anything that looks off and how accurate the forecast has been. One section per call. Context for timing and fitting a suggestion to the family's real week — not a subject to report on.",
+    parameters: {
+      type: 'object',
+      properties: {
+        section: { type: 'string', enum: ['summary', 'person', 'forecast', 'steps', 'together', 'habits'], description: 'Default "summary".' },
+        person: { type: 'string', description: 'For section "person": their name.' },
+      },
+    },
+  }),
 };
 
 function isLocal(name: string): name is LocalTool {
@@ -290,6 +304,10 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         return chatThreadsTool(args, opts.now);
       case 'activities':
         return activitiesTool(args);
+      case 'household_patterns': {
+        const { householdPatternsTool } = await import('./movement.server');
+        return householdPatternsTool(args, opts.now);
+      }
     }
   }
 

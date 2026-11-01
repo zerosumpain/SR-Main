@@ -18,9 +18,11 @@
   import PatternTogether from '$lib/components/home/people/PatternTogether.svelte';
   import PatternPlaces from '$lib/components/home/people/PatternPlaces.svelte';
   import PatternSteps from '$lib/components/home/people/PatternSteps.svelte';
+  import PatternStepsCompare from '$lib/components/home/people/PatternStepsCompare.svelte';
   import PatternHabits from '$lib/components/home/people/PatternHabits.svelte';
   import { GROUPS, categoryLabel, groupOf, type Group } from '$lib/home/presence/patterns';
   import { dayLabel } from '$lib/components/home/people/format';
+  import { emphasise } from '$lib/components/home/people/emphasis';
   import type { ActionData, PageData } from './$types';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -123,7 +125,11 @@
         <p class="kicker">Worth knowing</p>
         <h2 id="find-h">{focus ? `${focus.displayName}, in a few lines` : 'The household, in a few lines'}</h2>
         {#if findings.length}
-          <ol class="finds">{#each findings as f, i (i)}<li>{f.text}</li>{/each}</ol>
+          <ol class="finds">
+            {#each findings as f, i (i)}
+              <li class:lead={i === 0}>{#each emphasise(f.text) as seg, j (j)}{#if seg.key}<strong>{seg.text}</strong>{:else}{seg.text}{/if}{/each}</li>
+            {/each}
+          </ol>
         {:else}
           <p class="strap quiet">Nothing stands out yet.</p>
         {/if}
@@ -132,7 +138,7 @@
       <section class="card wide" aria-labelledby="shape-h">
         <p class="kicker">Times of day</p>
         <h2 id="shape-h">The shape of {focus ? `${focus.displayName}'s` : 'everyone’s'} day</h2>
-        <p class="strap">Pick a kind of place: each chart is the share of every hour {focus ? `${focus.displayName}` : 'each person'} spent there, weekdays against weekends, all on one scale. Hover, or use the arrow keys, to read an hour.</p>
+        <p class="strap">Pick one kind of place or several (each button shows the total time there): each chart is the share of every hour {focus ? `${focus.displayName}` : 'each person'} spent at any of them, weekdays against weekends, all on one scale. Hover, or use the arrow keys, to read an hour.</p>
         <PatternTimeOfDay people={shown} />
       </section>
 
@@ -209,8 +215,11 @@
 
       <section class="card wide" aria-labelledby="st-h">
         <p class="kicker">Steps</p>
-        <h2 id="st-h">What going out does to the step count</h2>
-        <p class="strap">Daily steps from the app against the days' movement. Only days the trail saw for 16 hours or more are compared.</p>
+        <h2 id="st-h">Who walks, and what going out does to it</h2>
+        <p class="strap">Daily steps from the app, person by person: the average day, weekdays against weekends, and the week day by day.</p>
+        <PatternStepsCompare people={report.people} {focus} />
+        <h3>A day at home against a day out</h3>
+        <p class="strap">The same steps against the days' movement. Only days the trail saw for 16 hours or more are compared.</p>
         <PatternSteps people={report.people} {focus} />
       </section>
 
@@ -364,16 +373,37 @@
     color: var(--text-muted);
     font-weight: 400;
   }
+  /* Read at a glance: the figures carry the line, so they are bold and in ink;
+     the strongest finding leads, larger, across both columns. */
   .finds {
     margin: 0;
-    padding-left: 1.4em;
+    padding-left: 1.6em;
     columns: 2 420px;
     column-gap: 40px;
   }
   .finds li {
-    margin-bottom: 8px;
-    font-size: var(--fs-body);
+    margin-bottom: 12px;
+    font-size: var(--fs-body-lg);
+    line-height: 1.45;
     break-inside: avoid;
+  }
+  .finds li::marker {
+    font: 600 var(--fs-label) var(--font-mono);
+    color: var(--accent);
+  }
+  .finds li.lead {
+    column-span: all;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: var(--fs-display-xs);
+    line-height: 1.3;
+  }
+  .finds strong {
+    font-weight: 700;
+    color: var(--accent-ink);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .aw {
     list-style: none;

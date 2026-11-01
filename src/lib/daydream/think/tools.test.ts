@@ -71,6 +71,7 @@ describe('the two allow-lists', () => {
       'spend',
       'chat_threads',
       'activities',
+      'household_patterns',
     ]);
     expect([...RESEARCH_TOOLS]).toEqual(['research_web_search', 'fetch_url']);
   });

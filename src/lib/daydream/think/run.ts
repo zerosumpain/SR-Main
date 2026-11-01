@@ -230,7 +230,7 @@ export function systemPrompt(opts: {
     ...siteBlock(opts.set === 'private' ? (opts.backlog ?? []) : []),
     '',
     'HOW TO WORK:',
-    `1. Read the situation card, then use the tools to look. Every result comes back as a card with an id like [C3]. You have ${opts.rounds} rounds and ${MAX_TOOL_CALLS} tool calls; ask for several things in one round when you can.`,
+    `1. Read the situation card and the household card, then use the tools to look. Every result comes back as a card with an id like [C3]. You have ${opts.rounds} rounds and ${MAX_TOOL_CALLS} tool calls; ask for several things in one round when you can.`,
     '2. CITE OR DIE: every note lists the card ids it rests on in "cites". Every number, date, name or amount in a note must appear in a cited card. A note citing a card you were not given is deleted whole, not fixed.',
     '3. When you are done, reply with ONE JSON object and nothing else:',
     '   {"notes":[{"outcome":"...","title":"...","body":"...","cites":["C1","C3"],"action":"...","until":"YYYY-MM-DD","subject":"merchant:Sky","changed":null,"do":null,"solve":null}]}',
@@ -314,6 +314,11 @@ export async function runThink(
       const { situationCard } = await import('./situation.server');
       const text = await situationCard(now).catch(() => null);
       if (text) toolbox.seed('situation', { at: today }, text);
+      // The household's forecast day and patterns (`movement.ts`): its own
+      // card, so it has its own CARD_CHARS and is cited on its own.
+      const { movementCard } = await import('./movement.server');
+      const household = await movementCard(now).catch(() => null);
+      if (household?.length) toolbox.seed('household', { at: today }, household.join('\n'));
     }
 
     const [said, profile, definitions, lessons, taste, subjects, identity] = await Promise.all([
