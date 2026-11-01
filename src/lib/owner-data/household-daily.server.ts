@@ -19,6 +19,8 @@ import { DAILY_METRICS, renderDaily, type DailyMetric, type DailyRow, type Perso
 
 /** Steps cost a call per two days; the rest a call per day. */
 export const MAX_DAYS: Record<DailyMetric, number> = { steps: 90, sleep: 31, workouts: 31, resting_hr: 31 };
+/** Steps are read from the window's start up to now, so how far back it may start is capped too. */
+export const STEPS_REACH_DAYS = 120;
 const DAY_MS = 86_400_000;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -45,6 +47,9 @@ export async function householdDailyTool(args: Record<string, unknown>, now = ne
   const to = typeof args.to === 'string' && args.to.trim() ? args.to.trim() : null;
   const dates = windowDates(days, now, { includeToday, to });
   const today = localClock(now).date;
+  if (metric === 'steps' && dates[0] < addDays(today, -STEPS_REACH_DAYS)) {
+    return { label: 'Household health by day', text: `Step counts can be read back ${STEPS_REACH_DAYS} days at most; that window starts ${dates[0]}. Ask for a more recent one.`, rows: [] };
+  }
   // Today's part day is shown beside a window that ends yesterday, for steps (it costs nothing extra).
   const showToday = metric === 'steps' && !dates.includes(today) && dates.at(-1) === addDays(today, -1);
 
@@ -67,7 +72,7 @@ export async function householdDailyTool(args: Record<string, unknown>, now = ne
     if (!m.email) return { ...base, values: null, missing: 'no app account' };
     try {
       if (metric === 'steps') {
-        // From the first date's London midnight (an hour spare) to now.
+        // From the first date's London midnight (an hour spare) to now: at most STEPS_REACH_DAYS.
         const span = Math.ceil((+now - Date.parse(`${dates[0]}T00:00:00Z`)) / DAY_MS) + 1;
         const steps = await dailySteps(m.email, span, now);
         if (!steps) return { ...base, values: null, missing: 'no app account' };

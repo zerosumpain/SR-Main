@@ -39,3 +39,14 @@ describe('household health day by day', () => {
     expect(hr.map((r) => r.name)).toEqual(['B', 'A']);
   });
 });
+
+describe('the window', () => {
+  it('ends yesterday by default, today on request, and never past today', async () => {
+    const { windowDates } = await import('./household-daily.server');
+    const now = new Date('2026-11-01T21:00:00Z');
+    expect(windowDates(3, now)).toEqual(['2026-10-29', '2026-10-30', '2026-10-31']);
+    expect(windowDates(2, now, { includeToday: true })).toEqual(['2026-10-31', '2026-11-01']);
+    expect(windowDates(2, now, { to: '2026-10-25' })).toEqual(['2026-10-24', '2026-10-25']);
+    expect(windowDates(1, now, { to: '2026-12-01' })).toEqual(['2026-10-31']);
+  });
+});
