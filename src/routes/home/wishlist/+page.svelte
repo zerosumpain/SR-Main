@@ -79,6 +79,7 @@
     match: { label: 'Match', tone: 't-good' },
     possible: { label: 'Check', tone: 't-watch' },
     near: { label: 'Near miss', tone: 't-action' },
+    over: { label: 'Over budget', tone: 't-steady' },
     no: { label: 'No', tone: 't-quiet' },
   };
 

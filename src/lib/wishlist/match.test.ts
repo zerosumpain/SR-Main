@@ -73,10 +73,14 @@ describe('evaluate', () => {
     expect(e.results.find((r) => r.field === 'gpu')?.reason).toBe('RTX 5050 is below RTX 5060');
   });
 
-  it('calls a small overspend with every spec met a near miss, and a large one no', () => {
+  it('calls a small overspend with every spec met a near miss, a larger one an over-budget option, and a huge one no', () => {
     const t = { title: 'CyberPowerPC RTX 5070 32GB DDR5 1TB NVMe', description: '' };
     expect(evaluate({ ...t, pricePence: 119_000 }, PC).verdict).toBe('near');
-    expect(evaluate({ ...t, pricePence: 131_900 }, PC).verdict).toBe('no');
+    expect(evaluate({ ...t, pricePence: 131_900 }, PC).verdict).toBe('over');
+    expect(evaluate({ ...t, pricePence: 170_000 }, PC).verdict).toBe('no');
+    // An over-budget listing that fails a spec, or leaves one unstated, is not an option.
+    expect(evaluate({ title: 'CyberPowerPC RTX 5070 32GB DDR4 1TB', description: '', pricePence: 131_900 }, PC).verdict).toBe('no');
+    expect(evaluate({ title: 'CyberPowerPC RTX 5070 32GB 1TB', description: '', pricePence: 131_900 }, PC).verdict).toBe('no');
   });
 
   it('does not give the benefit of the doubt on the GPU, or on two unstated specs', () => {
