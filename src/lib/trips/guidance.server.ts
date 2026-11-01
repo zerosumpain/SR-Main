@@ -176,7 +176,7 @@ export async function ensurePrimer(trip: TripRecord, guide: TripGuide | null): P
   if (!guide || !primerNeeded(guide)) return guide;
   let results: Array<{ title: string; url: string; content: string }> = [];
   try {
-    const { search } = await import('$lib/deepdive/tavily');
+    const { search } = await import('$lib/deepdive/web-search');
     const found = await search(`visiting ${trip.destination}: etiquette, tipping, cash or card, useful phrases, safety for tourists`, { purpose: 'trips.guide', maxResults: 6, searchDepth: 'basic' });
     results = (found.results ?? []).map((r) => ({ title: r.title, url: r.url, content: r.content ?? '' }));
   } catch (err) {
@@ -219,7 +219,7 @@ export async function ensureTripGuide(trip: TripRecord): Promise<TripRecord['gui
   if (!tripGuideNeeded(trip, localDateIn(trip.timeZone, new Date()))) return ensurePrimer(trip, trip.guide);
   let results: Array<{ title: string; url: string; content: string }> = [];
   try {
-    const { search } = await import('$lib/deepdive/tavily');
+    const { search } = await import('$lib/deepdive/web-search');
     const found = await search(`getting around ${trip.destination}: taxis, public transport tickets`, { purpose: 'trips.guide', maxResults: 6, searchDepth: 'basic' });
     results = (found.results ?? []).map((r) => ({ title: r.title, url: r.url, content: r.content ?? '' }));
   } catch (err) {

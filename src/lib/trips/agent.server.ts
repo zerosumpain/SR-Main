@@ -52,7 +52,7 @@ export interface AgentTools {
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 async function webSearch(query: string, purpose: string) {
-  const { search } = await import('$lib/deepdive/tavily');
+  const { search } = await import('$lib/deepdive/web-search');
   const found = await search(query, { purpose, maxResults: 5, searchDepth: 'basic' });
   return (found.results ?? []).map((r) => ({ title: r.title, url: r.url, content: clip(r.content ?? '', 600) }));
 }

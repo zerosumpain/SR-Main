@@ -88,6 +88,15 @@ export function countTavilySearch(depth: TavilyDepth = 'basic'): void {
   bump({ searches: 1, credits: searchCredits(depth) });
 }
 
+/**
+ * A search the balancer sent to Brave. It counts as a search the run made and
+ * spends no Tavily credits — Brave's allowance is in requests, read on
+ * /admin/ops/tavily — so the run's credit figure stays a Tavily figure.
+ */
+export function countBraveSearch(): void {
+  bump({ searches: 1, credits: 0 });
+}
+
 export function countTavilyExtract(urlCount: number, depth: TavilyDepth = 'basic'): void {
   bump({ extracts: 1, credits: extractCredits(urlCount, depth) });
 }

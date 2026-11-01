@@ -8,6 +8,11 @@
  * than a receipt. The page sets them beside the account's own `plan_usage`,
  * and the difference between the two is the point: it is the spend made by
  * anything that holds the key but does not write this ledger.
+ *
+ * Brave Search requests, the search balancer's other provider, are in the same
+ * ledger as `action_type = 'brave_call'` and are read alongside. A Brave row's
+ * credits are 1 per request, its plan's own unit, so "credits" below means
+ * Tavily credits plus Brave requests; `byProvider` keeps the two apart.
  */
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
@@ -24,8 +29,28 @@ export function clampTavilyDays(raw: string | null): TavilyWindow {
 const RECENT_LIMIT = 60;
 const RECENT_LIMIT_FILTERED = 200;
 
+export type AuditProvider = 'tavily' | 'brave';
+const PROVIDERS: readonly AuditProvider[] = ['tavily', 'brave'];
+
+export function clampProvider(raw: string | null): AuditProvider | null {
+  return (PROVIDERS as readonly string[]).includes(raw ?? '') ? (raw as AuditProvider) : null;
+}
+
+export interface ProviderRow {
+  provider: AuditProvider;
+  calls: number;
+  credits: number;
+  failed: number;
+  /** Second attempts: a retry, or a search the balancer moved from the other provider. */
+  retries: number;
+  /** Calls since the start of the calendar month (UTC). */
+  monthCalls: number;
+  lastAt: string | null;
+}
+
 export interface TavilyPurposeRow {
   app: string;
+  provider: AuditProvider;
   purpose: string;
   calls: number;
   searches: number;
@@ -58,6 +83,7 @@ export interface TavilyCallRow {
   id: string;
   at: string;
   app: string;
+  provider: AuditProvider;
   purpose: string;
   kind: string;
   depth: string | null;
@@ -76,8 +102,12 @@ export interface TavilyCallRow {
 export interface TavilyAudit {
   days: TavilyWindow;
   totals: { calls: number; credits: number; failed: number; searches: number; extracts: number };
-  /** Ledger credits since the start of the calendar month (UTC), for the account comparison. */
+  /** Tavily ledger credits since the start of the calendar month (UTC), for the account comparison. */
   monthCredits: number;
+  /** Per provider, for the window — always both rows, zero when a provider was not used. */
+  byProvider: ProviderRow[];
+  /** The allowance Brave's headers reported on its most recent response, and when. */
+  braveQuota: { limit: number | null; remaining: number | null; resetSeconds: number | null; at: string } | null;
   /** When the ledger's oldest row was written — the page cannot speak for anything before it. */
   recordingSince: string | null;
   byPurpose: TavilyPurposeRow[];
@@ -122,13 +152,21 @@ function triggerLabel(kind: TavilyTriggerRow['kind'], id: string | null, name: s
   }
 }
 
-export async function getTavilyAudit(days: TavilyWindow, purpose: string | null = null): Promise<TavilyAudit> {
+const SEARCH_ACTIONS = sql.raw(`a.action_type in ('tavily_call', 'brave_call')`);
+
+export async function getTavilyAudit(
+  days: TavilyWindow,
+  purpose: string | null = null,
+  provider: AuditProvider | null = null,
+): Promise<TavilyAudit> {
   const since = new Date(Date.now() - days * 86_400_000);
-  const scope = sql`a.action_type = 'tavily_call' and a.created_at >= ${since}`;
+  const scope = provider
+    ? sql`${SEARCH_ACTIONS} and a.provider = ${provider} and a.created_at >= ${since}`
+    : sql`${SEARCH_ACTIONS} and a.created_at >= ${since}`;
   const recentScope = purpose ? sql`${scope} and a.input ->> 'purpose' = ${purpose}` : scope;
   const credits = sql.raw(`coalesce(sum((a.input ->> 'credits')::numeric), 0)`);
 
-  const [totalsRes, monthRes, sinceRes, purposeRes, triggerRes, repeatRes, dayRes, recentRes] = await Promise.all([
+  const [totalsRes, monthRes, sinceRes, purposeRes, triggerRes, repeatRes, dayRes, recentRes, providerRes, quotaRes] = await Promise.all([
     db.execute(sql`
       select count(*)::int as calls, ${credits} as credits,
         count(*) filter (where a.status = 'failed')::int as failed,
@@ -140,7 +178,8 @@ export async function getTavilyAudit(days: TavilyWindow, purpose: string | null 
       where a.action_type = 'tavily_call' and a.created_at >= date_trunc('month', now() at time zone 'utc') at time zone 'utc'`),
     db.execute(sql`select min(a.created_at) as first_at from agent_actions a where a.action_type = 'tavily_call'`),
     db.execute(sql`
-      select coalesce(a.input ->> 'app', '?') as app, coalesce(a.input ->> 'purpose', 'unlabelled') as purpose,
+      select coalesce(a.input ->> 'app', '?') as app, coalesce(a.provider, 'tavily') as provider,
+        coalesce(a.input ->> 'purpose', 'unlabelled') as purpose,
         count(*)::int as calls,
         count(*) filter (where a.tool_name = 'search')::int as searches,
         count(*) filter (where a.tool_name = 'extract')::int as extracts,
@@ -148,7 +187,7 @@ export async function getTavilyAudit(days: TavilyWindow, purpose: string | null 
         count(*) filter (where a.status = 'failed')::int as failed,
         max(a.created_at) as last_at
       from agent_actions a where ${scope}
-      group by 1, 2 order by credits desc, calls desc`),
+      group by 1, 2, 3 order by credits desc, calls desc`),
     db.execute(sql`
       select t.kind, t.id, count(*)::int as calls, coalesce(sum(t.credits), 0) as credits, max(t.created_at) as last_at,
         max(rs.topic) as research_topic, max(w.name) as workflow_name
@@ -176,7 +215,7 @@ export async function getTavilyAudit(days: TavilyWindow, purpose: string | null 
         from agent_actions a where ${scope} group by 1, 2
       ) g group by g.day order by g.day`),
     db.execute(sql`
-      select a.id, a.created_at, a.tool_name, a.status, a.error, a.duration_ms, a.input,
+      select a.id, a.created_at, a.provider, a.tool_name, a.status, a.error, a.duration_ms, a.input,
         ${TRIGGER_KIND} as trigger_kind, ${TRIGGER_ID} as trigger_id,
         rs.topic as research_topic, w.name as workflow_name
       from agent_actions a
@@ -184,6 +223,21 @@ export async function getTavilyAudit(days: TavilyWindow, purpose: string | null 
       left join workflows w on a.input ->> 'workflowId' = w.id
       where ${recentScope}
       order by a.created_at desc limit ${purpose ? RECENT_LIMIT_FILTERED : RECENT_LIMIT}`),
+    db.execute(sql`
+      select coalesce(a.provider, 'tavily') as provider,
+        count(*) filter (where a.created_at >= ${since})::int as calls,
+        coalesce(sum((a.input ->> 'credits')::numeric) filter (where a.created_at >= ${since}), 0) as credits,
+        count(*) filter (where a.created_at >= ${since} and a.status = 'failed')::int as failed,
+        count(*) filter (where a.created_at >= ${since} and (a.input ->> 'attempt')::int > 1)::int as retries,
+        count(*) filter (where a.created_at >= date_trunc('month', now() at time zone 'utc') at time zone 'utc')::int as month_calls,
+        max(a.created_at) as last_at
+      from agent_actions a
+      where ${SEARCH_ACTIONS} and a.created_at >= least(${since}, date_trunc('month', now() at time zone 'utc') at time zone 'utc')
+      group by 1`),
+    db.execute(sql`
+      select a.input -> 'quota' as quota, a.created_at from agent_actions a
+      where a.action_type = 'brave_call' and a.input ? 'quota'
+      order by a.created_at desc limit 1`),
   ]);
 
   const totals = rowsOf<Record<string, unknown>>(totalsRes)[0] ?? {};
@@ -204,6 +258,7 @@ export async function getTavilyAudit(days: TavilyWindow, purpose: string | null 
       id: String(r.id),
       at: iso(r.created_at) ?? '',
       app: String(input.app ?? '?'),
+      provider: r.provider === 'brave' ? 'brave' : 'tavily',
       purpose: String(input.purpose ?? 'unlabelled'),
       kind: String(r.tool_name ?? ''),
       depth: typeof input.depth === 'string' ? input.depth : null,
@@ -231,8 +286,28 @@ export async function getTavilyAudit(days: TavilyWindow, purpose: string | null 
     },
     monthCredits: n(rowsOf<Record<string, unknown>>(monthRes)[0]?.credits),
     recordingSince: iso(rowsOf<Record<string, unknown>>(sinceRes)[0]?.first_at),
+    byProvider: PROVIDERS.map((p) => {
+      const r = rowsOf<Record<string, unknown>>(providerRes).find((row) => row.provider === p) ?? {};
+      return {
+        provider: p,
+        calls: n(r.calls),
+        credits: n(r.credits),
+        failed: n(r.failed),
+        retries: n(r.retries),
+        monthCalls: n(r.month_calls),
+        lastAt: iso(r.last_at),
+      };
+    }),
+    braveQuota: (() => {
+      const r = rowsOf<Record<string, unknown>>(quotaRes)[0];
+      const q = (r?.quota ?? null) as Record<string, unknown> | null;
+      if (!r || !q) return null;
+      const num = (v: unknown) => (typeof v === 'number' ? v : null);
+      return { limit: num(q.limit), remaining: num(q.remaining), resetSeconds: num(q.resetSeconds), at: iso(r.created_at) ?? '' };
+    })(),
     byPurpose: rowsOf<Record<string, unknown>>(purposeRes).map((r) => ({
       app: String(r.app),
+      provider: (r.provider === 'brave' ? 'brave' : 'tavily') as AuditProvider,
       purpose: String(r.purpose),
       calls: n(r.calls),
       searches: n(r.searches),
