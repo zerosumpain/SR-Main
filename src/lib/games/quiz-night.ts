@@ -615,4 +615,13 @@ export function review(room: Room, meId: string) {
   }));
 }
 
+/**
+ * The TV board's view: the question, who has answered (never what) and the
+ * scores — the same as a phone that is nobody's, so no `myChoice` and a
+ * review with no picks of its own.
+ */
+export function toScreen(room: Room, now: number) {
+  return toWire(room, '', now);
+}
+
 export type WireRoom = ReturnType<typeof toWire>;
