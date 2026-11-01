@@ -140,7 +140,7 @@
           <section class="editor-panel" bind:this={panelEl} tabindex="-1" aria-label={`Edit ${name(selected)}`}>
             <button class="back" type="button" onclick={close}>← All places</button>
             <header><p class="eyebrow">Place details</p><h2>{name(selected)}</h2>{#if selected.suggestedAddress}<p class="address">{selected.suggestedAddress}</p>{/if}</header>
-            {#key selected.id}<PlaceEditor place={selected} {draft} {moved} radius={data.radius} labelMax={data.labelMax} kinds={data.kinds} placeTimeDays={data.placeTimeDays} placeTime={data.placeTime} form={form as EditorForm} onradius={r => { if (draft) draft = { ...draft, radiusM: r }; }} onrevert={() => { if (selected) draft = geometryOf(selected); }} {afterGeometry} {afterRemove} bind:confirming />{/key}
+            {#key selected.id}<PlaceEditor place={selected} {draft} {moved} radius={data.radius} labelMax={data.labelMax} kinds={data.kinds} placeTimeDays={data.placeTimeDays} placeTime={data.placeTime} form={form as EditorForm} onradius={r => { if (draft) draft = { ...draft, radiusM: r }; }} onrevert={() => { if (selected) draft = geometryOf(selected); }} {afterGeometry} {afterRemove} others={data.places} bind:confirming />{/key}
           </section>
         {:else if adding}
           <form class="add-form" bind:this={addFormEl} method="POST" action="?/create" use:enhance={afterCreate}>

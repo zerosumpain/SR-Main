@@ -118,13 +118,14 @@ export const actions: Actions = {
     catch { return { saved: placeId, note: 'Name saved; memory will need updating later.' }; }
     return { saved: placeId };
   },
-  /** Several places that are one: folded into `targetId` and named. No button
-   *  yet — the owner's assistant calls it with a list of decisions. */
+  /** Several places that are one: folded into `targetId` and named. The
+   *  editor's "Merge places into this one" posts here. */
   merge: async (event) => {
     if (!(await isOwnerRequest(event))) return OWNER_ONLY();
     const form = await event.request.formData();
     const targetId = String(form.get('targetId') ?? '').trim();
-    const sourceIds = String(form.get('sourceIds') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    // One value per ticked box from the panel, or one comma list.
+    const sourceIds = form.getAll('sourceIds').flatMap((v) => String(v).split(',')).map((s) => s.trim()).filter(Boolean);
     const geometry = form.get('geometry') === 'keep' ? 'keep' : 'enclose';
     const label = String(form.get('label') ?? '').trim();
     const kind = form.get('kind');
