@@ -116,6 +116,8 @@ describe('every native route gates itself', () => {
         // Info screen: a member gets the file and nulls for jkai's fields.
         '/drive/files/[id]/meta/+server.ts',
         '/drive/folders/+server.ts',
+        // Photo sync's "which of these do you have?" — fingerprints only, the caller's own space.
+        '/drive/have/+server.ts',
         // Names in the caller's own space or the shared folder; contents hits owner-only.
         '/drive/search/+server.ts',
         // Resumable uploads for big videos and photos: the same two spaces,

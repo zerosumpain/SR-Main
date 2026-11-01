@@ -165,6 +165,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/drive/files/[id]/intel': phone('app/api', 'Pick out the people, places and things in one of your files'),
   '/api/native/drive/search': phone('app/api', 'Find a file in Drive by name, or by what it says'),
   '/api/native/drive/folders': phone('app/api', 'Make or remove a folder in Drive'),
+  '/api/native/drive/have': phone('app/api', 'Ask Drive which of the phone’s photos it already holds, so photo sync sends only the rest'),
   '/api/native/drive/uploads': phone('app/api', 'Start sending a big video or photo to Drive, a piece at a time'),
   '/api/native/drive/uploads/[id]': phone('app/api', 'Send the next piece of a big upload, see how far it got, or give up on it'),
   '/api/native/drive/uploads/[id]/complete': phone('app/api', 'Finish a big upload: Drive checks it arrived whole and files it'),

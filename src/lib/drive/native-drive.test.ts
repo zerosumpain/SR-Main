@@ -460,3 +460,26 @@ describe('complete is asynchronous: 202 while storing, then GET says how it went
     expect((await read(await drive.uploadStatus(ANN, ID, 'mine'))).body).toEqual(base);
   });
 });
+
+describe('which photos a space already has', () => {
+  const SHA = 'a'.repeat(64);
+
+  it('relays a checked batch and hands back phone-shaped files, no emails', async () => {
+    h.answer = json(200, { have: [{ sha256: SHA, file: file({ id: 'f7', uploadedBy: 'ann@example.test' }) }], unchecked: 12 });
+    const out = await drive.haveFiles(ANN, 'mine', { items: [{ sha256: SHA.toUpperCase(), size: 10 }] });
+    expect(h.calls[0]).toMatchObject({ method: 'POST', path: '/api/files/app/have?space=mine' });
+    expect(h.calls[0].headers['x-sr-app-for']).toBe('ann@example.test');
+    expect(JSON.parse(h.calls[0].body!.toString())).toEqual({ items: [{ sha256: SHA, size: 10 }] });
+    expect(out).toMatchObject({ have: [{ sha256: SHA, file: { id: 'f7' } }], unchecked: 12 });
+    expect(JSON.stringify(out)).not.toMatch(/@example/);
+  });
+
+  it('refuses a bad batch before calling Drive, and asks nothing for an empty one', async () => {
+    expect(await status(drive.haveFiles(OWNER, 'mine', { items: [{ sha256: 'x', size: 1 }] }))).toBe(400);
+    expect(await status(drive.haveFiles(OWNER, 'mine', { items: [{ sha256: SHA, size: -1 }] }))).toBe(400);
+    expect(await status(drive.haveFiles(OWNER, 'mine', { items: new Array(501).fill({ sha256: SHA, size: 1 }) }))).toBe(400);
+    expect(await status(drive.haveFiles(OWNER, 'mine', null))).toBe(400);
+    expect(await drive.haveFiles(OWNER, 'mine', { items: [] })).toEqual({ have: [], unchecked: 0 });
+    expect(h.calls).toEqual([]);
+  });
+});

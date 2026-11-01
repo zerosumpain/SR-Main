@@ -456,6 +456,41 @@ export async function searchSpace(caller: AppDriveCaller, space: DriveSpace, raw
   return out;
 }
 
+/** One "which do you have?" at most: the phone asks in batches. Drive's own ceiling. */
+export const HAVE_MAX_ITEMS = 500;
+
+/**
+ * POST have `{items:[{sha256,size}]}` — which of a phone's photos the space
+ * already holds, answered from Drive's fingerprints (no object read), so photo
+ * sync never sends one twice. `unchecked`: pictures in the space Drive has not
+ * fingerprinted yet; while above 0 a "not had" may still be had.
+ */
+export async function haveFiles(caller: AppDriveCaller, space: DriveSpace, body: unknown) {
+  const raw = (body as { items?: unknown } | null)?.items;
+  if (!Array.isArray(raw)) throw error(400, 'Send {items: [{sha256, size}]}.');
+  if (raw.length > HAVE_MAX_ITEMS) throw error(400, `At most ${HAVE_MAX_ITEMS} at a time.`);
+  const items = raw.map((r) => {
+    const sha256 = parseSha256(typeof (r as { sha256?: unknown })?.sha256 === 'string' ? (r as { sha256: string }).sha256 : null);
+    const size = (r as { size?: unknown })?.size;
+    if (!sha256) throw error(400, 'Each sha256 must be 64 hex characters.');
+    if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 0) throw error(400, 'Each size must be a whole number of bytes.');
+    return { sha256, size };
+  });
+  if (!items.length) return { have: [], unchecked: 0 };
+  const res = await call('POST', `/api/files/app/have${query({ space })}`, caller, {
+    body: Buffer.from(JSON.stringify({ items })),
+    contentType: 'application/json',
+    timeoutMs: 20_000,
+  });
+  const wire = parse<{ have?: { sha256: string; file: DriveFileWire }[]; unchecked?: number }>(res);
+  const have = (wire.have ?? []).slice(0, HAVE_MAX_ITEMS);
+  const names = await namesFor(space, have.map((h) => h.file));
+  return {
+    have: have.map((h) => ({ sha256: String(h.sha256), file: forPhone(h.file, space, names) })),
+    unchecked: Number.isSafeInteger(wire.unchecked) && (wire.unchecked as number) > 0 ? (wire.unchecked as number) : 0,
+  };
+}
+
 /** POST files/:id/analyse `{refresh?}` — jkai's summary. Owner only; the model call can take a while. */
 export async function analyseFile(caller: AppDriveCaller, id: string, refresh: boolean): Promise<FileAnalysis> {
   requireOwner(caller);
