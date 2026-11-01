@@ -19,6 +19,7 @@ import {
   type Fix, type InsightFix, type InsightPerson, type InsightPlace, type Trip,
 } from './insights';
 import { circularMedianMinute, hhmm } from './stats';
+import { habitsOf, mergeOutings, outingsOf, partPhrase, WEEKDAYS, type Habits, type Outing, type Routine } from './habits';
 import { MIN_DWELL_MINS, VISIT_MAX_GAP_MINS } from './types';
 
 const MINUTE = 60_000;
@@ -292,6 +293,8 @@ export interface PersonPattern extends InsightPerson {
     week: Array<{ weekday: number; mean: number }>;
   };
   weekly: Array<{ week: string; trips: number; awayHours: number; places: number; steps: number | null }>;
+  /** Routines, outings and the time of day of each kind of place (`habits.ts`). */
+  habits: Habits;
 }
 
 export interface PatternsReport {
@@ -306,6 +309,8 @@ export interface PatternsReport {
     categories: Array<{ category: Category; hours: number; visits: number; people: number }>;
     shared: Array<{ placeId: string; name: string; category: Category; type: string | null; people: string[]; visits: number; hours: number }>;
     departures: number[][];
+    /** The household's habits: people out together are one outing. */
+    habits: Habits;
   };
   findings: Array<{ subject: string | null; text: string; weight: number }>;
 }
@@ -425,6 +430,8 @@ export async function analysePatterns(
 
   // ── People ────────────────────────────────────────────────────────────────
   const departures = Array.from({ length: 7 }, () => Array(24).fill(0) as number[]);
+  const nameOfPerson = (s: string) => people.find((p) => p.subject === s)?.displayName ?? s;
+  const allOutings: Outing[] = [], allVisits: Visit[] = [], hhSeen = new Map<string, number>();
   const counted = new Set<string>();
   const peopleOut: PersonPattern[] = [];
   for (const person of people) {
@@ -587,6 +594,12 @@ export async function analysePatterns(
       weekly.set(k, w);
     }
 
+    // Habits: a date counts as seen with twelve hours of trail.
+    const seenDates = new Map([...dayStats].filter(([, d]) => d.observed >= 12 * 60).map(([date, d]) => [date, d.weekday]));
+    const outings = outingsOf(person.subject, visits, trips, homeId, (a, b) => onFootBetween(legs, a, b), clockAt);
+    for (const [d, wd] of seenDates) hhSeen.set(d, wd);
+    allOutings.push(...outings); allVisits.push(...visits);
+
     const ao = aloneOut.get(person.subject);
     peopleOut.push({
       ...person,
@@ -620,6 +633,7 @@ export async function analysePatterns(
       weekly: [...weekly].sort((a, b) => a[0].localeCompare(b[0])).map(([wk, w]) => ({
         week: wk, trips: w.trips, awayHours: r1(w.away / 60), places: w.places.size, steps: mean(w.steps),
       })),
+      habits: habitsOf(visits, outings, seenDates, name, nameOfPerson),
     });
   }
 
@@ -633,7 +647,6 @@ export async function analysePatterns(
     const s = shared.get(pl.placeId) ?? { people: new Set(), visits: 0, hours: 0 };
     s.people.add(p.subject); s.visits += pl.visits; s.hours += pl.hours; shared.set(pl.placeId, s);
   }
-  const nameOfPerson = (s: string) => people.find((p) => p.subject === s)?.displayName ?? s;
   const pairList = [...pairs].map(([k, e]) => { const [a, b] = k.split('|'); return { a, b, outHours: r1(e.out / 60), homeHours: r1(e.home / 60), sharedTrips: e.trips }; })
     .sort((x, y) => y.outHours - x.outHours);
   const report: PatternsReport = {
@@ -651,6 +664,7 @@ export async function analysePatterns(
         placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: typeOf(placeId), people: [...s.people], visits: s.visits, hours: r1(s.hours),
       })).sort((a, b) => b.people.length - a.people.length || b.hours - a.hours).slice(0, 12),
       departures,
+      habits: habitsOf(allVisits, mergeOutings(allOutings), hhSeen, name, nameOfPerson),
     },
     findings: [],
   };
@@ -687,6 +701,25 @@ export function findingsOf(r: PatternsReport, nameOf: (s: string) => string): Pa
   const pair = r.together.pairs[0];
   if (pair && pair.outHours > 2) out.push({ subject: null, weight: 0.6, text: `${nameOf(pair.a)} and ${nameOf(pair.b)} spend the most time together out of the house: ${pair.outHours} hours${pair.sharedTrips ? `, and ${pair.sharedTrips} journeys made together` : ''}.` });
   if (r.together.whole.hours > 0) out.push({ subject: null, weight: 0.5, text: `The whole household was out in one place for ${r.together.whole.hours} hours${r.together.whole.places[0] ? `, most of it at ${r.together.whole.places[0].name}` : ''}.` });
+  // Habits: the household's strongest routine, what an outing is like, what goes together, when.
+  const label = (c: Category) => categoryLabel(c).toLowerCase();
+  const span = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`);
+  const routine = (who: string | null, x: Routine) => `${who ? `${who}: ` : ''}${categoryLabel(x.category)} on ${WEEKDAYS[x.weekday]}s, ${x.hits} of the ${x.of} seen, usually arriving about ${x.usual} ${partPhrase(x.part)}${x.places.length ? ` (${x.places.slice(0, 2).join(', ')})` : ''}.`;
+  const hh = r.household.habits;
+  if (hh.routines[0]) out.push({ subject: null, weight: 0.55 + hh.routines[0].rate * 0.3, text: `A household habit: ${routine(null, hh.routines[0]).replace(/^./, (c) => c.toLowerCase())}` });
+  for (const p of r.people) {
+    const x = p.habits.routines[0];
+    if (x && p.coverage >= 0.15) out.push({ subject: p.subject, weight: 0.3 + x.rate * 0.3, text: `${p.displayName}'s habit: ${routine(null, x).replace(/^./, (c) => c.toLowerCase())}` });
+  }
+  const a = hh.outings.about;
+  if (a && a.outings >= 8) out.push({ subject: null, weight: 0.5,
+    text: `Out and about (not school, work or a holiday), an outing lasts a median ${span(a.medianMinutes)}: ${pct(a.longShare)} run past three hours, ${pct(a.walkShare)} include an hour or more on foot, and ${pct(a.foodShare)} stop somewhere to eat.` });
+  const pairing = hh.outings.pairs.find((x) => x.lift >= 1.5);
+  if (pairing) out.push({ subject: null, weight: 0.45,
+    text: `An outing with ${label(pairing.a)} is ${pairing.lift}× as likely to take in ${label(pairing.b)}: ${pct(pairing.rate)} of ${pairing.ofA}, against ${pct(pairing.base)} of all outings.` });
+  const meal = hh.times.find((t) => t.category === 'food');
+  if (meal && meal.visits >= 8 && meal.peak.share >= 0.35) out.push({ subject: null, weight: 0.4,
+    text: `Eating out bunches up: ${pct(meal.peak.share)} of ${meal.visits} visits to food places start between ${meal.peak.from} and ${meal.peak.to}${meal.weekendShare >= 0.5 ? `, and ${pct(meal.weekendShare)} are at the weekend` : ''}.` });
   const busiest = r.household.shared[0];
   if (busiest) out.push({ subject: null, weight: 0.4, text: `${busiest.name} is the most shared place: ${busiest.people.length} people, ${busiest.visits} visits between them.` });
   return out.sort((a, b) => b.weight - a.weight);

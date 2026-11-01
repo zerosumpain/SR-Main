@@ -3,7 +3,7 @@
    * /home/people/patterns — ninety days of the household's movement, looked
    * at for its patterns rather than its moment: what is worth knowing, the
    * shape of each person's day, where the time goes by kind of place, who is
-   * with whom, each person's destinations, their steps against where they
+   * with whom, each person's destinations, their routines and outings, their steps against where they
    * went, their rhythm, and the weeks. Built nightly; this page only draws
    * the stored report, narrowed by `?person=`.
    */
@@ -17,6 +17,7 @@
   import PatternTogether from '$lib/components/home/people/PatternTogether.svelte';
   import PatternPlaces from '$lib/components/home/people/PatternPlaces.svelte';
   import PatternSteps from '$lib/components/home/people/PatternSteps.svelte';
+  import PatternHabits from '$lib/components/home/people/PatternHabits.svelte';
   import { GROUPS, categoryLabel, groupOf, type Group } from '$lib/home/presence/patterns';
   import { dayLabel } from '$lib/components/home/people/format';
   import type { ActionData, PageData } from './$types';
@@ -27,6 +28,8 @@
   const names = $derived(Object.fromEntries((report?.people ?? []).map((p) => [p.subject, p.displayName])));
   const focus = $derived(report?.people.find((p) => p.subject === data.person) ?? null);
   const shown = $derived(focus ? [focus] : (report?.people ?? []));
+  // A report built before habits existed has none: the card waits for the next build.
+  const habits = $derived(focus ? focus.habits : report?.household.habits);
   const pct = (n: number) => `${Math.round(n * 100)}%`;
   const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString('en-GB'));
   const hrefFor = (next: { person?: string | null }) => (next.person ? `?person=${encodeURIComponent(next.person)}` : '?');
@@ -172,6 +175,15 @@
           </ul>
         {/if}
       </section>
+
+      {#if habits}
+        <section class="card wide" aria-labelledby="hb-h">
+          <p class="kicker">Habits</p>
+          <h2 id="hb-h">{focus ? `${focus.displayName}'s routines and outings` : 'The household’s routines and outings'}</h2>
+          <p class="strap">{focus ? '' : 'People out together count as one outing, and a day counts once whoever went. '}A routine needs three dates and at least a third of that weekday's seen days.</p>
+          <PatternHabits {habits} who={focus ? focus.displayName : 'the household'} />
+        </section>
+      {/if}
 
       <section class="card wide" aria-labelledby="st-h">
         <p class="kicker">Steps</p>
