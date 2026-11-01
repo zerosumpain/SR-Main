@@ -161,14 +161,23 @@
 </dialog>
 
 <style>
-  /* The site's reset zeroes every margin, which pins a modal dialog to the top left: centre it again. */
+  /* The site's reset zeroes every margin, which pins a modal dialog to the top
+     left. Centre it on the viewport by its own size: top/left 50% and a
+     translate back by half, which holds in every engine and whatever the
+     height does while the map loads. (`inset: 0; margin: auto` needs
+     `height: fit-content`, and where that is not honoured the dialog pins to
+     the top again.) */
   .pm {
     position: fixed;
-    inset: 0;
-    margin: auto;
-    height: fit-content;
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    margin: 0;
+    transform: translate(-50%, -50%);
     width: min(720px, calc(100vw - 32px));
-    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow: auto;
     padding: 0;
     border: 1px solid var(--line-strong);
     border-radius: 2px;

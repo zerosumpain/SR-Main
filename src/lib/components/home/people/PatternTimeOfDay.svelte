@@ -12,6 +12,11 @@
    * alone. One crosshair runs across every panel: hover or arrow keys pick an
    * hour, and each panel prints its own figures for it. The numbers are in a
    * table underneath.
+   *
+   * Kinds can be combined: pick shops and food and each line is the share of
+   * the hour at either. Picks merge by slot, so "Away from home" with "Shops"
+   * counts a shop hour once. Every button carries the total hours the people
+   * in view spent there over the window, so the chart's shares have a size.
    */
   import { CATEGORIES, GROUPS, categoryLabel, type PersonPattern } from '$lib/home/presence/patterns';
   import { hhmm } from './format';
@@ -34,11 +39,33 @@
   );
   const kinds = $derived([{ id: 'away', label: 'Away from home', slots: AWAY as readonly string[] }, { id: 'g:home', label: 'Home', slots: ['home'] as readonly string[] }, ...groupKinds, ...fine]);
 
-  let kindId = $state('away');
+  let picked = $state<string[]>(['away']);
   let days = $state<'both' | DayType>('both');
   let hover = $state<number | null>(null);
 
-  const kind = $derived(kinds.find((k) => k.id === kindId) ?? kinds[0]);
+  // Picks that vanished (a finer kind nobody in view visits) drop out; never none.
+  const chosen = $derived.by(() => {
+    const live = kinds.filter((k) => picked.includes(k.id));
+    return live.length ? live : [kinds[0]];
+  });
+  const kind = $derived({
+    id: chosen.map((k) => k.id).join('+'),
+    label: chosen.map((k) => k.label).join(' + '),
+    slots: [...new Set(chosen.flatMap((k) => k.slots))] as readonly string[],
+  });
+  function toggle(id: string) {
+    const on = chosen.some((k) => k.id === id);
+    if (on && chosen.length === 1) return; // keep one
+    picked = on ? chosen.map((k) => k.id).filter((x) => x !== id) : [...chosen.map((k) => k.id), id];
+  }
+
+  /** Hours the people in view spent at these slots over the window: places by kind, plus time travelling. */
+  const hoursAt = (slots: readonly string[]) =>
+    people.reduce((a, p) => a
+      + p.categories.reduce((b, c) => b + (slots.includes(c.category) ? c.hours : 0), 0)
+      + (slots.includes('travel') ? p.travelHours : 0), 0);
+  const totals = $derived(new Map(kinds.map((k) => [k.id, hoursAt(k.slots)])));
+  const hrs = (h: number) => (h >= 10 ? `${Math.round(h).toLocaleString('en-GB')} h` : h >= 1 ? `${h.toFixed(1).replace(/\.0$/, '')} h` : h > 0 ? `${Math.max(1, Math.round(h * 60))} min` : '0 h');
   const types = $derived(TYPES.filter((t) => days === 'both' || t.id === days));
   const value = (p: PersonPattern, t: DayType, h: number) => kind.slots.reduce((a, s) => a + ((p.dayShape[t][h] as Record<string, number | undefined>)?.[s] ?? 0), 0);
   const series = $derived(people.map((p) => ({
@@ -81,9 +108,9 @@
 </script>
 
 <div class="td-controls" role="toolbar" aria-label="Choose what to chart">
-  <div class="td-kinds" role="group" aria-label="Kind of place">
+  <div class="td-kinds" role="group" aria-label="Kinds of place: pick one or more">
     {#each kinds as k (k.id)}
-      <button type="button" class:fine={k.id.startsWith('c:')} aria-pressed={k.id === kind.id} onclick={() => (kindId = k.id)}>{k.label}</button>
+      <button type="button" class:fine={k.id.startsWith('c:')} aria-pressed={chosen.some((c) => c.id === k.id)} onclick={() => toggle(k.id)}>{k.label}<span class="td-h">{hrs(totals.get(k.id) ?? 0)}</span></button>
     {/each}
   </div>
   <div class="td-days" role="group" aria-label="Days">
@@ -97,7 +124,7 @@
   {#each types as t (t.id)}
     <li><svg width="22" height="8" aria-hidden="true"><line x1="1" y1="4" x2="21" y2="4" stroke={COLOUR[t.id]} stroke-width="2" stroke-dasharray={t.id === 'weekend' ? '4 3' : undefined} /></svg>{t.label}</li>
   {/each}
-  <li class="td-scale">Share of each hour at {kind.label.toLowerCase()}</li>
+  <li class="td-scale">Share of each hour at {kind.label.toLowerCase()} · <b>{hrs(hoursAt(kind.slots))}</b> in all{people.length > 1 ? ' between them' : ''}</li>
 </ul>
 
 <div class="td-grid" class:big bind:clientWidth={w}>
@@ -175,6 +202,20 @@
     background: transparent;
     color: var(--text-primary);
     cursor: pointer;
+  }
+  .td-h {
+    margin-left: 6px;
+    font: var(--fs-label-xs) var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+  }
+  .td-kinds button[aria-pressed='true'] .td-h {
+    color: inherit;
+    opacity: 0.8;
+  }
+  .td-scale b {
+    color: var(--text-primary);
+    font-weight: 600;
   }
   .td-kinds button.fine {
     border-style: dashed;
