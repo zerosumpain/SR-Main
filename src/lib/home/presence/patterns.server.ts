@@ -53,8 +53,11 @@ export async function dailySteps(email: string, days: number, now: Date): Promis
   return out;
 }
 
-/** `lookups`: how many batches of place lookups to run first; 0 uses only the cache. */
-export async function runPatterns(now = new Date(), lookups = 20): Promise<PatternsReport> {
+/**
+ * `lookups`: how many batches of place lookups to run first; 0 uses only the
+ * cache. `venueFetches`: how many big places' maps to fetch; 0 uses only those kept.
+ */
+export async function runPatterns(now = new Date(), lookups = 20, venueFetches = 6): Promise<PatternsReport> {
   const [members, home] = await Promise.all([insightMembers({ kind: 'owner' }), getHomePlace().catch(() => null)]);
   const placeRows = await db.select().from(daydreamPlaces).where(eq(daydreamPlaces.status, 'active'));
   const places: Array<PatternPlace & { suggestedAddress: string | null }> = placeRows.map((p) => ({
@@ -71,7 +74,7 @@ export async function runPatterns(now = new Date(), lookups = 20): Promise<Patte
     if (t && t.query === placeQuery(p, home?.id ?? null)) p.lookup = { category: t.category, type: t.type, name: t.name };
   }
   // The cafés and restaurants inside a big place, so a lunch in town is a food stop, not more "Town".
-  await attachVenues(places, home?.id ?? null, now).catch(() => 0);
+  await attachVenues(places, home?.id ?? null, now, venueFetches).catch(() => 0);
   const rows = members.length ? await trailRows('patterns', members.map((m) => m.subject), PATTERNS_DAYS, now) : [];
   const steps = new Map<string, Map<string, number>>();
   // One person at a time: the pilot is a small box and this is not urgent.

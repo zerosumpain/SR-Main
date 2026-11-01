@@ -14,8 +14,9 @@ import { overpassQuery, poisFromOverpass, SPLIT_MIN_RADIUS_M, type Poi } from '.
 
 export const VENUES_KEY = 'home.patterns.venues';
 const REFRESH_MS = 60 * 86_400_000;
-/** Overpass is a shared public service: a few places a run, one at a time. */
+/** Overpass is a shared public service, and slow from the VPS (21 s for a trivial query): a few places a night, one at a time, one try each. */
 const MAX_FETCHES = 6;
+const FETCH_TIMEOUT_MS = 40_000;
 
 type VenueCache = Record<string, { lat: number; lon: number; radiusM: number; at: string; pois: Poi[] }>;
 
@@ -27,8 +28,8 @@ export const splittable = (p: PatternPlace, homeId: string | null) =>
   p.id !== homeId && p.kind !== 'home' && p.kind !== 'cafe' && p.lookup?.category !== 'food' && !!p.label
   && p.radiusM >= SPLIT_MIN_RADIUS_M && p.radiusM <= SPLIT_MAX_RADIUS_M;
 
-/** Attach each big place's map, fetching the ones missing or stale first. */
-export async function attachVenues(places: PatternPlace[], homeId: string | null, now = new Date()): Promise<number> {
+/** Attach each big place's map, fetching up to `fetches` missing or stale ones first (the nightly build; the owner's rebuild uses what is kept). */
+export async function attachVenues(places: PatternPlace[], homeId: string | null, now = new Date(), fetches = MAX_FETCHES): Promise<number> {
   const cache = (await getSetting<VenueCache>(VENUES_KEY).catch(() => null)) ?? {};
   const fresh = (p: PatternPlace) => {
     const c = cache[p.id];
@@ -36,8 +37,8 @@ export async function attachVenues(places: PatternPlace[], homeId: string | null
   };
   let fetched = 0;
   const { overpass } = await import('$lib/trips/research.server');
-  for (const p of places.filter((x) => splittable(x, homeId) && !fresh(x)).slice(0, MAX_FETCHES)) {
-    const answer = await overpass(overpassQuery(p.lat, p.lon, p.radiusM)).catch(() => null);
+  for (const p of places.filter((x) => splittable(x, homeId) && !fresh(x)).slice(0, fetches)) {
+    const answer = await overpass(overpassQuery(p.lat, p.lon, p.radiusM), { attempts: 1, timeoutMs: FETCH_TIMEOUT_MS }).catch(() => null);
     // A busy Overpass leaves the old map in place, or none: the place is simply not split this run.
     if (!answer) continue;
     cache[p.id] = { lat: p.lat, lon: p.lon, radiusM: p.radiusM, at: now.toISOString(), pois: poisFromOverpass(answer) };
