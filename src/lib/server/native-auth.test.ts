@@ -118,6 +118,11 @@ describe('every native route gates itself', () => {
         '/drive/folders/+server.ts',
         // Names in the caller's own space or the shared folder; contents hits owner-only.
         '/drive/search/+server.ts',
+        // Resumable uploads for big videos and photos: the same two spaces,
+        // relayed to SR-Drive with the same `x-sr-app-for` naming as files.
+        '/drive/uploads/+server.ts',
+        '/drive/uploads/[id]/+server.ts',
+        '/drive/uploads/[id]/complete/+server.ts',
         // The family alarm: raise, stand down and list active alarms. The
         // forecast's audience (owner, or a family:circle/admin member via
         // `peopleViewerOf` + `familyCaller`); everyone else 403s. Standing one
