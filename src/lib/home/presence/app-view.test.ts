@@ -72,6 +72,8 @@ vi.mock('./location-hold.server', async () => {
         ? { apply: (input: Parameters<typeof applyHold>[0]) =>
             applyHold({ ...input, recent: input.recent ?? new Map() }, hold, ['john'], { isHome: true, placeLabel: null, distanceHomeKm: 0.02 }, now, 20_000) }
         : null,
+    ownerSubjects: (members: Array<{ subject: string; email: string | null }>) =>
+      members.filter((m) => m.email && h.owners.has(m.email.toLowerCase())).map((m) => m.subject),
   };
 });
 vi.mock('./viewer', async (orig) => {
@@ -432,6 +434,11 @@ describe('pushAppViews', () => {
     expect(john(owner.view.previewAs![0].view).position?.lat).toBe(51.4321);
     // And nothing in what Sam is sent says so.
     expect(JSON.stringify(sam)).not.toMatch(/"hold"|"held"|"until"/);
+    // Nor may the pilot lay his live point over the held pin, in any view.
+    const sourcesOf = (email: string) => (body.views.find((v) => v.email === email) as unknown as { sources: Array<{ subject: string }> }).sources.map((x) => x.subject);
+    expect(sourcesOf('sam@example.test')).not.toContain('john');
+    expect(sourcesOf('owner@example.test')).not.toContain('john');
+    expect(sourcesOf('sam@example.test')).toContain('sam');
   });
 
   it('previews a person the site allows who is NOT on the app yet, without filing them a view', async () => {
