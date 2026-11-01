@@ -27,6 +27,13 @@ export const HISTORY_SHOWN = 12;
 /** Each side of a comparison needs this many seen days at home's end of the map. */
 const MIN_LOCAL_DAYS = 10;
 const MIN_COVERAGE = 0.5;
+/**
+ * A month's roaming radius is the median of four or five weekly radii, so it
+ * jumps a few kilometres on its own (1.8 → 5.3 km on real data with nothing
+ * new). Only a move this big, and by this share, is named.
+ */
+const ROAM_MIN_KM = 5;
+const ROAM_MIN_SHARE = 0.5;
 
 export interface MonthPerson {
   subject: string; displayName: string;
@@ -179,7 +186,7 @@ export function compareMonths(prev: MonthSummary, cur: MonthSummary): MonthChang
       if (Math.abs(d) >= 800 && Math.abs(d) >= q.steps * 0.15) out.push({ subject: p.subject, kind: 'steps', weight: Math.min(0.8, 0.6 + Math.abs(d) / 20000),
         text: `${who} walked ${d > 0 ? 'more' : 'less'} in ${now}: ${num(p.steps)} steps a day against ${num(q.steps)} in ${was}.` });
     }
-    if (q.roamKm > 0 && Math.abs(p.roamKm - q.roamKm) >= 2 && Math.abs(p.roamKm - q.roamKm) >= q.roamKm * 0.4)
+    if (q.roamKm > 0 && Math.abs(p.roamKm - q.roamKm) >= ROAM_MIN_KM && Math.abs(p.roamKm - q.roamKm) >= q.roamKm * ROAM_MIN_SHARE)
       out.push({ subject: p.subject, kind: 'roam', weight: 0.6,
         text: `${who}'s weeks ${p.roamKm > q.roamKm ? 'reached further' : 'stayed closer to home'} in ${now}: a typical radius of ${p.roamKm} km against ${q.roamKm} km.` });
     if (Math.abs(p.aloneOutShare - q.aloneOutShare) >= 0.15)

@@ -62,6 +62,12 @@ describe('compareMonths', () => {
     expect(compareMonths(was, now)).toEqual([]);
   });
 
+  it('names a change in roaming only when it is big, not the weekly jitter', () => {
+    const roam = (was: number, now: number) => compareMonths(month('2026-09', [person({ roamKm: was })]), month('2026-10', [person({ roamKm: now })]));
+    expect(roam(1.8, 5.3)).toEqual([]);
+    expect(roam(3, 9).map((c) => c.text)).toEqual(["Sam's weeks reached further in October: a typical radius of 9 km against 3 km."]);
+  });
+
   it('compares nothing across a change of tracker, or off too few days', () => {
     const was = month('2026-09', [person({ source: 'life360' })]);
     // person() is the app by default: a different tracker.
