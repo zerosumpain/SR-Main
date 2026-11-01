@@ -9,16 +9,7 @@ import {
 } from '$lib/constants/default-models';
 import { toCodexSlug, DEFAULT_CODEX_MODEL_SLUG } from '$lib/server/models/codex-catalogue';
 
-const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-
-/**
- * OpenRouter's API root. `OPENROUTER_BASE_URL` overrides it — set only by the
- * isolated local stacks, which point it at a stub model server so a preview
- * never spends real credit. Unset in production, so the default stands.
- */
-export function openRouterBaseUrl(): string {
-  return process.env.OPENROUTER_BASE_URL?.trim() || DEFAULT_OPENROUTER_BASE_URL;
-}
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 let openrouterClient: OpenAI | undefined;
 let codexClient: OpenAI | undefined;
@@ -169,7 +160,7 @@ export async function getLLMClient(ctx: ModelContext): Promise<{ client: OpenAI;
       installUsageCapture(
         new OpenAI({
           apiKey,
-          baseURL: openRouterBaseUrl(),
+          baseURL: OPENROUTER_BASE_URL,
         }),
         'openrouter',
       ),
