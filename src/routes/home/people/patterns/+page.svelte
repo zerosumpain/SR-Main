@@ -13,7 +13,7 @@
   import KpiStrip from '$lib/components/home/people/KpiStrip.svelte';
   import PeopleFilterBar from '$lib/components/home/people/PeopleFilterBar.svelte';
   import DepartureHeat from '$lib/components/home/people/DepartureHeat.svelte';
-  import PatternDayShape from '$lib/components/home/people/PatternDayShape.svelte';
+  import PatternTimeOfDay from '$lib/components/home/people/PatternTimeOfDay.svelte';
   import PatternTogether from '$lib/components/home/people/PatternTogether.svelte';
   import PatternPlaces from '$lib/components/home/people/PatternPlaces.svelte';
   import PatternSteps from '$lib/components/home/people/PatternSteps.svelte';
@@ -124,8 +124,8 @@
       <section class="card wide" aria-labelledby="shape-h">
         <p class="kicker">Times of day</p>
         <h2 id="shape-h">The shape of {focus ? `${focus.displayName}'s` : 'everyone’s'} day</h2>
-        <p class="strap">Each column is one hour: where the observed time in it went, across the window. Hover a block for its share.</p>
-        <PatternDayShape people={shown} />
+        <p class="strap">Pick a kind of place: each chart is the share of every hour {focus ? `${focus.displayName}` : 'each person'} spent there, weekdays against weekends, all on one scale. Hover, or use the arrow keys, to read an hour.</p>
+        <PatternTimeOfDay people={shown} />
       </section>
 
       <section class="card" aria-labelledby="where-h">
