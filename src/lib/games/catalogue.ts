@@ -26,6 +26,7 @@ import * as manhunt from './manhunt';
 import * as homestead from './homestead';
 import * as hometowns from './hometowns/hometowns';
 import * as azul from './azul';
+import * as codenames from './codenames';
 import { writeQuiz } from './quiz-night.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
@@ -51,6 +52,7 @@ export const GAME_IDS = [
   'homestead',
   'hometowns',
   'azul',
+  'codenames',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -463,6 +465,21 @@ export const GAMES: Record<GameId, GameRules> = {
     moves: {
       // Raw on purpose: `take` types its own fields (400 with a sentence for a line that cannot take it).
       take: (room, p, b, now) => azul.take(room as azul.Room, p, { source: b.source, colour: b.colour, line: b.line }, now),
+    },
+  },
+  // Two teams (four to eight) or co-op (two or three), the grid on the TV board (spec 2026-11-01 TV games).
+  // Exports durable = { schema: 1 }, waitingOn, resume and toScreen; the leaderboard ranks by `place`.
+  codenames: {
+    ...codenames,
+    maxPlayers: codenames.MAX_PLAYERS,
+    resultScore: () => null,
+    resultRank: (s) => (typeof s.place === 'number' ? s.place : null),
+    moves: {
+      // Raw on purpose: each types its own fields (400 with a sentence for a clue on the board).
+      team: (room, p, b, now) => codenames.pickTeam(room as codenames.Room, p, { team: b.team, spymaster: b.spymaster }, now),
+      clue: (room, p, b, now) => codenames.giveClue(room as codenames.Room, p, { word: b.word, count: b.count }, now),
+      guess: (room, p, b, now) => codenames.guess(room as codenames.Room, p, { card: b.card }, now),
+      pass: (room, p, _b, now) => codenames.pass(room as codenames.Room, p, now),
     },
   },
 };
