@@ -1,6 +1,6 @@
 // The open web as a wish list source: up to `SEARCHES_PER_DAY` searches per
 // item per day, paced across its checks (`searchesAllowed`), each opening its
-// first few readable results for a price.
+// first few readable results and taking every priced product on them.
 //
 // Search goes through the site's search client, so it is ledgered under
 // `purpose: 'wishlist'` on /admin/ops/tavily like every other search, and
@@ -8,19 +8,24 @@
 
 import { search } from '$lib/deepdive/web-search';
 import { searchesAllowed, searchesToday } from '../due';
-import { isReadableResult, nextQueries, SEARCH_SKIP_DOMAINS, searchQueries } from './search';
+import { fetchPageScripts, type PageScripts } from './fetch.server';
+import { isReadableResult, listingsFromPage, nextQueries, SEARCH_SKIP_DOMAINS, searchQueries } from './search';
 import type { Candidate, WishItem } from '../types';
 
-/** Results opened per search. Each may be a residential scrape, so few. */
-const PAGES_PER_SEARCH = 3;
+/**
+ * Results opened per search. Many results carry no priced products (a
+ * builder's category page that lists links only, a review) — on 2026-11-01 the
+ * one shop page with 24 listings was the fourth readable result — and a
+ * blocked page costs a residential scrape, so five, read in parallel.
+ */
+const PAGES_PER_SEARCH = 5;
 const RESULTS_PER_SEARCH = 8;
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 200);
 
 export interface SearchDeps {
   search: typeof search;
-  /** A product page as one candidate, or a throw when it has no price. */
-  readPage: (url: string) => Promise<Candidate>;
+  fetchPage: (url: string) => Promise<PageScripts>;
 }
 
 export interface SearchRun {
@@ -33,8 +38,9 @@ export interface SearchRun {
  * Run this check's share of the item's searches. Records the spend on the item
  * (the caller saves it) before each search, so a search that throws still counts.
  */
-export async function searchTheWeb(item: WishItem, now: Date, deps: Pick<SearchDeps, 'readPage'> & Partial<SearchDeps>): Promise<SearchRun> {
+export async function searchTheWeb(item: WishItem, now: Date, deps: Partial<SearchDeps> = {}): Promise<SearchRun> {
   const run = deps.search ?? search;
+  const fetchPage = deps.fetchPage ?? ((u: string) => fetchPageScripts(u));
   const all = searchQueries(item.feeds);
   // The same query twice in one check would find the same pages.
   const queries = nextQueries(item, all, Math.min(searchesAllowed(item, now), all.length));
@@ -55,9 +61,9 @@ export async function searchTheWeb(item: WishItem, now: Date, deps: Pick<SearchD
       continue;
     }
     for (const u of urls) opened.add(u);
-    const pages = await Promise.allSettled(urls.map((u) => deps.readPage(u)));
-    // An unreadable result (no Product JSON-LD, blocked) is not the search failing.
-    for (const p of pages) if (p.status === 'fulfilled') out.candidates.push(p.value);
+    const pages = await Promise.allSettled(urls.map(async (u) => listingsFromPage(await fetchPage(u), u)));
+    // An unreadable result (no priced Product, blocked) is not the search failing.
+    for (const p of pages) if (p.status === 'fulfilled') out.candidates.push(...p.value);
   }
   return out;
 }

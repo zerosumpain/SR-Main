@@ -92,7 +92,7 @@ export async function checkItem(item: WishItem, now = new Date()): Promise<ItemC
         errors.push(`${feed.source} ${feed.value}: ${errMsg(err)}`);
       }
     }
-    const web = await searchTheWeb(item, now, { readPage: readProductPage });
+    const web = await searchTheWeb(item, now);
     candidates.push(...web.candidates);
     errors.push(...web.errors);
   } else {

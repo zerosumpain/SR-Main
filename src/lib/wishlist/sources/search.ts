@@ -2,12 +2,16 @@
 // runs, and which results are worth opening. The searching and reading are in
 // `search.server.ts`.
 //
-// A result is opened only to read its schema.org `Product` JSON-LD — the same
-// reader a tracked product page uses — so a listing's price always comes from
-// the page that sells it, never from a search snippet ("was £999, now…").
+// A result is opened only to read the schema.org `Product`s in its JSON-LD,
+// so a listing's price always comes from the page that sells it, never from a
+// search snippet ("was £999, now…"). Most results are category pages, not
+// one product (checked 2026-11-01: LaptopsDirect's RTX 5060 page is a
+// CollectionPage whose ItemList holds 24 priced Products), so every priced
+// Product on the page is a listing.
 
-import { isAllowedPricerunnerUrl } from './pricerunner';
-import type { FeedRef, WishItem } from '../types';
+import { amountToPence } from '../specs';
+import { availability, isAllowedPricerunnerUrl, parseCategoryPayload, parseProductLd } from './pricerunner';
+import type { Candidate, FeedRef, WishItem } from '../types';
 
 /**
  * Sites not worth a result slot. Each costs a residential scrape to learn
@@ -51,4 +55,90 @@ export function nextQueries(item: Pick<WishItem, 'searches'>, queries: string[],
   if (!queries.length || n <= 0) return [];
   const start = item.searches?.cursor ?? 0;
   return Array.from({ length: n }, (_, i) => queries[(start + i) % queries.length]);
+}
+
+const MAX_LISTINGS_PER_PAGE = 60;
+
+const isProduct = (t: unknown) => t === 'Product' || (Array.isArray(t) && t.includes('Product'));
+
+/** A Product node's lowest GBP price and whether any offer is in stock. */
+function productPrice(node: Record<string, unknown>): { pence: number | null; inStock: boolean | null } {
+  const raw = node.offers;
+  const offers = (Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? [raw] : []) as Record<string, unknown>[];
+  let pence: number | null = null;
+  let inStock: boolean | null = null;
+  for (const o of offers) {
+    if (o.priceCurrency !== undefined && o.priceCurrency !== 'GBP') continue;
+    const p = amountToPence(o.lowPrice ?? o.price);
+    if (p !== null && (pence === null || p < pence)) pence = p;
+    const a = availability(o.availability);
+    if (a !== null) inStock = inStock === true || a;
+  }
+  return { pence, inStock };
+}
+
+const bareHost = (u: URL) => u.hostname.toLowerCase().replace(/^www\./, '');
+
+/**
+ * Every priced Product on a page a search turned up — a product page's one,
+ * a category page's ItemList, a PriceRunner category's payload. A listing's
+ * URL must stay on the page's own site (a feed of someone else's links is
+ * not that site's price). A single product page keeps its sellers.
+ */
+export function listingsFromPage(page: { payload: string | null; ld: string[] }, pageUrl: string): Candidate[] {
+  const base = new URL(pageUrl);
+  const site = bareHost(base);
+  if (page.payload) {
+    const listed = parseCategoryPayload(page.payload);
+    if (listed.length) return listed.slice(0, MAX_LISTINGS_PER_PAGE);
+  }
+  const found = new Map<string, Candidate>();
+  const walk = (o: unknown, depth: number) => {
+    if (depth > 30 || o === null || typeof o !== 'object' || found.size >= MAX_LISTINGS_PER_PAGE) return;
+    if (Array.isArray(o)) {
+      for (const v of o) walk(v, depth + 1);
+      return;
+    }
+    const node = o as Record<string, unknown>;
+    if (isProduct(node['@type']) && typeof node.name === 'string') {
+      let url: URL;
+      try {
+        url = new URL(typeof node.url === 'string' && node.url ? node.url : pageUrl, base);
+      } catch {
+        return;
+      }
+      const { pence, inStock } = productPrice(node);
+      if (pence === null || url.protocol !== 'https:' || bareHost(url) !== site) return;
+      url.hash = '';
+      if (!found.has(url.toString())) {
+        found.set(url.toString(), {
+          source: site === 'pricerunner.com' ? 'pricerunner' : 'retailer',
+          title: node.name.trim().slice(0, 300),
+          description: typeof node.description === 'string' ? node.description.trim().slice(0, 1_500) : '',
+          url: url.toString(),
+          merchant: site,
+          pricePence: pence,
+          inStock,
+        });
+      }
+      return; // a Product's offers are not more products
+    }
+    for (const v of Object.values(node)) walk(v, depth + 1);
+  };
+  for (const raw of page.ld) {
+    try {
+      walk(JSON.parse(raw), 0);
+    } catch {
+      // One malformed block is not the page.
+    }
+  }
+  const out = [...found.values()];
+  // One product, on its own page: PriceRunner lists every seller — keep them.
+  if (out.length === 1) {
+    const product = parseProductLd(page.ld);
+    if (product?.offers.length) {
+      out[0] = { ...out[0], merchant: product.offers[0].merchant, pricePence: product.lowPence ?? out[0].pricePence, sellers: product.offers };
+    }
+  }
+  return out;
 }
