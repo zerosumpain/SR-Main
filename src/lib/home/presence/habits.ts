@@ -187,11 +187,12 @@ export function habitsOf(
   // ── Routines ────────────────────────────────────────────────────────────
   const ofWeekday = Array(7).fill(0) as number[];
   for (const wd of seenDates.values()) ofWeekday[wd]++;
-  const slots = new Map<string, { dates: Set<string>; mins: number[]; places: Map<string, number>; people: Set<string> }>();
+  type Slot = { dates: Set<string>; mins: number[]; places: Map<string, number>; people: Set<string> };
+  const slots = new Map<string, Slot>();
   for (const v of visits) {
     if (NOT_HABITS.has(v.category) || !seenDates.has(v.date)) continue;
     const k = `${v.category}|${v.weekday}`;
-    const s = slots.get(k) ?? { dates: new Set(), mins: [], places: new Map(), people: new Set() };
+    const s: Slot = slots.get(k) ?? { dates: new Set(), mins: [], places: new Map(), people: new Set() };
     s.dates.add(v.date); s.mins.push(v.arriveMin); s.people.add(v.subject);
     s.places.set(v.placeId, (s.places.get(v.placeId) ?? 0) + 1);
     slots.set(k, s);
