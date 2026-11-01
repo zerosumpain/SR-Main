@@ -29,8 +29,10 @@
       "requiredTables": [
         "drive_folder_settings",
         "drive_intel_outbox",
+        "file_analyses",
         "file_embeddings",
         "file_share_token",
+        "mail_attachment_files",
         "workflow_files"
       ],
       "ownedSchema": "drive",
@@ -338,6 +340,7 @@
         "entity",
         "entity_mention",
         "fact",
+        "file_analyses",
         "file_embeddings",
         "file_share_token",
         "forge_schedules",
@@ -382,6 +385,7 @@
         "jkai_memories",
         "jkai_memory_entities",
         "jkai_tool_traces",
+        "mail_attachment_files",
         "mail_embeddings",
         "narrative_item",
         "native_credentials",

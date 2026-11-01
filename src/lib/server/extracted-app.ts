@@ -155,7 +155,7 @@ export interface RawExtractedResponse {
  */
 export function requestExtracted(
 	app: ExtractedApp,
-	method: 'GET' | 'POST' | 'DELETE',
+	method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
 	path: string,
 	{
 		headers = {},

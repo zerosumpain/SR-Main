@@ -68,7 +68,11 @@
 /api/native/drive
 /api/native/drive/files
 /api/native/drive/files/[id]
+/api/native/drive/files/[id]/analyse
+/api/native/drive/files/[id]/intel
+/api/native/drive/files/[id]/meta
 /api/native/drive/folders
+/api/native/drive/search
 /api/native/family/alarm
 /api/native/family/alarm/cancel
 /api/native/family/backlog

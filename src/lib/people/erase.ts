@@ -206,6 +206,9 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   intel_entities: { space_id: 'kept: Core-owned; purged by the mail-purge / file-deleted jobs queued here' },
   intel_relationships: { space_id: 'kept: Core-owned; purged by the mail-purge / file-deleted jobs queued here' },
   intel_timeline_events: { space_id: 'kept: Core-owned; purged by the mail-purge / file-deleted jobs queued here' },
+  // Attachments Core's mail rules filed: only ever from the owner's own Gmail
+  // (owner-accounts), and Core's purgeMailbox clears them with the mailbox.
+  mail_attachment_files: { account_email: 'kept: Core-owned; owner mailboxes only, purged by the mail-purge job queued here' },
   // Owner-only surfaces: a member can never write these, so the value is always the owner or an agent tag.
   activity_share_token: { created_by: 'kept: owner-only (health sharing)' },
   project_share: { created_by: 'kept: owner-only (projects)' },

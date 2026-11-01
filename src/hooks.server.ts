@@ -138,6 +138,14 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   // in that window could hold open at once.
   { pattern: /^\/api\/jkai\/run-snippet(\/|$)/, capacity: 20, refillPerSecond: 20 / 60 },
   { pattern: /^\/api\/projects\/share(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 }, // share-link create/revoke
+  // The phone's Drive uploads: one POST per file, so importing 200 photos (or
+  // "move from phone" draining an album) is 200 writes in a minute or two and
+  // broke on the 60/min lane below. Its own, larger bucket — 300 burst,
+  // refilling at 5/s — still caps a runaway retry loop, and Drive's quota is
+  // what bounds the bytes. Must precede the broad /api/native rule (first
+  // match wins). Only the upload paths: `files` exactly (not a file's own
+  // rename, delete or jkai calls) and the chunked `uploads` lane (phase 2).
+  { pattern: /^\/api\/native\/drive\/(files|uploads(\/.*)?)$/, capacity: 300, refillPerSecond: 5 },
   // The phone's writes. Matched nothing until now: the per-device key was being
   // computed and handed to a table with no pattern for it, so `rateLimited`
   // returned null and the lane was uncapped. The limiter only fires on non-GET,

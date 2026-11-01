@@ -109,7 +109,15 @@ describe('every native route gates itself', () => {
         '/drive/+server.ts',
         '/drive/files/+server.ts',
         '/drive/files/[id]/+server.ts',
+        // jkai on a file (analyse, extract entities): the wrapper resolves the
+        // caller, then the relay 403s anyone but the owner (`requireOwner`).
+        '/drive/files/[id]/analyse/+server.ts',
+        '/drive/files/[id]/intel/+server.ts',
+        // Info screen: a member gets the file and nulls for jkai's fields.
+        '/drive/files/[id]/meta/+server.ts',
         '/drive/folders/+server.ts',
+        // Names in the caller's own space or the shared folder; contents hits owner-only.
+        '/drive/search/+server.ts',
         // The family alarm: raise, stand down and list active alarms. The
         // forecast's audience (owner, or a family:circle/admin member via
         // `peopleViewerOf` + `familyCaller`); everyone else 403s. Standing one
