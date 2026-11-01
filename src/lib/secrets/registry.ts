@@ -131,9 +131,12 @@ const REF_SOURCES: Record<string, { label: string; resolve: () => Promise<string
   },
   brave: {
     label: 'Brave Search API key (app_settings brave.api_key → env BRAVE_SEARCH_API_KEY)',
+    // Mirrors getBraveApiKey in $lib/deepdive/brave, which this platform
+    // module may not import.
     resolve: async () => {
-      const { getBraveApiKey } = await import('$lib/deepdive/brave');
-      return getBraveApiKey();
+      const { getSetting } = await import('$lib/server/models/settings');
+      const v = await getSetting<{ value?: string }>('brave.api_key');
+      return v?.value || process.env.BRAVE_SEARCH_API_KEY || undefined;
     },
   },
   elevenlabs: {
