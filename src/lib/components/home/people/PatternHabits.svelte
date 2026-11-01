@@ -186,9 +186,17 @@
     color: var(--text-muted);
     text-align: center;
   }
+  /* A fixed-layout table takes its column widths from the first row: the header's. */
+  .hb-grid thead th:first-child {
+    width: 170px;
+  }
+  @media (max-width: 700px) {
+    .hb-grid thead th:first-child {
+      width: 120px;
+    }
+  }
   .hb-grid tbody th {
     text-align: left;
-    width: 170px;
     font: var(--fs-label) var(--font-body);
     color: var(--text-primary);
   }
