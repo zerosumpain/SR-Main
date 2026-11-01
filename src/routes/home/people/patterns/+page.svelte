@@ -14,6 +14,7 @@
   import PeopleFilterBar from '$lib/components/home/people/PeopleFilterBar.svelte';
   import DepartureHeat from '$lib/components/home/people/DepartureHeat.svelte';
   import PatternTimeOfDay from '$lib/components/home/people/PatternTimeOfDay.svelte';
+  import PlaceMapDialog, { type MapPlace } from '$lib/components/home/people/PlaceMapDialog.svelte';
   import PatternTogether from '$lib/components/home/people/PatternTogether.svelte';
   import PatternPlaces from '$lib/components/home/people/PatternPlaces.svelte';
   import PatternSteps from '$lib/components/home/people/PatternSteps.svelte';
@@ -30,6 +31,13 @@
   const shown = $derived(focus ? [focus] : (report?.people ?? []));
   // A report built before habits existed has none: the card waits for the next build.
   const habits = $derived(focus ? focus.habits : report?.household.habits);
+  // The pop-up map. Reports built before places carried their geometry have none: no button.
+  let mapPlace = $state<MapPlace | null>(null);
+  const showPlace = (p: { name: string; type?: string | null; category: Parameters<typeof categoryLabel>[0]; lat?: number; lon?: number; radiusM?: number }) => {
+    if (p.lat == null || p.lon == null || !p.radiusM) return;
+    mapPlace = { name: p.name, detail: p.type ?? categoryLabel(p.category), lat: p.lat, lon: p.lon, radiusM: p.radiusM };
+  };
+  const mappable = (p: { radiusM?: number }) => !!p.radiusM;
   // Reports built before the split have no `inside`.
   const inside = $derived((focus ? focus.inside : report?.household.inside) ?? []);
   const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -166,13 +174,13 @@
         {#if focus}
           <h2 id="pl-h">Where {focus.displayName} goes</h2>
           <p class="strap">Most time first. “Way in” is the journey that arrived (and how often it was on foot); “× stay” is the stay against that journey. Steps are an estimate: the day’s steps above a day at home, shared out by minutes on foot.</p>
-          <PatternPlaces person={focus} {names} />
+          <PatternPlaces person={focus} {names} onplace={showPlace} />
         {:else}
           <h2 id="pl-h">The places the household shares</h2>
           <p class="strap">Away from home, somewhere two or more people stay. Pick a person above for their own destinations in full.</p>
           <ul class="rows">
             {#each report.household.shared as s (s.placeId)}
-              <li><span><strong>{s.name}</strong><small>{s.type ?? categoryLabel(s.category)} · {s.people.map((x) => names[x] ?? x).join(', ')}</small></span><span class="num">{s.visits} visits · {Math.round(s.hours)} h</span></li>
+              <li><span>{#if mappable(s)}<button type="button" class="place-btn" onclick={() => showPlace(s)} title="Show on a map">{s.name}</button>{:else}<strong>{s.name}</strong>{/if}<small>{s.type ?? categoryLabel(s.category)} · {s.people.map((x) => names[x] ?? x).join(', ')}</small></span><span class="num">{s.visits} visits · {Math.round(s.hours)} h</span></li>
             {/each}
           </ul>
         {/if}
@@ -182,7 +190,7 @@
           <ul class="rows">
             {#each inside.slice(0, 12) as s (s.placeId)}
               <li>
-                <span><strong>{s.name}</strong><small>{s.type ?? categoryLabel(s.category)} · {focus ? `usually ${s.arrives}, for ${s.medianStay} min` : s.people.map((x) => names[x] ?? x).join(', ')}</small></span>
+                <span>{#if mappable(s)}<button type="button" class="place-btn" onclick={() => showPlace(s)} title="Show on a map">{s.name}</button>{:else}<strong>{s.name}</strong>{/if}<small>{s.type ?? categoryLabel(s.category)} · {focus ? `usually ${s.arrives}, for ${s.medianStay} min` : s.people.map((x) => names[x] ?? x).join(', ')}</small></span>
                 <span class="num">{s.visits} {s.visits === 1 ? 'visit' : 'visits'}</span>
               </li>
             {/each}
@@ -275,7 +283,29 @@
   </div>
 </HomeFrame>
 
+<PlaceMapDialog place={mapPlace} onclose={() => (mapPlace = null)} />
+
 <style>
+  .place-btn {
+    display: block;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: 600 var(--fs-body-sm) var(--font-body);
+    text-align: left;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 3px;
+  }
+  .place-btn:hover {
+    text-decoration-color: var(--accent);
+  }
+  .place-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .desk {
     width: min(1400px, 100%);
     margin: 0 auto;

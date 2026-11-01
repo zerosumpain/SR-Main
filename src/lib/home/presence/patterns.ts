@@ -281,6 +281,8 @@ export interface PlacePattern {
   placeId: string; name: string; category: Category;
   /** What the lookup says it is: "Discount supermarket". */
   type: string | null;
+  /** Where it is, for the pop-up map. */
+  lat: number; lon: number; radiusM: number;
   visits: number; days: number; hours: number; medianStay: number;
   medianTravelIn: number; activeShare: number; arrives: string; weekdayShare: number;
   onFootPerVisit: number; stayPerTravel: number | null;
@@ -291,6 +293,7 @@ export interface PlacePattern {
 
 export interface InsideStop {
   placeId: string; name: string; type: string | null; category: Category; parent: string;
+  lat: number; lon: number; radiusM: number;
   visits: number; hours: number; medianStay: number; arrives: string; people: string[];
 }
 
@@ -337,7 +340,7 @@ export interface PatternsReport {
   };
   household: {
     categories: Array<{ category: Category; hours: number; visits: number; people: number }>;
-    shared: Array<{ placeId: string; name: string; category: Category; type: string | null; people: string[]; visits: number; hours: number }>;
+    shared: Array<{ placeId: string; name: string; category: Category; type: string | null; lat: number; lon: number; radiusM: number; people: string[]; visits: number; hours: number }>;
     /** Everyone's stops inside the big places, a venue once with everyone who went. */
     inside: InsideStop[];
     departures: number[][];
@@ -382,6 +385,7 @@ export async function analysePatterns(
     if (!t || (!p?.label && cats.get(id) === 'far')) return null;
     return t.name && !p?.label ? `${t.type} (${t.name}?)` : t.type;
   };
+  const where = (id: string) => { const p = placeById.get(id); return { lat: p?.lat ?? 0, lon: p?.lon ?? 0, radiusM: p?.radiusM ?? 0 }; };
   rows = normaliseReadings(rows.filter((r) => +r.ts >= from && +r.ts <= +now));
 
   // Per person: trips, visits, legs and the bin-by-bin state the grids and
@@ -501,7 +505,7 @@ export async function analysePatterns(
         .filter((w) => w.share >= 0.15).sort((a, b) => b.share - a.share);
       const firstVisit = Math.min(...list.map((v) => v.start));
       return {
-        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: typeOf(placeId),
+        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: typeOf(placeId), ...where(placeId),
         visits: list.length, days: new Set(list.map((v) => v.date)).size, hours: r1(hours),
         medianStay: r0(med(list.map((v) => v.minutes))), medianTravelIn: r0(travel),
         activeShare: ways.length ? r1(ways.filter((v) => v.inMode === 'active').length / ways.length * 100) / 100 : 0,
@@ -653,7 +657,7 @@ export async function analysePatterns(
       homeDays, observedDays: fullDays.length,
       places: placesOut.slice(0, 25), categories,
       inside: placesOut.filter((pl) => pl.placeId.includes('#')).map((pl) => ({
-        placeId: pl.placeId, name: pl.name, type: pl.type, category: pl.category, parent: name(pl.placeId.split('#')[0]),
+        placeId: pl.placeId, name: pl.name, type: pl.type, category: pl.category, parent: name(pl.placeId.split('#')[0]), ...where(pl.placeId),
         visits: pl.visits, hours: pl.hours, medianStay: pl.medianStay, arrives: pl.arrives, people: [person.subject],
       })).sort((a, b) => b.visits - a.visits || b.hours - a.hours).slice(0, 40),
       dayShape: { weekday: toShares(shape.weekday), weekend: toShares(shape.weekend) },
@@ -709,7 +713,7 @@ export async function analysePatterns(
         return m;
       }, new Map<string, InsideStop>()).values()].sort((a, b) => b.visits - a.visits || b.hours - a.hours).slice(0, 40),
       shared: [...shared].filter(([, s]) => s.people.size >= 2).map(([placeId, s]) => ({
-        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: typeOf(placeId), people: [...s.people], visits: s.visits, hours: r1(s.hours),
+        placeId, name: name(placeId), category: cats.get(placeId) ?? 'unnamed', type: typeOf(placeId), ...where(placeId), people: [...s.people], visits: s.visits, hours: r1(s.hours),
       })).sort((a, b) => b.people.length - a.people.length || b.hours - a.hours).slice(0, 12),
       departures,
       habits: habitsOf(allVisits, mergeOutings(allOutings), hhSeen, name, nameOfPerson),

@@ -10,7 +10,7 @@
   import { categoryLabel, type PersonPattern } from '$lib/home/presence/patterns';
   import { mins } from './format';
 
-  let { person, names }: { person: PersonPattern; names: Record<string, string> } = $props();
+  let { person, names, onplace }: { person: PersonPattern; names: Record<string, string>; onplace?: (p: PersonPattern['places'][number]) => void } = $props();
 
   const rows = $derived(person.places.filter((p) => p.category !== 'home').slice(0, 15));
   const home = $derived(person.places.find((p) => p.category === 'home') ?? null);
@@ -43,7 +43,7 @@
       <tbody>
         {#each rows as r (r.placeId)}
           <tr>
-            <th scope="row"><span class="pl">{r.name}</span><small>{categoryLabel(r.category)}{r.type ? ` · ${r.type}` : ''}{r.isNew ? ' · new' : ''}</small></th>
+            <th scope="row">{#if onplace && r.radiusM}<button type="button" class="pl pl-btn" onclick={() => onplace(r)} title="Show on a map">{r.name}</button>{:else}<span class="pl">{r.name}</span>{/if}<small>{categoryLabel(r.category)}{r.type ? ` · ${r.type}` : ''}{r.isNew ? ' · new' : ''}</small></th>
             <td>
               <div class="bar-c">
                 <span class="bar" style:width={`${Math.max(3, (r.hours / peak) * 100)}%`}></span>
@@ -65,6 +65,26 @@
 {/if}
 
 <style>
+  .pl-btn {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 3px;
+  }
+  .pl-btn:hover {
+    text-decoration-color: var(--accent);
+  }
+  .pl-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .pp-home {
     margin: 0 0 10px;
     font-size: var(--fs-body-sm);
