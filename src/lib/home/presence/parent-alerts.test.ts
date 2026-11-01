@@ -51,6 +51,13 @@ describe('stopNotices', () => {
     const b = stopNotices({ routes: [route('rory', 'school', '2026-11-04T08:20:00Z', 24)], places, guardians, names, now: new Date(+now + 120_000) });
     expect(a[0].id).toBe(b[0].id);
   });
+  it('leaves out a guardian an "arrived safely" already told about that trip', () => {
+    const r = route('rory', 'school', '2026-11-04T08:20:00Z', 24);
+    const arrived = Date.parse('2026-11-04T08:44:00Z');
+    const [n] = stopNotices({ routes: [r], places, guardians, names, now, covered: new Map([[`rory-${arrived}`, ['john@example.test']]]) });
+    expect(n.recipients).toEqual(['katie@example.test']);
+    expect(stopNotices({ routes: [r], places, guardians, names, now, covered: new Map([[`rory-${arrived}`, ['john@example.test', 'katie@example.test']]]) })).toEqual([]);
+  });
 });
 
 const routine = (over: Partial<Routine> = {}): Routine => ({

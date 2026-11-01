@@ -16,6 +16,7 @@
 
 import { getSetting, setSetting } from '$lib/server/models/settings';
 import { isPlausibleCoord, latestTsBySource, recordFix } from './observe';
+import type { DriveFix } from './drive';
 import type { HouseholdMember } from './members';
 import { errMsg, type IncomingFix, type MovementMode } from './types';
 
@@ -102,6 +103,8 @@ export interface CompanionResult {
   skipped: number;
   /** Fixes closer than TRAIL_MIN_SPACING_S to the last one kept. */
   thinned?: number;
+  /** Harsh braking or acceleration found in this run's raw fixes (`drive`). */
+  driveEvents?: number;
   /** True when the page cap stopped the run with more waiting. */
   more: boolean;
   /** Set when a fetch or a write failed; the cursor stays on the failed page. */
@@ -233,6 +236,9 @@ export async function ingestCompanion(
 
     await setSetting(COMPANION_USERS_KEY, page.users);
 
+    // Every raw fix, thinned or not, for harsh braking (`drive`): the trail
+    // keeps one every TRAIL_MIN_SPACING_S, and a stop takes about three.
+    const raw = new Map<string, DriveFix[]>();
     for (const f of page.fixes) {
       const subject = bySubject.get(String(f.email ?? '').toLowerCase());
       if (!subject) {
@@ -250,6 +256,9 @@ export async function ingestCompanion(
         result.skipped++;
         continue;
       }
+      const list = raw.get(subject) ?? [];
+      list.push({ ts: recordedMs, lat: f.lat, lon: f.lon, accuracyM: incoming.accuracyM ?? null, speedMs: incoming.speedKmh == null ? null : incoming.speedKmh / 3.6 });
+      raw.set(subject, list);
       if (newest && recordedMs - newest.getTime() < TRAIL_MIN_SPACING_S * 1000) {
         result.thinned = (result.thinned ?? 0) + 1;
         continue;
@@ -259,10 +268,17 @@ export async function ingestCompanion(
         latest.set(subject, new Date(recordedMs));
         result.written++;
       } catch (err) {
-        if (err instanceof Error && err.name === 'CompanionDeletionFloor') { result.skipped++; continue; }
+        // Before the deletion floor: not kept, so not read for braking either.
+        if (err instanceof Error && err.name === 'CompanionDeletionFloor') { result.skipped++; list.pop(); continue; }
         result.error = `write failed: ${errMsg(err)}`;
         return result;
       }
+    }
+
+    if (raw.size) {
+      const { recordDriveFixes } = await import('./drive.server');
+      const drive = await recordDriveFixes(raw);
+      result.driveEvents = (result.driveEvents ?? 0) + drive.events;
     }
 
     cursor = page.cursor;

@@ -99,15 +99,20 @@ export function stopNotices(input: {
   guardians: ReadonlyMap<string, string[]>;
   names: ReadonlyMap<string, string>;
   now: Date;
+  /** Trips (`<subject>-<arrived ms>`) an "arrived safely" already tells
+   *  these recipients about (`journey-alerts`): they are not told twice. */
+  covered?: ReadonlyMap<string, readonly string[]>;
 }): ParentNotice[] {
   const { routes, places, guardians, names, now } = input;
   const out: ParentNotice[] = [];
   for (const route of routes) {
-    const recipients = guardians.get(route.subject);
-    if (!recipients?.length) continue;
+    if (!guardians.get(route.subject)?.length) continue;
     for (const trip of route.trips) {
       const left = +new Date(trip.start), arrived = left + trip.minutes * MINUTE;
       if (arrived > +now || +now - arrived > STOP_WINDOW_MINS * MINUTE) continue;
+      const told = input.covered?.get(`${route.subject}-${arrived}`) ?? [];
+      const recipients = guardians.get(route.subject)!.filter((r) => !told.includes(r));
+      if (!recipients.length) continue;
       const to = places.find((p) => p.id === route.toId);
       const where = to?.label || to?.suggestedLabel || (to?.kind === 'home' ? 'Home' : null);
       const name = names.get(route.subject) ?? route.person;
