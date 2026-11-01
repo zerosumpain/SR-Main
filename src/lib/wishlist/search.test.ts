@@ -128,7 +128,7 @@ describe('searchTheWeb', () => {
 
   it('runs this check’s share, records it on the item, and skips unreadable results', async () => {
     const item = hunt();
-    const search = vi.fn(async (q: string) => ({
+    const search = vi.fn(async (q: string, _opts?: unknown) => ({
       query: q,
       results: [
         { title: '', url: `https://shop.example/${q}`, content: '', score: 1 },
