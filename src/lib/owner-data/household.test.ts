@@ -2,8 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { analysePatterns, findingsOf, type PatternPlace } from '$lib/home/presence/patterns';
 import type { InsightFix } from '$lib/home/presence/insights';
 import type { FamilyForecast } from '$lib/home/presence/forecast';
-import { movementCardLines, renderMovement, type MovementInputs } from './movement';
-import { describeSource } from './explain';
+import { movementCardLines, renderMovement, type MovementInputs } from './household';
 
 const places: PatternPlace[] = [
   { id: 'home', label: 'Home', kind: 'home', lat: 51.5, lon: -0.12, radiusM: 100 },
@@ -83,9 +82,20 @@ describe('movement for the think loop', () => {
   it('asks for a name it does not know', async () => {
     expect(renderMovement(await inputs(), 'person', 'Robin')).toContain('Name someone: Alex, Sam.');
   });
-
-  it('names its source plainly on the explain page', () => {
-    expect(describeSource('household_patterns', { section: 'forecast' }).label).toBe('Household forecast');
-    expect(describeSource('household_patterns', { section: 'person', person: 'Alex' })).toEqual({ label: 'Household movement patterns', detail: 'person · Alex' });
+  it('reads the weekly digest and the month history as their own sections', async () => {
+    const m = await inputs();
+    m.digest = {
+      generatedAt: '2026-09-26T02:00:00Z',
+      changes: [{ key: 'k', kind: 'later', subject: 'sam', person: 'Sam', title: 'Leaves school later', detail: 'by 20 min', weight: 2 }],
+      health: {
+        alex: { days: 7, steps: 9000, stepDays: 7, sleepHours: 8.1, nights: 6, workouts: 1, workoutMinutes: 40, from: '2026-09-19', to: '2026-09-25' },
+        sam: { days: 7, steps: 12000, stepDays: 5, sleepHours: null, nights: 0, workouts: 0, workoutMinutes: 0, from: '2026-09-19', to: '2026-09-25' },
+      },
+    } as unknown as MovementInputs['digest'];
+    const week = renderMovement(m, 'week', null);
+    expect(week.indexOf('Sam (')).toBeLessThan(week.indexOf('Alex ('));
+    expect(week).toContain('steps 12,000 a day over 5 days');
+    expect(week).toContain('Sam: Leaves school later — by 20 min');
+    expect(renderMovement({ ...m, history: null }, 'months', null)).toMatch(/No months kept yet/);
   });
 });

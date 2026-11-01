@@ -5,7 +5,14 @@
 // `$lib/daydream/think/{reads,health}`), so chat and daydream can never
 // disagree about what a pound or a night's sleep was.
 //
-// All five are reads, owner-only and NOT member-safe (they are not on the
+// The household's reads joined them 2026-11-01 (owner: questions about the
+// family's health, comparisons, benchmarks and "who has the most average
+// steps over the last 6 days"): household_patterns is daydream's own tool
+// (`./household.server`), and household_daily does the sums over any window
+// (`./household-daily.server`). Toolset 'people', member-forbidden on both
+// sides: the most sensitive data the site holds stays the owner's.
+//
+// All seven are reads, owner-only and NOT member-safe (they are not on the
 // contract's MEMBER_SAFE_TOOLS list, so `executeTool` refuses any member; the
 // handler's `refuseUnlessOwner` is the second wall). Not offered to WhatsApp or
 // the heartbeat, whose whitelists name their tools.
@@ -18,6 +25,8 @@ import { register } from '$lib/tools/registry-internal';
 import { refuseUnlessOwner } from '$lib/tools/tools/owner-only';
 import { diaryTool } from './diary.server';
 import { spendTool } from './spend.server';
+import { MOVEMENT_SECTIONS } from './household';
+import { DAILY_METRICS } from './household-daily';
 import { HUB_SECTIONS, activitiesTool, healthHubTool, healthSeriesDescription, healthSeriesTool } from './health.server';
 
 type Read = (args: Record<string, unknown>) => Promise<string>;
@@ -129,4 +138,58 @@ register({
   effect: 'read',
   surfaces: ['chat', 'app'],
   handler: ownerRead('health_activities', "John's recent workouts and outings", (args) => activitiesTool(args), '/health'),
+});
+
+register({
+  name: 'household_patterns',
+  description:
+    "The household (everyone on /home/people): ninety days of movement patterns, today's forecast, the weekly digest and month-by-month history. Sections: summary (sharpest findings and one line a person), person (one person in depth: places, routines, time out, steps), forecast (each person's rest of today, anything off routine, forecast accuracy), steps (90-day step averages a person, weekday vs weekend, by weekday, home vs out), together (who is out with whom), habits (household routines and outings), week (each person's last seven days: steps, sleep, workouts; and what changed), months (each month's steps, time out, journeys, distance by person, and the last two months compared). One section per call. Named places only, never coordinates. For any other window or a day-by-day comparison use household_daily. Read-only.",
+  parameters: {
+    type: 'object',
+    properties: {
+      section: { type: 'string', enum: [...MOVEMENT_SECTIONS], description: 'Default "summary".' },
+      person: { type: 'string', description: 'For section "person": their name.' },
+    },
+    required: [],
+  },
+  category: 'Family',
+  toolset: 'people',
+  effect: 'read',
+  surfaces: ['chat', 'app'],
+  handler: ownerRead('household_patterns', "The household's movement and week (/home/people)", async (args) => {
+    const { householdPatternsTool } = await import('./household.server');
+    return householdPatternsTool(args);
+  }, '/home/people/patterns'),
+});
+
+register({
+  name: 'household_daily',
+  description:
+    "Everyone in the household's health day by day from the SR app (the same Apple Health source for each person, John included), with the arithmetic already done: each person's value on every date, then mean, median, total, highest and lowest day, a ranking, the gap between the top two and the household average. Use it for comparisons and simple maths over any window: \"who has the most average steps over the last 6 days\", \"who slept most this week\", \"workout minutes this month\". Quote its figures rather than recomputing them. The window is London dates ending YESTERDAY (today is a part day, shown separately for steps) unless include_today is set. A missing day is not zero. Read-only.",
+  parameters: {
+    type: 'object',
+    properties: {
+      metric: { type: 'string', enum: [...DAILY_METRICS], description: 'steps (default), sleep (hours a night), workouts (minutes), resting_hr (bpm).' },
+      days: { type: 'number', minimum: 1, maximum: 90, description: 'How many dates, default 7. Steps up to 90; the others up to 31.' },
+      include_today: { type: 'boolean', description: "End the window today (a part day) instead of yesterday. Default false." },
+      to: { type: 'string', description: 'Optional last date, YYYY-MM-DD, for a past window. Default yesterday.' },
+      person: { type: 'string', description: 'Optional: one person by name. Default everyone.' },
+    },
+    required: [],
+  },
+  category: 'Family',
+  toolset: 'people',
+  effect: 'read',
+  surfaces: ['chat', 'app'],
+  handler: async (args, ctx) => {
+    const refused = refuseUnlessOwner('household_daily', ctx);
+    if (refused) return refused;
+    try {
+      const { householdDailyTool } = await import('./household-daily.server');
+      const { label, text, rows } = await householdDailyTool(args ?? {});
+      return { success: true, data: { label, text, rows, url: '/home/people/patterns' } };
+    } catch (err) {
+      return { success: false, error: `household_daily could not be read: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300) };
+    }
+  },
 });

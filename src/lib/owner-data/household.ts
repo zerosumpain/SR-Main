@@ -1,11 +1,15 @@
-// src/lib/daydream/think/movement.ts
+// src/lib/owner-data/household.ts
 //
-// The household's movement, as the think loop reads it: the nightly patterns
-// report (/home/people/patterns) and the live forecast (/home/people). PURE —
-// `movement.server.ts` gathers both.
+// The household's movement and week, as the think loop and chat read it: the
+// nightly patterns report (/home/people/patterns), the live forecast
+// (/home/people), the weekly digest (what changed, and each person's week of
+// health from the app) and the month-by-month history. PURE —
+// `household.server.ts` gathers them.
 //
 // Owner, 2026-11-01: "make all of this rich, new intelligence available to
-// daydream, too — so it can consider patterns and forecasts". Two ways in:
+// daydream, too — so it can consider patterns and forecasts", and then to
+// chat, "so that questions about health, comparisons, benchmarks" get
+// answered. Two ways in for daydream:
 //
 //   - a HOUSEHOLD card, seeded beside the situation card, carries TODAY: each person's forecast day, anything
 //     that looks off against their routine, and the household's sharpest
@@ -13,14 +17,18 @@
 //   - the `household_patterns` tool carries the DEPTH, a section at a time
 //     (every card is cut at CARD_CHARS, so one section per call fits).
 //
-// Like the rest of the card: named places only, never coordinates.
+// Chat registers the same tool (`chat-tools.ts`), beside `household_daily`
+// for day-by-day figures. Like the rest of the card: named places only, never
+// coordinates.
 
 import { categoryLabel, type PatternsReport, type PersonPattern } from '$lib/home/presence/patterns';
 import { WEEKDAYS } from '$lib/home/presence/habits';
 import type { FamilyForecast } from '$lib/home/presence/forecast';
 import type { Scorecard } from '$lib/home/presence/forecast-eval';
+import type { StoredDigest } from '$lib/home/presence/forecast-digest.server';
+import { monthName, type PatternsHistoryView } from '$lib/home/presence/patterns-history';
 
-export const MOVEMENT_SECTIONS = ['summary', 'person', 'forecast', 'steps', 'together', 'habits'] as const;
+export const MOVEMENT_SECTIONS = ['summary', 'person', 'forecast', 'steps', 'together', 'habits', 'week', 'months'] as const;
 export type MovementSection = (typeof MOVEMENT_SECTIONS)[number];
 
 export interface MovementInputs {
@@ -29,6 +37,10 @@ export interface MovementInputs {
   scorecard: Scorecard | null;
   /** subject → display name, for the forecast (which carries subjects). */
   names: Record<string, string>;
+  /** The nightly digest: what changed, and each person's last seven days of health. */
+  digest?: StoredDigest | null;
+  /** Month by month (the kept history, not the 90-day window). */
+  history?: PatternsHistoryView | null;
 }
 
 const clockFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -167,10 +179,46 @@ function forecastBlock(m: MovementInputs): string[] {
   return out;
 }
 
+function weekBlock(m: MovementInputs): string[] {
+  const d = m.digest;
+  if (!d) return ['The weekly digest has not been built yet (it is built nightly at 2am).'];
+  const out = [`WEEKLY DIGEST — built ${d.generatedAt.slice(0, 10)}.`];
+  const rows = Object.entries(d.health).sort((a, b) => (b[1].steps ?? -1) - (a[1].steps ?? -1));
+  if (rows.length) {
+    out.push('Last seven days of health from the app, person by person (means over the days that had a reading; most steps first):');
+    for (const [subject, w] of rows) {
+      out.push(`  ${nameOf(m, subject)} (${w.from} to ${w.to}): steps ${num(w.steps)} a day over ${w.stepDays} days; sleep ${w.sleepHours ?? '—'} h a night over ${w.nights} nights; ${w.workouts} workouts, ${w.workoutMinutes} min.`);
+    }
+  } else {
+    out.push('No one uploaded health from the app in the last seven days.');
+  }
+  const changes = [...d.changes].sort((a, b) => b.weight - a.weight).slice(0, 10);
+  if (changes.length) out.push('What changed (the last fortnight against the six weeks before):', ...changes.map((c) => `  ${c.person}: ${c.title}${c.detail ? ` — ${c.detail}` : ''}`));
+  return out;
+}
+
+function monthsBlock(m: MovementInputs): string[] {
+  const h = m.history;
+  if (!h?.months.length) return ['No months kept yet (each month is summed by the nightly build).'];
+  const out = ['MONTH BY MONTH (steps leave holiday days out; months compare only on the same tracker):'];
+  for (const mo of h.months) {
+    out.push(`${monthName(mo.month)}${mo.final ? '' : ` (so far, ${mo.coveredDays} of ${mo.monthDays} days)`}:`);
+    for (const p of mo.people) {
+      out.push(`  ${p.displayName}: steps ${num(p.steps)} a day (${p.stepDays} days); out ${p.outPerDay == null ? '—' : p.outPerDay.toFixed(1)} h a day; ${p.trips} journeys, ${num(p.distanceKm)} km; ${p.distinctPlaces} places; ${p.awayDays} days away; seen ${pct(p.coverage)} (${p.source ?? 'unknown'} tracker).`);
+    }
+  }
+  if (h.compared && h.changes.length) {
+    out.push(`${monthName(h.compared[0])} to ${monthName(h.compared[1])}:`, ...h.changes.slice(0, 10).map((c) => `  ${c.text}`));
+  }
+  return out;
+}
+
 /** One section of the `household_patterns` tool. */
 export function renderMovement(m: MovementInputs, section: MovementSection, person: string | null): string {
   const r = m.report;
   if (section === 'forecast') return forecastBlock(m).join('\n');
+  if (section === 'week') return weekBlock(m).join('\n');
+  if (section === 'months') return monthsBlock(m).join('\n');
   if (!r) return 'The household patterns report has not been built yet (it is built nightly at 2am).';
   const head = `HOUSEHOLD PATTERNS — ${r.days} days to ${r.to.slice(0, 10)}, built ${r.generatedAt.slice(0, 10)}.`;
   switch (section) {
