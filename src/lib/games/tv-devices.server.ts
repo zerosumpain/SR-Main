@@ -57,7 +57,7 @@ function datastoreStore(): TvStore {
   return {
     async list() {
       await ensure();
-      const { records } = await queryRecords(TVS_COLLECTION, { sort: { field: 'linkedAt', dir: 'desc' }, limit: 100 }, ACTOR);
+      const { records } = await queryRecords(TVS_COLLECTION, { sort: { path: 'linkedAt', dir: 'desc' }, limit: 100 }, ACTOR);
       return records.map((r) => r.data as unknown as TvRow);
     },
     async get(id) {

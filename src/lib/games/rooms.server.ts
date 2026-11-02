@@ -29,7 +29,7 @@ import { roundRows, type RoundRow, type Window } from './results';
 import type { RoomMeta, RoomStore, SaveResult, StoredRoom } from './room-store';
 import { isGuestId } from './party';
 
-type WireRoom = ReturnType<GameRules['toWire']>;
+export type WireRoom = ReturnType<GameRules['toWire']>;
 
 /** How long an invite sent from the lobby holds the lobby open for, at least. */
 const INVITE_HOLD_MS = 2 * 60_000;

@@ -197,5 +197,5 @@ John's.
 | APK hosting | static/ / GitHub release of a public SR-TV repo | GitHub release | no binaries in SR-Main; Downloader follows the 302 | yes |
 | Physics authority | every phone simulates / TV simulates and reports | TV | one renderer, the TV is a linked device | yes |
 | New physics lib | hand-rolled / planck / Rapier 2D | Rapier 2D | Marbler precedent | yes |
-| Boggle name | rename / keep | keep for now | private family use; flagged in the board-games plan for renaming before going public | yes |
+| Boggle name | rename / keep | **Kelloggle** (John, 2026-11-02) — shown everywhere; the id stays `boggle` so results, rooms and the app keep working | his call; also clears the trademark | yes |
 | Guests on leaderboard | record / skip | skip | `game_results` is family-only, no anonymous rows | yes |

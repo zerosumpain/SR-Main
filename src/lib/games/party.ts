@@ -106,3 +106,29 @@ export function partyRange(game: GameId): { min: number; max: number } {
   const max = Math.min(PARTY_MAX, rules.maxPlayers ?? MAX_PLAYERS);
   return { min: Math.min(max, rules.minPlayers ?? 1), max };
 }
+
+export type MemberKind = 'family' | 'guest';
+
+export interface PartyGame {
+  id: GameId;
+  title: string;
+  min: number;
+  max: number;
+}
+
+export interface PartyView {
+  id: string;
+  code: string;
+  tvName: string;
+  phase: 'lobby' | 'playing';
+  locked: boolean;
+  game: GameId | null;
+  options: Record<string, unknown>;
+  members: { id: string; name: string; kind: MemberKind; online: boolean }[];
+  roomId: string | null;
+  notice: string | null;
+  games: PartyGame[];
+  joinPath: string;
+  serverNow: number;
+}
+

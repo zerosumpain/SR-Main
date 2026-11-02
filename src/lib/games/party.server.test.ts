@@ -224,3 +224,14 @@ describe('streams', () => {
     expect(partyByCode(code).members[0].online).toBe(false);
   });
 });
+
+describe('a kicked guest', () => {
+  it('is known as kicked, so the same browser cannot rejoin', async () => {
+    const { wasKicked } = await import('./party.server');
+    const { code } = openParty(tv);
+    const sam = joinGuest(code, 'Sam').memberId;
+    expect(wasKicked(code, sam)).toBe(false);
+    tvAct(tv.id, 'kick', { memberId: sam });
+    expect(wasKicked(code, sam)).toBe(true);
+  });
+});

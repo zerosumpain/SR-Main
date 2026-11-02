@@ -19,7 +19,9 @@ import { TITLES } from './invite-push.server';
 import { act, createGame, endRoom, ensureRoom, roomStage, subscribe, watch, type WireRoom } from './rooms.server';
 import { newCode, normaliseCode } from './screens';
 import { GameError, isDifficulty, type Difficulty } from './tap-duel';
-import { PARTY_GAMES, PARTY_MAX, cleanGuestName, issueSeat, newGuestId, newPartyId, partyRange } from './party';
+import { PARTY_GAMES, PARTY_MAX, cleanGuestName, issueSeat, newGuestId, newPartyId, partyRange, type MemberKind, type PartyGame, type PartyView } from './party';
+
+export type { MemberKind, PartyGame, PartyView };
 
 /** Parties at once, across every TV. */
 export const MAX_PARTIES = 100;
@@ -31,7 +33,6 @@ const KEEPALIVE_MS = 15_000;
 /** The lobby verbs a phone may not send at a party: the TV starts, ends and invites. */
 const TV_ONLY = new Set(['start', 'again', 'join', 'decline', 'invite', 'screen', 'close']);
 
-export type MemberKind = 'family' | 'guest';
 
 interface Member {
   id: string;
@@ -59,29 +60,6 @@ interface Party {
   online: Map<string, number>;
   events: EventEmitter;
   stopRoom: () => void;
-}
-
-export interface PartyGame {
-  id: GameId;
-  title: string;
-  min: number;
-  max: number;
-}
-
-export interface PartyView {
-  id: string;
-  code: string;
-  tvName: string;
-  phase: 'lobby' | 'playing';
-  locked: boolean;
-  game: GameId | null;
-  options: Record<string, unknown>;
-  members: { id: string; name: string; kind: MemberKind; online: boolean }[];
-  roomId: string | null;
-  notice: string | null;
-  games: PartyGame[];
-  joinPath: string;
-  serverNow: number;
 }
 
 const parties = new Map<string, Party>();
@@ -233,6 +211,11 @@ export function joinGuest(code: unknown, rawName: unknown, now = Date.now()): { 
   if (!name) throw new GameError(400, 'Pick a different name — letters and numbers, up to sixteen.');
   const m = admit(p, { id: newGuestId(), name, kind: 'guest' }, now);
   return { party: view(p, now), memberId: m.id, seat: seatFor(p, m.id) };
+}
+
+/** Whether `memberId` was taken out of this party on the TV (a kicked guest cannot come back under a new name from the same browser). */
+export function wasKicked(code: unknown, memberId: string): boolean {
+  return codeParty(code).members.some((m) => m.id === memberId && !m.active);
 }
 
 /** The party's id for a code — the route reads the seat cookie named after it. */
