@@ -16,6 +16,8 @@
   import QuizTable from '$lib/components/games/quiz/QuizTable.svelte';
   import CodenamesTable from '$lib/components/games/codenames/CodenamesTable.svelte';
   import SnapTable from '$lib/components/games/snap/SnapTable.svelte';
+  import BiscuitTable from '$lib/components/games/biscuit/BiscuitTable.svelte';
+  import type { ScreenRoom as BiscuitRoom } from '$lib/games/biscuit-tower';
   import type { ScreenRoom as SnapRoom } from '$lib/games/snap-happy';
   import type { AzulRoom } from '$lib/components/games/azul/motion';
   import type { WireRoom as QuizRoom } from '$lib/games/quiz-night';
@@ -228,6 +230,9 @@
         <AzulTable room={room as AzulRoom} {skewMs} />
       {:else if party.game === 'snap-happy'}
         <SnapTable room={room as SnapRoom} {skewMs} />
+      {:else if party.game === 'biscuit-tower'}
+        <!-- This TV runs the physics and says how each drop landed. -->
+        <BiscuitTable room={room as BiscuitRoom} {skewMs} report={(b) => void tvParty({ action: 'report', ...b }).catch(() => {})} />
       {/if}
     </div>
     {#if roomPhase === 'lobby' && !sheet}
@@ -468,33 +473,38 @@
 
   /* Menu */
   .tv-menu {
-    padding: 5cqw 6cqw;
+    padding: 3.6cqw 5cqw 2.4cqw;
     display: flex;
     flex-direction: column;
-    gap: 3cqw;
+    gap: 2.2cqw;
   }
+  .tv-menu h1 {
+    font-size: 3.8cqw;
+  }
+  /* Four across: every game and the About tile fit the screen without scrolling. */
   .tv-tiles {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2cqw;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.6cqw;
   }
   .tv-tile {
-    width: 26cqw;
-    min-height: 12.5cqw;
+    min-height: 12cqw;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     text-align: left;
-    gap: 0.8cqw;
-    padding: 2cqw;
+    gap: 0.6cqw;
+    padding: 1.5cqw 1.6cqw;
   }
   .tv-tile-name {
     font-family: var(--font-display);
     font-weight: var(--font-display-weight);
-    font-size: 2.6cqw;
+    font-size: 2.1cqw;
+    line-height: 1.1;
   }
   .tv-tile-blurb {
-    font-size: 1.4cqw;
+    font-size: 1.2cqw;
+    line-height: 1.4;
     color: var(--on-ink-70);
     flex: 1;
   }

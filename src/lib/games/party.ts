@@ -113,9 +113,10 @@ export function cleanGuestName(raw: unknown, taken: readonly string[]): string |
 
 /** How many people a game can be started with at a party. */
 export function partyRange(game: GameId): { min: number; max: number } {
-  const rules = GAMES[game];
+  const rules = GAMES[game] as (typeof GAMES)[GameId] & { MIN_PLAYERS?: number };
   const max = Math.min(PARTY_MAX, rules.maxPlayers ?? MAX_PLAYERS);
-  return { min: Math.min(max, rules.minPlayers ?? 1), max };
+  // A game's own floor (Azul and Codenames export MIN_PLAYERS: two) is what its `start` checks.
+  return { min: Math.min(max, rules.minPlayers ?? rules.MIN_PLAYERS ?? 1), max };
 }
 
 export type MemberKind = 'family' | 'guest';
