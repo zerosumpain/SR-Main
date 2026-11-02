@@ -27,6 +27,7 @@ import { GameError, MAX_PLAYERS, type Difficulty } from './tap-duel';
 import { GAMES, PACES, type GameId, type GameRules, type Pace, type RoomBase } from './catalogue';
 import { roundRows, type RoundRow, type Window } from './results';
 import type { RoomMeta, RoomStore, SaveResult, StoredRoom } from './room-store';
+import { isGuestId } from './party';
 
 type WireRoom = ReturnType<GameRules['toWire']>;
 
@@ -186,7 +187,9 @@ function record(live: Live, now: number): void {
   live.round += 1;
   let rows: RoundRow[];
   try {
-    rows = roundRows(room, live.rules, live.round, now, live.optionKeys);
+    // A party's guests (`v_` ids, no account) play and are placed, but only
+    // the family's rows are kept: the leaderboard is theirs.
+    rows = roundRows(room, live.rules, live.round, now, live.optionKeys).filter((r) => !isGuestId(r.playerId));
   } catch (err) {
     console.error(`[games] ${room.id}: could not read the result`, err);
     return;
@@ -1359,6 +1362,29 @@ export function closeLobby(id: string, byName: string): void {
   room.phase = 'closed';
   room.phaseEndsAt = null;
   // Every game's room keeps an `updatedAt`; `RoomBase` does not name it.
+  if ('updatedAt' in room) (room as RoomBase & { updatedAt: number }).updatedAt = now;
+  live.closedBy = byName;
+  settle(live, true);
+}
+
+/**
+ * End a room whatever its phase — the TV running a party stops the game it
+ * is showing (`party.server`): every phone sees it close, with `closedBy`.
+ * A room already closed is left as it is.
+ */
+export function endRoom(id: string, byName: string): void {
+  const live = rooms.get(id);
+  if (!live || live.dead) return;
+  const now = Date.now();
+  const moved = advanceRoom(live, now);
+  record(live, now);
+  const { room } = live;
+  if (room.phase === 'closed') {
+    settle(live, moved);
+    return;
+  }
+  room.phase = 'closed';
+  room.phaseEndsAt = null;
   if ('updatedAt' in room) (room as RoomBase & { updatedAt: number }).updatedAt = now;
   live.closedBy = byName;
   settle(live, true);
