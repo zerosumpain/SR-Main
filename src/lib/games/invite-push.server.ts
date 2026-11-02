@@ -41,6 +41,7 @@ export const TITLES: Record<GameId, string> = {
   hometowns: 'Hometowns',
   azul: 'Azul',
   codenames: 'Codenames',
+  'snap-happy': 'Snap Happy',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
