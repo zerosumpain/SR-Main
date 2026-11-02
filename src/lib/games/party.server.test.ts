@@ -235,3 +235,41 @@ describe('a kicked guest', () => {
     expect(wasKicked(code, sam)).toBe(true);
   });
 });
+
+describe('games with set-up first', () => {
+  it('Codenames opens its lobby on Start, and Go starts play', () => {
+    const { code } = openParty(tv);
+    joinGuest(code, 'Sam');
+    joinGuest(code, 'Alex');
+    tvAct(tv.id, 'pick', { game: 'codenames' });
+    const v = tvAct(tv.id, 'start');
+    expect(roomStage(v.roomId!)?.phase).toBe('lobby');
+    tvAct(tv.id, 'go');
+    expect(roomStage(v.roomId!)?.phase).toBe('countdown');
+  });
+
+  it('Go with nothing waiting is refused', () => {
+    openParty(tv);
+    expect(() => tvAct(tv.id, 'go')).toThrow(/No game is waiting/u);
+  });
+
+  it('a TV may start ten AI quizzes a day', () => {
+    const { code } = openParty(tv);
+    joinGuest(code, 'Sam');
+    tvAct(tv.id, 'pick', { game: 'quiz-night', options: { topic: 'trains' } });
+    for (let i = 0; i < 10; i++) tvAct(tv.id, i === 0 ? 'start' : 'again');
+    expect(() => tvAct(tv.id, 'again')).toThrow(/limit/u);
+  });
+});
+
+describe('the TV reports a drop', () => {
+  it('only through the party, never from a phone', () => {
+    const { code } = openParty(tv);
+    const sam = joinGuest(code, 'Sam').memberId;
+    tvAct(tv.id, 'pick', { game: 'biscuit-tower' });
+    tvAct(tv.id, 'start');
+    expect(() => memberAct(code, sam, 'report', { turn: 1, outcome: 'toppled' })).toThrow(/Unknown action/u);
+    // Before anything has dropped the report is ignored, not an error.
+    expect(() => tvAct(tv.id, 'report', { turn: 1, outcome: 'settled', height: 1 })).not.toThrow();
+  });
+});

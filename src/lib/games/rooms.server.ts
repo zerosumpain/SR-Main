@@ -1039,6 +1039,12 @@ export function gameOf(id: string, playerId: string): GameId {
   return live.room.game;
 }
 
+/** Who hosts a loaded room now (the host can pass on when somebody leaves), or null. */
+export function hostOf(id: string): string | null {
+  const live = rooms.get(id);
+  return live && !live.dead ? live.room.hostId : null;
+}
+
 /** Which game a loaded room is and the phase it is in, or null when it is not loaded. */
 export function roomStage(id: string): { game: GameId; phase: string } | null {
   const live = rooms.get(id);

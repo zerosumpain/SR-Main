@@ -115,6 +115,11 @@ const PUBLIC_PATHS = [
   '/tv',
   '/api/games/tv',
   '/api/games/party',
+  // A Kelly's Quiz Night photo for the TV and the phones in a room playing
+  // its pack: /api/games/photos/<pack>/<photo>?e=&s= — the HMAC signature
+  // (twelve hours, written into the room) is the permission; forged, expired
+  // and deleted all 404 ($lib/games/quiz-packs.server signedPhoto). A PREFIX.
+  '/api/games/photos',
   // The iPhone app for a phone that cannot use TestFlight (a child's):
   // /app (the family's one address), /app/<code> (a join link) and
   // /install/<token> (the manifest and the app). Safari on that phone has no

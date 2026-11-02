@@ -6,6 +6,16 @@
   import { openPlay, type PlayParty, type PlayState } from './play-stream';
   import BogglePad from './boggle/BogglePad.svelte';
   import type { WireRoom as BoggleRoom } from '$lib/games/boggle';
+  import QuizPad from './quiz/QuizPad.svelte';
+  import CodenamesPad from './codenames/CodenamesPad.svelte';
+  import AzulPad from './azul/AzulPad.svelte';
+  import SnapPad from './snap/SnapPad.svelte';
+  import BiscuitPad from './biscuit/BiscuitPad.svelte';
+  import type { WireRoom as BiscuitRoom } from '$lib/games/biscuit-tower';
+  import type { WireRoom as SnapRoom } from '$lib/games/snap-happy';
+  import type { WireRoom as QuizRoom } from '$lib/games/quiz-night';
+  import type { WireRoom as CodenamesRoom } from '$lib/games/codenames';
+  import type { WireRoom as AzulRoom } from '$lib/games/azul';
 
   let {
     code,
@@ -72,6 +82,16 @@
 {:else if view.kind === 'room'}
   {#if view.room.game === 'boggle'}
     <BogglePad {code} room={view.room as unknown as BoggleRoom} skewMs={view.skewMs} />
+  {:else if view.room.game === 'quiz-night'}
+    <QuizPad {code} room={view.room as unknown as QuizRoom} skewMs={view.skewMs} />
+  {:else if view.room.game === 'codenames'}
+    <CodenamesPad {code} room={view.room as unknown as CodenamesRoom} skewMs={view.skewMs} />
+  {:else if view.room.game === 'azul'}
+    <AzulPad {code} room={view.room as unknown as AzulRoom} skewMs={view.skewMs} />
+  {:else if view.room.game === 'snap-happy'}
+    <SnapPad {code} room={view.room as unknown as SnapRoom} skewMs={view.skewMs} />
+  {:else if view.room.game === 'biscuit-tower'}
+    <BiscuitPad {code} room={view.room as unknown as BiscuitRoom} skewMs={view.skewMs} />
   {:else if view.room.phase === 'finished'}
     {@const table = standingsOf(view.room)}
     <section class="play-centre">

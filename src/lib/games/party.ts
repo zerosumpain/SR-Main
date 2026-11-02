@@ -23,7 +23,18 @@ export const PARTY_MAX = 8;
 export const GUEST_NAME_MAX = 16;
 
 /** The games a party can play: a TV board and a web controller each. */
-export const PARTY_GAMES: readonly GameId[] = ['boggle'];
+export const PARTY_GAMES: readonly GameId[] = ['boggle', 'quiz-night', 'codenames', 'azul', 'snap-happy', 'biscuit-tower'];
+
+/**
+ * Games whose room has something to do before play (Codenames: teams and
+ * spymasters picked on the phones; Quiz Night: jkai writing the questions).
+ * The TV's Start makes the room with everybody in it and shows its lobby;
+ * the TV's Go (`go`) then starts play.
+ */
+export const SETUP_FIRST: ReadonlySet<GameId> = new Set<GameId>(['codenames', 'quiz-night']);
+
+/** AI-written quizzes one TV may start in a rolling day (each is two model calls). */
+export const QUIZZES_PER_TV_DAY = 10;
 
 const hex = (bytes: number) => randomBytes(bytes).toString('hex');
 export const newTvId = () => 'tv_' + hex(6);
@@ -102,9 +113,10 @@ export function cleanGuestName(raw: unknown, taken: readonly string[]): string |
 
 /** How many people a game can be started with at a party. */
 export function partyRange(game: GameId): { min: number; max: number } {
-  const rules = GAMES[game];
+  const rules = GAMES[game] as (typeof GAMES)[GameId] & { MIN_PLAYERS?: number };
   const max = Math.min(PARTY_MAX, rules.maxPlayers ?? MAX_PLAYERS);
-  return { min: Math.min(max, rules.minPlayers ?? 1), max };
+  // A game's own floor (Azul and Codenames export MIN_PLAYERS: two) is what its `start` checks.
+  return { min: Math.min(max, rules.minPlayers ?? rules.MIN_PLAYERS ?? 1), max };
 }
 
 export type MemberKind = 'family' | 'guest';

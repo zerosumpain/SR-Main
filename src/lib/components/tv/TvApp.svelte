@@ -9,13 +9,24 @@
   import TvStage from './TvStage.svelte';
   import { focusFirst, remote } from './focus';
   import { openTv, tvParty, type TvState } from './tv-stream';
-  import { GAME_OPTIONS, GAME_BLURBS, defaultOptions } from './tv-games';
+  import { DIFFICULTY, GAME_OPTIONS, GAME_BLURBS, defaultOptions, type TvOption } from './tv-games';
   import { STING, hostLine } from '$lib/games/kelly';
   import BoggleTable from '$lib/components/games/boggle/BoggleTable.svelte';
+  import AzulTable from '$lib/components/games/azul/AzulTable.svelte';
+  import QuizTable from '$lib/components/games/quiz/QuizTable.svelte';
+  import CodenamesTable from '$lib/components/games/codenames/CodenamesTable.svelte';
+  import SnapTable from '$lib/components/games/snap/SnapTable.svelte';
+  import BiscuitTable from '$lib/components/games/biscuit/BiscuitTable.svelte';
+  import type { ScreenRoom as BiscuitRoom } from '$lib/games/biscuit-tower';
+  import type { ScreenRoom as SnapRoom } from '$lib/games/snap-happy';
+  import type { AzulRoom } from '$lib/components/games/azul/motion';
+  import type { WireRoom as QuizRoom } from '$lib/games/quiz-night';
+  import type { WireRoom as CodenamesRoom } from '$lib/games/codenames';
   import type { PartyView } from '$lib/games/party';
+  import type { PackSummary } from '$lib/games/quiz-packs';
   import type { ScreenRoom as BoggleRoom } from '$lib/games/boggle';
 
-  let { tvName, family = [] }: { tvName: string; family?: string[] } = $props();
+  let { tvName, family = [], packs = [] }: { tvName: string; family?: string[]; packs?: PackSummary[] } = $props();
 
   type View = 'menu' | 'lobby' | 'about';
   type Sheet = null | { kind: 'end' } | { kind: 'kick'; id: string; name: string };
@@ -37,6 +48,8 @@
   const skewMs = $derived(link.kind === 'party' ? link.skewMs : 0);
   const playing = $derived(!!party?.roomId && !!room);
   const roomPhase = $derived((room as { phase?: string } | null)?.phase ?? null);
+  // Quiz Night's questions are still being written: Go waits for them.
+  const writing = $derived((room as { prep?: string } | null)?.prep === 'writing');
   const current = $derived(party?.games.find((g) => g.id === party?.game) ?? null);
   const seed = $derived(party ? party.code.charCodeAt(0) + party.code.charCodeAt(3) : 0);
   const greeting = $derived.by(() => {
@@ -88,8 +101,27 @@
   }
 
   async function pick(game: string) {
-    if (await send({ action: 'pick', game, options: party?.game === game ? party.options : defaultOptions(game) })) void go('lobby');
+    // Quiz Night from its own tile is jkai's quiz: a pack chosen before is dropped.
+    const same = party?.game === game && !(game === 'quiz-night' && party.options.pack);
+    if (await send({ action: 'pick', game, options: same ? party!.options : defaultOptions(game) })) void go('lobby');
   }
+
+  /** Kelly's Quiz Night: Quiz Night playing one of John's approved packs. */
+  async function pickKelly() {
+    const keep = party?.game === 'quiz-night' && packs.some((p) => p.id === party?.options.pack);
+    const options = keep ? party!.options : { pack: packs[0].id, difficulty: 'medium' };
+    if (await send({ action: 'pick', game: 'quiz-night', options })) void go('lobby');
+  }
+
+  const kelly = $derived(party?.game === 'quiz-night' && typeof party.options.pack === 'string');
+  const lobbyTitle = $derived(kelly ? 'Kelly’s Quiz Night' : (current?.title ?? 'Pick a game'));
+  /** The lobby's choices: a pack and the pace for Kelly's Quiz Night, else the game's own. */
+  const lobbyOptions = $derived.by((): TvOption[] => {
+    if (!party?.game) return [];
+    if (!kelly) return GAME_OPTIONS[party.game] ?? [];
+    const pack: TvOption = { key: 'pack', label: 'Pack', fallback: packs[0]?.id ?? '', choices: packs.map((p) => ({ value: p.id, label: p.title })) };
+    return [pack, { ...DIFFICULTY, label: 'Time to answer', choices: [{ value: 'easy', label: 'Relaxed' }, { value: 'medium', label: 'Normal' }, { value: 'hard', label: 'Quick' }] }];
+  });
 
   function setOption(key: string, value: string | number) {
     if (!party?.game) return;
@@ -113,9 +145,27 @@
     focusFirst(true);
   }
 
-  /** A strip of controls that appears over a board takes the remote's focus. */
+  /**
+   * A strip of controls that appears over a board takes the remote's focus —
+   * its first button that can take it (Start waits while the questions are
+   * written, so the strip watches for it to be enabled).
+   */
   function grabFocus(node: HTMLElement) {
-    queueMicrotask(() => node.querySelector<HTMLElement>('[data-tv]')?.focus());
+    const take = () => {
+      const first = node.querySelector<HTMLElement>('[data-tv-first]:not(:disabled)');
+      // The primary button, once it can take focus, takes it back from its neighbours.
+      if (first) {
+        if (document.activeElement !== first) first.focus();
+        return;
+      }
+      const active = document.activeElement;
+      if (active && node.contains(active)) return;
+      node.querySelector<HTMLElement>('[data-tv]:not(:disabled)')?.focus();
+    };
+    queueMicrotask(take);
+    const watch = new MutationObserver(take);
+    watch.observe(node, { attributes: true, subtree: true, attributeFilter: ['disabled'] });
+    return { destroy: () => watch.disconnect() };
   }
 
   function back(): boolean {
@@ -172,9 +222,25 @@
     <div class="tv-fill" in:fade={{ duration: 300 }}>
       {#if party.game === 'boggle'}
         <BoggleTable room={room as BoggleRoom} {skewMs} />
+      {:else if party.game === 'quiz-night'}
+        <QuizTable room={room as QuizRoom} {skewMs} />
+      {:else if party.game === 'codenames'}
+        <CodenamesTable room={room as CodenamesRoom} {skewMs} />
+      {:else if party.game === 'azul'}
+        <AzulTable room={room as AzulRoom} {skewMs} />
+      {:else if party.game === 'snap-happy'}
+        <SnapTable room={room as SnapRoom} {skewMs} />
+      {:else if party.game === 'biscuit-tower'}
+        <!-- This TV runs the physics and says how each drop landed. -->
+        <BiscuitTable room={room as BiscuitRoom} {skewMs} report={(b) => void tvParty({ action: 'report', ...b }).catch(() => {})} />
       {/if}
     </div>
-    {#if roomPhase === 'finished' && !sheet}
+    {#if roomPhase === 'lobby' && !sheet}
+      <div class="tv-strip" in:fly={{ y: 40, duration: 300 }} use:grabFocus>
+        <button type="button" class="tv-primary" data-tv data-tv-first onclick={() => act('go')} disabled={writing}>{writing ? 'Writing the questions…' : 'Start the game'}</button>
+        <button type="button" data-tv onclick={() => act('end')}>Back to the lobby</button>
+      </div>
+    {:else if roomPhase === 'finished' && !sheet}
       <div class="tv-strip" in:fly={{ y: 40, duration: 300 }} use:grabFocus>
         <button type="button" data-tv data-tv-first onclick={() => act('again')}>Play again</button>
         <button type="button" data-tv onclick={() => act('end')}>Back to the lobby</button>
@@ -195,6 +261,13 @@
             <span class="tv-tile-meta">{g.min === g.max ? g.min : `${g.min}–${g.max}`} players</span>
           </button>
         {/each}
+        {#if packs.length}
+          <button type="button" class="tv-tile tv-tile-kelly" data-tv onclick={pickKelly}>
+            <span class="tv-tile-name">Kelly’s Quiz Night</span>
+            <span class="tv-tile-blurb">Questions about us — old photos, holidays and the stories we keep telling.</span>
+            <span class="tv-tile-meta">{packs.length} {packs.length === 1 ? 'pack' : 'packs'} · 1–8 players</span>
+          </button>
+        {/if}
         <button type="button" class="tv-tile tv-tile-quiet" data-tv onclick={() => go('about')}>
           <span class="tv-tile-name">About</span>
           <span class="tv-tile-blurb">What this is, and who made it.</span>
@@ -234,12 +307,12 @@
 
       <div class="tv-side">
         <p class="tv-brand"><span class="tv-mark">sr.</span> tv · {tvName}</p>
-        <h1>{current?.title ?? 'Pick a game'}</h1>
+        <h1>{lobbyTitle}</h1>
         <p class="tv-lead">{greeting}</p>
 
-        {#if party.game && GAME_OPTIONS[party.game]}
+        {#if lobbyOptions.length}
           <div class="tv-options">
-            {#each GAME_OPTIONS[party.game] as opt (opt.key)}
+            {#each lobbyOptions as opt (opt.key)}
               <div class="tv-option">
                 <span class="tv-label">{opt.label}</span>
                 <div class="tv-choices">
@@ -400,33 +473,38 @@
 
   /* Menu */
   .tv-menu {
-    padding: 5cqw 6cqw;
+    padding: 3.6cqw 5cqw 2.4cqw;
     display: flex;
     flex-direction: column;
-    gap: 3cqw;
+    gap: 2.2cqw;
   }
+  .tv-menu h1 {
+    font-size: 3.8cqw;
+  }
+  /* Four across: every game and the About tile fit the screen without scrolling. */
   .tv-tiles {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2cqw;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.6cqw;
   }
   .tv-tile {
-    width: 26cqw;
-    min-height: 15cqw;
+    min-height: 12cqw;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     text-align: left;
-    gap: 0.8cqw;
-    padding: 2cqw;
+    gap: 0.6cqw;
+    padding: 1.5cqw 1.6cqw;
   }
   .tv-tile-name {
     font-family: var(--font-display);
     font-weight: var(--font-display-weight);
-    font-size: 2.6cqw;
+    font-size: 2.1cqw;
+    line-height: 1.1;
   }
   .tv-tile-blurb {
-    font-size: 1.4cqw;
+    font-size: 1.2cqw;
+    line-height: 1.4;
     color: var(--on-ink-70);
     flex: 1;
   }
@@ -436,6 +514,9 @@
     letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--accent-on-dark);
+  }
+  .tv-tile-kelly {
+    border-color: var(--accent);
   }
   .tv-tile-quiet .tv-tile-meta {
     color: var(--on-ink-55);

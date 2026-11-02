@@ -16,10 +16,11 @@ import { EventEmitter } from 'node:events';
 import { env } from '$env/dynamic/private';
 import { GAMES, isGameId, type GameId } from './catalogue';
 import { TITLES } from './invite-push.server';
-import { act, createGame, endRoom, ensureRoom, roomStage, subscribe, watch, type WireRoom } from './rooms.server';
+import { act, createGame, endRoom, ensureRoom, hostOf, roomStage, subscribe, watch, type WireRoom } from './rooms.server';
 import { newCode, normaliseCode } from './screens';
 import { GameError, isDifficulty, type Difficulty } from './tap-duel';
-import { PARTY_GAMES, PARTY_MAX, cleanGuestName, issueSeat, newGuestId, newPartyId, partyRange, type MemberKind, type PartyGame, type PartyView } from './party';
+import { SCREEN_ACTOR } from './biscuit-tower';
+import { PARTY_GAMES, PARTY_MAX, QUIZZES_PER_TV_DAY, SETUP_FIRST, cleanGuestName, issueSeat, newGuestId, newPartyId, partyRange, type MemberKind, type PartyGame, type PartyView } from './party';
 
 export type { MemberKind, PartyGame, PartyView };
 
@@ -31,7 +32,7 @@ const SWEEP_MS = 5 * 60_000;
 const KEEPALIVE_MS = 15_000;
 
 /** The lobby verbs a phone may not send at a party: the TV starts, ends and invites. */
-const TV_ONLY = new Set(['start', 'again', 'join', 'decline', 'invite', 'screen', 'close']);
+const TV_ONLY = new Set(['start', 'again', 'join', 'decline', 'invite', 'screen', 'close', 'report']);
 
 
 interface Member {
@@ -255,6 +256,19 @@ function stopGame(p: Party, byName: string): void {
   if (id) endRoom(id, byName);
 }
 
+/** When each TV last started AI-written quizzes, for the daily cap. */
+const quizStarts = new Map<string, number[]>();
+const DAY_MS = 24 * 3_600_000;
+
+function chargeQuiz(tvId: string, now = Date.now()): void {
+  const recent = (quizStarts.get(tvId) ?? []).filter((t) => now - t < DAY_MS);
+  if (recent.length >= QUIZZES_PER_TV_DAY) {
+    throw new GameError(429, `That is ${QUIZZES_PER_TV_DAY} quizzes on this TV today — the limit. Try Kelloggle or Codenames.`);
+  }
+  recent.push(now);
+  quizStarts.set(tvId, recent);
+}
+
 function startGame(p: Party): void {
   if (p.roomId) throw new GameError(409, 'A game is already running. End it first.');
   const game = p.game;
@@ -266,6 +280,9 @@ function startGame(p: Party): void {
     throw new GameError(409, `${TITLES[game]} needs ${range} players — ${players.length} joined.`);
   }
   const [host, ...rest] = players;
+  // Every refusal createGame would make comes before the quiz is charged.
+  // A pack is John's own questions: no model call, nothing to charge.
+  if (game === 'quiz-night' && !p.options.pack) chargeQuiz(p.tvId);
   const room = createGame({
     game,
     host: { id: host.id, name: host.name },
@@ -276,7 +293,8 @@ function startGame(p: Party): void {
   });
   try {
     for (const m of rest) act(room.id, m.id, 'join');
-    act(room.id, host.id, 'start');
+    // A game with set-up waits in its own lobby for the TV's Go.
+    if (!SETUP_FIRST.has(game)) act(room.id, host.id, 'start');
   } catch (err) {
     endRoom(room.id, p.tvName);
     throw err;
@@ -329,6 +347,26 @@ export function tvAct(tvId: string, action: unknown, body: Record<string, unknow
         throw err;
       }
       break;
+    case 'go': {
+      // Play starts in a room waiting in its lobby (teams picked, questions written).
+      const host = p.roomId ? hostOf(p.roomId) : null;
+      if (!p.roomId || !host) throw new GameError(409, 'No game is waiting to start.');
+      try {
+        act(p.roomId, host, 'start');
+      } catch (err) {
+        if (err instanceof GameError) p.notice = err.message;
+        changed(p);
+        throw err;
+      }
+      break;
+    }
+    case 'report': {
+      // The TV says how a drop landed (Biscuit Tower): a move only the TV may make.
+      if (!p.roomId) throw new GameError(409, 'No game is running on the TV.');
+      act(p.roomId, SCREEN_ACTOR, 'report', body);
+      // The room's own stream tells everybody; the party itself has not changed.
+      return view(p, now);
+    }
     case 'end':
       stopGame(p, p.tvName);
       break;
@@ -548,6 +586,7 @@ export function memberStream(code: unknown, memberId: string): Response {
 
 /** Tests only. */
 export function _resetParties(): void {
+  quizStarts.clear();
   for (const p of [...parties.values()]) closeParty(p, 'reset');
   if (sweeper) clearInterval(sweeper);
   sweeper = null;

@@ -109,6 +109,7 @@
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.41.0",
+    "@dimforge/rapier2d-compat": "0.19.3",
     "@hapi/boom": "^9.1.4",
     "@mozilla/readability": "^0.6.0",
     "@openai/codex-sdk": "^0.160.0",
