@@ -113,6 +113,11 @@
     focusFirst(true);
   }
 
+  /** A strip of controls that appears over a board takes the remote's focus. */
+  function grabFocus(node: HTMLElement) {
+    queueMicrotask(() => node.querySelector<HTMLElement>('[data-tv]')?.focus());
+  }
+
   function back(): boolean {
     if (sheet) {
       sheet = null;
@@ -133,7 +138,10 @@
   onMount(() => {
     const close = openTv((s) => {
       const wasPlaying = link.kind === 'party' && !!link.party.roomId;
+      const first = link.kind !== 'party';
       link = s;
+      // The menu's first tile takes focus as soon as there is a menu, so the remote's first OK picks it.
+      if (first && s.kind === 'party') void tick().then(() => focusFirst(true));
       if (s.kind === 'unlinked') location.reload();
       if (s.kind === 'party') {
         void refreshQr(s.party.code);
@@ -167,7 +175,7 @@
       {/if}
     </div>
     {#if roomPhase === 'finished' && !sheet}
-      <div class="tv-strip" in:fly={{ y: 40, duration: 300 }}>
+      <div class="tv-strip" in:fly={{ y: 40, duration: 300 }} use:grabFocus>
         <button type="button" data-tv data-tv-first onclick={() => act('again')}>Play again</button>
         <button type="button" data-tv onclick={() => act('end')}>Back to the lobby</button>
       </div>
@@ -378,6 +386,12 @@
     color: var(--chrome-bg);
     font-weight: 700;
     min-width: 12cqw;
+  }
+  /* Focused, the primary keeps its fill: the stage's focus wash would hide its ink label. */
+  .tv-primary:focus,
+  .tv-primary:focus-visible {
+    background: var(--accent-hover) !important;
+    color: var(--chrome-bg);
   }
   .tv-danger {
     border-color: var(--error);

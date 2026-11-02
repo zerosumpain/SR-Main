@@ -13,7 +13,7 @@ import { satisfies } from '$lib/access/catalogue';
 import { isOwnerEmail } from '$lib/server/access';
 import { loadMember } from '$lib/server/grants';
 import { clientIp, hashIp, rateLimit } from '$lib/server/public-request-rate-limit';
-import { playerFor } from './players.server';
+import { playerFor, playerId } from './players.server';
 import { GameError } from './tap-duel';
 import { TV_COOKIE, seatCookie, verifySeat } from './party';
 import { partyIdFor } from './party.server';
@@ -54,14 +54,15 @@ export function setTvCookie(cookies: Cookies, url: URL, token: string, expiresAt
 
 /** A signed-in family member with games access, as a player; null for anybody else. */
 export async function familyPlayer(event: Pick<RequestEvent, 'locals'>): Promise<{ id: string; name: string } | null> {
-  const session = await event.locals.auth?.();
+  const session = await event.locals.auth?.().catch(() => null);
   const email = (session?.user?.email ?? '').trim().toLowerCase();
   if (!email) return null;
   if (!isOwnerEmail(email)) {
     const member = await loadMember(email).catch(() => null);
     if (!member || !satisfies(member.grants, 'games:self')) return null;
   }
-  const p = await playerFor(email);
+  // The roster read can fail (a database hiccup); the person is still who their session says.
+  const p = await playerFor(email).catch(() => ({ id: playerId(email), name: email.split('@')[0] }));
   return { id: p.id, name: p.name };
 }
 
