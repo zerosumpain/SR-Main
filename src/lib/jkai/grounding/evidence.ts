@@ -13,8 +13,24 @@ export function sourceReferences(value: unknown, depth = 0): string[] {
   }
   return [...new Set(refs)].slice(0, 100);
 }
+/**
+ * A tool result's `display` is for John's screen, never the model: the photo
+ * tools put their thumbnails there (`{success, data, display}`), and the chat
+ * card and the desk draw them while the model reads only `data`. A
+ * `JSON.stringify` replacer, so it also clears `display` from stored steps
+ * replayed as prior evidence (`{_truncated, display, preview}` included).
+ * Only an envelope loses it; a `display` field inside `data` is left alone.
+ */
+export function withoutDisplay(_key: string, value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !('display' in value)) return value;
+  const v = value as Record<string, unknown>;
+  if (typeof v.success !== 'boolean' && v._truncated !== true) return value;
+  const { display: _drop, ...rest } = v;
+  void _drop;
+  return rest;
+}
 export function contextResult(result: unknown, budget = 32000): string {
-  const text = JSON.stringify(result);
+  const text = JSON.stringify(result, withoutDisplay);
   if (text.length <= budget) return text;
   const data = result as { evidence?: EvidenceEnvelope };
   return JSON.stringify({ partial: true, evidence: data.evidence,
