@@ -204,6 +204,14 @@ function routePath(file) {
   const cleaned = dir
     .split('/')
     .filter((seg) => seg && !/^\(.*\)$/.test(seg)) // drop (route groups)
+    // SvelteKit's escapes: `[x+2e]well-known` is served at /.well-known. Left
+    // encoded, the path matched no public prefix and every route under it was
+    // invisible to this gate (apple-app-site-association was, until 2026-11-02).
+    .map((seg) =>
+      seg
+        .replace(/\[x\+([0-9a-fA-F]{2})\]/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/\[u\+([0-9a-fA-F]{4,6})\]/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16))),
+    )
     .join('/');
   return '/' + cleaned;
 }

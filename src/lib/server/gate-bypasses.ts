@@ -146,6 +146,13 @@ export const HOOK_EXACT_BYPASSES: string[] = [
   // compared with `===`; the catalogue was the thing that was wrong.
   '/api/workflows/orchestrator/chat',
   '/api/workflows/orchestrator/chat/stream',
+  // Main's owner-only OpenID provider ($lib/server/oidc/provider), for Immich.
+  // Each authenticates itself and 404s while unconfigured. /oauth is NOT a
+  // tree: /oauth/authorize stays behind the session and owner gate.
+  '/.well-known/openid-configuration',
+  '/oauth/jwks',
+  '/oauth/token',
+  '/oauth/userinfo',
 ];
 
 /** Prefix bypasses at the page level. `/tools` is a genuine tree (static/tools/*). */
@@ -164,6 +171,10 @@ export const HOOK_NON_BYPASSES: string[] = [
   // route files live under src/routes/trails any more, so nothing enters the
   // inventory through it.
   '/trails',
+  // Not anonymous: the hook resolves it only AFTER the session check (a visitor
+  // with no session is sent to /login). It skips the owner-only page redirect so
+  // a signed-in non-owner gets the handler's 403; only an owner gets a code.
+  '/oauth/authorize',
 ];
 
 /**
@@ -215,4 +226,9 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/health': 'public page · owner payload withheld without a session',
   '/api/platform/jkai/today': 'GET only · jkai service token; the owner payload for the jkai desk Today',
   '/tools': 'public static tree',
+  '/.well-known/openid-configuration': 'public OIDC discovery metadata (endpoint names only) · 404 until SR_OIDC_* is set',
+  '/oauth/jwks': 'public, empty key set (ID tokens are HS256 with the client secret) · 404 until SR_OIDC_* is set',
+  '/oauth/token':
+    'POST only · client secret (basic or post, constant-time) + sealed 60 s single-use code + PKCE S256 verifier · 404 until SR_OIDC_* is set',
+  '/oauth/userinfo': 'Bearer access token (HMAC, 5 min) from /oauth/token · 404 until SR_OIDC_* is set',
 };
