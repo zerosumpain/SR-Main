@@ -77,6 +77,7 @@ export const GAME_OPTIONS_MORE: Record<string, TvOption[]> = {
   ],
   codenames: [DIFFICULTY],
   azul: [],
+  'snap-happy': [DIFFICULTY],
 };
 Object.assign(GAME_OPTIONS, GAME_OPTIONS_MORE);
 
@@ -88,6 +89,7 @@ export const GAME_FIXED: Record<string, Record<string, string | number>> = {
 export const GAME_BLURBS: Record<string, string> = {
   'quiz-night': 'jkai writes ten questions on a topic. Answer on your phone; quicker is worth more.',
   codenames: 'Two teams, one spymaster each. Give one-word clues to find your agents on the TV.',
+  'snap-happy': 'The TV flicks through pictures. Snap on your phone when the target shows — and not a moment before.',
   azul: 'Draft coloured tiles and build the wall. Two to four players, the board on the TV.',
   boggle: 'Trace words on your phone through touching letters. Find the Kelly word for double.',
 };

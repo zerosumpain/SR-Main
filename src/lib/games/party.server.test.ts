@@ -261,3 +261,15 @@ describe('games with set-up first', () => {
     expect(() => tvAct(tv.id, 'again')).toThrow(/limit/u);
   });
 });
+
+describe('the TV reports a drop', () => {
+  it('only through the party, never from a phone', () => {
+    const { code } = openParty(tv);
+    const sam = joinGuest(code, 'Sam').memberId;
+    tvAct(tv.id, 'pick', { game: 'biscuit-tower' });
+    tvAct(tv.id, 'start');
+    expect(() => memberAct(code, sam, 'report', { turn: 1, outcome: 'toppled' })).toThrow(/Unknown action/u);
+    // Before anything has dropped the report is ignored, not an error.
+    expect(() => tvAct(tv.id, 'report', { turn: 1, outcome: 'settled', height: 1 })).not.toThrow();
+  });
+});

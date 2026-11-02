@@ -19,6 +19,7 @@ import { TITLES } from './invite-push.server';
 import { act, createGame, endRoom, ensureRoom, hostOf, roomStage, subscribe, watch, type WireRoom } from './rooms.server';
 import { newCode, normaliseCode } from './screens';
 import { GameError, isDifficulty, type Difficulty } from './tap-duel';
+import { SCREEN_ACTOR } from './biscuit-tower';
 import { PARTY_GAMES, PARTY_MAX, QUIZZES_PER_TV_DAY, SETUP_FIRST, cleanGuestName, issueSeat, newGuestId, newPartyId, partyRange, type MemberKind, type PartyGame, type PartyView } from './party';
 
 export type { MemberKind, PartyGame, PartyView };
@@ -31,7 +32,7 @@ const SWEEP_MS = 5 * 60_000;
 const KEEPALIVE_MS = 15_000;
 
 /** The lobby verbs a phone may not send at a party: the TV starts, ends and invites. */
-const TV_ONLY = new Set(['start', 'again', 'join', 'decline', 'invite', 'screen', 'close']);
+const TV_ONLY = new Set(['start', 'again', 'join', 'decline', 'invite', 'screen', 'close', 'report']);
 
 
 interface Member {
@@ -358,6 +359,13 @@ export function tvAct(tvId: string, action: unknown, body: Record<string, unknow
         throw err;
       }
       break;
+    }
+    case 'report': {
+      // The TV says how a drop landed (Biscuit Tower): a move only the TV may make.
+      if (!p.roomId) throw new GameError(409, 'No game is running on the TV.');
+      act(p.roomId, SCREEN_ACTOR, 'report', body);
+      // The room's own stream tells everybody; the party itself has not changed.
+      return view(p, now);
     }
     case 'end':
       stopGame(p, p.tvName);

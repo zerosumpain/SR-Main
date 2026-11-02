@@ -23,7 +23,7 @@ export const PARTY_MAX = 8;
 export const GUEST_NAME_MAX = 16;
 
 /** The games a party can play: a TV board and a web controller each. */
-export const PARTY_GAMES: readonly GameId[] = ['boggle', 'quiz-night', 'codenames', 'azul', 'snap-happy'];
+export const PARTY_GAMES: readonly GameId[] = ['boggle', 'quiz-night', 'codenames', 'azul', 'snap-happy', 'biscuit-tower'];
 
 /**
  * Games whose room has something to do before play (Codenames: teams and

@@ -15,6 +15,8 @@
   import AzulTable from '$lib/components/games/azul/AzulTable.svelte';
   import QuizTable from '$lib/components/games/quiz/QuizTable.svelte';
   import CodenamesTable from '$lib/components/games/codenames/CodenamesTable.svelte';
+  import SnapTable from '$lib/components/games/snap/SnapTable.svelte';
+  import type { ScreenRoom as SnapRoom } from '$lib/games/snap-happy';
   import type { AzulRoom } from '$lib/components/games/azul/motion';
   import type { WireRoom as QuizRoom } from '$lib/games/quiz-night';
   import type { WireRoom as CodenamesRoom } from '$lib/games/codenames';
@@ -206,6 +208,8 @@
         <CodenamesTable room={room as CodenamesRoom} {skewMs} />
       {:else if party.game === 'azul'}
         <AzulTable room={room as AzulRoom} {skewMs} />
+      {:else if party.game === 'snap-happy'}
+        <SnapTable room={room as SnapRoom} {skewMs} />
       {/if}
     </div>
     {#if roomPhase === 'lobby' && !sheet}

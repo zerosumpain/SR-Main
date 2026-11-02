@@ -28,6 +28,7 @@ import * as hometowns from './hometowns/hometowns';
 import * as azul from './azul';
 import * as codenames from './codenames';
 import * as snapHappy from './snap-happy';
+import * as biscuitTower from './biscuit-tower';
 import { writeQuiz } from './quiz-night.server';
 import { loadPackQuiz } from './quiz-packs.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
@@ -56,6 +57,7 @@ export const GAME_IDS = [
   'azul',
   'codenames',
   'snap-happy',
+  'biscuit-tower',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -491,6 +493,14 @@ export const GAMES: Record<GameId, GameRules> = {
     ...snapHappy,
     moves: {
       snap: (room, p, b, now) => snapHappy.snap(room as snapHappy.Room, p, { round: b.round, at: b.at }, now),
+    },
+  },
+  // sr. tv's physics game: phones DROP, the TV runs the physics and reports (party TV only, `SCREEN_ACTOR`).
+  'biscuit-tower': {
+    ...biscuitTower,
+    moves: {
+      drop: (room, p, b, now) => biscuitTower.drop(room as biscuitTower.Room, p, { turn: b.turn, at: b.at }, now),
+      report: (room, p, b, now) => biscuitTower.report(room as biscuitTower.Room, p, { turn: b.turn, outcome: b.outcome, height: b.height }, now),
     },
   },
 };
