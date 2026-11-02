@@ -6,7 +6,7 @@ import { approvedPacks } from '$lib/games/quiz-packs.server';
 import { db } from '$lib/db';
 import { projectVisibility } from '$lib/db/schema';
 import { isProjectPublic, resolveVisibilityMap } from '$lib/projects/visibility';
-import { tvProjects } from './tv-projects';
+import { tvProjects } from '$lib/games/tv-projects';
 
 /**
  * /games/tv — sr. tv: the TV's games screen, opened by the Android TV app

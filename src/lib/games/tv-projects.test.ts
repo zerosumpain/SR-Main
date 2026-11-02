@@ -12,3 +12,10 @@ describe('tvProjects', () => {
     expect(tvProjects(() => false)).toEqual([]);
   });
 });
+
+describe('the addresses', () => {
+  it('match the /projects cards', async () => {
+    const { PROJECT_CARDS } = await import('../../routes/projects/cards');
+    for (const p of tvProjects(() => true)) expect(PROJECT_CARDS.find((c) => c.key === p.key)?.href, p.key).toBe(p.href);
+  });
+});

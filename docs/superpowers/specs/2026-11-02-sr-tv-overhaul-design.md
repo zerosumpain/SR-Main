@@ -28,7 +28,7 @@ could be collected and played through sr.tv".
   fallback). The TV never marks items watched: `doneByEmail` is a person.
 - Player: `<video>` over the stage, controls fade after 4 s, menu behind is `inert` and the remote skips inert
   controls (`focus.ts`). Music stops while a video plays.
-- Projects: `src/routes/games/tv/tv-projects.ts` (curated keys + TV blurbs, titles/hrefs from `PROJECT_CARDS`),
+- Projects: `$lib/games/tv-projects.ts` (curated keys, titles, hrefs and TV blurbs; a test pins hrefs to `PROJECT_CARDS` — a route may not import another route),
   filtered by `/projects` visibility in the page load.
 - Marbler (zerosumpain/marbler): `?tv=1` hides editing/tuning controls and sliders, turns predictions off, focuses
   Next race on the results card and starts it after 15 s; OK starts it at once. Back is the TV shell's history back.
