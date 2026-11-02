@@ -75,6 +75,10 @@
 /api/native/drive/files/[id]/meta
 /api/native/drive/folders
 /api/native/drive/have
+/api/native/drive/photos/face/[id]
+/api/native/drive/photos/people
+/api/native/drive/photos/search
+/api/native/drive/photos/thumb/[id]
 /api/native/drive/search
 /api/native/drive/uploads
 /api/native/drive/uploads/[id]
