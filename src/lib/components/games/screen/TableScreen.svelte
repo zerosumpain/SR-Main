@@ -81,7 +81,7 @@
       </div>
     {:else}
       <div class="pair" in:fade={{ duration: 400 }}>
-        <p class="brand"><span class="mark">sr.</span> games</p>
+        <p class="gb-brand"><span class="mark">sr.</span> games</p>
         <h1>{title}</h1>
         {#if view.kind === 'code'}
           <p class="lead">On a phone in the game, tap <strong>Show on TV</strong> and type</p>
@@ -137,7 +137,7 @@
     gap: 1.6cqw;
     text-align: center;
   }
-  .brand {
+  .gb-brand {
     margin: 0;
     font-family: var(--font-mono);
     font-size: 1.3cqw;

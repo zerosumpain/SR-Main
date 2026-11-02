@@ -143,9 +143,27 @@
     focusFirst(true);
   }
 
-  /** A strip of controls that appears over a board takes the remote's focus. */
+  /**
+   * A strip of controls that appears over a board takes the remote's focus —
+   * its first button that can take it (Start waits while the questions are
+   * written, so the strip watches for it to be enabled).
+   */
   function grabFocus(node: HTMLElement) {
-    queueMicrotask(() => node.querySelector<HTMLElement>('[data-tv]')?.focus());
+    const take = () => {
+      const first = node.querySelector<HTMLElement>('[data-tv-first]:not(:disabled)');
+      // The primary button, once it can take focus, takes it back from its neighbours.
+      if (first) {
+        if (document.activeElement !== first) first.focus();
+        return;
+      }
+      const active = document.activeElement;
+      if (active && node.contains(active)) return;
+      node.querySelector<HTMLElement>('[data-tv]:not(:disabled)')?.focus();
+    };
+    queueMicrotask(take);
+    const watch = new MutationObserver(take);
+    watch.observe(node, { attributes: true, subtree: true, attributeFilter: ['disabled'] });
+    return { destroy: () => watch.disconnect() };
   }
 
   function back(): boolean {

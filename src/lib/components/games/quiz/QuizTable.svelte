@@ -61,7 +61,7 @@
 
 <div class="quiz">
   <header class="top">
-    <span class="brand"><span class="mark">sr.</span> {room.pack ? 'kelly’s quiz night' : 'quiz night'}</span>
+    <span class="gb-brand"><span class="mark">sr.</span> {room.pack ? 'kelly’s quiz night' : 'quiz night'}</span>
     <span class="about">{heading}</span>
     {#key headline}
       <h1 in:fly={{ y: -12, duration: 380 }}>{headline}</h1>
@@ -194,7 +194,7 @@
     padding-bottom: 0.9cqw;
     min-width: 0;
   }
-  .brand,
+  .gb-brand,
   .about {
     font-family: var(--font-mono);
     font-size: 1.1cqw;
