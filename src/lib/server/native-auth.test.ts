@@ -115,9 +115,18 @@ describe('every native route gates itself', () => {
         '/drive/files/[id]/intel/+server.ts',
         // Info screen: a member gets the file and nulls for jkai's fields.
         '/drive/files/[id]/meta/+server.ts',
+        // Grid tiles and the viewer: a JPEG of a picture the download would serve.
+        '/drive/files/[id]/preview/+server.ts',
         '/drive/folders/+server.ts',
         // Photo sync's "which of these do you have?" — fingerprints only, the caller's own space.
         '/drive/have/+server.ts',
+        // Photo search in Drive: the wrapper resolves the caller, then each
+        // handler 403s anyone but the owner (`requirePhotoOwner`), as Drive's
+        // photo lane does — never a member, nor the owner viewing as one.
+        '/drive/photos/face/[id]/+server.ts',
+        '/drive/photos/people/+server.ts',
+        '/drive/photos/search/+server.ts',
+        '/drive/photos/thumb/[id]/+server.ts',
         // Names in the caller's own space or the shared folder; contents hits owner-only.
         '/drive/search/+server.ts',
         // Resumable uploads for big videos and photos: the same two spaces,
