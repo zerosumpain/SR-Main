@@ -14,6 +14,8 @@ const KEYS: Record<string, Dir> = { ArrowLeft: 'left', ArrowRight: 'right', Arro
 function focusables(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>('[data-tv]')].filter((el) => {
     if ((el as HTMLButtonElement).disabled) return false;
+    // Behind an overlay (the video player) a control is inert: the remote skips it.
+    if (el.closest('[inert]')) return false;
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   });

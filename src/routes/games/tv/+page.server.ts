@@ -3,6 +3,10 @@ import { TV_COOKIE } from '$lib/games/party';
 import { tvFromToken } from '$lib/games/tv-devices.server';
 import { listMembers } from '$lib/home/presence/members';
 import { approvedPacks } from '$lib/games/quiz-packs.server';
+import { db } from '$lib/db';
+import { projectVisibility } from '$lib/db/schema';
+import { isProjectPublic, resolveVisibilityMap } from '$lib/projects/visibility';
+import { tvProjects } from '$lib/games/tv-projects';
 
 /**
  * /games/tv — sr. tv: the TV's games screen, opened by the Android TV app
@@ -22,5 +26,14 @@ export const load: PageServerLoad = async ({ cookies, setHeaders }) => {
     : [];
   // Kelly's Quiz Night packs John has approved (titles only), for the menu's tile.
   const packs = await approvedPacks().catch(() => []);
-  return { linked: true as const, tvName: tv.name, family: [...new Set(family)].slice(0, 12), packs };
+  // The site's projects that suit a remote, only those public on /projects.
+  const projects = await db
+    .select({ projectKey: projectVisibility.projectKey, isPublic: projectVisibility.isPublic })
+    .from(projectVisibility)
+    .then((rows) => {
+      const map = resolveVisibilityMap(rows);
+      return tvProjects((key) => isProjectPublic(map, key));
+    })
+    .catch(() => []);
+  return { linked: true as const, tvName: tv.name, family: [...new Set(family)].slice(0, 12), packs, projects };
 };

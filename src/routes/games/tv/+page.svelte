@@ -12,7 +12,7 @@
 </svelte:head>
 
 {#if data.linked}
-  <TvApp tvName={data.tvName} family={data.family} packs={data.packs} />
+  <TvApp tvName={data.tvName} family={data.family} packs={data.packs} projects={data.projects} />
 {:else}
   <TvLink />
 {/if}
