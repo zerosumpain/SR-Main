@@ -126,6 +126,32 @@ describe('the relay', () => {
     expect(r).toMatchObject({ display: { type: 'photos', photos: [{ id: ID, preview: `/api/photos/thumb/${ID}?size=preview` }] } });
   });
 
+  it('carries what a photo shows (its caption and objects) and the photos whose caption matches a text search', async () => {
+    h.reply = json(200, {
+      connected: true,
+      asset: { ...ASSET, ocrText: null, faces: [], description: { caption: 'Two dogs on a beach.', objects: [{ label: 'dog', count: 2 }, { label: 'ball', count: 1 }], model: 'f', describedAt: 't' } },
+    });
+    const d = await photoDetailTool({ id: ID });
+    expect(d).toMatchObject({ success: true, data: { asset: { id: ID, seen: { caption: 'Two dogs on a beach.', objects: ['dog ×2', 'ball'] } } } });
+    h.reply = json(200, { connected: true, asset: { ...ASSET, ocrText: null, faces: [], description: null } });
+    expect(JSON.stringify(((await photoDetailTool({ id: ID })) as { data: unknown }).data)).not.toContain('seen');
+
+    const OTHER = '1b9a2f6e-1c3d-4e5f-8a7b-9c0d1e2f3a4b';
+    h.reply = json(200, {
+      connected: true,
+      total: null,
+      page: 1,
+      assets: [ASSET],
+      described: [
+        { assetId: ID, caption: 'A red car outside a house.', score: 3, asset: ASSET },
+        { assetId: OTHER, caption: 'A red car in the snow.', score: 2, asset: { ...ASSET, id: OTHER, driveFile: null } },
+      ],
+    });
+    const r = await photoSearchTool({ text: 'red car' });
+    expect(r).toMatchObject({ success: true, data: { described: [{ id: ID, caption: 'A red car outside a house.', place: 'Lisbon, Portugal' }, { id: OTHER, caption: 'A red car in the snow.' }] } });
+    expect((r as { display: { photos: { id: string }[] } }).display.photos.map((p) => p.id)).toEqual([ID, OTHER]);
+  });
+
   it('keeps only the jobs with work left, and says the counts are incomplete while Immich works', async () => {
     h.reply = json(200, { connected: true, totals: { photos: 1990, videos: 20 }, people: { named: 2, unnamed: 30 }, dateRange: { from: '2012-01-01T00:00:00Z', to: '2026-10-31T00:00:00Z' },
       topPlaces: [{ place: 'London, United Kingdom', count: 900 }, { place: 'Lisbon, Portugal', count: 40 }], processing: { faceDetection: { active: 1, waiting: 200 }, smartSearch: { active: 0, waiting: 0 } } });

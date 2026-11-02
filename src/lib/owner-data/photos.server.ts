@@ -13,7 +13,7 @@
 // photo is a plain failed tool call with Drive's own sentence.
 
 import { requestExtracted } from '$lib/server/extracted-app';
-import { compactAssetVideo, compactMoments, type WireAssetVideo } from './photos';
+import { compactAssetVideo, compactDescribed, compactDescription, compactMoments, type WireAssetVideo } from './photos';
 import {
   NOT_CONNECTED,
   PHOTOS_PAGE,
@@ -141,10 +141,20 @@ export function photoSearchTool(args: Record<string, unknown>): Promise<PhotoRes
       returned: assets.length,
       // Analysed videos' 10-second stretches that match the text, when there are any.
       ...compactMoments(b.moments),
+      // Photos whose caption holds the words, when the describer has reached them.
+      ...compactDescribed(b.described),
       ...summarise(assets),
       assets,
     };
-  }, (b) => photosDisplay(list<WireAsset>(b.assets), { caption: searchCaption(args), total: typeof b.total === 'number' ? b.total : null }));
+  }, (b) => {
+    // Caption matches the page does not hold join the strip after it.
+    const page = list<WireAsset>(b.assets);
+    const seen = new Set(page.map((a) => a.id));
+    const extra = list<{ asset?: WireAsset | null }>(b.described)
+      .map((d) => d.asset)
+      .filter((a): a is WireAsset => !!a && typeof a.id === 'string' && !seen.has(a.id) && (seen.add(a.id), true));
+    return photosDisplay([...page, ...extra], { caption: searchCaption(args), total: typeof b.total === 'number' ? b.total : null });
+  });
 }
 
 export function photoDetailTool(args: Record<string, unknown>): Promise<PhotoResult> {
@@ -160,6 +170,8 @@ export function photoDetailTool(args: Record<string, unknown>): Promise<PhotoRes
         ...(a.width && a.height ? { size: `${a.width}x${a.height}` } : {}),
         // Who and what text appear in a video, and when (on-request analysis).
         ...(a.type === 'video' ? { video: compactAssetVideo(a.id, (a as WireAsset & { video?: WireAssetVideo | null }).video) } : {}),
+        // What the photo shows, in words and objects (the analyser's caption), when it has been described.
+        ...compactDescription((a as WireAsset & { description?: unknown }).description),
         // Words read off the image: what's written in it, not anyone's message.
         ...(ocr ? { textInImage: ocr.slice(0, 2000), ...(ocr.length > 2000 ? { textInImageTruncated: true } : {}) } : {}),
         faces: list<{ personId?: string | null; name?: string | null }>(a.faces).map((f) => ({

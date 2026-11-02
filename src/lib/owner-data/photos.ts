@@ -520,6 +520,43 @@ export function compactAssetVideo(assetId: string, v: WireAssetVideo | null | un
   };
 }
 
+export interface WireDescribed { assetId?: string; caption?: string | null; score?: number; asset?: WireAsset | null }
+export interface WireDescription { caption?: string | null; objects?: { label?: string; count?: number }[] }
+
+/**
+ * photo_search's `described`: photos whose caption (Florence-2, written by the
+ * analyser beside Immich) holds every word of the text — what a photo SHOWS in
+ * words, found even where the photo-search model ranks it low.
+ */
+export function compactDescribed(raw: unknown) {
+  const described = (Array.isArray(raw) ? (raw as WireDescribed[]) : [])
+    .filter((d) => typeof d.assetId === 'string' && d.assetId)
+    .slice(0, 20)
+    .map((d) => {
+      const place = placeName(d.asset?.location);
+      return {
+        id: d.assetId!,
+        ...(typeof d.caption === 'string' && d.caption.trim() ? { caption: d.caption.trim().slice(0, 300) } : {}),
+        ...(d.asset?.takenAt ? { takenAt: d.asset.takenAt } : {}),
+        ...(place ? { place } : {}),
+      };
+    });
+  return described.length ? { described } : {};
+}
+
+/** photo_detail's `seen`: the photo described in words, and the objects in it with how many of each. */
+export function compactDescription(raw: unknown) {
+  const d = raw && typeof raw === 'object' ? (raw as WireDescription) : null;
+  if (!d) return {};
+  const caption = typeof d.caption === 'string' ? d.caption.trim().slice(0, 600) : '';
+  const objects = (Array.isArray(d.objects) ? d.objects : [])
+    .filter((o) => typeof o.label === 'string' && o.label.trim())
+    .slice(0, 30)
+    .map((o) => (typeof o.count === 'number' && o.count > 1 ? `${o.label} ×${o.count}` : o.label!));
+  if (!caption && !objects.length) return {};
+  return { seen: { ...(caption ? { caption } : {}), ...(objects.length ? { objects } : {}) } };
+}
+
 /** photo_search's `moments`: the 10-second stretches of analysed videos that match the text. */
 export function compactMoments(raw: unknown) {
   const moments = (Array.isArray(raw) ? (raw as WireMoment[]) : [])
