@@ -22,7 +22,15 @@
 /api/daydream/observe
 /api/deepdive/index-sources
 /api/deepdive/reindex-facts
+/api/games/party/[code]
+/api/games/party/[code]/act
+/api/games/party/[code]/join
+/api/games/party/[code]/stream
 /api/games/screens/stream
+/api/games/tv/claim
+/api/games/tv/link
+/api/games/tv/party
+/api/games/tv/party/stream
 /api/health/workflow-engine
 /api/internal/session
 /api/jkai/codegraph/ingest
@@ -108,6 +116,7 @@
 /api/native/games/[id]/stream
 /api/native/games/leaderboard
 /api/native/games/offline-results
+/api/native/games/party/[code]/join
 /api/native/games/suggestions
 /api/native/health/activities
 /api/native/health/activities/[id]
@@ -201,6 +210,9 @@
 /decks/[...path]
 /follow/[token]
 /games/[game]
+/games/join/[code]
+/games/tv
+/games/tv/install
 /install/[token]
 /install/[token]/app.ipa
 /install/[token]/manifest.plist
@@ -235,6 +247,9 @@
 /rss.xml
 /sitemap.xml
 /tos
+/tv
+/tv/get
+/tv/version.json
 /welcome
 /welcome/[code]
 /welcome/app
