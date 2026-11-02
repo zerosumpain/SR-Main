@@ -5,9 +5,11 @@
   import AzulTable from '$lib/components/games/azul/AzulTable.svelte';
   import QuizTable from '$lib/components/games/quiz/QuizTable.svelte';
   import CodenamesTable from '$lib/components/games/codenames/CodenamesTable.svelte';
+  import BoggleTable from '$lib/components/games/boggle/BoggleTable.svelte';
   import type { AzulRoom } from '$lib/components/games/azul/motion';
   import type { WireRoom as QuizRoom } from '$lib/games/quiz-night';
   import type { WireRoom as CodenamesRoom } from '$lib/games/codenames';
+  import type { ScreenRoom as BoggleRoom } from '$lib/games/boggle';
   import type { PageData } from './$types';
 
   let { data }: { data: PageData } = $props();
@@ -29,6 +31,12 @@
   <TableScreen game="codenames" title={data.title}>
     {#snippet board(room: CodenamesRoom, skewMs: number)}
       <CodenamesTable {room} {skewMs} />
+    {/snippet}
+  </TableScreen>
+{:else if data.game === 'boggle'}
+  <TableScreen game="boggle" title={data.title}>
+    {#snippet board(room: BoggleRoom, skewMs: number)}
+      <BoggleTable {room} {skewMs} />
     {/snippet}
   </TableScreen>
 {/if}

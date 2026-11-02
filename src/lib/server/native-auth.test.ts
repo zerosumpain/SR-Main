@@ -178,6 +178,9 @@ describe('every native route gates itself', () => {
         // is filed for the caller alone (their own player id), and View as is
         // refused by the gate because it is a write.
         '/games/offline-results/+server.ts',
+        // Sitting down at a TV party from its QR (sr. tv): games:self, the
+        // member joins as themselves only (their own player id).
+        '/games/party/[code]/join/+server.ts',
         // Game ideas the family would like one day: games:self, then the
         // family (owner, circle or parent) in the handler; names only.
         '/games/suggestions/+server.ts',

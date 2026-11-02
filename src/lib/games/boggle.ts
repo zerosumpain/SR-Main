@@ -32,6 +32,7 @@ import {
 } from "./tap-duel";
 import { COMMON_WORDS, RARE_WORDS } from "./words/anagram";
 import { LONG_COMMON, LONG_RARE } from "./words/boggle";
+import { KELLY_WORDS } from "./kelly";
 
 export {
   COUNTDOWN_MS,
@@ -58,6 +59,8 @@ export const DEFAULT_SECONDS: Seconds = 120;
 export const DEFAULT_SCORING: Scoring = "classic";
 
 export const MAX_LENGTH = 16;
+/** Up to eight round one TV (a party, `party.server`); the phones' own lobbies stay at five. */
+export const maxPlayers = 8;
 /**
  * Points by length in letters: a point a letter past two, so 3 → 1, 4 → 2,
  * 5 → 3 and on up to the longest word a board allows. Sent whole on the wire
@@ -354,6 +357,24 @@ export function points(word: string): number {
   return Math.max(0, word.length - 2);
 }
 
+/**
+ * The board's Kelly word: one of `KELLY_WORDS` it holds, at random; failing
+ * that its longest common word (so a round always has one). Null for a board
+ * with no common word at all.
+ */
+export function kellyWordFor(solution: readonly Traced[], rng: Rng): string | null {
+  const held = solution.filter((t) => KELLY_WORDS.includes(t.word)).map((t) => t.word);
+  if (held.length) return held[Math.floor(rng() * held.length) % held.length];
+  const { common } = dictionary();
+  const best = solution.filter((t) => common.has(t.word)).sort((a, b) => byLengthThenAlpha(a.word, b.word))[0];
+  return best?.word ?? null;
+}
+
+/** A word's points in this room: double for the Kelly word. */
+function worth(room: Room, word: string): number {
+  return points(word) * (room.kellyWord && word === room.kellyWord ? 2 : 1);
+}
+
 // ---- The room ------------------------------------------------------------
 
 export interface Found {
@@ -385,6 +406,13 @@ export interface Room {
   solution: Traced[] | null;
   /** When play began (the countdown's end); null before. */
   startedAt: number | null;
+  /**
+   * The Kelly word of the round (a party at the TV only): one word the board
+   * holds from `KELLY_WORDS`, worth double to whoever finds it. Absent on
+   * rooms made before it, and on phone games, which never set `kelly`.
+   */
+  kelly?: boolean;
+  kellyWord?: string | null;
   /** Lobby expiry, countdown end, time limit, finished expiry. */
   phaseEndsAt: number | null;
   createdAt: number;
@@ -431,8 +459,8 @@ export function createRoom(input: {
     (p, i, all) =>
       p.id !== input.host.id && all.findIndex((q) => q.id === p.id) === i,
   );
-  if (invited.length > MAX_PLAYERS - 1)
-    throw new GameError(400, `Up to ${MAX_PLAYERS} players.`);
+  if (invited.length > maxPlayers - 1)
+    throw new GameError(400, `Up to ${maxPlayers} players.`);
   return {
     id: input.id,
     game: "boggle",
@@ -447,6 +475,8 @@ export function createRoom(input: {
     grid: null,
     solution: null,
     startedAt: null,
+    kelly: input.options?.kelly === true,
+    kellyWord: null,
     phaseEndsAt: input.now + LOBBY_MS,
     createdAt: input.now,
     updatedAt: input.now,
@@ -534,6 +564,7 @@ export function again(room: Room, playerId: string, now: number): void {
   room.grid = null;
   room.solution = null;
   room.startedAt = null;
+  room.kellyWord = null;
   room.phaseEndsAt = now + LOBBY_MS;
   room.createdAt = now;
   room.updatedAt = now;
@@ -629,6 +660,7 @@ export function advance(room: Room, now: number, rng: Rng): boolean {
         room.grid = grid;
         room.solution = solution;
         room.startedAt = due;
+        if (room.kelly) room.kellyWord = kellyWordFor(solution, rng);
         room.phaseEndsAt = due + room.seconds * 1000;
         room.updatedAt = due;
         break;
@@ -692,7 +724,7 @@ export function scored(room: Room, p: Player): Scored[] {
   if (room.phase !== "finished") {
     return p.words.map((f) => ({
       word: f.word,
-      points: points(f.word),
+      points: worth(room, f.word),
       shared: null,
       path: f.path,
     }));
@@ -702,7 +734,7 @@ export function scored(room: Room, p: Player): Scored[] {
     const shared = (by.get(f.word)?.length ?? 0) > 1;
     return {
       word: f.word,
-      points: crossedOut(room, by, f.word) ? 0 : points(f.word),
+      points: crossedOut(room, by, f.word) ? 0 : worth(room, f.word),
       shared,
       path: f.path,
     };
@@ -818,7 +850,7 @@ export function toWire(room: Room, meId: string, now: number) {
     found: by
       ? [...by.keys()].sort(byLengthThenAlpha).map((w) => ({
           word: w,
-          points: crossedOut(room, by, w) ? 0 : points(w),
+          points: crossedOut(room, by, w) ? 0 : worth(room, w),
           finderIds: by.get(w)!,
           shared: by.get(w)!.length > 1,
           path: pathOf.get(w)!,
@@ -840,8 +872,61 @@ export function toWire(room: Room, meId: string, now: number) {
         : null,
     standings: table,
     winnerIds: table ? winners(table) : [],
+    ...kellyOnWire(room),
     serverNow: now,
   };
 }
 
 export type WireRoom = ReturnType<typeof toWire>;
+
+/** The Kelly word: a hint (length and first letter) while playing, the word once finished. */
+function kellyOnWire(room: Room): { kellyWord: string | null; kellyHint: { length: number; first: string } | null } {
+  const w = room.kellyWord ?? null;
+  if (!w) return { kellyWord: null, kellyHint: null };
+  if (room.phase === "finished") return { kellyWord: w, kellyHint: null };
+  return { kellyWord: null, kellyHint: room.phase === "playing" ? { length: w.length, first: w[0] } : null };
+}
+
+/**
+ * The room as the TV shows it (`/games/boggle`, a party's board): the grid
+ * everyone is tracing, the clock, and each player's COUNT and score while it
+ * runs — never a word, which would hand them to the rest of the room. At the
+ * finish, everything the phones see: who found what, what was crossed out,
+ * the best words missed and the Kelly word.
+ */
+export function toScreen(room: Room, now: number) {
+  const finished = room.phase === "finished";
+  const table = finished ? standings(room) : null;
+  const by = finished ? finders(room) : null;
+  const names = new Map(room.players.map((p) => [p.id, p.name]));
+  return {
+    id: room.id,
+    game: room.game,
+    phase: room.phase,
+    size: room.size,
+    scoring: room.scoring,
+    minLength: TUNING[room.difficulty].minLength,
+    timeLimitMs: room.seconds * 1000,
+    startedAt: room.startedAt,
+    phaseEndsAt: room.phaseEndsAt,
+    grid: room.phase === "playing" || finished ? room.grid : null,
+    players: room.players
+      .filter((p) => p.status === "joined" || p.words.length > 0)
+      .map((p) => ({ id: p.id, name: p.name, wordCount: p.words.length, score: score(room, p) })),
+    found: by
+      ? [...by.keys()].sort(byLengthThenAlpha).map((w) => ({
+          word: w,
+          points: crossedOut(room, by, w) ? 0 : worth(room, w),
+          finders: by.get(w)!.map((id) => names.get(id) ?? ""),
+          shared: by.get(w)!.length > 1,
+        }))
+      : null,
+    missed: finished ? missedWords(room).map((t) => ({ word: t.word, points: points(t.word) })) : null,
+    standings: table,
+    winnerIds: table ? winners(table) : [],
+    ...kellyOnWire(room),
+    serverNow: now,
+  };
+}
+
+export type ScreenRoom = ReturnType<typeof toScreen>;

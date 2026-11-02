@@ -105,6 +105,16 @@ const PUBLIC_PATHS = [
   // anonymous; the games API itself (/api/native/games) is untouched.
   '/games',
   '/api/games/screens',
+  // sr. tv: a party at a linked TV, joined from its QR by phones with no login
+  // ($lib/games/party.server). Every handler names its caller itself
+  // ($lib/games/party-http.server): the TV by its `sr_tv` cookie (HMAC + a
+  // linked, unrevoked row), a player by a seat cookie for that one party (or
+  // their own signed-in session). A party is opened only by a linked TV.
+  // /tv is the short address and only redirects. PREFIXES, so
+  // check-public-routes.mjs is what stops a sibling becoming anonymous.
+  '/tv',
+  '/api/games/tv',
+  '/api/games/party',
   // The iPhone app for a phone that cannot use TestFlight (a child's):
   // /app (the family's one address), /app/<code> (a join link) and
   // /install/<token> (the manifest and the app). Safari on that phone has no
