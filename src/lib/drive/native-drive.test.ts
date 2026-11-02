@@ -16,6 +16,12 @@ vi.mock('$lib/server/extracted-app', () => ({
     h.calls.push({ method, path, headers: o.headers, body: o.body, timeoutMs: o.timeoutMs });
     return h.answer;
   },
+  // The preview relay streams: the same answer, its body as a node stream.
+  streamExtracted: async (_app: string, method: string, path: string, o: { headers: Record<string, string>; timeoutMs?: number }) => {
+    h.calls.push({ method, path, headers: o.headers, timeoutMs: o.timeoutMs });
+    const { Readable } = await import('node:stream');
+    return { status: h.answer.status, headers: h.answer.headers, body: Readable.from([h.answer.body]) };
+  },
 }));
 vi.mock('$lib/db', () => ({
   db: { select: () => ({ from: () => ({ where: () => Promise.resolve(h.roster) }) }) },
@@ -481,5 +487,73 @@ describe('which photos a space already has', () => {
     expect(await status(drive.haveFiles(OWNER, 'mine', null))).toBe(400);
     expect(await drive.haveFiles(OWNER, 'mine', { items: [] })).toEqual({ have: [], unchecked: 0 });
     expect(h.calls).toEqual([]);
+  });
+});
+
+describe('previews for the grid and the viewer', () => {
+  const jpeg = (headers: Record<string, string> = {}) => ({
+    status: 200,
+    headers: { 'content-type': 'image/jpeg', 'content-length': '4', etag: '"f1.thumb.abc"', 'cache-control': 'private, max-age=31536000, immutable', ...headers },
+    body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+  });
+
+  it('asks Drive for the size and version, naming a member and passing If-None-Match', async () => {
+    h.answer = jpeg();
+    await drive.preview(ANN, '../x', 'view', { ifNoneMatch: '"f1.view.abc"', version: '12-1700' });
+    expect(h.calls[0].method).toBe('GET');
+    expect(h.calls[0].path).toBe('/api/files/app/files/..%2Fx/preview?size=view&v=12-1700');
+    expect(h.calls[0].headers['x-sr-app-for']).toBe('ann@example.test');
+    expect(h.calls[0].headers['if-none-match']).toBe('"f1.view.abc"');
+    await drive.preview(OWNER, 'f1', 'thumb');
+    expect(h.calls[1].path).toBe('/api/files/app/files/f1/preview?size=thumb');
+    expect(h.calls[1].headers['x-sr-app-for']).toBeUndefined();
+    expect(h.calls[1].headers['if-none-match']).toBeUndefined();
+  });
+
+  it('streams the JPEG with Drive’s ETag and private cache headers', async () => {
+    h.answer = jpeg();
+    const res = await drive.preview(ANN, 'f1', 'thumb');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/jpeg');
+    expect(res.headers.get('content-length')).toBe('4');
+    expect(res.headers.get('etag')).toBe('"f1.thumb.abc"');
+    expect(res.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.body).toBeInstanceOf(ReadableStream);
+    expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([0xff, 0xd8, 0xff, 0xd9]);
+  });
+
+  it('never relays a public cache header, and always sends JPEG', async () => {
+    h.answer = jpeg({ 'cache-control': 'public, max-age=999', 'content-type': 'text/html' });
+    const res = await drive.preview(ANN, 'f1', 'thumb');
+    expect(res.headers.get('cache-control')).toBe('private, max-age=300');
+    expect(res.headers.get('content-type')).toBe('image/jpeg');
+  });
+
+  it('passes a 304 on with no body', async () => {
+    h.answer = { status: 304, headers: { etag: '"f1.thumb.abc"', 'cache-control': 'private, max-age=86400' }, body: Buffer.alloc(0) };
+    const res = await drive.preview(ANN, 'f1', 'thumb', { ifNoneMatch: '"f1.thumb.abc"' });
+    expect(res.status).toBe(304);
+    expect(res.headers.get('etag')).toBe('"f1.thumb.abc"');
+    expect(await res.text()).toBe('');
+  });
+
+  it("passes Drive's 404 and 415 in its words, and never a 401", async () => {
+    h.answer = json(404, { message: 'No such file.' });
+    await expect(drive.preview(ANN, 'f1', 'thumb')).rejects.toMatchObject({ status: 404, body: { message: 'No such file.' } });
+    h.answer = json(415, { message: 'This file is not a picture.' });
+    expect(await status(drive.preview(ANN, 'f1', 'thumb'))).toBe(415);
+    h.answer = json(401, { error: 'Authentication required' });
+    expect(await status(drive.preview(ANN, 'f1', 'thumb'))).toBe(502);
+  });
+
+  it('reads only thumb or view, and a short plain version key', () => {
+    expect(drive.parsePreviewSize('thumb')).toBe('thumb');
+    expect(drive.parsePreviewSize('view')).toBe('view');
+    expect(drive.parsePreviewSize('huge')).toBeNull();
+    expect(drive.cleanPreviewVersion('1234-1700000000')).toBe('1234-1700000000');
+    expect(drive.cleanPreviewVersion('a&b=c')).toBeNull();
+    expect(drive.cleanPreviewVersion('x'.repeat(65))).toBeNull();
+    expect(drive.cleanPreviewVersion(null)).toBeNull();
   });
 });

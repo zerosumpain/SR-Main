@@ -161,6 +161,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/drive/files': phone('app/api', 'Add a photo or a file to your own space or the shared folder'),
   '/api/native/drive/files/[id]': phone('app/api', 'Open, rename, move or delete one file in Drive'),
   '/api/native/drive/files/[id]/meta': phone('app/api', 'A file’s details in Drive, and what jkai found in it'),
+  '/api/native/drive/files/[id]/preview': phone('app/api', 'A small picture of a photo in Drive, for the grid and the viewer'),
   '/api/native/drive/files/[id]/analyse': phone('app/api', 'Ask jkai to summarise one of your files'),
   '/api/native/drive/files/[id]/intel': phone('app/api', 'Pick out the people, places and things in one of your files'),
   '/api/native/drive/search': phone('app/api', 'Find a file in Drive by name, or by what it says'),

@@ -115,6 +115,8 @@ describe('every native route gates itself', () => {
         '/drive/files/[id]/intel/+server.ts',
         // Info screen: a member gets the file and nulls for jkai's fields.
         '/drive/files/[id]/meta/+server.ts',
+        // Grid tiles and the viewer: a JPEG of a picture the download would serve.
+        '/drive/files/[id]/preview/+server.ts',
         '/drive/folders/+server.ts',
         // Photo sync's "which of these do you have?" — fingerprints only, the caller's own space.
         '/drive/have/+server.ts',

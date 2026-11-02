@@ -264,6 +264,7 @@ if (runsService('background')) {
 // is the kill switch; =on loads them whatever the role (the local preview,
 // whose Main runs as 'builder' so no WhatsApp or engines start).
 import { resolveServiceRole } from '$lib/server/service-role';
+import { keepsOwnNativeCache } from '$lib/drive/native-preview-cache';
 const customToolsSwitch = (process.env.JKAI_CUSTOM_TOOLS ?? '').trim().toLowerCase();
 if (!building && customToolsSwitch !== 'off' && (customToolsSwitch === 'on' || resolveServiceRole() === 'web')) {
   void import('$lib/tools/custom-tool-loader')
@@ -1119,7 +1120,11 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  if (event.url.pathname.startsWith('/api/native/')) response.headers.set('Cache-Control', 'private, no-store');
+  // The phone's API is never cached — except the Drive previews, whose
+  // private, ETag-keyed headers are what let the app keep a tile instead of
+  // fetching it again (SR-Drive sets them; the relay refuses anything public).
+  const keepsPreviewCache = keepsOwnNativeCache(event.route.id, response.status, response.headers.get('Cache-Control'));
+  if (event.url.pathname.startsWith('/api/native/') && !keepsPreviewCache) response.headers.set('Cache-Control', 'private, no-store');
   // Defence-in-depth for share links: any /projects/* response opened with a
   // share token (?t=) must never be edge-cached, indexed, or leak the token
   // onward via Referer — even if a route handler forgets. (Per-route guards

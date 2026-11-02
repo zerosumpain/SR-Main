@@ -22,7 +22,8 @@ import { error, isHttpError, json } from '@sveltejs/kit';
 import { inArray } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { householdMember } from '$lib/db/schema';
-import { requestExtracted, type RawExtractedResponse } from '$lib/server/extracted-app';
+import { Readable } from 'node:stream';
+import { requestExtracted, streamExtracted, type RawExtractedResponse } from '$lib/server/extracted-app';
 
 export type DriveSpace = 'mine' | 'shared';
 
@@ -331,6 +332,90 @@ export async function download(caller: AppDriveCaller, id: string): Promise<Resp
   const disposition = pass('content-disposition');
   headers['Content-Disposition'] = disposition?.startsWith('attachment') ? disposition : 'attachment';
   return new Response(new Uint8Array(res.body), { status: 200, headers });
+}
+
+// ── Picture previews for the grid and the viewer ──
+
+export type PreviewSize = 'thumb' | 'view';
+
+export function parsePreviewSize(raw: string | null | undefined): PreviewSize | null {
+  return raw === 'thumb' || raw === 'view' ? raw : null;
+}
+
+/** The phone's version key (size and modified time): short and URL-plain, or dropped. */
+export function cleanPreviewVersion(raw: string | null | undefined): string | null {
+  return raw && /^[A-Za-z0-9._-]{1,64}$/.test(raw) ? raw : null;
+}
+
+/** A refusal's body is a sentence of JSON; never let one run on. */
+const REFUSAL_MAX_BYTES = 16 * 1024;
+
+async function smallBody(body: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of body) {
+    size += (chunk as Buffer).length;
+    if (size > REFUSAL_MAX_BYTES) {
+      body.destroy();
+      break;
+    }
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * A JPEG preview of a picture (Drive renders and caches it; HEIC decoded),
+ * streamed through rather than held: a grid scrolls through hundreds of these.
+ * Drive's cache headers and ETag pass through, and the phone's If-None-Match
+ * goes the other way, so a tile it already holds is a 304 with no body. A
+ * 404 (no such file, or an older Drive without the route) and a 415 (not a
+ * picture) arrive in Drive's words; the app falls back on a 404.
+ */
+export async function preview(
+  caller: AppDriveCaller,
+  id: string,
+  size: PreviewSize,
+  { ifNoneMatch = null, version = null }: { ifNoneMatch?: string | null; version?: string | null } = {},
+): Promise<Response> {
+  const path = `/api/files/app/files/${encodeURIComponent(id)}/preview${query({ size, v: version })}`;
+  let res;
+  try {
+    res = await streamExtracted('drive', 'GET', path, {
+      headers: {
+        accept: 'application/json',
+        ...forHeaders(caller),
+        ...(ifNoneMatch ? { 'if-none-match': ifNoneMatch.slice(0, 512) } : {}),
+      },
+      // A first view of a big HEIC waits behind Drive's one-at-a-time renderer.
+      timeoutMs: 60_000,
+    });
+  } catch (err) {
+    if (isHttpError(err)) throw err;
+    console.error('[native-drive] Drive unreachable:', (err as Error).message);
+    throw error(502, 'Drive is not answering. Try again.');
+  }
+  const pass = (name: string): string | undefined => {
+    const v = res.headers[name];
+    return Array.isArray(v) ? v[0] : v;
+  };
+  const headers: Record<string, string> = { 'X-Content-Type-Options': 'nosniff' };
+  const etag = pass('etag');
+  if (etag) headers.ETag = etag;
+  // Private only: whatever Drive sent, a shared cache never keeps a family photo.
+  const cache = pass('cache-control');
+  headers['Cache-Control'] = cache && /^private\b/.test(cache) ? cache : 'private, max-age=300';
+
+  if (res.status === 304) {
+    res.body.resume();
+    return new Response(null, { status: 304, headers });
+  }
+  if (res.status !== 200) refusal({ status: res.status, headers: res.headers, body: await smallBody(res.body) });
+
+  headers['Content-Type'] = 'image/jpeg';
+  const length = pass('content-length');
+  if (length && /^\d+$/.test(length)) headers['Content-Length'] = length;
+  return new Response(Readable.toWeb(res.body) as ReadableStream<Uint8Array>, { status: 200, headers });
 }
 
 // ── The phone's Info screen, rename/move, search and jkai (build map §2.2) ──
