@@ -35,7 +35,7 @@ const ASSET = {
   thumbnailPath: `/api/photos/thumb/${ID}`,
 };
 
-const { peoplePath, searchPath, detailPath, compactAsset, placeName, summarise } = await import('./photos');
+const { peoplePath, searchPath, detailPath, compactAsset, placeName, summarise, displayPhoto, displayFace, photosDisplay, searchCaption, DISPLAY_MAX } = await import('./photos');
 const { photoPeopleTool, photoSearchTool, photoDetailTool, photoStatsTool } = await import('./photos.server');
 const { tools } = await import('$lib/tools/registry-internal');
 await import('./chat-tools');
@@ -121,7 +121,9 @@ describe('the relay', () => {
   it('reads one photo with the words in it and its faces', async () => {
     h.reply = json(200, { connected: true, asset: { ...ASSET, ocrText: 'TOTAL £12.40', faces: [{ personId: 'p-sam', name: 'Sam', box: { x1: 1, y1: 1, x2: 2, y2: 2, imageWidth: 4, imageHeight: 4 } }] } });
     const r = await photoDetailTool({ id: ID });
-    expect(r).toMatchObject({ success: true, data: { asset: { id: ID, region: 'Lisbon', lens: 'Main camera', size: '4032x3024', textInImage: 'TOTAL £12.40', faces: [{ personId: 'p-sam', name: 'Sam' }], thumbnail: `/api/photos/thumb/${ID}` } } });
+    expect(r).toMatchObject({ success: true, data: { asset: { id: ID, region: 'Lisbon', lens: 'Main camera', size: '4032x3024', textInImage: 'TOTAL £12.40', faces: [{ personId: 'p-sam', name: 'Sam' }], link: '/drive?file=f1' } } });
+    expect(JSON.stringify((r as { data: unknown }).data)).not.toContain('/api/photos/');
+    expect(r).toMatchObject({ display: { type: 'photos', photos: [{ id: ID, preview: `/api/photos/thumb/${ID}?size=preview` }] } });
   });
 
   it('keeps only the jobs with work left, and says the counts are incomplete while Immich works', async () => {
@@ -152,6 +154,69 @@ describe('the relay', () => {
     expect(h.calls).toHaveLength(0);
     h.reply = json(404, { message: 'No such photo' });
     expect(await photoDetailTool({ id: ID })).toEqual({ success: false, error: 'photo_detail: No such photo' });
+  });
+});
+
+const FACE = '7d1e0c2a-3b4c-4d5e-9f60-718293a4b5c6';
+
+describe('the thumbnails (the UI channel, never the model\'s)', () => {
+  it('carries each photo with paths built from its UUID, its time, place, named people and Drive file', () => {
+    expect(displayPhoto(ASSET)).toEqual({
+      id: ID,
+      type: 'photo',
+      takenAt: '2026-07-14T18:32:05+01:00',
+      timeZone: 'Europe/Lisbon',
+      place: 'Lisbon, Portugal',
+      people: ['Sam'],
+      unnamed: 1,
+      thumb: `/api/photos/thumb/${ID}`,
+      preview: `/api/photos/thumb/${ID}?size=preview`,
+      file: { name: 'Incoming photos/IMG_1.HEIC', url: '/drive?file=f1' },
+    });
+    const video = displayPhoto({ id: ID.toUpperCase(), type: 'video', durationSec: 12.6, driveFile: null });
+    expect(video).toEqual({ id: ID, type: 'video', durationSec: 13, thumb: `/api/photos/thumb/${ID}`, preview: `/api/photos/thumb/${ID}?size=preview` });
+  });
+
+  it('never copies a path or link it did not build: a non-UUID id is dropped, a foreign Drive url replaced', () => {
+    expect(displayPhoto({ ...ASSET, id: '../files/app/x' })).toBeNull();
+    expect(displayPhoto({ ...ASSET, thumbnailPath: 'https://evil.example/x.png' })!.thumb).toBe(`/api/photos/thumb/${ID}`);
+    expect(displayPhoto({ ...ASSET, driveFile: { id: 'f 1', name: 'a.jpg', url: 'javascript:alert(1)' } })!.file).toEqual({ name: 'a.jpg', url: '/drive?file=f%201' });
+    expect(displayFace({ id: 'p-sam', name: 'Sam', assetCount: 3 })).toBeNull();
+    expect(displayFace({ id: FACE, name: ' Sam ', assetCount: 3 })).toEqual({ id: FACE, name: 'Sam', photos: 3, thumb: `/api/photos/face/${FACE}` });
+  });
+
+  it('caps the strip and captions it with what was asked', () => {
+    const many = Array.from({ length: DISPLAY_MAX + 5 }, (_, i) => ({ ...ASSET, id: `${ID.slice(0, -4)}${String(i).padStart(4, '0')}` }));
+    expect(photosDisplay(many, { total: 300 })).toMatchObject({ type: 'photos', total: 300 });
+    expect(photosDisplay(many)!.photos).toHaveLength(DISPLAY_MAX);
+    expect(photosDisplay([])).toBeNull();
+    expect(searchCaption({ people: ['Sam', 'Alex'], place: 'Lisbon', from: '2026-06-01', to: '2026-08-31', text: 'beach' })).toBe('Sam, Alex · Lisbon · 2026-06-01 to 2026-08-31 · “beach”');
+    expect(searchCaption({ from: '2026-07-14', to: '2026-07-14' })).toBe('2026-07-14');
+    expect(searchCaption({})).toBeUndefined();
+  });
+
+  it('keeps the model\'s copy compact: search rows carry ids, no file names, links or image paths', async () => {
+    h.reply = json(200, { connected: true, total: 120, page: 1, assets: [ASSET, { ...ASSET, id: FACE, type: 'video', durationSec: 9 }] });
+    const r = (await photoSearchTool({ people: ['Sam'] })) as unknown as { success: true; data: { assets: Array<Record<string, unknown>> }; display: { photos: Array<{ id: string }>; caption: string; total: number } };
+    expect(r.data.assets.map((a) => a.id)).toEqual([ID, FACE]);
+    const modelText = JSON.stringify(r.data);
+    for (const leak of ['/api/photos/', '/drive?file=', 'IMG_1.HEIC']) expect(modelText).not.toContain(leak);
+    expect(r.display).toMatchObject({ type: 'photos', caption: 'Sam', total: 120, photos: [{ id: ID }, { id: FACE, type: 'video', durationSec: 9 }] });
+  });
+
+  it('shows faces for photo_people, and nothing when no id is a UUID', async () => {
+    h.reply = json(200, { connected: true, people: [{ id: FACE, name: 'Sam', assetCount: 120 }, { id: 'p-2', name: null, assetCount: 4 }] });
+    const r = await photoPeopleTool({});
+    expect(r).toMatchObject({ display: { type: 'photos', photos: [], faces: [{ id: FACE, name: 'Sam', photos: 120, thumb: `/api/photos/face/${FACE}` }] } });
+    h.reply = json(200, { connected: true, people: [{ id: 'p-2', name: null, assetCount: 4 }] });
+    expect(await photoPeopleTool({})).not.toHaveProperty('display');
+  });
+
+  it('sends no display when photos are not connected or the call failed', async () => {
+    h.reply = json(200, { connected: false, assets: [] });
+    expect(await photoSearchTool({})).not.toHaveProperty('display');
+    h.reply = json(404, { message: 'No such photo' });
+    expect(await photoDetailTool({ id: ID })).not.toHaveProperty('display');
   });
 });
 

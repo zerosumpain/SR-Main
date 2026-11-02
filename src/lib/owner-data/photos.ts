@@ -207,5 +207,123 @@ export function summarise(assets: CompactAsset[]) {
   };
 }
 
+// ---------------------------------------------------------------- the UI channel
+//
+// Thumbnails go to John's screen, not to the model. A result carries them in a
+// top-level `display` beside `data` (`{success, data, display}`): Core strips
+// `display` from what the model reads (`contextResult`), draws it on the tool
+// card and the desk, and keeps it with the turn. The model gets the compact
+// rows above and the photo ids, never one URL per photo.
+//
+// Every path is built here from an Immich UUID, never copied from Drive's
+// answer, and Core re-derives them from the id again before an <img> sees one:
+// only same-origin `/api/photos/thumb/<uuid>` and `/api/photos/face/<uuid>`
+// (Drive's owner-only proxies) are ever drawn.
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Enough for a page of results; a bigger page still reaches the model whole. */
+export const DISPLAY_MAX = 48;
+
+export const isPhotoId = (v: unknown): v is string => typeof v === 'string' && UUID.test(v);
+export const thumbPath = (id: string) => `/api/photos/thumb/${id.toLowerCase()}`;
+export const previewPath = (id: string) => `${thumbPath(id)}?size=preview`;
+export const facePath = (id: string) => `/api/photos/face/${id.toLowerCase()}`;
+
+/** Drive's own link for the file, or one built from its id; never anything else. */
+function driveFileLink(f: WireAsset['driveFile']): { name: string; url: string } | undefined {
+  if (!f || typeof f.id !== 'string' || !f.id || typeof f.name !== 'string') return undefined;
+  const url = typeof f.url === 'string' && /^\/drive\?file=[\w.~%-]{1,200}$/.test(f.url) ? f.url : `/drive?file=${encodeURIComponent(f.id)}`;
+  return { name: f.name.slice(0, 200), url };
+}
+
+export interface DisplayPhoto {
+  id: string;
+  type: 'photo' | 'video';
+  durationSec?: number;
+  takenAt?: string;
+  timeZone?: string;
+  place?: string;
+  /** Named people only; the unnamed are counted. */
+  people?: string[];
+  unnamed?: number;
+  thumb: string;
+  preview: string;
+  file?: { name: string; url: string };
+}
+
+export interface DisplayFace {
+  id: string;
+  name: string | null;
+  photos: number | null;
+  thumb: string;
+}
+
+/** The artifact Core draws (`type: 'photos'` in its artifact-types). */
+export interface PhotosDisplay {
+  type: 'photos';
+  caption?: string;
+  /** How many matched in all, when Drive knows; the strip shows `photos.length`. */
+  total?: number | null;
+  photos: DisplayPhoto[];
+  faces?: DisplayFace[];
+}
+
+export function displayPhoto(a: WireAsset): DisplayPhoto | null {
+  if (!isPhotoId(a?.id)) return null;
+  const id = a.id.toLowerCase();
+  const out: DisplayPhoto = { id, type: a.type === 'video' ? 'video' : 'photo', thumb: thumbPath(id), preview: previewPath(id) };
+  if (out.type === 'video' && typeof a.durationSec === 'number' && Number.isFinite(a.durationSec)) out.durationSec = Math.round(a.durationSec);
+  if (a.takenAt) out.takenAt = a.takenAt;
+  if (a.timeZone) out.timeZone = a.timeZone;
+  const place = placeName(a.location);
+  if (place) out.place = place;
+  const named = (a.people ?? []).map((p) => p?.name?.trim()).filter((n): n is string => !!n);
+  if (named.length) out.people = [...new Set(named)].slice(0, 12);
+  const unnamed = (a.people ?? []).filter((p) => !p?.name?.trim()).length;
+  if (unnamed) out.unnamed = unnamed;
+  const file = driveFileLink(a.driveFile);
+  if (file) out.file = file;
+  return out;
+}
+
+export function displayFace(p: WirePerson): DisplayFace | null {
+  if (!isPhotoId(p?.id)) return null;
+  const id = p.id.toLowerCase();
+  return { id, name: p.name?.trim() || null, photos: typeof p.assetCount === 'number' ? p.assetCount : null, thumb: facePath(id) };
+}
+
+/** "Sam, Alex · Lisbon · 2026-06-01 to 2026-08-31 · “beach”" — what was asked, for the strip's caption. */
+export function searchCaption(args: Record<string, unknown>): string | undefined {
+  const parts: string[] = [];
+  const who = names(args.people);
+  if (who.length) parts.push(who.join(', '));
+  const place = text(args.place, 100);
+  if (place) parts.push(place);
+  const from = text(args.from, 40)?.slice(0, 10);
+  const to = text(args.to, 40)?.slice(0, 10);
+  if (from && to) parts.push(from === to ? from : `${from} to ${to}`);
+  else if (from) parts.push(`from ${from}`);
+  else if (to) parts.push(`to ${to}`);
+  const t = text(args.text, 80);
+  if (t) parts.push(`“${t}”`);
+  const ocr = text(args.text_in_image, 80);
+  if (ocr) parts.push(`text “${ocr}”`);
+  if (args.type === 'video') parts.push('videos');
+  return parts.length ? parts.join(' · ').slice(0, 200) : undefined;
+}
+
+export function photosDisplay(assets: WireAsset[], opts: { caption?: string; total?: number | null } = {}): PhotosDisplay | null {
+  const photos = assets.map(displayPhoto).filter((p): p is DisplayPhoto => !!p).slice(0, DISPLAY_MAX);
+  if (!photos.length) return null;
+  return { type: 'photos', ...(opts.caption ? { caption: opts.caption } : {}), ...(opts.total !== undefined ? { total: opts.total } : {}), photos };
+}
+
+export function facesDisplay(people: WirePerson[], caption?: string): PhotosDisplay | null {
+  const faces = people.map(displayFace).filter((f): f is DisplayFace => !!f).slice(0, DISPLAY_MAX);
+  if (!faces.length) return null;
+  return { type: 'photos', ...(caption ? { caption } : {}), photos: [], faces };
+}
+
 export const NOT_CONNECTED =
   'Photos are not connected right now (the reason says why), so there is nothing to read. Tell John that plainly, with the reason; do not guess or describe photos.';

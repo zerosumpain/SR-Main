@@ -218,7 +218,7 @@ function photoRead(name: string, load: () => Promise<PhotoRun>) {
 register({
   name: 'photo_people',
   description:
-    "The people in John's photo library (faces SR-Drive's Immich has clustered, with the names John gave them on /drive): name or null for a face not yet named, how many photos, first and last seen. Use for \"who is in my photos\", \"how many photos of Sam\", \"when did I first take a photo of X\", or to check a name before photo_search. An unnamed person can still be searched by id. Read-only.",
+    "The people in John's photo library (faces SR-Drive's Immich has clustered, with the names John gave them on /drive): name or null for a face not yet named, how many photos, first and last seen. John sees their faces beside your reply. Use for \"who is in my photos\", \"how many photos of Sam\", \"when did I first take a photo of X\", or to check a name before photo_search. An unnamed person can still be searched by id. Read-only.",
   parameters: {
     type: 'object',
     properties: {
@@ -238,7 +238,7 @@ register({
 register({
   name: 'photo_search',
   description:
-    "Search John's photos and videos (SR-Drive's photo library) by who is in them, where, when, what they show, or words written in them. Each result: id, taken date/time (ISO with its UTC offset), place as \"City, Country\" with lat/lon, people by name, camera, and the Drive file link; plus where and who the page adds up to. Combine filters freely: \"photos of Sam in Lisbon last summer\" = people [\"Sam\"], place \"Lisbon\", from/to; \"where was I on a date\" = from and to that same date, no other filter, and read the places and times; \"find the photo of the receipt\" = text_in_image \"total\" or text \"receipt\"; \"pictures of the beach\" = text \"beach\". Resolve relative dates (\"last summer\", \"in March\") to YYYY-MM-DD yourself. Newest first unless text is given (then best match). Use photo_detail for one photo's full text and faces. Read-only.",
+    "Search John's photos and videos (SR-Drive's photo library) by who is in them, where, when, what they show, or words written in them. Each result: id, taken date/time (ISO with its UTC offset), place as \"City, Country\" with lat/lon, people by name, camera; plus where and who the page adds up to. John sees the results as thumbnails beside your reply (a click opens the photo and its Drive file), so describe them by when, where and who; never paste photo links or image markdown. Combine filters freely: \"photos of Sam in Lisbon last summer\" = people [\"Sam\"], place \"Lisbon\", from/to; \"where was I on a date\" = from and to that same date, no other filter, and read the places and times; \"find the photo of the receipt\" = text_in_image \"total\" or text \"receipt\"; \"pictures of the beach\" = text \"beach\". Resolve relative dates (\"last summer\", \"in March\") to YYYY-MM-DD yourself. Newest first unless text is given (then best match). Use photo_detail for one photo's full text, faces and Drive link. Read-only.",
   parameters: {
     type: 'object',
     properties: {
