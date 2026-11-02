@@ -9,6 +9,7 @@
   import TvStage from './TvStage.svelte';
   import { focusFirst, remote } from './focus';
   import { openTv, tvParty, type TvState } from './tv-stream';
+  import { TvMusic, musicOff, trackFor } from './tv-music';
   import { DIFFICULTY, GAME_OPTIONS, GAME_BLURBS, defaultOptions, type TvOption } from './tv-games';
   import { STING, hostLine } from '$lib/games/kelly';
   import BoggleTable from '$lib/components/games/boggle/BoggleTable.svelte';
@@ -40,6 +41,9 @@
   let joinUrl = $state('');
   let error = $state<string | null>(null);
   let busy = $state(false);
+  let musicOn = $state(!musicOff());
+
+  const music = new TvMusic();
 
   // Plain handles (svelte5-pitfalls §1).
   let qrFor: string | null = null;
@@ -59,6 +63,15 @@
     if (family.length && party.members.length === 0) return `Right then — ${family[seed % family.length]}, grab a phone and scan the code.`;
     return hostLine('lobby', seed);
   });
+
+  // What is on screen picks the track; TvMusic itself holds no reactive state.
+  $effect(() => {
+    if (party) music.play(trackFor(view, party.game, playing));
+  });
+
+  function toggleMusic() {
+    musicOn = !music.toggle();
+  }
 
   function say(message: string) {
     error = message;
@@ -209,6 +222,7 @@
     return () => {
       close();
       stopRemote();
+      music.stop();
       if (errorTimer) clearTimeout(errorTimer);
     };
   });
@@ -278,7 +292,10 @@
           <span class="tv-tile-meta">strangeramblings.com</span>
         </button>
       </div>
-      <p class="tv-sting">{STING}</p>
+      <div class="tv-foot">
+        <p class="tv-sting">{STING}</p>
+        <button type="button" class="tv-music" data-tv onclick={toggleMusic}>Music: {musicOn ? 'on' : 'off'}</button>
+      </div>
     </section>
   {:else if view === 'about'}
     <section class="tv-about" in:fade={{ duration: 250 }}>
@@ -525,8 +542,22 @@
   .tv-tile-quiet .tv-tile-meta {
     color: var(--on-ink-55);
   }
-  .tv-sting {
+  .tv-foot {
     margin: auto 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2cqw;
+  }
+  .tv-music {
+    font-family: var(--font-mono);
+    font-size: 1.1cqw;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.6cqw 1.2cqw;
+  }
+  .tv-sting {
+    margin: 0;
     font-family: var(--font-mono);
     font-size: 1.1cqw;
     letter-spacing: 0.12em;
