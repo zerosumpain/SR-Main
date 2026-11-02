@@ -210,8 +210,6 @@
       <a href="/rss.xml" class="nav-link">RSS</a>
       <a href="https://library.strangeramblings.com" class="nav-link">Library</a>
       {#if data.isOwner}<a href="/admin" class="nav-link">Admin</a>{/if}
-      <!-- Temporary: lets a logged-out browser grab the sr. tv APK while it's being tried out. -->
-      <a href="/tv/get" class="nav-link">TV app (APK)</a>
       <a href="/privacy" class="nav-link">Privacy</a>
       <a href="/tos" class="nav-link">Terms</a>
       <button type="button" class="nav-link rambler-toggle" data-rambler-hover="tuck" onclick={toggleRambler}>
