@@ -264,7 +264,7 @@ register({
 register({
   name: 'photo_detail',
   description:
-    "One photo or video from John's library in full, by the id photo_search returned: when (ISO with offset) and time zone, place with region and lat/lon, camera and lens, size, the people whose faces are in it (named or not), the words written in it (OCR text, e.g. a receipt's lines), and the Drive file link. Use it to read a receipt or sign, or to say exactly who is in a picture. Read-only.",
+    "One photo or video from John's library in full, by the id photo_search returned: when (ISO with offset) and time zone, place with region and lat/lon, camera and lens, size, the people whose faces are in it (named or not), the words written in it (OCR text, e.g. a receipt's lines), and the Drive file link. Use it to read a receipt or sign, or to say exactly who is in a picture. For a video it also gives the analysis (photo_analyse_video), when there is one: each person and each piece of on-screen text once with the time ranges they appear and links to those moments. Read-only.",
   parameters: {
     type: 'object',
     properties: {
@@ -295,4 +295,37 @@ register({
   effect: 'read',
   surfaces: ['chat', 'app'],
   handler: photoRead('photo_stats', async () => (await import('./photos.server')).photoStatsTool),
+});
+
+// Video analysis on request (2026-11-02, owner: "count a face ... one per video
+// not per frame ... grouping in blocks of 10 seconds"). The one photo tool that
+// changes something: 'start' queues a CPU job on SR-Drive's analyser, so it is
+// a mutate (refused unattended), with no card: a long video already stops at
+// Drive's own needsConfirm and the model must ask John before `confirm: true`.
+
+register({
+  name: 'photo_analyse_video',
+  description:
+    "Analyse one of John's videos for who appears in it and what text is shown, and when. Runs only when asked, one video at a time, and takes minutes: action 'start' (default) queues it and answers at once with its place in the queue; call again later with action 'status', or read photo_detail, which carries the results once done. Results are per person per video, not per frame: each recognised person (by the names John gave on /drive) and each distinct piece of on-screen text once, with the time ranges (m:ss, from 10-second blocks) it appears and a link that opens the video at that moment; faces with no person are only counted. Give the video id from photo_search, or describe it (text, people, place, from/to) and it is looked up among videos; if more than one matches nothing starts and the candidates come back, so ask John which. A long video needs John's yes: the answer gives its length and a processing estimate; ask him, and only after he agrees call again with confirm true. force re-analyses a video already done; 'cancel' stops a queued or running one.",
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', description: 'The video id from photo_search. Or leave it out and describe the video below.' },
+      action: { type: 'string', enum: ['start', 'status', 'cancel'], description: 'Default "start" (queue the analysis). "status" reads progress or results; "cancel" stops it.' },
+      text: { type: 'string', description: 'Without an id: what the video shows, in plain words, e.g. "cutting the birthday cake".' },
+      people: { type: 'array', items: { type: 'string' }, description: 'Without an id: names who must be in the video.' },
+      place: { type: 'string', description: 'Without an id: city, region or country.' },
+      from: { type: 'string', description: 'Without an id: earliest date taken, YYYY-MM-DD.' },
+      to: { type: 'string', description: 'Without an id: latest date taken, YYYY-MM-DD.' },
+      confirm: { type: 'boolean', description: 'True only after John has agreed to analyse a long video (the answer asked for it).' },
+      force: { type: 'boolean', description: 'True to re-analyse a video already analysed (replaces the old result).' },
+    },
+    required: [],
+  },
+  category: 'Photos',
+  toolset: 'people',
+  effect: 'mutate',
+  confirm: 'never',
+  surfaces: ['chat', 'app'],
+  handler: photoRead('photo_analyse_video', async () => (await import('./photo-video.server')).photoAnalyseVideoTool),
 });

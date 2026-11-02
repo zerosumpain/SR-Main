@@ -94,6 +94,7 @@ const TIERS: Record<string, { effect: string; confirm: string }> = {
   photo_search: { effect: 'read', confirm: 'never' },
   photo_detail: { effect: 'read', confirm: 'never' },
   photo_stats: { effect: 'read', confirm: 'never' },
+  photo_analyse_video: { effect: 'mutate', confirm: 'never' },
   trip_list: { effect: 'read', confirm: 'never' },
   trip_get: { effect: 'read', confirm: 'never' },
   trip_thread: { effect: 'read', confirm: 'never' },

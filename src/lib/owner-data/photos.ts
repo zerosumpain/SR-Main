@@ -327,3 +327,215 @@ export function facesDisplay(people: WirePerson[], caption?: string): PhotosDisp
 
 export const NOT_CONNECTED =
   'Photos are not connected right now (the reason says why), so there is nothing to read. Tell John that plainly, with the reason; do not guess or describe photos.';
+
+// ---------------------------------------------------------------- video analysis
+//
+// On request only (owner, 2026-11-02: "count a face ... one per video not per
+// frame ... grouping in blocks of 10 seconds"). SR-Drive's analyser samples ONE
+// video at a time and answers one record per person and per distinct text,
+// with time ranges merged from 10-second blocks. Drive's lane:
+// GET|POST|DELETE /api/photos/videos/<id>; photo_detail's asset carries
+// `video`, photo_search's answer carries `moments`. Here: the paths, the time
+// labels, and the compact shapes.
+
+export const VIDEO_ACTIONS = ['start', 'status', 'cancel'] as const;
+export type VideoAction = (typeof VIDEO_ACTIONS)[number];
+
+const VIDEO_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** photo_analyse_video → /api/photos/videos/<id>. Immich ids are UUIDs. */
+export function videoPath(raw: unknown): string {
+  const id = text(raw, 64);
+  if (!id || !VIDEO_ID.test(id)) throw new PhotoArgError('id must be a video id from photo_search (a UUID)');
+  return `/api/photos/videos/${id.toLowerCase()}`;
+}
+
+/** Finding the video to analyse from a description: photo_search, videos only. */
+export function videoResolverPath(args: Record<string, unknown>): string {
+  const criteria = { people: args.people, text: args.text, place: args.place, from: args.from, to: args.to };
+  if (!names(criteria.people).length && !text(criteria.text) && !text(criteria.place, 100) && !text(criteria.from, 40) && !text(criteria.to, 40)) {
+    throw new PhotoArgError('give the video id from photo_search, or describe the video (text, people, place, from/to)');
+  }
+  return searchPath({ ...criteria, type: 'video', limit: 10 });
+}
+
+/** Seconds into a video as "1:10", or "1:02:05" past the hour. */
+export function formatOffset(sec: number): string {
+  const s = Math.max(0, Math.floor(Number.isFinite(sec) ? sec : 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+
+const MAX_RANGES = 20;
+
+/** Drive's `[[start, end], ...]` in seconds, the well-formed pairs only. */
+function rangeList(raw: unknown): Array<[number, number]> {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((r): r is [number, number] =>
+    Array.isArray(r) && typeof r[0] === 'number' && typeof r[1] === 'number' && Number.isFinite(r[0]) && Number.isFinite(r[1]) && r[1] >= r[0]);
+}
+
+/** "0:00–0:20, 1:10–1:30" (en dash); a long list ends "… (+N more)". */
+export function formatRanges(raw: unknown): string {
+  const ranges = rangeList(raw);
+  const shown = ranges.slice(0, MAX_RANGES).map(([a, b]) => `${formatOffset(a)}–${formatOffset(b)}`).join(', ');
+  return ranges.length > MAX_RANGES ? `${shown} … (+${ranges.length - MAX_RANGES} more)` : shown;
+}
+
+/** Drive's deep link into the People tab's video panel, at `t` seconds when given. */
+export function videoLink(assetId: string, t?: number | null): string {
+  const at = typeof t === 'number' && Number.isFinite(t) ? `&t=${Math.max(0, Math.floor(t))}` : '';
+  return `/drive?tab=people&video=${encodeURIComponent(assetId)}${at}`;
+}
+
+/** Drive's own link when it is a site path into /drive; otherwise built here. */
+const driveLink = (raw: unknown, assetId: string, t?: number | null): string =>
+  typeof raw === 'string' && /^\/drive\?[\w=&%.~-]{1,300}$/.test(raw) ? raw : videoLink(assetId, t);
+
+export interface WireVideoPerson { personId?: string | null; name?: string | null; ranges?: unknown; label?: string; link?: string; frameHits?: number }
+export interface WireVideoText { text?: string; ranges?: unknown; label?: string; link?: string }
+export interface WireUnknownFace { label?: string; ranges?: unknown; rangesLabel?: string; frameHits?: number }
+export interface WireVideoEstimate { durationSec?: number; frames?: number; estimatedCpuSec?: number }
+export interface WireVideoResult {
+  analysedAt?: string | null;
+  durationSec?: number | null;
+  blockSec?: number;
+  framesSampled?: number;
+  cpuSec?: number;
+  people?: WireVideoPerson[];
+  unknownFaces?: WireUnknownFace[];
+  text?: WireVideoText[];
+}
+export interface WireVideoState {
+  assetId?: string;
+  status?: string;
+  position?: number | null;
+  progress?: number | null;
+  requestedAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  attempts?: number;
+  error?: string | null;
+  estimate?: WireVideoEstimate | null;
+  result?: WireVideoResult | null;
+  link?: string;
+}
+/** photo_detail's asset, for a video. */
+export interface WireAssetVideo {
+  status?: string;
+  analysedAt?: string | null;
+  people?: WireVideoPerson[];
+  text?: WireVideoText[];
+  unknownFaces?: number | WireUnknownFace[];
+}
+export interface WireMoment { assetId?: string; offsetSec?: number; endSec?: number; score?: number; link?: string; asset?: WireAsset | null }
+
+const firstStart = (raw: unknown): number | null => rangeList(raw)[0]?.[0] ?? null;
+const when = (ranges: unknown, label: unknown): string => formatRanges(ranges) || (typeof label === 'string' ? label.slice(0, 300) : '');
+
+/** Each person once per video: who, when, and a link that opens the video there. */
+function videoPeople(assetId: string, raw: unknown) {
+  return (Array.isArray(raw) ? (raw as WireVideoPerson[]) : []).slice(0, 30).map((p) => ({
+    person: personLabel({ id: p.personId, name: p.name }),
+    when: when(p.ranges, p.label),
+    link: driveLink(p.link, assetId, firstStart(p.ranges)),
+  }));
+}
+
+/** Each distinct piece of text shown in the video once: the words, when, a link. */
+function videoText(assetId: string, raw: unknown) {
+  return (Array.isArray(raw) ? (raw as WireVideoText[]) : [])
+    .filter((t) => typeof t.text === 'string' && t.text.trim())
+    .slice(0, 40)
+    .map((t) => ({ text: t.text!.trim().slice(0, 200), when: when(t.ranges, t.label), link: driveLink(t.link, assetId, firstStart(t.ranges)) }));
+}
+
+const unknownCount = (raw: unknown): number => (typeof raw === 'number' ? raw : Array.isArray(raw) ? raw.length : 0);
+
+/** A finished analysis: per person and per text, never per frame. */
+export function compactVideoResult(assetId: string, r: WireVideoResult) {
+  const unknown = (Array.isArray(r.unknownFaces) ? r.unknownFaces : []).slice(0, 10).map((u, i) => ({
+    label: u.label?.trim() || `Unknown ${i + 1}`,
+    when: when(u.ranges, u.rangesLabel),
+  }));
+  return {
+    ...(r.analysedAt ? { analysedAt: r.analysedAt } : {}),
+    ...(typeof r.durationSec === 'number' ? { length: formatOffset(r.durationSec) } : {}),
+    people: videoPeople(assetId, r.people),
+    text: videoText(assetId, r.text),
+    // Faces Immich has no person for: counted, never created as people.
+    ...(unknown.length ? { unknownFaces: unknown } : {}),
+  };
+}
+
+/** Drive's estimate for a long video, in words John can say yes to. */
+export function compactEstimate(e: WireVideoEstimate | null | undefined) {
+  if (!e || typeof e !== 'object') return null;
+  return {
+    ...(typeof e.durationSec === 'number' ? { videoLength: formatOffset(e.durationSec) } : {}),
+    ...(typeof e.frames === 'number' ? { frames: e.frames } : {}),
+    ...(typeof e.estimatedCpuSec === 'number' ? { cpuMinutes: Math.max(0.1, Math.round(e.estimatedCpuSec / 6) / 10) } : {}),
+  };
+}
+
+/** One video's analysis state: where it is in the queue, how far, and its results once done. */
+export function compactVideoState(v: WireVideoState, assetId: string) {
+  const id = typeof v.assetId === 'string' && v.assetId ? v.assetId : assetId;
+  const status = typeof v.status === 'string' ? v.status : 'none';
+  const active = status === 'queued' || status === 'running';
+  const estimate = compactEstimate(v.estimate);
+  return {
+    id,
+    status,
+    ...(active && typeof v.position === 'number' ? { position: v.position } : {}),
+    ...(status === 'running' && typeof v.progress === 'number' ? { progress: `${Math.round(Math.min(1, Math.max(0, v.progress)) * 100)}%` } : {}),
+    ...(active && v.requestedAt ? { requestedAt: v.requestedAt } : {}),
+    ...(active && v.startedAt ? { startedAt: v.startedAt } : {}),
+    ...(!active && v.finishedAt ? { finishedAt: v.finishedAt } : {}),
+    ...(estimate && Object.keys(estimate).length ? { estimate } : {}),
+    ...(v.error ? { error: String(v.error).slice(0, 300) } : {}),
+    ...(v.result && typeof v.result === 'object' ? { result: compactVideoResult(id, v.result) } : {}),
+    link: driveLink(v.link, id),
+  };
+}
+
+export const VIDEO_NOT_ANALYSED = 'Not analysed yet: photo_analyse_video can analyse it on request (it takes minutes).';
+
+/** photo_detail's `video` block; `null` from Drive (never analysed, or no analyser) reads as status none. */
+export function compactAssetVideo(assetId: string, v: WireAssetVideo | null | undefined) {
+  const status = v && typeof v.status === 'string' ? v.status : 'none';
+  const hasResult = !!v && (Array.isArray(v.people) || Array.isArray(v.text));
+  const unknown = unknownCount(v?.unknownFaces);
+  return {
+    status,
+    ...(v?.analysedAt ? { analysedAt: v.analysedAt } : {}),
+    ...(hasResult ? { people: videoPeople(assetId, v!.people), text: videoText(assetId, v!.text) } : {}),
+    ...(unknown ? { unknownFaces: unknown } : {}),
+    ...(status === 'queued' || status === 'running'
+      ? { hint: "Analysis in progress: photo_analyse_video with action 'status' says how far." }
+      : !hasResult ? { hint: VIDEO_NOT_ANALYSED } : {}),
+    link: videoLink(assetId),
+  };
+}
+
+/** photo_search's `moments`: the 10-second stretches of analysed videos that match the text. */
+export function compactMoments(raw: unknown) {
+  const moments = (Array.isArray(raw) ? (raw as WireMoment[]) : [])
+    .filter((m) => typeof m.assetId === 'string' && m.assetId && typeof m.offsetSec === 'number' && Number.isFinite(m.offsetSec))
+    .slice(0, 20)
+    .map((m) => {
+      const place = placeName(m.asset?.location);
+      return {
+        assetId: m.assetId!,
+        at: formatOffset(m.offsetSec!),
+        ...(typeof m.endSec === 'number' && m.endSec > m.offsetSec! ? { until: formatOffset(m.endSec) } : {}),
+        ...(typeof m.score === 'number' && Number.isFinite(m.score) ? { score: Math.round(m.score * 100) / 100 } : {}),
+        ...(m.asset?.takenAt ? { takenAt: m.asset.takenAt } : {}),
+        ...(place ? { place } : {}),
+        link: driveLink(m.link, m.assetId!, m.offsetSec),
+      };
+    });
+  return moments.length ? { moments } : {};
+}

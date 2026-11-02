@@ -13,6 +13,7 @@
 // photo is a plain failed tool call with Drive's own sentence.
 
 import { requestExtracted } from '$lib/server/extracted-app';
+import { compactAssetVideo, compactMoments, type WireAssetVideo } from './photos';
 import {
   NOT_CONNECTED,
   PHOTOS_PAGE,
@@ -138,6 +139,8 @@ export function photoSearchTool(args: Record<string, unknown>): Promise<PhotoRes
       total: typeof b.total === 'number' ? b.total : null,
       page: typeof b.page === 'number' ? b.page : 1,
       returned: assets.length,
+      // Analysed videos' 10-second stretches that match the text, when there are any.
+      ...compactMoments(b.moments),
       ...summarise(assets),
       assets,
     };
@@ -155,6 +158,8 @@ export function photoDetailTool(args: Record<string, unknown>): Promise<PhotoRes
         ...(a.location?.state && a.location.city ? { region: a.location.state } : {}),
         ...(a.camera?.lens ? { lens: a.camera.lens } : {}),
         ...(a.width && a.height ? { size: `${a.width}x${a.height}` } : {}),
+        // Who and what text appear in a video, and when (on-request analysis).
+        ...(a.type === 'video' ? { video: compactAssetVideo(a.id, (a as WireAsset & { video?: WireAssetVideo | null }).video) } : {}),
         // Words read off the image: what's written in it, not anyone's message.
         ...(ocr ? { textInImage: ocr.slice(0, 2000), ...(ocr.length > 2000 ? { textInImageTruncated: true } : {}) } : {}),
         faces: list<{ personId?: string | null; name?: string | null }>(a.faces).map((f) => ({
