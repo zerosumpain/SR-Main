@@ -11,6 +11,8 @@
   import AzulPad from './azul/AzulPad.svelte';
   import SnapPad from './snap/SnapPad.svelte';
   import BiscuitPad from './biscuit/BiscuitPad.svelte';
+  import IronPad from './iron/IronPad.svelte';
+  import type { WireRoom as IronRoom } from '$lib/games/iron-roads';
   import type { WireRoom as BiscuitRoom } from '$lib/games/biscuit-tower';
   import type { WireRoom as SnapRoom } from '$lib/games/snap-happy';
   import type { WireRoom as QuizRoom } from '$lib/games/quiz-night';
@@ -92,6 +94,8 @@
     <SnapPad {code} room={view.room as unknown as SnapRoom} skewMs={view.skewMs} />
   {:else if view.room.game === 'biscuit-tower'}
     <BiscuitPad {code} room={view.room as unknown as BiscuitRoom} skewMs={view.skewMs} />
+  {:else if view.room.game === 'iron-roads'}
+    <IronPad {code} room={view.room as unknown as IronRoom} skewMs={view.skewMs} />
   {:else if view.room.phase === 'finished'}
     {@const table = standingsOf(view.room)}
     <section class="play-centre">

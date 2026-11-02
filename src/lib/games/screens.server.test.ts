@@ -76,7 +76,7 @@ describe('codes and tickets', () => {
 
 describe('a TV board', () => {
   it('lists the games that have one', () => {
-    expect([...screenGames()].sort()).toEqual(['azul', 'boggle', 'codenames', 'quiz-night', 'snap-happy', 'biscuit-tower'].sort());
+    expect([...screenGames()].sort()).toEqual(['azul', 'boggle', 'codenames', 'quiz-night', 'snap-happy', 'biscuit-tower', 'iron-roads'].sort());
   });
 
   it('refuses a game with no board', async () => {

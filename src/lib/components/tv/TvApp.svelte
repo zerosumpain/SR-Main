@@ -17,6 +17,8 @@
   import CodenamesTable from '$lib/components/games/codenames/CodenamesTable.svelte';
   import SnapTable from '$lib/components/games/snap/SnapTable.svelte';
   import BiscuitTable from '$lib/components/games/biscuit/BiscuitTable.svelte';
+  import IronTable from '$lib/components/games/iron/IronTable.svelte';
+  import type { ScreenRoom as IronRoom } from '$lib/games/iron-roads';
   import type { ScreenRoom as BiscuitRoom } from '$lib/games/biscuit-tower';
   import type { ScreenRoom as SnapRoom } from '$lib/games/snap-happy';
   import type { AzulRoom } from '$lib/components/games/azul/motion';
@@ -233,6 +235,8 @@
       {:else if party.game === 'biscuit-tower'}
         <!-- This TV runs the physics and says how each drop landed. -->
         <BiscuitTable room={room as BiscuitRoom} {skewMs} report={(b) => void tvParty({ action: 'report', ...b }).catch(() => {})} />
+      {:else if party.game === 'iron-roads'}
+        <IronTable room={room as IronRoom} {skewMs} />
       {/if}
     </div>
     {#if roomPhase === 'lobby' && !sheet}
