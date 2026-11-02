@@ -12,6 +12,8 @@
 # If CI fails on this file: a route was added under a public prefix. Confirm it
 # is MEANT to be anonymous — and if it self-gates, that the gate is actually
 # called — then run `npm run gate:public-routes -- --write` and commit.
+/.well-known/apple-app-site-association
+/.well-known/openid-configuration
 /api/admin/security
 /api/blog/images/[postId]/[filename]
 /api/claude-changelog/ingest
@@ -203,6 +205,9 @@
 /install/[token]/app.ipa
 /install/[token]/manifest.plist
 /login
+/oauth/jwks
+/oauth/token
+/oauth/userinfo
 /privacy
 /projects
 /projects/[slug]/[...path]

@@ -619,6 +619,21 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // Main's owner-only OpenID provider ($lib/server/oidc/provider): Immich signs
+  // the owner in with this site's session. These four authenticate themselves
+  // (discovery and keys are public metadata; token checks the client secret,
+  // the sealed code and the PKCE verifier; userinfo checks its bearer) and all
+  // 404 while the provider is unconfigured. EXACT paths. /oauth/authorize is
+  // deliberately NOT here: it needs the session and the owner gate below.
+  if (
+    pathname === '/.well-known/openid-configuration' ||
+    pathname === '/oauth/jwks' ||
+    pathname === '/oauth/token' ||
+    pathname === '/oauth/userinfo'
+  ) {
+    return resolve(event);
+  }
+
   // /api/scraper/script is service-to-service when called on homeserv (the
   // host that owns the scrape scripts) and user-authenticated when called on
   // the VPS (the panel proxies through). Whitelist on homeserv only — its
@@ -1023,6 +1038,12 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     const callbackUrl = encodeURIComponent(pathname + event.url.search);
     throw redirect(302, `/login?callbackUrl=${callbackUrl}`);
   }
+
+  // Signing in to another app with this site ($lib/server/oidc/provider): a
+  // SIGNED-IN non-owner reaches the handler so it can say "only the owner"
+  // with a 403, rather than being bounced to `/` with no explanation. Session
+  // already required above; the handler gives a code to an owner only.
+  if (pathname === '/oauth/authorize') return resolve(event);
 
   // Authed pages are owner-only by default. A guest on the login allow-list can
   // sign in but only reach public pages plus any guest-allowed prefix
