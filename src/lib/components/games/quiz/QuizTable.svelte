@@ -61,7 +61,7 @@
 
 <div class="quiz">
   <header class="top">
-    <span class="brand"><span class="mark">sr.</span> quiz night</span>
+    <span class="brand"><span class="mark">sr.</span> {room.pack ? 'kelly’s quiz night' : 'quiz night'}</span>
     <span class="about">{heading}</span>
     {#key headline}
       <h1 in:fly={{ y: -12, duration: 380 }}>{headline}</h1>
@@ -97,7 +97,12 @@
         </div>
       {:else if (room.phase === 'question' || room.phase === 'reveal') && q}
         {#key q.index}
-          <div class="question" in:fly={{ y: 40, duration: 520, easing: cubicOut }}>
+          <div class="question" class:qn-has-photo={!!q.photo} in:fly={{ y: 40, duration: 520, easing: cubicOut }}>
+            {#if q.photo}
+              <!-- Kelly's Quiz Night: the pack photo the question is about (a signed URL). -->
+              <img class="qn-photo" src={q.photo} alt="" in:fade={{ duration: 500 }} />
+            {/if}
+            <div class="qn-main">
             <p class="prompt">{q.prompt}</p>
             <div class="clock" aria-hidden="true">
               <span class="drain" class:low={left !== null && left < 0.25} style:transform="scaleX({open ? (left ?? 0) : 0})"></span>
@@ -125,6 +130,7 @@
             {#if revealed && q.explain}
               <p class="explain" in:fade={{ delay: 700, duration: 400 }}>{q.explain}</p>
             {/if}
+            </div>
           </div>
         {/key}
       {:else if room.phase === 'finished'}
@@ -503,5 +509,24 @@
     .drain {
       transition: none;
     }
+  }
+  /* Kelly's Quiz Night: a photo beside the question. */
+  .qn-has-photo {
+    display: grid;
+    grid-template-columns: 40% 1fr;
+    gap: 2.4cqw;
+    align-items: center;
+  }
+  .qn-photo {
+    width: 100%;
+    max-height: 30cqw;
+    object-fit: contain;
+    border-radius: 2px;
+    background: var(--on-ink-05);
+  }
+  .qn-main {
+    min-width: 0;
+    display: grid;
+    gap: 1.4cqw;
   }
 </style>

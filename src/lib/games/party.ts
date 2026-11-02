@@ -23,7 +23,18 @@ export const PARTY_MAX = 8;
 export const GUEST_NAME_MAX = 16;
 
 /** The games a party can play: a TV board and a web controller each. */
-export const PARTY_GAMES: readonly GameId[] = ['boggle'];
+export const PARTY_GAMES: readonly GameId[] = ['boggle', 'quiz-night', 'codenames', 'azul'];
+
+/**
+ * Games whose room has something to do before play (Codenames: teams and
+ * spymasters picked on the phones; Quiz Night: jkai writing the questions).
+ * The TV's Start makes the room with everybody in it and shows its lobby;
+ * the TV's Go (`go`) then starts play.
+ */
+export const SETUP_FIRST: ReadonlySet<GameId> = new Set<GameId>(['codenames', 'quiz-night']);
+
+/** AI-written quizzes one TV may start in a rolling day (each is two model calls). */
+export const QUIZZES_PER_TV_DAY = 10;
 
 const hex = (bytes: number) => randomBytes(bytes).toString('hex');
 export const newTvId = () => 'tv_' + hex(6);

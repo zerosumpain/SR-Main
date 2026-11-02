@@ -235,3 +235,29 @@ describe('a kicked guest', () => {
     expect(wasKicked(code, sam)).toBe(true);
   });
 });
+
+describe('games with set-up first', () => {
+  it('Codenames opens its lobby on Start, and Go starts play', () => {
+    const { code } = openParty(tv);
+    joinGuest(code, 'Sam');
+    joinGuest(code, 'Alex');
+    tvAct(tv.id, 'pick', { game: 'codenames' });
+    const v = tvAct(tv.id, 'start');
+    expect(roomStage(v.roomId!)?.phase).toBe('lobby');
+    tvAct(tv.id, 'go');
+    expect(roomStage(v.roomId!)?.phase).toBe('countdown');
+  });
+
+  it('Go with nothing waiting is refused', () => {
+    openParty(tv);
+    expect(() => tvAct(tv.id, 'go')).toThrow(/No game is waiting/u);
+  });
+
+  it('a TV may start ten AI quizzes a day', () => {
+    const { code } = openParty(tv);
+    joinGuest(code, 'Sam');
+    tvAct(tv.id, 'pick', { game: 'quiz-night', options: { topic: 'trains' } });
+    for (let i = 0; i < 10; i++) tvAct(tv.id, i === 0 ? 'start' : 'again');
+    expect(() => tvAct(tv.id, 'again')).toThrow(/limit/u);
+  });
+});

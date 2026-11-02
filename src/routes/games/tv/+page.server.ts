@@ -2,6 +2,7 @@ import type { PageServerLoad } from './$types';
 import { TV_COOKIE } from '$lib/games/party';
 import { tvFromToken } from '$lib/games/tv-devices.server';
 import { listMembers } from '$lib/home/presence/members';
+import { approvedPacks } from '$lib/games/quiz-packs.server';
 
 /**
  * /games/tv — sr. tv: the TV's games screen, opened by the Android TV app
@@ -19,5 +20,7 @@ export const load: PageServerLoad = async ({ cookies, setHeaders }) => {
         .then((all) => all.map((m) => m.displayName?.split(' ')[0]).filter((n): n is string => !!n))
         .catch(() => [] as string[])
     : [];
-  return { linked: true as const, tvName: tv.name, family: [...new Set(family)].slice(0, 12) };
+  // Kelly's Quiz Night packs John has approved (titles only), for the menu's tile.
+  const packs = await approvedPacks().catch(() => []);
+  return { linked: true as const, tvName: tv.name, family: [...new Set(family)].slice(0, 12), packs };
 };

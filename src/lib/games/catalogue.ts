@@ -28,6 +28,7 @@ import * as hometowns from './hometowns/hometowns';
 import * as azul from './azul';
 import * as codenames from './codenames';
 import { writeQuiz } from './quiz-night.server';
+import { loadPackQuiz } from './quiz-packs.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
 export const GAME_IDS = [
@@ -246,7 +247,8 @@ export const GAMES: Record<GameId, GameRules> = {
   },
   'quiz-night': {
     ...quizNight,
-    prepare: (room) => writeQuiz(room as quizNight.Room),
+    // Kelly's Quiz Night plays a pack John wrote; any other quiz is written by jkai.
+    prepare: (room) => ((room as quizNight.Room).pack ? loadPackQuiz(room as quizNight.Room) : writeQuiz(room as quizNight.Room)),
     moves: {
       answer: (room, playerId, body, now) =>
         quizNight.answer(room as quizNight.Room, playerId, { question: num(body.question) ?? -1, choice: num(body.choice) ?? -1 }, now),
