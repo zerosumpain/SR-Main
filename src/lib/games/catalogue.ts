@@ -29,6 +29,7 @@ import * as azul from './azul';
 import * as codenames from './codenames';
 import * as snapHappy from './snap-happy';
 import * as biscuitTower from './biscuit-tower';
+import * as ironRoads from './iron-roads';
 import { writeQuiz } from './quiz-night.server';
 import { loadPackQuiz } from './quiz-packs.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
@@ -58,6 +59,7 @@ export const GAME_IDS = [
   'codenames',
   'snap-happy',
   'biscuit-tower',
+  'iron-roads',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -501,6 +503,16 @@ export const GAMES: Record<GameId, GameRules> = {
     moves: {
       drop: (room, p, b, now) => biscuitTower.drop(room as biscuitTower.Room, p, { turn: b.turn, at: b.at }, now),
       report: (room, p, b, now) => biscuitTower.report(room as biscuitTower.Room, p, { turn: b.turn, outcome: b.outcome, height: b.height }, now),
+    },
+  },
+  // sr. tv's board game: route building on a North-East rail map, Darlington at its heart (spec 2026-11-02 sr. tv §9).
+  'iron-roads': {
+    ...ironRoads,
+    moves: {
+      keep: (room, p, b, now) => ironRoads.keep(room as ironRoads.Room, p, { tickets: b.tickets }, now),
+      draw: (room, p, b, now) => ironRoads.draw(room as ironRoads.Room, p, { source: b.source }, now),
+      claim: (room, p, b, now) => ironRoads.claim(room as ironRoads.Room, p, { route: b.route, colour: b.colour }, now),
+      tickets: (room, p, b, now) => ironRoads.tickets(room as ironRoads.Room, p, b, now),
     },
   },
 };

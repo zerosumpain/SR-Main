@@ -78,6 +78,7 @@ export const GAME_OPTIONS_MORE: Record<string, TvOption[]> = {
   codenames: [DIFFICULTY],
   azul: [],
   'snap-happy': [DIFFICULTY],
+  'iron-roads': [],
   'biscuit-tower': [{ ...DIFFICULTY, label: 'Crane speed', choices: [{ value: 'easy', label: 'Gentle' }, { value: 'medium', label: 'Brisk' }, { value: 'hard', label: 'Wild' }] }],
 };
 Object.assign(GAME_OPTIONS, GAME_OPTIONS_MORE);
@@ -91,6 +92,7 @@ export const GAME_BLURBS: Record<string, string> = {
   'quiz-night': 'jkai writes ten questions on a topic. Answer on your phone; quicker is worth more.',
   codenames: 'Two teams, one spymaster each. Give one-word clues to find your agents on the TV.',
   'snap-happy': 'The TV flicks through pictures. Snap on your phone when the target shows — and not a moment before.',
+  'iron-roads': 'Build railways across the North East from Darlington. Your secret routes stay on your phone.',
   'biscuit-tower': 'Take turns dropping biscuits, mugs and the teapot from a swinging crane. Topple it and the round ends.',
   azul: 'Draft coloured tiles and build the wall. Two to four players, the board on the TV.',
   boggle: 'Trace words on your phone through touching letters. Find the Kelly word for double.',

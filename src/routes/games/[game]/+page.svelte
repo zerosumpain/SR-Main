@@ -11,6 +11,8 @@
   import type { WireRoom as CodenamesRoom } from '$lib/games/codenames';
   import SnapTable from '$lib/components/games/snap/SnapTable.svelte';
   import BiscuitTable from '$lib/components/games/biscuit/BiscuitTable.svelte';
+  import IronTable from '$lib/components/games/iron/IronTable.svelte';
+  import type { ScreenRoom as IronRoom } from '$lib/games/iron-roads';
   import type { ScreenRoom as BiscuitRoom } from '$lib/games/biscuit-tower';
   import type { ScreenRoom as SnapRoom } from '$lib/games/snap-happy';
   import type { ScreenRoom as BoggleRoom } from '$lib/games/boggle';
@@ -53,6 +55,12 @@
   <TableScreen game="biscuit-tower" title={data.title}>
     {#snippet board(room: BiscuitRoom, skewMs: number)}
       <BiscuitTable {room} {skewMs} />
+    {/snippet}
+  </TableScreen>
+{:else if data.game === 'iron-roads'}
+  <TableScreen game="iron-roads" title={data.title}>
+    {#snippet board(room: IronRoom, skewMs: number)}
+      <IronTable {room} {skewMs} />
     {/snippet}
   </TableScreen>
 {/if}
