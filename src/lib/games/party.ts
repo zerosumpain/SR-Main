@@ -33,6 +33,14 @@ export const PARTY_GAMES: readonly GameId[] = ['boggle', 'quiz-night', 'codename
  */
 export const SETUP_FIRST: ReadonlySet<GameId> = new Set<GameId>(['codenames', 'quiz-night']);
 
+/**
+ * The TV's verbs the host's phone may send too: pick the game and its options,
+ * start, go, play again, back to the lobby, take somebody out, lock. Not
+ * `close` (that ends the evening for everybody) or `report` (only the TV's
+ * physics may say how a biscuit landed).
+ */
+export const HOST_VERBS: ReadonlySet<string> = new Set(['pick', 'start', 'go', 'again', 'end', 'kick', 'lock', 'unlock']);
+
 /** AI-written quizzes one TV may start in a rolling day (each is two model calls). */
 export const QUIZZES_PER_TV_DAY = 10;
 
@@ -137,6 +145,8 @@ export interface PartyView {
   game: GameId | null;
   options: Record<string, unknown>;
   members: { id: string; name: string; kind: MemberKind; online: boolean }[];
+  /** Whoever joined first and is still in: their phone drives the party as the remote does (`HOST_VERBS`). */
+  hostId: string | null;
   roomId: string | null;
   notice: string | null;
   games: PartyGame[];

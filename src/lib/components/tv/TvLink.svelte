@@ -23,7 +23,7 @@
   const letters = $derived(view.kind === 'code' ? [...view.code] : []);
 </script>
 
-<TvStage>
+<TvStage art="/tv-art/link.webp">
   <div class="tv-link" in:fade={{ duration: 300 }}>
     <p class="tv-brand"><span class="tv-mark">sr.</span> tv</p>
     {#if view.kind === 'linked'}

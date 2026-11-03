@@ -18,7 +18,10 @@ export interface PlayParty {
   phase: 'lobby' | 'playing';
   locked: boolean;
   game: string | null;
+  options: Record<string, unknown>;
   members: { id: string; name: string; kind: 'family' | 'guest'; online: boolean }[];
+  /** The first in: their phone gets the TV's controls (`HostPanel`). */
+  hostId: string | null;
   roomId: string | null;
   notice: string | null;
   games: { id: string; title: string; min: number; max: number }[];
@@ -157,4 +160,32 @@ export async function playAct<R = PlayRoom>(code: string, body: Record<string, u
   const out = (await res.json().catch(() => null)) as { room?: R; error?: string } | null;
   if (!res.ok || !out?.room) throw new Error(out?.error ?? 'That did not go through. Try again.');
   return out.room;
+}
+
+/** One of the TV's verbs from the host's phone (`hostAct`); the party comes back on the stream too. */
+export async function hostAct(code: string, body: Record<string, unknown>): Promise<PlayParty> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/games/party/${encodeURIComponent(code)}/host`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error('No connection. Try again.');
+  }
+  const out = (await res.json().catch(() => null)) as { party?: PlayParty; error?: string } | null;
+  if (!res.ok || !out?.party) throw new Error(out?.error ?? 'That did not go through. Try again.');
+  return out.party;
+}
+
+/** Kelly's Quiz Night's approved packs, for the host's game list. Empty when there are none or the call fails. */
+export async function hostPacks(code: string): Promise<{ id: string; title: string }[]> {
+  try {
+    const res = await fetch(`/api/games/party/${encodeURIComponent(code)}/host`);
+    const out = (await res.json().catch(() => null)) as { packs?: { id: string; title: string }[] } | null;
+    return res.ok && Array.isArray(out?.packs) ? out.packs : [];
+  } catch {
+    return [];
+  }
 }

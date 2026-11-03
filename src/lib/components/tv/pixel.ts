@@ -1,9 +1,10 @@
 // sr. tv's marks: the iPhone app's pixel "SR" and a pixel icon per tile,
-// drawn on the same kind of grid (`#` is a cell), and the Prism hues each
-// tile wears. The SR grid and the icon's four-corner ground are copied from
+// drawn on the same kind of grid (`#` is a cell), and the hue each tile
+// wears. The SR grid and the icon's four-corner ground are copied from
 // SR-AppleApp scripts/app-icons.py (MARK, ICONS.prism) — change one, change
-// both. Hues are Prism's per-feature pairs (Design/SRPalette.swift), base
-// then glow.
+// both. The tiles' hues are the site's warm family (burnt orange, teal, gold,
+// brick, olive) rather than Prism's, so they sit on the browns and creams;
+// base then glow.
 
 export type Grid = readonly string[];
 
@@ -27,19 +28,19 @@ export interface Hue {
 }
 
 const HUES = {
-  tasks: { base: '#FFB800', glow: '#FFE14D' },
-  chat: { base: '#3B4BF5', glow: '#6E8BFF' },
-  alerts: { base: '#DC2626', glow: '#FB923C' },
-  trips: { base: '#1E63E9', glow: '#2EC5FF' },
-  move: { base: '#E11D74', glow: '#FF5FA2' },
-  steps: { base: '#E85D00', glow: '#FF9E2C' },
-  health: { base: '#0E9F5A', glow: '#3DDC84' },
-  family: { base: '#E62E5C', glow: '#FF7A59' },
-  daydream: { base: '#9333EA', glow: '#F472B6' },
-  messages: { base: '#0B8A7A', glow: '#2DD4BF' },
-  news: { base: '#0E7490', glow: '#22C3DD' },
-  flows: { base: '#4338CA', glow: '#38BDF8' },
-  games: { base: '#7C3AED', glow: '#C026D3' },
+  tasks: { base: '#B8862B', glow: '#E2B54F' },
+  chat: { base: '#35505A', glow: '#5E8A94' },
+  alerts: { base: '#9E3B2A', glow: '#E06A4A' },
+  trips: { base: '#2C6E78', glow: '#3FA3B0' },
+  move: { base: '#8E3B4E', glow: '#C9667A' },
+  steps: { base: '#B45A12', glow: '#E07B2A' },
+  health: { base: '#5E6B33', glow: '#8A9A5B' },
+  family: { base: '#A4472C', glow: '#E07B5A' },
+  daydream: { base: '#5B3A5E', glow: '#9A6A8E' },
+  messages: { base: '#1F5E5A', glow: '#4C9A8E' },
+  news: { base: '#8A6A2A', glow: '#C9A04A' },
+  flows: { base: '#5A4632', glow: '#9A7B58' },
+  games: { base: '#7A4A22', glow: '#C47A3A' },
 } satisfies Record<string, Hue>;
 
 export interface TileArt {
