@@ -70,6 +70,9 @@
 
   // Plain handles (svelte5-pitfalls §1).
   let qrFor: string | null = null;
+  /** What the menu last saw: somebody joining, or the host picking a game, moves the TV to the lobby. */
+  let seenJoined = 0;
+  let seenPick = '';
   let errorTimer: ReturnType<typeof setTimeout> | null = null;
 
   const party = $derived<PartyView | null>(link.kind === 'party' ? link.party : null);
@@ -81,9 +84,11 @@
   const writing = $derived((room as { prep?: string } | null)?.prep === 'writing');
   const current = $derived(party?.games.find((g) => g.id === party?.game) ?? null);
   const seed = $derived(party ? party.code.charCodeAt(0) + party.code.charCodeAt(3) : 0);
+  const host = $derived(party?.members.find((m) => m.id === party?.hostId) ?? null);
   const greeting = $derived.by(() => {
     if (!party) return '';
     if (family.length && party.members.length === 0) return `Right then — ${family[seed % family.length]}, grab a phone and scan the code.`;
+    if (host) return `${host.name} is the host — pick and start from their phone, or with the remote.`;
     return hostLine('lobby', seed);
   });
 
@@ -351,6 +356,12 @@
       if (s.kind === 'unlinked') location.reload();
       if (s.kind === 'party') {
         void refreshQr(s.party.code);
+        const joined = s.party.members.length;
+        const pickKey = JSON.stringify([s.party.game, s.party.options]);
+        // A phone is driving: a newcomer, or the host choosing a game, brings the TV to the lobby to show it.
+        if (!first && view === 'menu' && !player && (joined > seenJoined || (joined > 0 && pickKey !== seenPick))) void go('lobby');
+        seenJoined = joined;
+        seenPick = pickKey;
         const nowPlaying = !!s.party.roomId;
         // A game ending (or one started elsewhere) moves focus to whatever is now on screen.
         if (wasPlaying !== nowPlaying) {
@@ -371,7 +382,8 @@
   });
 </script>
 
-<TvStage>
+<!-- A game board gets no painting behind it; the lobby has the kitchen table, everything else the living room. -->
+<TvStage art={playing ? null : view === 'lobby' && party ? '/tv-art/lobby.webp' : '/tv-art/menu.webp'}>
   {#if !party}
     <div class="tv-center" in:fade>
       <div class="tv-splash"><PixelTile label="sr." /></div>
@@ -416,6 +428,14 @@
           <p class="tv-brand"><span class="tv-mark">sr.</span> tv · {tvName}</p>
           <h1>What are we playing?</h1>
           <p class="tv-lead">{focusedBlurb ?? greeting}</p>
+        </div>
+        <!-- Join from the menu: the first phone in is the host and can pick the game itself. -->
+        <div class="tv-menu-join">
+          {#if qr}<img src={qr} alt="Scan to join" />{/if}
+          <p>
+            <span class="tv-menu-code" aria-label="Code {party.code.split('').join(' ')}">{party.code}</span>
+            <span>{host ? `${host.name} is hosting` : 'Scan to play · first in hosts'}</span>
+          </p>
         </div>
       </header>
 
@@ -575,7 +595,7 @@
               {#each party.members as m (m.id)}
                 <li animate:flip={{ duration: 250 }} in:fly={{ y: 16, duration: 250 }}>
                   <button type="button" class="tv-member" class:tv-off={!m.online} data-tv onclick={() => openSheet({ kind: 'kick', id: m.id, name: m.name })}>
-                    <span class="tv-dot"></span>{m.name}{#if m.kind === 'family'}<span class="tv-fam">family</span>{/if}
+                    <span class="tv-dot"></span>{m.name}{#if m.id === party.hostId}<span class="tv-fam">host</span>{:else if m.kind === 'family'}<span class="tv-fam">family</span>{/if}
                   </button>
                 </li>
               {/each}
@@ -786,6 +806,37 @@
   }
   .tv-top-text {
     min-width: 0;
+    flex: 1;
+  }
+  .tv-menu-join {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 1cqw;
+    padding: 0.6cqw;
+    background: var(--tv-surface);
+    border: 1px solid var(--on-ink-14);
+  }
+  .tv-menu-join img {
+    width: 7cqw;
+    height: 7cqw;
+    background: #fff;
+    padding: 0.3cqw;
+  }
+  .tv-menu-join p {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3cqw;
+    max-width: 12cqw;
+    font-size: 1.1cqw;
+    color: var(--on-ink-80);
+  }
+  .tv-menu-code {
+    font-family: var(--font-mono);
+    font-size: 2.2cqw;
+    letter-spacing: 0.2em;
+    color: var(--chrome-ink);
   }
   .tv-logo {
     width: 6.6cqw;

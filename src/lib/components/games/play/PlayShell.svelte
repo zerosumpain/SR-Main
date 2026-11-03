@@ -4,6 +4,7 @@
   // A game is picked by `room.game`; one without a web controller yet says so.
   import { onMount } from 'svelte';
   import { openPlay, type PlayParty, type PlayState } from './play-stream';
+  import HostPanel from './HostPanel.svelte';
   import BogglePad from './boggle/BogglePad.svelte';
   import type { WireRoom as BoggleRoom } from '$lib/games/boggle';
   import QuizPad from './quiz/QuizPad.svelte';
@@ -62,11 +63,18 @@
   </section>
 {:else if view.kind === 'party'}
   {@const party = view.party}
+  {@const host = party.members.find((m) => m.id === party.hostId)}
   <section class="play-lobby">
     <p class="play-kicker">At {party.tvName}</p>
     <h1 class="play-title">{party.game ? gameTitle(party) : 'Pick a game on the TV'}</h1>
     <p class="play-lead">
-      {party.phase === 'playing' ? 'Joining the game…' : 'Waiting for the TV to start…'}
+      {#if party.phase === 'playing'}
+        Joining the game…
+      {:else if party.hostId === meId}
+        Pick the game and press Start — here or on the TV.
+      {:else}
+        Waiting for {host ? host.name : 'the TV'} to start…
+      {/if}
     </p>
     {#if party.notice}
       <p class="play-notice">{party.notice}</p>
@@ -76,10 +84,13 @@
       {#each party.members as m (m.id)}
         <li class:play-me={m.id === meId}>
           <span class="play-dot" class:play-on={m.online} aria-hidden="true"></span>
-          {m.name}{m.id === meId ? ' (you)' : ''}
+          {m.name}{m.id === meId ? ' (you)' : ''}{m.id === party.hostId ? ' · host' : ''}
         </li>
       {/each}
     </ul>
+    {#if party.hostId === meId}
+      <HostPanel {code} {meId} {party} />
+    {/if}
   </section>
 {:else if view.kind === 'room'}
   {#if view.room.game === 'boggle'}
@@ -116,6 +127,9 @@
       <p class="play-kicker">{gameTitle(view.party)}</p>
       <p class="play-lead">This game's controls are coming soon — watch the TV.</p>
     </section>
+  {/if}
+  {#if view.party.hostId === meId}
+    <HostPanel {code} {meId} party={view.party} roomPhase={view.room.phase} writing={view.room.prep === 'writing'} />
   {/if}
 {:else if view.kind === 'kicked'}
   <section class="play-centre">
