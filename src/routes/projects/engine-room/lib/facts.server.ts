@@ -34,7 +34,12 @@ import { RETEST_DAYS, SUMMARY_EVERY_DAYS } from '$lib/daydream/think/ledger';
 import { capabilityLines } from '$lib/daydream/think/capability-lines';
 import { IDEA_SOURCES, WORK_STAGES, STAGE_META } from '$lib/selfimprove/board';
 import { BUDGET_CAPS, WORK_CAPS } from '$lib/selfimprove/types';
-import { RELEASE_POLICIES, RELEASE_POLICY_LABELS, AUTOPILOT_ROUNDS, BRIEF_LANES } from '$lib/constants/development';
+import { RELEASE_POLICIES, RELEASE_POLICY_LABELS, AUTOPILOT_ROUNDS, BRIEF_LANES, COMMISSION_SOURCES } from '$lib/constants/development';
+import { COMMISSION_QUOTA_CEILING, MAX_LIVE_COMMISSIONS, CHAT_RELEASE_POLICIES } from '$lib/jkai/commission/commission';
+import { CHANGE_REQUEST_BUDGET } from '$lib/jkai/change-request';
+import { JKAI_PUSH_DAILY_CAP, DELIVERY_COALESCE_MINUTES } from '$lib/jkai/delivery-push';
+import { NEVER_AUTOBUILD_SOURCES } from '$lib/selfimprove/propose';
+import { GAP_DRAIN_INTERVAL_MS } from '$lib/selfimprove/capability-gaps';
 import { DEFAULT_BUILD_BUDGET } from '$lib/jkai/budget';
 import { EDGE_KINDS, VERDICTS, MAX_HOPS, MAX_LIMIT, MAX_BUDGET, DEFAULT_BUDGET } from '$lib/codegraph/query';
 import { GATE_NAMES } from '$lib/codegraph/gates';
@@ -201,6 +206,21 @@ export function loadFacts(now = new Date()) {
         maxBudget: MAX_BUDGET,
         defaultBudget: DEFAULT_BUDGET,
         evidenceMaturity: EVIDENCE_MATURITY,
+      },
+      commissions: {
+        sources: [...COMMISSION_SOURCES],
+        chatPolicies: [...CHAT_RELEASE_POLICIES],
+        maxLive: MAX_LIVE_COMMISSIONS,
+        quotaCeiling: { ...COMMISSION_QUOTA_CEILING },
+        budget: {
+          maxIterations: CHANGE_REQUEST_BUDGET.maxIterations,
+          maxMinutes: CHANGE_REQUEST_BUDGET.maxTotalMinutes,
+          maxCostUsd: CHANGE_REQUEST_BUDGET.maxCostUsd,
+        },
+        pushesPerDay: JKAI_PUSH_DAILY_CAP,
+        pushGapMinutes: DELIVERY_COALESCE_MINUTES,
+        neverAutobuild: [...NEVER_AUTOBUILD_SOURCES],
+        gapDrainMinutes: GAP_DRAIN_INTERVAL_MS / MIN,
       },
       activities: activities(),
       idleMinutes: DEFAULT_IDLE_WINDOW_MS / MIN,

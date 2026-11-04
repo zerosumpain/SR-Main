@@ -22,7 +22,7 @@ import { join, resolve } from 'node:path';
 import { STAGES } from '$lib/daydream/think/explain';
 import { COMMISSION_STATES } from '$lib/daydream/commissioning';
 import { IDEA_SOURCES } from '$lib/selfimprove/board';
-import { RELEASE_POLICIES, BRIEF_LANES } from '$lib/constants/development';
+import { RELEASE_POLICIES, BRIEF_LANES, COMMISSION_SOURCES } from '$lib/constants/development';
 import { EDGE_KINDS } from '$lib/codegraph/query';
 import { GATE_NAMES } from '$lib/codegraph/gates';
 import { ACT_KINDS } from '$lib/daydream/act/plan';
@@ -41,7 +41,9 @@ import {
   SOURCE_COPY, POLICY_COPY, BRIEF_LANE_COPY, EDGE_COPY, GATE_COPY, HEARTBEAT_ACTIVITIES, HIDDEN_ACTIVITIES, ACTIVITY_COPY,
   BUILD_COPY, DELIVERY_COPY, VERIFY_COPY, PHASE_COPY, LANE_COPY,
   BACKLOG_COPY, DEVELOP_COPY, VERIFY_EXTRA, CODEGRAPH_EXTRA, BUILD_HUB_COPY,
+  COMMISSION_SOURCE_COPY, CHAT_BUILD_COPY, NEVER_AUTOBUILD_COPY,
 } from './build';
+import { NEVER_AUTOBUILD_SOURCES } from '$lib/selfimprove/propose';
 import {
   APP, APP_COPY, TAB_COPY, MORE_COPY, WATCH_COPY, BACKGROUND_COPY, PERMISSION_COPY, ENTITLEMENT_COPY,
   SURFACE_COPY, AREA_COPY, PAIRING_COPY, DOORWAY_COPY,
@@ -68,6 +70,8 @@ describe('copy maps cover exactly what the feature declares', () => {
     ['brief lanes', BRIEF_LANE_COPY, BRIEF_LANES],
     ['codegraph edge kinds', EDGE_COPY, EDGE_KINDS],
     ['gate names', GATE_COPY, GATE_NAMES],
+    ['where a build can be commissioned', COMMISSION_SOURCE_COPY, COMMISSION_SOURCES],
+    ['channels that never autobuild', NEVER_AUTOBUILD_COPY, NEVER_AUTOBUILD_SOURCES],
   ] as const)('%s', (_name, copy, declared) => {
     expect(keys(copy)).toEqual(sorted(declared));
   });
@@ -168,6 +172,7 @@ describe('explainer copy carries no figures', () => {
       ROUTE_LEDGER, STORY, OVERVIEW_COPY, STAGE_TURN, ACT_BADGE, PAIRING_COPY, DOORWAY_COPY,
       BACKLOG_COPY, DEVELOP_COPY, VERIFY_EXTRA, CODEGRAPH_EXTRA, BUILD_HUB_COPY,
       SOLVE_COPY, REASON_COPY, SHELF_COPY, SITUATION_ROWS, FOLLOW_COPY,
+      COMMISSION_SOURCE_COPY, CHAT_BUILD_COPY, NEVER_AUTOBUILD_COPY,
       PARTS: PARTS.map(({ strap, headline, lede, leaves }) => ({ strap, headline, lede, leaves })),
     };
     for (const [name, m] of Object.entries(maps)) strings(m, name, all);
