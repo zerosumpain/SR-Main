@@ -56,6 +56,7 @@ vi.mock('$env/dynamic/private', () => ({
       'sr-supply-chain-monitor': 'm'.repeat(40),
       'sr-local-plan-navigator': 'l'.repeat(40),
       'sr-wildmind': 'w'.repeat(40),
+      'sr-casebook': 'c'.repeat(40),
       'sr-spine': 'n'.repeat(40),
     }),
   },
@@ -263,6 +264,19 @@ describe('session authority claims', () => {
     state.shareValid = false;
     state.queue.push([]);
     expect((await (await call('sr-wildmind', 'w'.repeat(40), { 'x-sr-session-share': 'stale' })).json()).claims.project.access).toBe('none');
+  });
+
+  it('Casebook asks about its own, private-by-default project, and only that one', async () => {
+    state.email = null;
+    state.shareValid = true;
+    state.queue.push([]); // no visibility row: private by default
+    const shared = await (await call('sr-casebook', 'c'.repeat(40), { 'x-sr-session-share': 'cb-token' })).json();
+    expect(shared.claims.project).toEqual({ key: 'casebook', access: 'share' });
+    expect(state.shareCalls.at(-1)).toEqual(['casebook', 'cb-token']);
+
+    state.shareValid = false;
+    state.queue.push([]);
+    expect((await (await call('sr-casebook', 'c'.repeat(40))).json()).claims.project).toEqual({ key: 'casebook', access: 'none' });
   });
 
   it('a Spine share carries its link\'s password verifier as pass, and only a share does', async () => {

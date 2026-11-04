@@ -155,6 +155,23 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'supplier risk · re-tender losses · supply chain model · scenarios · public data',
   },
   {
+    // Casebook runs on porkserv as its own SvelteKit app, served at
+    // /projects/casebook through the site's gateway (SR-Infra registry
+    // `casebook`, audience sr-casebook). The owner gets the whole app; while it
+    // is private nobody else gets anything, and once public a reader still needs
+    // one of Casebook's own pack links. Private by default.
+    key: 'casebook',
+    href: '/projects/casebook',
+    label: 'Open Casebook',
+    kind: 'Working tool',
+    tag: 'Owner sign-in · Evidence packs',
+    title: 'Casebook — the evidence under the slides',
+    blurb:
+      'I built this to make a case properly. Research keeps a claim only if its quote is really on the page it came from, the chapters are written from those claims and rewritten for whoever is reading them, and a short deck sits on top where every point opens the evidence underneath. One editor takes a pack from a question to something I can share, asking me at each step or deciding for itself. Private by default.',
+    chips: 'claims with receipts · audiences · slide builds · independent app',
+    separateApp: true,
+  },
+  {
     key: 'policy-engine',
     href: '/projects/policy-engine',
     label: 'Open Education Policy Modelling',

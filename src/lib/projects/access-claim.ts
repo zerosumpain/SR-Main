@@ -1,6 +1,6 @@
 // The project visibility/share decision Main signs for an extracted project
 // application (SR-Policy-Engine, SR-DfE-Data-Strategy, SR-Data-Standard-Designer,
-// SR-DataSpine, SR-Spine, Supply Chain Monitor, Local Plan Navigator, Wildmind).
+// SR-DataSpine, SR-Spine, Supply Chain Monitor, Local Plan Navigator, Wildmind, Casebook).
 //
 // Those applications used to read `project_visibility` and `project_share`
 // themselves and bump the share's use count from their own process. Now the
@@ -40,6 +40,7 @@ export const PROJECT_AUDIENCES: Readonly<Record<string, string>> = Object.freeze
   'sr-supply-chain-monitor': 'supply-chain-monitor',
   'sr-local-plan-navigator': 'local-plan-navigator',
   'sr-wildmind': 'wildmind',
+  'sr-casebook': 'casebook',
 });
 
 export type ProjectAccess = 'public' | 'owner' | 'share' | 'none';

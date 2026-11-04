@@ -215,6 +215,17 @@ describe('private-by-default static key (local-plan-navigator)', () => {
   });
 });
 
+describe('private-by-default static key (casebook)', () => {
+  // Casebook holds working evidence packs, some of them private drafts: it must
+  // never go public by registering, only by the owner's toggle.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('casebook')).toBe(true);
+    expect(defaultsPublic('casebook')).toBe(false);
+    expect(isProjectPublic({}, 'casebook')).toBe(false);
+    expect(isProjectPublic({ casebook: true }, 'casebook')).toBe(true);
+  });
+});
+
 describe('private-by-default static key (wildmind)', () => {
   // Wildmind is its own app on its own host, watched by invitation; its card
   // carries a Share button and must never publish the valley by registering.
