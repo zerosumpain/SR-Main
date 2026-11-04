@@ -52,6 +52,7 @@ export const STATIC_PROJECT_KEYS = [
   'marbler',
   'local-plan-navigator',
   'wildmind',
+  'casebook',
   'hometowns',
 ] as const;
 
@@ -70,6 +71,7 @@ const PRIVATE_BY_DEFAULT: ReadonlySet<string> = new Set([
   'supply-chain-monitor',
   'local-plan-navigator',
   'wildmind',
+  'casebook',
 ]);
 
 /** A /projects address: one lowercase URL segment, as `slugifyTitle` produces. */
