@@ -21,9 +21,11 @@ import { drainPrivacyJobs } from './privacy-jobs';
 
 import { and, eq } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
-import { daydreamTrail } from '$lib/db/schema';
+import { appSettings, daydreamTrail } from '$lib/db/schema';
+import { driveKey } from './drive';
 import { deletePilotData, pilotFailureText, type PilotDeleted, type PilotResult } from './companion-accounts';
 import { memberByEmail } from './members';
+import { trailChanged } from './trail-generation';
 
 /** The confirm field must hold exactly this word. */
 export const DELETE_CONFIRM_WORD = 'delete';
@@ -48,6 +50,10 @@ export const defaultDeleteDeps: DeleteDeps = {
       .delete(daydreamTrail)
       .where(and(eq(daydreamTrail.subject, subject), eq(daydreamTrail.source, 'companion')))
       .returning({ id: daydreamTrail.id });
+    // And the harsh braking read from those fixes (`drive.server`), which
+    // carries where each happened.
+    await executor.delete(appSettings).where(eq(appSettings.key, driveKey(subject)));
+    trailChanged();
     return rows.length;
   },
 };

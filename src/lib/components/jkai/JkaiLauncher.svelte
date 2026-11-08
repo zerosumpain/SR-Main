@@ -13,10 +13,10 @@
 
   async function runBriefing() {
     actionBusy = true;
-    actionStatus = 'Generating briefing…';
+    actionStatus = 'Starting briefing…';
     try {
       const res = await fetch('/api/admin/briefing/run', { method: 'POST' });
-      actionStatus = res.ok ? 'Briefing generated ✓' : 'Briefing failed';
+      actionStatus = res.ok ? 'Briefing started ✓' : 'Briefing failed';
     } catch {
       actionStatus = 'Briefing failed';
     } finally {
@@ -29,7 +29,7 @@
   }
 
   const ACTIONS: NavItem[] = [
-    { code: '✦', label: 'Run briefing now', desc: "Generate today's digest", keywords: 'briefing run digest generate', run: runBriefing },
+    { code: '✦', label: 'Run briefing now', desc: "Run today's briefing workflow", keywords: 'briefing run digest generate', run: runBriefing },
     { code: '+', label: 'New chat', desc: 'Start a fresh conversation', keywords: 'new chat conversation', run: () => navTo('/jkai') },
     { code: '⊹', label: 'New monitor', desc: 'Watch something new', keywords: 'new monitor watch alert', run: () => navTo('/jkai/daydreams/watches') },
     { code: '⌕', label: 'Search knowledge', desc: 'Recall across everything', keywords: 'search knowledge recall find', run: () => navTo('/jkai/intel') },
@@ -47,7 +47,7 @@
       ],
     },
     {
-      section: 'Recall & agents',
+      section: 'Recall & prompts',
       items: [
         { code: 'INT', label: 'Intel', href: '/jkai/intel', desc: 'Search, sources & memory', keywords: 'graph entities relationships' },
         { code: 'CG', label: 'Codegraph', href: '/jkai/codegraph', desc: 'What building this codebase has already taught us', keywords: 'code graph build history episodes lessons precedent relevance' },
@@ -55,7 +55,7 @@
         { code: 'SRC', label: 'Sources', href: '/jkai/sources', desc: 'Connected accounts, archives and data permissions', keywords: 'activity integrations steam music podcasts reddit github data source connect' },
         { code: 'ACT', label: 'Activity', href: '/jkai/activity', desc: 'Audit evidence and its provenance', keywords: 'timeline events evidence provenance history activity' },
         { code: 'VOX', label: 'Voice', href: '/home/voice', desc: 'What the house says to Alexa, and the replies', keywords: 'alexa echo voice history utterances speaker household' },
-        { code: 'AG', label: 'Agent team', href: '/jkai/agents', desc: 'Specialists, prompts and shared memory', keywords: 'delegate specialist team persona prompt workbench system soul' },
+        { code: 'PR', label: 'Prompts', href: '/jkai/prompts', desc: 'The system prompt every chat reply runs on', keywords: 'prompt workbench system soul persona instructions' },
       ],
     },
     {
@@ -72,7 +72,7 @@
     },
   ];
 
-  const SECTION_COLOR: Record<string, number> = { Actions: 0, Create: 1, 'Recall & agents': 2, Proactive: 3, Ops: 0 };
+  const SECTION_COLOR: Record<string, number> = { Actions: 0, Create: 1, 'Recall & prompts': 2, Proactive: 3, Ops: 0 };
 
   let query = $state('');
   let selected = $state(0);
@@ -159,7 +159,7 @@
 {#if open}
   <div class="jl-bg" role="button" tabindex="-1" onclick={onClose} onkeydown={() => {}}>
     <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-    <div class="jl" role="dialog" aria-label="JKAI launcher" onclick={(e) => e.stopPropagation()}>
+    <div class="jl" role="dialog" aria-label="jkai launcher" onclick={(e) => e.stopPropagation()}>
       <div class="jl-search">
         <span class="jl-slash">⌘K</span>
         <!-- svelte-ignore a11y_autofocus -->

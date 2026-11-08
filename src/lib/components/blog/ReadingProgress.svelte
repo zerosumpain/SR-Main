@@ -83,6 +83,11 @@
 </div>
 
 <style>
+  /* Notes paper: the progress rail is a line of orange pencil along the top
+     of the screen; the bar is a strip torn from the page, ruled along its
+     foot, the title in Inter 800 and the figure in mono. Its slide in is functional (it says the title
+     has gone), sits outside the reading column, and stops for a reader who
+     has asked for stillness. */
   .progress-rail {
     position: fixed;
     top: 0;
@@ -106,8 +111,10 @@
     left: 0;
     right: 0;
     z-index: 55;
-    background: var(--bg);
-    border-bottom: 2px solid var(--line-strong);
+    background: var(--np-paper, var(--bg));
+    box-shadow:
+      inset 0 -1px 0 var(--np-rule, rgba(14, 91, 102, 0.16)),
+      0 10px 18px -16px rgba(26, 16, 8, 0.45);
     transform: translateY(-100%);
     transition: transform 0.2s ease-out;
   }
@@ -122,25 +129,36 @@
     gap: 1rem;
     max-width: 78rem;
     margin: 0 auto;
-    padding: 0.6rem 1.5rem;
+    padding: 0 1.5rem;
+    /* Tall enough to cover the site bar it slides over. */
+    min-height: calc(var(--site-nav-height, 48px) + 4px);
   }
 
   .sb-mark {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     font-family: var(--font-brand);
     font-size: var(--fs-body);
-    color: var(--accent);
+    color: var(--accent-hover);
     text-decoration: none;
     flex: none;
+  }
+
+  .sb-mark:focus-visible {
+    outline: 2px solid var(--accent-hover);
+    outline-offset: 4px;
+    border-radius: 2px;
   }
 
   .sb-title {
     flex: 1;
     min-width: 0;
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-secondary);
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: var(--fs-body-sm);
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -150,7 +168,16 @@
     flex: none;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    font-variant-numeric: tabular-nums;
+    color: var(--np-pen-ink, var(--accent-ink));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .progress-fill,
+    .sticky-bar {
+      transition: none;
+    }
   }
 
   @media print {

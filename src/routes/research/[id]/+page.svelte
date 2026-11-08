@@ -305,7 +305,7 @@
       <div class="lede-inner">
         <div class="report-copy">
           <p class="eyebrow">
-            JKAI · Research · {data.tier.label}{#if data.tier.grounded}{' · '}{data.tier.groundingLabel}{/if}
+            jkai · Research · {data.tier.label}{#if data.tier.grounded}{' · '}{data.tier.groundingLabel}{/if}
           </p>
           <h1 title={data.session.topic}>{data.session.topic}</h1>
           <div class="report-meta-line">
@@ -484,7 +484,7 @@
                 sessionId={data.session.id}
                 depth={data.session.depth}
                 hasReport={!!summary}
-                shareToken={data.session.shareToken}
+                shared={data.session.shared}
                 canCommit={data.ownerTools}
               />
             </aside>

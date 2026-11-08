@@ -7,7 +7,19 @@
   "files": {
     "src/lib/file-store/storage.ts": {
       "peer": "zerosumpain/SR-Drive",
-      "sha256": "7e71f53383890231b799bf79d175b5423833f9de0606900fe5c38338b5fc6d13"
+      "sha256": "3182143474179b5b0c5baba86d8be7886f9c25c7e01aff361ed84a820f30c5be"
+    },
+    "src/lib/file-store/backends.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "f8004223b442b8fa1487723bf8a3641b1ea072fbafd1c7d05131bbfd19394728"
+    },
+    "src/lib/file-store/connected.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "5c8575bc5bf530e804ccc7d8e0efedc6376bcbfc3d5cd74f71bf3b8e342e6e17"
+    },
+    "src/lib/file-store/location.ts": {
+      "peer": "zerosumpain/SR-Drive",
+      "sha256": "7be58c628fb59d33a3171000b36fb65f6031499a2329d8ba88572f5a61f5a819"
     },
     "src/lib/file-shares.ts": {
       "peer": "zerosumpain/SR-Drive",
@@ -23,7 +35,7 @@
     },
     "src/lib/server/health-hub-contract.ts": {
       "peer": "zerosumpain/SR-Health",
-      "sha256": "65a7089c4d043b2600d2cfc47ec41a6a982fd6462372a30f624139439af51df8"
+      "sha256": "0b6b2f7956a4a65262830b49099453527856ebcf3857dc53f7ceaaebeb0f34f6"
     },
     "src/lib/file-index/content.ts": {
       "peer": "zerosumpain/SR-Drive",
@@ -40,10 +52,6 @@
     "src/lib/file-index/hash.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "1d244d37cedac5425d1af7e9290c6e5b691d677af303d9ad875cfd018e4dd1d2"
-    },
-    "src/lib/file-index/jkai-mirror.ts": {
-      "peer": "zerosumpain/SR-Drive",
-      "sha256": "60eccfd63fc79f7a052a465b40b73dc74930e257102b629b595afbbe55dd7ca5"
     },
     "src/lib/file-index/search.ts": {
       "peer": "zerosumpain/SR-Drive",
@@ -64,42 +72,60 @@
     "src/lib/llm/pricing.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
-      "sha256": "c1311b2d9c66a1ad15ebfc49b29245decc0edde8f8205ceee531277d63ceb555"
+      "sha256": "768cee2dfddad139dfdc7dccc4082fa875476c66025fd2a6aff9f007a2736fe3"
     },
     "src/lib/llm/usage-log.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
-      "sha256": "e2a930de8fcfe53f67f5cc4592d0946db37771a4088158a4b2a70baefad6b540"
+      "sha256": "9951885a9faf87a7ce871b9b7e042925f1347ea7f2d81ddd4583798b4f26da22"
     },
     "src/lib/llm/usage-capture.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
-      "sha256": "dc1bf86af6bf82f6c16726a0d465e2a339b399be3855d171f028b87a125bb4c7"
+      "sha256": "0bcb0a3f18976801a3355a09c9df0d075947f01dbdb2f8ab29186c5f977ad94f"
     },
     "src/lib/llm/usage-meter.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
       "sha256": "d07c3871e7955bdadc717afd09c3a066a3041213bf89fde9ae9dec761ab908e8"
     },
     "src/lib/llm/keys.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
       "sha256": "453630c914d4a57b45f12c767f7abf947d1d1cc434bdac6c68d0eb16e45ada21"
     },
     "src/lib/llm/client.ts": {
       "peer": [
         "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
       ],
       "sha256": "8b34dee5cd4518f933615e06385f8c7a470007df0da00125c42580f5745e3551"
     },
@@ -118,10 +144,7 @@
       "sha256": "c8bb23e94f12b7aa7f7402eae2ea5e84de06fb18c7d286a8f740e2b41d5a95bf"
     },
     "src/lib/server/access.ts": {
-      "peer": [
-        "zerosumpain/SR-Health",
-        "zerosumpain/SR-Drive"
-      ],
+      "peer": "zerosumpain/SR-Health",
       "sha256": "1637e7a99119771b9977234e6df1e5a7a9e3cd23ed19d751058ca54256eb8baf"
     },
     "src/lib/server/access-util.ts": {
@@ -159,14 +182,21 @@
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "69e4c6245a7d14f6f88501a0ec85a146251481b39c6859603918ea4790ca123a"
+      "sha256": "48512d5454d22f968abfc2331f3acbc7ec8ed95b6f69afb0db7c21e3b018794c"
     },
     "src/lib/components/SiteHeader.svelte": {
       "peer": [
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "a60b982adededa529dd5fbd557d2bcd787e215408f0f16fbd64575aa01626d90"
+      "sha256": "ba00e057a92341af26a26f4309972dfa83cc7f348fd64af19d7b204cbedab57e"
+    },
+    "src/lib/components/JkaiMenu.svelte": {
+      "peer": [
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Health"
+      ],
+      "sha256": "26f3ba311c3696d5a9384c4117553b8f7cb2692ee8fc8555af290a44b1dd3a17"
     },
     "src/lib/nav/page-path.ts": {
       "peer": [
@@ -183,11 +213,10 @@
         "zerosumpain/SR-Health",
         "zerosumpain/SR-Workflows"
       ],
-      "sha256": "e978300d598e52076564d0cf3365028865acfdaefa30a91f55ba28cb83f44d60"
+      "sha256": "70ec57d8b20c6b4f7a43067444f38e3cba607444fb2371ce6ce360ee4e5a524f"
     },
     "src/lib/access/effective.ts": {
       "peer": [
-        "zerosumpain/SR-Drive",
         "zerosumpain/SR-Jkai-Core",
         "zerosumpain/SR-Health",
         "zerosumpain/SR-Workflows"
@@ -205,6 +234,58 @@
     "src/lib/nav/reach.ts": {
       "peer": "zerosumpain/SR-Drive",
       "sha256": "33ef10438ebf9daabaa5aa5c436bacf830a9b9a64002a26f1aa32d6f6b94e069"
+    },
+    "src/lib/jkai/panel/schema.ts": {
+      "peer": "zerosumpain/SR-Jkai-Core",
+      "sha256": "e0a550e772806d27b40b59ef165d9e10854b669730637fea2964af8b77a23d14"
+    },
+    "src/lib/llm/model-service-contract.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
+      ],
+      "sha256": "520441e3f1aa380c38e7318607936ee98ba825ae153ce7ecc17085febe95f2de"
+    },
+    "src/lib/llm/model-service-client.ts": {
+      "peer": [
+        "zerosumpain/SR-Health",
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Policy-Engine",
+        "zerosumpain/SR-DfE-Data-Strategy",
+        "zerosumpain/SR-Data-Standard-Designer"
+      ],
+      "sha256": "7041898ef576d29aa0dd3c9afde0ed6de25a7888bc2adac244eb661ed738be54"
+    },
+    "src/lib/jkai/jkai-theme.svelte.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "29c1db7b98f696728cd371a1e421255158eab9edafecc01d77445cb6fc3a8f76"
+    },
+    "src/lib/tools/invoke-contract.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "835f5310bc7879bac460d6257a60cca5181020969b235781d7a2b8670fdb0e1f"
+    },
+    "src/lib/tools/registry-internal.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "eaa3c6bcaec0d865ce9106d5687c669f3b9dddd33e5cc9060c56bcd435712b7c"
+    },
+    "src/lib/tools/principal-seal.ts": {
+      "peer": [
+        "zerosumpain/SR-Jkai-Core",
+        "zerosumpain/SR-Workflows"
+      ],
+      "sha256": "abecd2ab0c0e0340338270a9b263cef54305c12a4b37e5fa0182bbb61ea71b37"
     }
   }
 }

@@ -15,9 +15,10 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { codegraphSnapshots } from '$lib/db/schema';
 import type { BriefLint, DeliveryState } from '$lib/constants/development';
-import { mutateDelivery, relevantLessons } from './development-state.server';
-import { groomDevelopmentBrief, type readBriefFields } from './development-grooming.server';
-import { autopilotBriefDecision, lintBrief, parseCriteriaJudgement, type BriefInput } from './development-brief';
+import { mutateDelivery } from './development-state.server';
+import { areaLessons } from '$lib/codegraph/build-lessons.server';
+import { groomBacklogBrief, groomDevelopmentBrief, type BacklogCandidate, type GroomBacklogInput, type GroomingModelResult, type readBriefFields } from './development-grooming.server';
+import { autopilotBriefDecision, lintBrief, parseCriteriaJudgement, type BriefInput, type GroomedBrief } from './development-brief';
 import { emitLog } from './log-emitter';
 
 const MANIFEST_TTL_MS = 5 * 60 * 1000;
@@ -88,6 +89,23 @@ export const briefInput = (state: DeliveryState): BriefInput => ({
   newRoutes: state.brief.newRoutes ?? [], lane: state.brief.lane,
 });
 
+export const groomedBriefInput = (g: GroomedBrief): BriefInput => ({
+  outcome: g.outcome, criteria: g.acceptanceCriteria, routes: g.routes ?? [], newRoutes: g.newRoutes ?? [], lane: g.lane,
+});
+
+/**
+ * Groom an improvement-backlog item and check it as a development brief: the
+ * same lane rule, route manifest and criteria judgement a delivery's brief
+ * gets, so the owner sees what would stop it before accepting it.
+ * `previous` is the check stored on the item (never the browser's copy), so an
+ * unchanged set of criteria is not judged twice.
+ */
+export async function groomBacklogItem(input: GroomBacklogInput, backlog: BacklogCandidate[], previous?: GroomedBrief['lint']): Promise<GroomingModelResult> {
+  const result = await groomBacklogBrief(input, backlog);
+  const lint = await checkBrief(groomedBriefInput(result.grooming), result.grooming.revision, { buildModelId: null, previous });
+  return { ...result, grooming: { ...result.grooming, lint: { ...lint, by: 'owner' } } };
+}
+
 /**
  * Groom a brief and store the proposal WITH its check, so the owner reads the
  * lane and the findings beside the brief they apply to. Shared by the Refine
@@ -101,7 +119,7 @@ export async function groomDelivery(buildId: string, state: DeliveryState, optio
   const turns = state.grooming?.turns ?? [];
   const context = await (await import('$lib/codegraph/development.server')).contextForBuild(buildId).then(r => r.block)
     .catch(() => 'Code context unavailable; do not invent repository dependencies.');
-  const proposal = await groomDevelopmentBrief({ ...options.draft, area: options.area }, options.message, await relevantLessons(options.area), turns, context);
+  const proposal = await groomDevelopmentBrief({ ...options.draft, area: options.area }, options.message, await areaLessons(options.area), turns, context);
   const next = state.brief.revision + 1;
   const lint = await checkBrief({ outcome: proposal.brief.outcome, criteria: proposal.criteria, routes: proposal.brief.routes, newRoutes: proposal.brief.newRoutes, lane: proposal.brief.lane },
     next, { buildModelId: options.buildModelId, previous: state.brief.lint });

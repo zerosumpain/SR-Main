@@ -1,4 +1,59 @@
 {
   "note": "Rejections and edited acceptances from the blog assistant. A rejection says more than an acceptance; an acceptance he rewrote first says most of all. Generated — do not edit by hand.",
-  "pairs": []
+  "pairs": [
+    {
+      "id": "838fd7a2-ec2d-4cc6-b9ee-4b5606208bb4",
+      "status": "rejected",
+      "kind": "prose",
+      "at": "2026-09-04T18:11:07.197Z",
+      "original": "I've been thinking quite a lot about devolution recently - [nerd-alert, let me correct that] while I'm doing my marathon training, or paragliding, or fighting crime [too much, JK]. Jokes aside, whatever flavour of government we have, from one centralised, huge state to an entirely decentralised set of decision-making authorities, the impact of those authorities depends on how well information flows between the important bits, and I don't think the accepted norm of information sharing scales well, especially when we think about shifting accountability.",
+      "suggested": "I've been thinking quite a lot about devolution recently, mostly whilst doing my marathon training, paragliding, and fighting crime in my imagination. Whatever flavour of government we have, the impact of those authorities depends on how well information flows between the important bits, and I don't think the accepted way of sharing information scales well when accountability is spread across more places.",
+      "reason": "The main point arrives at the end of a long paragraph, after jokes and a very wide definition of government. This puts the argument first and leaves the humour around it, so the reader knows what the post is about straight away."
+    },
+    {
+      "id": "d3f88d9d-d7ee-4ddc-9c1b-7ad134b5a94f",
+      "status": "rejected",
+      "kind": "prose",
+      "at": "2026-09-04T18:13:36.814Z",
+      "original": "It's not very nippy - if you need some view of the world and you don't have it, there's an expensive cycle of engagement, agreement, integration, processing, yada yada yada.As I get older, like many of us i'm sure, I get a bit more boring, and I find myself becoming genuinely animated over interoperability. It's a boring word, my kids roll their eyes and my tongue trips over the pronunciation, but it matters because interoperable data is well described, including the context in which it was captured. That makes it less likely to be used in the wrong way for the wrong reasons, and it means I can spend less time explaining what a piece of data means before anyone can use it. I want to paint a picture of what that could look like.",
+      "suggested": "It's not very nippy - if you need some view of the world and you don't have it, there's an expensive cycle of engagement, agreement, integration, processing, yada yada yada. As I get older, like many of us i'm sure, I get a bit more boring, and I find myself becoming genuinely animated over interoperability. It's a boring word, my kids roll their eyes and my tongue trips over the pronunciation, but it matters because interoperable data is well described, including the context in which it was captured. That makes it less likely to be used in the wrong way for the wrong reasons, and it means I can spend less time explaining what a piece of data means before anyone can use it. I want to paint a picture of what that could look like.",
+      "reason": "The paragraph currently fuses two separate thoughts together, so the turn from slow data sharing to interoperability is harder to follow."
+    },
+    {
+      "id": "6dbb05d0-73b1-4fea-95dd-b0a1a1b5e6c2",
+      "status": "rejected",
+      "kind": "prose",
+      "at": "2026-09-04T18:13:38.956Z",
+      "original": "We can minimise the data needed to answer a question , and therefore can afford to ask more questions, more safely, respecting the privacy of more peaceful and with a good wind do all of that just a bit more quickly.",
+      "suggested": "We can minimise the data needed to answer a question, and therefore afford to ask more questions, more safely, respecting people's privacy, and with a good wind do all of that just a bit more quickly.",
+      "reason": "A garbled phrase currently obscures the paragraph's point about asking safer questions with less data."
+    },
+    {
+      "id": "ad209ce6-1a85-4aaf-b2c0-b23a75022816",
+      "status": "rejected",
+      "kind": "prose",
+      "at": "2026-09-04T18:13:46.791Z",
+      "original": "Now interoperability and standardised data are important. But the reality is i'm a technologist, and we're a dying breed. People like to centre conversations on the people that make it all happen, and the interconnected tissue that binds us all around an important mission. You know what? me too, but I also enjoy getting my nerd on with claude code (and i've recently gone rogue and subbed to codex too) and I think have a technology lens on a human problem is still really helpful. You know what I spot in my nerd-monocle? Distributed, federated information sharing.",
+      "suggested": "Interoperability and standardised data are important, but i'm a technologist and I still find the technical lens useful when looking at a human problem. I enjoy getting my nerd on with claude code, and i've recently gone rogue and subbed to codex too, so perhaps i'm not the best person to complain about this. What I see through my nerd-monocle is distributed, federated information sharing.",
+      "reason": "The paragraph circles around being a technologist, the value of technology, and the idea it eventually introduces. This version gets to distributed, federated information sharing sooner, so the following explanation has something definite to build on."
+    },
+    {
+      "id": "65fa5aa9-4cad-405c-b866-2598b60e2268",
+      "status": "rejected",
+      "kind": "prose",
+      "at": "2026-09-04T18:14:46.567Z",
+      "original": "One of the most common concerns I've heard from custodians is the risk of misinterpretation of data where a bland old table implies a truth, but the reality is the data doesn't tell the whole story, or worse, asking the wrong question because of the lack of context.",
+      "suggested": "One of the most common concerns I've heard from custodians is the risk of misinterpretation, where a bland old table implies a truth even though the data doesn't tell the whole story, or worse, encourages people to ask the wrong question because the context is missing.",
+      "reason": "The sentence currently tangles together misinterpretation, incomplete data and bad questions, making the trust argument hard to follow."
+    },
+    {
+      "id": "7eaa259c-a51b-442d-8191-3b59cd615893",
+      "status": "rejected",
+      "kind": "prose",
+      "at": "2026-09-04T18:14:48.345Z",
+      "original": "If we're going to devolve decision making, we must thing seriously about how information can flow different to support those who need answers. Answering a good, important or even critical question is important enough.",
+      "suggested": "If we're going to devolve decision making, we must think seriously about how information can flow differently to support the people who need answers. A good question, an important question, or a critical one is worth answering without first moving every bit of data in the building.",
+      "reason": "The conclusion currently contains a typo and repeats the importance of answering questions without adding a final consequence. This gives the post a cleaner landing by tying devolution back to the central idea of moving answers rather than data."
+    }
+  ]
 }

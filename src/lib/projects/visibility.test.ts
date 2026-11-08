@@ -57,6 +57,16 @@ describe('defaultsPublic', () => {
     expect(defaultsPublic('pulse')).toBe(true);
   });
 
+  it('makes the card-less Hometowns map page public with no row', () => {
+    expect(isStaticProjectKey('hometowns')).toBe(true);
+    expect(defaultsPublic('hometowns')).toBe(true);
+  });
+
+  it('makes the Marbler game public with no row', () => {
+    expect(isStaticProjectKey('marbler')).toBe(true);
+    expect(defaultsPublic('marbler')).toBe(true);
+  });
+
   it('makes an AI build private with no row', () => {
     expect(isStaticProjectKey('compound-interest-calculator')).toBe(false);
     expect(defaultsPublic('compound-interest-calculator')).toBe(false);
@@ -110,5 +120,134 @@ describe('filterForViewer', () => {
 
   it('hides an untoggled build from a public viewer', () => {
     expect(filterForViewer([{ key: 'graphing-calculator' }], {}, false)).toEqual([]);
+  });
+});
+
+describe('private-by-default static key (field-study-8)', () => {
+  it('is a static key, so it gets a card, a toggle and share links', () => {
+    expect(isStaticProjectKey('field-study-8')).toBe(true);
+  });
+
+  it('defaults private with no project_visibility row', () => {
+    expect(defaultsPublic('field-study-8')).toBe(false);
+    expect(isProjectPublic({}, 'field-study-8')).toBe(false);
+  });
+
+  it('is hidden from the public listing and shown to the owner', () => {
+    const items = [{ key: 'field-study-8' }];
+    expect(filterForViewer(items, {}, false)).toEqual([]);
+    expect(filterForViewer(items, {}, true)).toEqual(items);
+  });
+
+  it('becomes public only through an explicit row', () => {
+    expect(isProjectPublic({ 'field-study-8': true }, 'field-study-8')).toBe(true);
+  });
+});
+
+describe('private-by-default static key (field-study-9)', () => {
+  // A second private briefing, published as a static bundle like field-study-8.
+  // The neutral key keeps its subject out of this public repo.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('field-study-9')).toBe(true);
+    expect(defaultsPublic('field-study-9')).toBe(false);
+    expect(isProjectPublic({}, 'field-study-9')).toBe(false);
+  });
+
+  it('is hidden from the public listing and shown to the owner', () => {
+    const items = [{ key: 'field-study-9' }];
+    expect(filterForViewer(items, {}, false)).toEqual([]);
+    expect(filterForViewer(items, {}, true)).toEqual(items);
+  });
+
+  it('becomes public only through an explicit row', () => {
+    expect(isProjectPublic({ 'field-study-9': true }, 'field-study-9')).toBe(true);
+  });
+});
+
+describe('private-by-default static key (data-spine)', () => {
+  // The Data Spine is served by its own app (SR-DataSpine) and gets its card and
+  // toggle here. Registering a static key would otherwise publish it on deploy.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('data-spine')).toBe(true);
+    expect(defaultsPublic('data-spine')).toBe(false);
+    expect(isProjectPublic({}, 'data-spine')).toBe(false);
+  });
+
+  it('is hidden from the public listing and shown to the owner', () => {
+    const items = [{ key: 'data-spine' }];
+    expect(filterForViewer(items, {}, false)).toEqual([]);
+    expect(filterForViewer(items, {}, true)).toEqual(items);
+  });
+
+  it('becomes public only through an explicit row', () => {
+    expect(isProjectPublic({ 'data-spine': true }, 'data-spine')).toBe(true);
+  });
+});
+
+describe('private-by-default static key (spine)', () => {
+  // The Spine is served by its own app (SR-Spine) and gets its card and toggle
+  // here. Registering a static key would otherwise publish it on deploy.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('spine')).toBe(true);
+    expect(defaultsPublic('spine')).toBe(false);
+    expect(isProjectPublic({}, 'spine')).toBe(false);
+  });
+
+  it('is hidden from the public listing and shown to the owner', () => {
+    const items = [{ key: 'spine' }];
+    expect(filterForViewer(items, {}, false)).toEqual([]);
+    expect(filterForViewer(items, {}, true)).toEqual(items);
+  });
+
+  it('becomes public only through an explicit row', () => {
+    expect(isProjectPublic({ spine: true }, 'spine')).toBe(true);
+  });
+});
+
+describe('private-by-default static key (local-plan-navigator)', () => {
+  // The Local Plan Navigator is its own app (zerosumpain/local-plan-navigator),
+  // shared by link with people outside the site; registering its card for the
+  // Share button must never publish it.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('local-plan-navigator')).toBe(true);
+    expect(defaultsPublic('local-plan-navigator')).toBe(false);
+    expect(isProjectPublic({}, 'local-plan-navigator')).toBe(false);
+  });
+});
+
+describe('private-by-default static key (casebook)', () => {
+  // Casebook holds working evidence packs, some of them private drafts: it must
+  // never go public by registering, only by the owner's toggle.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('casebook')).toBe(true);
+    expect(defaultsPublic('casebook')).toBe(false);
+    expect(isProjectPublic({}, 'casebook')).toBe(false);
+    expect(isProjectPublic({ casebook: true }, 'casebook')).toBe(true);
+  });
+});
+
+describe('private-by-default static key (wildmind)', () => {
+  // Wildmind is its own app on its own host, watched by invitation; its card
+  // carries a Share button and must never publish the valley by registering.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('wildmind')).toBe(true);
+    expect(defaultsPublic('wildmind')).toBe(false);
+    expect(isProjectPublic({}, 'wildmind')).toBe(false);
+  });
+});
+
+describe('private-by-default static key (supply-chain-monitor)', () => {
+  // Supply Chain Monitor is served by its own app (zerosumpain/supply-chain-monitor),
+  // owner-only; the card must not publish itself on deploy.
+  it('is a static key that defaults private with no project_visibility row', () => {
+    expect(isStaticProjectKey('supply-chain-monitor')).toBe(true);
+    expect(defaultsPublic('supply-chain-monitor')).toBe(false);
+    expect(isProjectPublic({}, 'supply-chain-monitor')).toBe(false);
+  });
+
+  it('is hidden from the public listing and shown to the owner', () => {
+    const items = [{ key: 'supply-chain-monitor' }];
+    expect(filterForViewer(items, {}, false)).toEqual([]);
+    expect(filterForViewer(items, {}, true)).toEqual(items);
   });
 });

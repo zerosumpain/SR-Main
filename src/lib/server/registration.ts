@@ -14,8 +14,9 @@ import { createHash, createPublicKey, randomBytes, verify as verifySignature, ty
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/db';
-import { accessRequest, allowedUser, nativeCredentials } from '$lib/db/schema';
-import { isEmailAllowedToSignIn } from './access';
+import { accessRequest, allowedUser, householdMember, nativeCredentials } from '$lib/db/schema';
+import { isEmailAllowedToSignIn, isOwnerEmail } from './access';
+import { admitToAllowList } from './admission';
 import { notifyOwner } from './notify';
 
 /**
@@ -27,6 +28,14 @@ import { notifyOwner } from './notify';
 export const REGISTER_COOKIE = 'sr_register';
 export const REGISTER_COOKIE_MAX_AGE_S = 10 * 60;
 export const REGISTER_FINISH_PATH = '/welcome/app/finish';
+
+/**
+ * Set beside the nonce when the app opens /welcome/app?confirm=<code hash> to
+ * learn who is signed in on the phone for a code it has scanned. Finish then
+ * mints a pairing identity (`$lib/server/pair-identity`) instead of
+ * registering anyone.
+ */
+export const PAIR_CONFIRM_COOKIE = 'sr_pair_confirm';
 
 export function mintRegisterNonce(): string {
   return randomBytes(24).toString('base64url');
@@ -90,10 +99,15 @@ export async function isRegistrant(email: string): Promise<boolean> {
 
 export type EnsureOutcome = 'allowed' | 'pending' | 'declined';
 
+/** The group a pre-registered family member joins on their first sign-in. */
+export const PRE_REGISTERED_GROUP = 'family-circle';
+
 /**
  * Record an app sign-in as a request, once. Someone already allowed needs
- * none; someone already waiting is not asked again (nor is the owner
- * notified twice); someone refused in the last 30 days sees the refusal.
+ * none; someone refused in the last 30 days sees the refusal; someone the
+ * owner has already added to the household by this address is PRE-REGISTERED
+ * and let straight in (`admitPreRegistered`); someone already waiting is not
+ * asked again (nor is the owner notified twice).
  */
 export async function ensureAppRequest(input: {
   email: string;
@@ -103,10 +117,11 @@ export async function ensureAppRequest(input: {
   const email = input.email.trim().toLowerCase();
   if (await isEmailAllowedToSignIn(email)) return 'allowed';
   const latest = await registrationOf(email);
-  if (latest?.status === 'pending') return 'pending';
   if (latest?.status === 'declined' && latest.decidedAt && Date.now() - latest.decidedAt.getTime() < DECLINED_HOLD_MS) {
     return 'declined';
   }
+  if (await admitPreRegistered(email, input.via)) return 'allowed';
+  if (latest?.status === 'pending') return 'pending';
   const name = input.name?.trim().replace(/\s+/g, ' ').slice(0, 80) || nameFromEmail(email);
   await db.insert(accessRequest).values({
     email,
@@ -126,6 +141,50 @@ export async function ensureAppRequest(input: {
   return 'pending';
 }
 
+/**
+ * The owner's say-so, given in advance: a household person (/home/people) whose
+ * email is this sign-in's — Apple or Google vouched for the address, and only
+ * the owner puts an address on a household row (removing someone unlinks it).
+ * They join the allow-list in Family Circle exactly as an approval would, any
+ * request they left waiting is marked approved, and the owner is told. Nobody
+ * else: an address the household does not know still asks and waits.
+ */
+export async function admitPreRegistered(email: string, via: 'google' | 'apple'): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  if (!e || isOwnerEmail(e)) return false;
+  // Queried here, not through $lib/home's memberByEmail: platform code may not
+  // import a domain. lower() on the column for the same reason that one has it.
+  const [member] = await db
+    .select({ displayName: householdMember.displayName })
+    .from(householdMember)
+    .where(sql`lower(${householdMember.email}) = ${e}`)
+    .limit(1)
+    .catch(() => []);
+  if (!member) return false;
+  const name = member.displayName?.trim() || nameFromEmail(e);
+
+  await admitToAllowList({ email: e, name, groups: [PRE_REGISTERED_GROUP], addedBy: null });
+
+  const decided = { status: 'approved', decidedAt: new Date(), decidedBy: null };
+  const waiting = await db
+    .update(accessRequest)
+    .set(decided)
+    .where(and(eq(accessRequest.email, e), eq(accessRequest.status, 'pending')))
+    .returning({ id: accessRequest.id });
+  if (waiting.length === 0) {
+    await db.insert(accessRequest).values({ email: e, name, message: null, wants: { app: true, via, preRegistered: true }, ipHash: null, ...decided });
+  }
+  await notifyOwner({
+    category: 'access',
+    title: `${name} joined from the app`,
+    body: `${e} · signed in with ${via === 'apple' ? 'Apple' : 'Google'} · pre-registered in the household, so let straight in to ${PRE_REGISTERED_GROUP}`,
+    url: '/admin/access',
+    severity: 'info',
+    dedupeKey: `access-preregistered:${e}`,
+  }).catch((err) => console.error('[registration] notify failed:', err));
+  return true;
+}
+
 function nameFromEmail(email: string): string {
   const local = email.split('@')[0] ?? email;
   return local.charAt(0).toUpperCase() + local.slice(1);
@@ -143,6 +202,8 @@ export async function withdrawRegistration(email: string): Promise<void> {
     .set({ revokedAt: new Date() })
     .where(and(eq(nativeCredentials.ownerEmail, e), isNull(nativeCredentials.revokedAt)));
 }
+
+// Phones across an allow-list write: `$lib/server/admission` (`keepingPhones`).
 
 // ── Sign in with Apple ──────────────────────────────────────────────────────
 

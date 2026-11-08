@@ -6,12 +6,12 @@
 // because the card is the single description of how everything writes and an
 // unattended overnight change to it would be untraceable.
 //
-// Structured after `selfimprove/engine.ts`, which is the house pattern for this:
-// croner, a prod-only hostname gate, a kill switch in app settings, and a
-// stop function so a hot reload does not stack schedules.
+// Scheduled by the heartbeat since 2026-10-02 (the `voice-drift` activity:
+// daily in a 06:00–06:55 London window, acting only on the 1st), not by its own
+// croner. The prod-only host gate and the kill switch are checked by
+// `runMonthlyDriftCheck`, as the croner checked them at fire time.
 
 import os from 'node:os';
-import { Cron } from 'croner';
 import { ensureCollection, insertRecord, queryRecords } from '$lib/datastore';
 import { getSetting } from '$lib/server/models/settings';
 import { getVoiceCard } from './card';
@@ -28,13 +28,8 @@ const SETTINGS_ENABLED_KEY = 'voice.drift.enabled';
 
 /** 06:00 on the 1st of each month, London. Monthly because the corpus grows in
  *  posts, not in days — a nightly check would report the same thing 30 times. */
-const CRON_EXPR = '0 6 1 * *';
-const CRON_TZ = 'Europe/London';
+export const DRIFT_WINDOW = { start: '06:00', end: '06:55', tz: 'Europe/London' } as const;
 
-let started = false;
-let cronJob: Cron | null = null;
-
-const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export async function ensureDriftCollection(): Promise<void> {
   await ensureCollection(
@@ -113,40 +108,20 @@ export async function latestDriftReport(): Promise<(DriftReport & { observedAt?:
   }
 }
 
-/** Idempotent; safe to call once from hooks.server.ts. */
-export function startVoiceDrift(): void {
-  if (started) return;
-  started = true;
+/** Kept so `hooks.server.ts` (protected) need not change; the heartbeat schedules it. */
+export function startVoiceDrift(): void {}
 
-  // Prod-only, matching selfimprove. homeserv has the same database in dev use
-  // and a second writer would just duplicate rows.
-  if (os.hostname() === 'homeserv' && process.env.VOICE_DRIFT_ALLOW_DEV !== '1') {
-    console.log('[voice-drift] host is homeserv — monthly check disabled. Set VOICE_DRIFT_ALLOW_DEV=1 to enable.');
-    return;
-  }
-
-  try {
-    cronJob = new Cron(CRON_EXPR, { timezone: CRON_TZ }, () => {
-      void (async () => {
-        try {
-          if ((await getSetting<boolean>(SETTINGS_ENABLED_KEY)) === false) {
-            console.log('[voice-drift] kill switch is off — skipping');
-            return;
-          }
-          await runDriftCheck('cron');
-        } catch (err) {
-          console.error('[voice-drift] check failed:', errMsg(err));
-        }
-      })();
-    });
-    console.log(`[voice-drift] monthly check scheduled (${CRON_EXPR} ${CRON_TZ})`);
-  } catch (err) {
-    console.error('[voice-drift] failed to schedule cron:', errMsg(err));
-  }
+/** Is `at` the 1st of the month on the London calendar? PURE. */
+export function isDriftDay(at: Date): boolean {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: DRIFT_WINDOW.tz, day: 'numeric' }).format(at) === '1';
 }
 
-export function stopVoiceDrift(): void {
-  if (cronJob) cronJob.stop();
-  cronJob = null;
-  started = false;
+/** The monthly check as the heartbeat runs it: why it did not run, or the report. */
+export async function runMonthlyDriftCheck(at: Date): Promise<{ ran: false; reason: string } | { ran: true; report: DriftReport | null }> {
+  if (!isDriftDay(at)) return { ran: false, reason: 'not the 1st of the month' };
+  // Prod-only: homeserv has the same database in dev use and a second writer
+  // would just duplicate rows.
+  if (os.hostname() === 'homeserv' && process.env.VOICE_DRIFT_ALLOW_DEV !== '1') return { ran: false, reason: 'host is homeserv — monthly check runs on prod only' };
+  if ((await getSetting<boolean>(SETTINGS_ENABLED_KEY)) === false) return { ran: false, reason: 'kill switch is off' };
+  return { ran: true, report: await runDriftCheck('cron') };
 }

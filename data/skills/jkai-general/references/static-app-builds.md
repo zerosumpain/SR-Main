@@ -7,7 +7,7 @@ Copy this block into the `<head>` of the first `index.html` you pass to
 re-skin — that costs a full rebuild round trip and John has called it out.
 
 ```html
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #ede4d4;
@@ -20,7 +20,7 @@ re-skin — that costs a full rebuild round trip and John has called it out.
     --text-secondary: #3d2e1a;
     --text-muted: rgba(26, 16, 8, 0.65);
     --text-ghost: rgba(26, 16, 8, 0.45);
-    --font-display: 'Archivo Black', Impact, sans-serif;
+    --font-display: 'Inter', system-ui, sans-serif;
     --font-body: 'DM Sans', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   }
@@ -39,7 +39,7 @@ re-skin — that costs a full rebuild round trip and John has called it out.
 
 Hard rules (these are in the skill file too, and they hold whether or not you
 read this page): warm cream background `#ede4d4`, burnt orange accent
-`#c4570a`, Archivo Black headings, DM Sans body, JetBrains Mono
+`#c4570a`, Inter ExtraBold (800) headings, DM Sans body, JetBrains Mono
 labels/inputs/data, `.nm-sec` cards, `.sr-label-tight` small-caps labels, `sr.`
 monogram top-left. NO dark backgrounds. NO rounded corners. NO different accent
 colours.

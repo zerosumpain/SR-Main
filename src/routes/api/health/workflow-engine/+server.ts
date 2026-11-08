@@ -8,4 +8,4 @@
  * repointed in its own step, before the health application takes over the
  * /api/health prefix. Delete it once that unit no longer names this path.
  */
-export { GET } from '$lib/workflows/engine-probe';
+export { GET } from '$lib/workflows-client/engine-probe';

@@ -17,6 +17,8 @@ import {
   QUESTIONS,
   REVEAL_MS,
   TIME_MS,
+  GCSE_REVEAL_MS,
+  about,
   type Question,
   type Room,
 } from './quiz-night';
@@ -27,7 +29,7 @@ const half = () => 0.5;
 const keep = () => 0.999999;
 
 function q(n: number, answerIndex = 0): Question {
-  return { prompt: `Question number ${n}?`, options: ['a', 'b', 'c', 'd'], answerIndex, explain: null };
+  return { prompt: `Question number ${n}?`, options: ['a', 'b', 'c', 'd'], answerIndex, explain: null, topic: null };
 }
 
 function room(invite = [{ id: 'p_sam', name: 'Sam' }]): Room {
@@ -224,3 +226,124 @@ describe('what the model wrote', () => {
     expect(toWire(r, 'p_sam', T0).players[0].score).toBe(0);
   });
 });
+
+describe('GCSE', () => {
+  function gcse(options: Record<string, unknown>, difficulty: 'easy' | 'medium' | 'hard' = 'medium'): Room {
+    return createRoom({ id: 'g_g', host: { id: 'p_john', name: 'John' }, invite: [{ id: 'p_sam', name: 'Sam' }], difficulty, options, now: T0 });
+  }
+
+  it('takes a subject and a board, and refuses a GCSE quiz without a subject', () => {
+    const r = gcse({ mode: 'gcse', subject: 'biology', board: 'aqa', audience: 'kids' });
+    expect(r.mode).toBe('gcse');
+    expect(r.subject).toBe('biology');
+    expect(r.board).toBe('aqa');
+    // Pitched at the exam, not the youngest player.
+    expect(r.audience).toBe('family');
+    expect(r.title).toBe('GCSE Biology');
+    expect(gcse({ mode: 'gcse', subject: 'maths', board: 'nonsense' }).board).toBe('any');
+    expect(() => gcse({ mode: 'gcse', subject: 'astrology' })).toThrow(/GCSE subject/);
+    expect(() => gcse({ mode: 'gcse' })).toThrow(/GCSE subject/);
+    // A general quiz ignores the GCSE fields.
+    const general = gcse({ subject: 'biology', board: 'aqa' });
+    expect(general.mode).toBe('general');
+    expect(general.subject).toBeNull();
+    expect(general.board).toBeNull();
+  });
+
+  it('gives harder grade bands LONGER, and working subjects longer than recall', () => {
+    expect(gcse({ mode: 'gcse', subject: 'maths' }, 'easy').timeMs).toBe(45_000);
+    expect(gcse({ mode: 'gcse', subject: 'maths' }, 'hard').timeMs).toBe(75_000);
+    expect(gcse({ mode: 'gcse', subject: 'history' }, 'easy').timeMs).toBe(25_000);
+    expect(gcse({ mode: 'gcse', subject: 'history' }, 'hard').timeMs).toBe(35_000);
+    // A general quiz is still faster when harder.
+    expect(gcse({}, 'hard').timeMs).toBe(TIME_MS.hard);
+  });
+
+  it('times and scores a question against the room clock', () => {
+    const r = gcse({ mode: 'gcse', subject: 'physics' }, 'hard');
+    const t = playing(r);
+    expect(r.phaseEndsAt).toBe(t + 75_000);
+    answer(r, 'p_john', { question: 0, choice: 0 }, t + 15_000);
+    answer(r, 'p_sam', { question: 0, choice: 1 }, t + 15_000);
+    expect(r.phaseEndsAt).toBe(t + 15_000 + GCSE_REVEAL_MS);
+    expect(r.players[0].score).toBe(500 + Math.round(500 * (1 - 15_000 / 75_000)));
+    expect(toWire(r, 'p_john', t).timeMs).toBe(75_000);
+  });
+
+  it('says what it is in an invite and on the wire', () => {
+    const r = gcse({ mode: 'gcse', subject: 'chemistry', board: 'edexcel', topic: 'Rates and equilibrium' }, 'hard');
+    expect(about(r)).toBe('GCSE Chemistry · Edexcel · grades 6–9 — Rates and equilibrium');
+    expect(about(gcse({ mode: 'gcse', subject: 'history', board: 'any' }, 'easy'))).toBe('GCSE History · grades 1–3');
+    const w = toWire(r, 'p_john', T0);
+    expect(w.mode).toBe('gcse');
+    expect(w.gcse).toEqual({
+      subject: 'chemistry',
+      subjectLabel: 'Chemistry',
+      board: 'edexcel',
+      boardLabel: 'Edexcel',
+      band: 'Grades 6–9',
+      tier: 'Higher',
+    });
+    expect(toWire(gcse({ mode: 'gcse', subject: 'history' }), 'p_john', T0).gcse?.tier).toBeNull();
+    expect(toWire(room(), 'p_john', T0).gcse).toBeNull();
+  });
+
+  it("lets a subject's own words through, and only that subject's", () => {
+    const bio = 'Which type of reproduction is sexual reproduction?';
+    expect(isClean(bio, 'family', ['sexual\\w*'])).toBe(true);
+    expect(isClean(bio, 'family')).toBe(false);
+    expect(isClean('Who led the Nazi Party?', 'family', ['nazi\\w*'])).toBe(true);
+    // Lifting one stem lifts nothing else.
+    expect(isClean('what a twat', 'family', ['sexual\\w*'])).toBe(false);
+    const raw = {
+      questions: Array.from({ length: 8 }, (_, i) => ({
+        prompt: `Question ${i} on reproduction?`,
+        options: ['sexual', 'asexual', 'budding', `other ${i}`],
+        answerIndex: 0,
+        explain: null,
+        topic: 'Inheritance, variation and evolution',
+      })),
+    };
+    expect(validateQuestions(raw, keep, 'family')).toBeNull();
+    const ok = validateQuestions(raw, keep, 'family', { allows: ['sexual\\w*'] });
+    expect(ok?.questions).toHaveLength(8);
+    expect(ok?.questions[0].topic).toBe('Inheritance, variation and evolution');
+  });
+
+  it('keeps the spec heading off the wire until the reveal', () => {
+    const r = gcse({ mode: 'gcse', subject: 'biology' });
+    ready(r, { title: null, questions: [{ ...q(0), topic: 'Cell biology' }, q(1), q(2)] }, T0);
+    join(r, 'p_sam', T0);
+    start(r, 'p_john', T0);
+    const t = T0 + COUNTDOWN_MS;
+    advance(r, t, half);
+    expect(toWire(r, 'p_john', t).question?.topic).toBeNull();
+    answer(r, 'p_john', { question: 0, choice: 0 }, t + 1);
+    answer(r, 'p_sam', { question: 0, choice: 0 }, t + 1);
+    expect(toWire(r, 'p_john', t + 1).question?.topic).toBe('Cell biology');
+  });
+});
+
+describe('the review at the end', () => {
+  it('lists every question with the answer, my pick and how many got it — only once finished', () => {
+    const r = room();
+    const t = playing(r, 2);
+    expect(toWire(r, 'p_john', t).review).toBeNull();
+    answer(r, 'p_john', { question: 0, choice: 0 }, t + 1);
+    answer(r, 'p_sam', { question: 0, choice: 2 }, t + 1);
+    advance(r, t + 1 + REVEAL_MS, half);
+    answer(r, 'p_john', { question: 1, choice: 3 }, t + 2 + REVEAL_MS);
+    // Sam does not answer question 1.
+    advance(r, t + 1 + REVEAL_MS + TIME_MS.easy + 1_000, half);
+    advance(r, t + 1 + REVEAL_MS + TIME_MS.easy + 1_000 + REVEAL_MS, half);
+    expect(r.phase).toBe('finished');
+    const mine = toWire(r, 'p_john', T0).review!;
+    expect(mine).toHaveLength(2);
+    expect(mine[0]).toMatchObject({ index: 0, answerIndex: 0, myChoice: 0, rightCount: 1, playerCount: 2 });
+    expect(mine[1]).toMatchObject({ index: 1, myChoice: 3, rightCount: 0 });
+    const sams = toWire(r, 'p_sam', T0).review!;
+    expect(sams[0].myChoice).toBe(2);
+    expect(sams[1].myChoice).toBeNull();
+  });
+});
+

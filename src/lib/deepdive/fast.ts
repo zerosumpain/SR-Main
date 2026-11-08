@@ -19,7 +19,7 @@ import { eq } from 'drizzle-orm';
 import { jsonCompletion, streamCompletion, groundedCompletion } from './ai';
 import { coerceGrounding, groundingOption, groundedRoute, isGrounded } from './grounding';
 import { recordCitations } from './grounding.server';
-import { search } from './tavily';
+import { search } from './web-search';
 import { classifyDomain } from './credibility';
 import { emit, emitLog, emitStats, throwIfStopped, beat } from './worker';
 import { emitArtefact } from './desk-events';
@@ -219,6 +219,7 @@ export async function runScan(
   const searchOpts = scopeToSearchOptions(scope);
   // Raw-topic search goes out first and runs while the model writes queries.
   const rawSearch = search(topic, {
+    purpose: 'research.scan',
     maxResults: 5,
     searchDepth: 'basic',
     ...searchOpts,
@@ -241,6 +242,7 @@ export async function runScan(
   const settled = await Promise.allSettled(
     queries.map((q) =>
       search(q, {
+        purpose: 'research.scan',
         maxResults: 5,
         searchDepth: 'basic',
         ...searchOpts,

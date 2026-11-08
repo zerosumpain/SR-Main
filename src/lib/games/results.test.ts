@@ -13,6 +13,7 @@ vi.mock('./quiz-night.server', () => ({
           options: ['a', 'b', 'c', 'd'],
           answerIndex: 1,
           explain: null,
+          topic: null,
         })),
       },
       room.createdAt,
@@ -27,13 +28,19 @@ const T0 = Date.parse('2026-09-29T10:00:00Z');
 const john = { id: 'p_john', name: 'John' };
 const sam = { id: 'p_sam', name: 'Sam' };
 
-/** A room of `game` with John and Sam, played to its finish by the clock alone. */
+/** John and Sam, and as many more as a game needs to start (`GameRules.minPlayers`). */
+function contenders(game: GameId): { id: string; name: string }[] {
+  const extra = Math.max(0, (GAMES[game].minPlayers ?? 2) - 2);
+  return [john, sam, ...Array.from({ length: extra }, (_, i) => ({ id: `p_extra${i}`, name: `Extra ${i}` }))];
+}
+
+/** A room of `game` with John and Sam (and more if it needs them), played to its finish by the clock alone. */
 async function finished(game: GameId, options: Record<string, unknown> = {}): Promise<{ room: RoomBase; now: number }> {
   const rules = GAMES[game];
   let now = T0;
-  const room = rules.createRoom({ id: `g_${game}`, host: john, invite: [sam], difficulty: 'easy', options, now });
+  const room = rules.createRoom({ id: `g_${game}`, host: john, invite: contenders(game).slice(1), difficulty: 'easy', options, now });
   if (rules.prepare) await rules.prepare(room);
-  rules.join(room, 'p_sam', now);
+  for (const p of contenders(game).slice(1)) rules.join(room, p.id, now);
   rules.start(room, 'p_john', now);
   // Nobody moves: every game ends on its own clock. Step to each deadline.
   for (let i = 0; i < 5_000 && room.phase !== 'finished'; i++) {
@@ -44,24 +51,36 @@ async function finished(game: GameId, options: Record<string, unknown> = {}): Pr
   return { room, now };
 }
 
+/**
+ * Games the two-player clock run below cannot finish (three or more at the
+ * table; a game nobody plays is abandoned, nothing recorded): each one's own
+ * suite records a played round instead. One id a line, appended.
+ */
+const OWN_SUITE: readonly string[] = [
+  'manhunt', // three players and a play area; manhunt.test.ts records its own finish
+  'homestead',
+  'hometowns', // a county never finishes: towns are kept forever
+];
+
 describe('recording a finished round, in every game in the catalogue', () => {
-  it.each(GAME_IDS.map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
+  it.each(GAME_IDS.filter((g) => !OWN_SUITE.includes(g)).map((g) => [g]))('%s records both contenders from its own standings', async (game) => {
     const rules = GAMES[game];
     const { room, now } = await finished(game);
     expect(room.phase).toBe('finished');
     const rows = roundRows(room, rules, 1, now, []);
-    expect(rows.map((r) => r.playerId).sort()).toEqual(['p_john', 'p_sam']);
+    const everyone = contenders(game).map((p) => p.id);
+    expect(rows.map((r) => r.playerId).sort()).toEqual([...everyone].sort());
 
     const wire = rules.toWire(room, 'p_john', now) as unknown as {
       standings: Array<{ id: string; score?: unknown }>;
       winnerIds: string[];
     };
     for (const r of rows) {
-      expect(r).toMatchObject({ game, roomId: room.id, round: 1, players: 2, difficulty: 'easy' });
+      expect(r).toMatchObject({ game, roomId: room.id, round: 1, players: everyone.length, difficulty: 'easy' });
       expect(r.won).toBe(wire.winnerIds.includes(r.playerId));
       expect(r.score === null || Number.isInteger(r.score)).toBe(true);
       expect(r.rank).toBeGreaterThanOrEqual(1);
-      expect(r.rank).toBeLessThanOrEqual(2);
+      expect(r.rank).toBeLessThanOrEqual(everyone.length);
       const standing = wire.standings.find((s) => s.id === r.playerId)!;
       // The default is the standing's own numeric score; an override says otherwise.
       if (!rules.resultScore && typeof standing.score === 'number') expect(r.score).toBe(standing.score);
@@ -222,6 +241,35 @@ describe('the boards', () => {
       { rank: 1, playerId: 'p_sam', name: 'Samuel', wins: 1, played: 2 },
     ]);
     expect(board.from).toBe(new Date(T0).toISOString());
+  });
+
+  it('gives an offline game its own board after the site games, titled from its latest row', () => {
+    const offline = 'offline:maths-sprint' as GameId;
+    const board = buildLeaderboard(
+      [
+        row({ game: 'maths-sprint', playerId: 'p_john', score: 9, won: true }),
+        row({ game: offline, roomId: 'offline-a-1', playerId: 'p_sam', playerName: 'Sam', score: 140, difficulty: '', options: { title: 'Sprint', label: 'streak 7' } }),
+        row({ game: offline, roomId: 'offline-b-1', playerId: 'p_sam', playerName: 'Sam', score: 90, won: true, difficulty: '', finishedAt: at(2), options: { title: 'Maths Sprint' } }),
+      ],
+      'week',
+      new Date(T0),
+      ['maths-sprint'],
+      { 'maths-sprint': 'Maths Sprint' },
+    );
+    expect(board.games.map((g) => [g.game, g.title])).toEqual([
+      ['maths-sprint', 'Maths Sprint'],
+      ['offline:maths-sprint', 'Maths Sprint (offline)'],
+    ]);
+    // The offline best is not mixed into the online board, and its detail is its label.
+    expect(board.games[0].rows.map((r) => r.best)).toEqual([9]);
+    expect(board.games[1].rows).toEqual([
+      { rank: 1, playerId: 'p_sam', name: 'Sam', best: 140, bestLabel: 'streak 7', wins: 1, played: 2 },
+    ]);
+    // Offline wins and games count overall like any other.
+    expect(board.overall.map((o) => [o.playerId, o.wins, o.played])).toEqual([
+      ['p_john', 1, 1],
+      ['p_sam', 1, 2],
+    ]);
   });
 
   it('ranks a game with no numeric score by wins, with no best', () => {

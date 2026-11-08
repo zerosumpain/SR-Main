@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  JKAI_ITEM,
   SECTIONS,
   SITE_ITEMS,
   activeSection,
@@ -40,7 +41,7 @@ describe('parentHref — the common way back', () => {
     expect(parentHref('/jkai/builds/42')).toBe('/jkai/builds');
     expect(parentHref('/jkai/intel/sources')).toBe('/jkai/intel');
     expect(parentHref('/health/activities/17')).toBe('/health/activities');
-    expect(parentHref('/projects/engine-room/turn/trace')).toBe('/projects/engine-room/turn');
+    expect(parentHref('/projects/engine-room/daydream/inbox')).toBe('/projects/engine-room/daydream');
   });
 
   it('sends a sub-section back to the family above it', () => {
@@ -106,7 +107,7 @@ describe('owner filtering', () => {
 
 describe('the hidden owner-only surfaces stay hidden', () => {
   it('never emits a route that is deliberately absent from every index', () => {
-    const everyHref = [...SITE_ITEMS, ...SECTIONS.flatMap((s) => s.items)]
+    const everyHref = [...SITE_ITEMS, JKAI_ITEM, ...(JKAI_ITEM.children ?? []), ...SECTIONS.flatMap((s) => s.items)]
       .map((i) => i.href)
       .concat(SECTIONS.map((s) => s.rootHref));
     // /projects is a public PREFIX; these two are gated only inside their own
@@ -125,7 +126,6 @@ describe('wearsSharedChrome', () => {
     expect(wearsSharedChrome('/auth-error')).toBe(false);
     expect(wearsSharedChrome('/deepdive/share/tok123')).toBe(false);
     expect(wearsSharedChrome('/research/abc/desk')).toBe(false);
-    expect(wearsSharedChrome('/decks/my-deck/print')).toBe(false);
   });
 
   it('keeps the shared-conversation page ON the bar', () => {
@@ -136,14 +136,8 @@ describe('wearsSharedChrome', () => {
     expect(wearsSharedChrome('/jkai/shared/tok123')).toBe(true);
   });
 
-  it('carves out the deck PLAYER but not the index or the editor', () => {
-    expect(wearsSharedChrome('/decks/my-deck')).toBe(false);
-    expect(wearsSharedChrome('/decks')).toBe(true);
-    expect(wearsSharedChrome('/decks/my-deck/edit')).toBe(true);
-  });
-
   it('leaves every ordinary page wearing the bar', () => {
-    for (const p of ['/', '/blog', '/blog/a-post', '/jkai', '/jkai/intel/sources', '/health', '/health/plan', '/research', '/projects/engine-room/turn', '/admin/ops/costs']) {
+    for (const p of ['/', '/blog', '/blog/a-post', '/jkai', '/jkai/intel/sources', '/health', '/health/plan', '/research', '/projects/engine-room/daydream', '/admin/ops/costs']) {
       expect(wearsSharedChrome(p), `${p} lost its header`).toBe(true);
     }
   });
@@ -174,9 +168,9 @@ describe('isItemActive', () => {
 describe('the bar is never empty', () => {
   it('shows the site strip on the main page and every top-level page', () => {
     // The regression this guards: sections without children rendered an empty
-    // band, so /, /blog, /projects, /decks and /releases lost the nav the site
+    // band, so /, /blog, /projects and /releases lost the nav the site
     // has always had. The brief opens by naming that bar as the thing to keep.
-    for (const p of ['/', '/blog', '/projects', '/decks', '/releases']) {
+    for (const p of ['/', '/blog', '/projects', '/releases']) {
       const cells = navCellsFor(p, true).map((i) => i.href);
       expect(cells.length, `${p} rendered an empty nav bar`).toBeGreaterThan(3);
       expect(cells).toContain('/projects');
@@ -197,5 +191,36 @@ describe('the bar is never empty', () => {
     for (const href of navCellsFor('/jkai/shared/tok', false).map((i) => i.href)) {
       expect(['/releases', '/news', '/drive', '/live', '/jkai', '/research']).not.toContain(href);
     }
+  });
+});
+
+describe('the jkai menu anchors Trips', () => {
+  const jkai = JKAI_ITEM;
+
+  it('offers jkai, Daydreams, Trips and the Wish list under the jkai cell', () => {
+    expect(jkai.children?.map((c) => c.href)).toEqual(['/jkai', '/jkai/daydreams', '/trips', '/home/wishlist']);
+  });
+
+  it('lights the jkai cell on a trip and walks a trip up to jkai', () => {
+    expect(isItemActive(jkai, '/trips/abc')).toBe(true);
+    expect(isItemActive(jkai, '/tripsy')).toBe(false);
+    expect(activeSection('/trips/abc')?.id).toBe('trips');
+    expect(parentHref('/trips')).toBe('/jkai');
+    expect(parentLabel('/trips')).toBe('jkai');
+    expect(parentHref('/trips/abc')).toBe('/trips');
+  });
+
+  it('keeps jkai out of the strip: every bar renders it on its own', () => {
+    expect(navCellsFor('/trips/abc', true).map((c) => c.href)).not.toContain('/jkai');
+    expect(navCellsFor('/health', true).map((c) => c.href)).not.toContain('/jkai');
+  });
+
+  it('gives a member only the menu rows they can open, and none to a visitor', () => {
+    expect(visibleItems([JKAI_ITEM], false)).toEqual([]);
+    const member = visibleItems([JKAI_ITEM], false, ['/jkai/daydreams/impact'])[0];
+    expect(member?.href).toBe('/jkai/daydreams/impact');
+    expect(member?.children?.map((c) => c.href)).toEqual(['/jkai/daydreams/impact']);
+    const noRows = visibleItems([JKAI_ITEM], false, ['/jkai/notes'])[0];
+    expect(noRows?.children).toBeUndefined();
   });
 });

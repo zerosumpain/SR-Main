@@ -2,7 +2,8 @@
  * Per-million-token pricing for LLM calls (OpenRouter-only since 2026-07-17).
  *
  * Primary source: the openrouter_models catalogue table (refreshed from
- * OpenRouter's /api/v1/models), loaded into an in-memory map on first use so
+ * OpenRouter's /api/v1/models; extracted applications get Main's copy through
+ * `$lib/llm/model-source`), loaded into an in-memory map on first use so
  * `priceFor` stays synchronous for the usage-capture hot path. The small
  * hard-coded table below is the fallback while the catalogue warm-up is in
  * flight (first call after boot) or if the DB is unavailable.
@@ -52,17 +53,14 @@ function warmCataloguePrices(): void {
   if (cataloguePrices || warmInFlight) return;
   warmInFlight = true;
   (async () => {
-    const { db } = await import('$lib/db');
-    const { openrouterModels } = await import('$lib/db/schema');
-    const rows = await db
-      .select({
-        id: openrouterModels.id,
-        promptPrice: openrouterModels.promptPrice,
-        completionPrice: openrouterModels.completionPrice,
-      })
-      .from(openrouterModels);
+    // Main reads its own catalogue table; an extracted application reads the
+    // copy Main serves it. See $lib/llm/model-source.
+    const { loadCatalogue } = await import('$lib/llm/model-source');
+    const rows = await loadCatalogue();
     const map = new Map<string, ModelPricing>();
     for (const r of rows) {
+      // Null is "unpriced", and Number(null) would make it a free model.
+      if (r.promptPrice === null || r.completionPrice === null) continue;
       const input = Number(r.promptPrice);
       const output = Number(r.completionPrice);
       if (Number.isFinite(input) && Number.isFinite(output)) {

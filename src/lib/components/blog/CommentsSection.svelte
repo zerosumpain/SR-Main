@@ -14,6 +14,7 @@
    */
   import type { PublicComment } from '$lib/blog/comments';
   import { MAX_BODY_LENGTH, MAX_NAME_LENGTH, validateComment } from '$lib/blog/comments';
+  import { snapToRule } from '$lib/components/notes-paper/snap';
 
   let {
     slug,
@@ -133,10 +134,12 @@
   {/if}
 
   {#if sent}
-    <p class="c-sent">
-      Thanks — that is with John. Comments are read before they appear, so it will not show up
-      straight away.
-    </p>
+    <div class="c-sent" use:snapToRule>
+      <p class="np-sticky">
+        Thanks — that is with John. Comments are read before they appear, so it will not show up
+        straight away.
+      </p>
+    </div>
   {/if}
 
   {#if !open}
@@ -144,7 +147,7 @@
       {top.length === 0 ? 'Be the first to respond' : 'Add a response'}
     </button>
   {:else}
-    <form class="c-form" onsubmit={submit}>
+    <form class="c-form" onsubmit={submit} use:snapToRule>
       {#if replyTo !== null}
         <p class="c-replying">
           Replying to {comments.find((c) => c.id === replyTo)?.authorName ?? 'a comment'}
@@ -208,19 +211,54 @@
 </section>
 
 <style>
+  /* Notes paper: responses are letters written on the page's rules. Every
+     line here is one rule tall (names, dates, bodies, the reply and open
+     buttons, whose 44px hit areas are pseudo-elements that leave the pitch
+     alone), and the section carries the page's ruled band from its own top,
+     so the writing sits on the lines. The form is a card laid on the page,
+     opaque, and kept whole rules tall by snapToRule. */
   .comments {
-    margin-top: 4rem;
-    padding-top: 2rem;
-    border-top: 2px solid var(--line-strong);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    padding-top: var(--np-l, 32px);
+    border-image: var(--pp-band) fill 0 / 0 / 0 var(--np-bleed, 100vw);
   }
 
+  /* The heading is a margin kicker, as Sources above it is, so the foot of
+     the sheet reads as one system: mono caps right up against the margin
+     rule, on the line beside the first response. The sheet's columns
+     (--rule-gap, --pp-kick, --rail-col) place it; it takes no line of the
+     column itself. */
   .c-heading {
+    position: absolute;
+    top: var(--np-l, 32px);
+    right: calc(100% + var(--rule-gap, 2rem) + var(--pp-kick, 22px));
+    margin: 0;
     font-family: var(--font-mono);
-    font-size: var(--fs-label);
+    font-size: var(--fs-label-xs);
+    font-weight: 400;
+    line-height: var(--np-l, 32px);
+    text-align: right;
     text-transform: uppercase;
+    white-space: nowrap;
     letter-spacing: 0.14em;
-    color: var(--text-muted);
-    margin: 0 0 1.5rem;
+    color: var(--np-pen-text, var(--accent-hover));
+  }
+
+  /* Where the margin is narrow it runs down it, centred in the margin. */
+  @media (max-width: 1180px) {
+    .c-heading {
+      right: auto;
+      left: calc(-1 * (var(--rule-gap, 2rem) + var(--rail-col, 56px)));
+      display: flex;
+      align-items: center;
+      width: var(--rail-col, 56px);
+      padding: 4px 0 0;
+      line-height: 1.4;
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+    }
   }
 
   .c-list,
@@ -231,37 +269,51 @@
   }
 
   .c-item {
-    padding: 1rem 0;
-    border-bottom: 1px solid var(--card-border);
+    padding: 0 0 var(--np-l, 32px);
   }
 
+  /* Replies indented behind a double petrol rule, the margin's echo. */
   .c-replies {
-    margin-top: 0.75rem;
-    padding-left: 1.25rem;
-    border-left: 2px solid var(--card-border);
+    position: relative;
+    padding-left: 1.5rem;
+  }
+
+  .c-replies::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    left: 0.25rem;
+    width: 4px;
+    border-left: 1px solid var(--np-pen-ink, var(--accent-ink));
+    border-right: 1px solid var(--np-pen-ink, var(--accent-ink));
+    opacity: 0.55;
   }
 
   .c-replies .c-item:last-child {
-    border-bottom: none;
     padding-bottom: 0;
   }
 
   .c-meta {
     display: flex;
     align-items: baseline;
-    gap: 0.75rem;
-    margin-bottom: 0.35rem;
+    gap: 0.9rem;
+    height: var(--np-l, 32px);
+    line-height: var(--np-l, 32px);
   }
 
   .c-author {
     font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    color: var(--text-primary);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--np-pen-ink, var(--accent-ink));
   }
 
   .c-date {
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
+    letter-spacing: 0.06em;
     color: var(--text-muted);
   }
 
@@ -270,63 +322,78 @@
     /* Paragraphing without a renderer. Nothing here is parsed as markup. */
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    font-family: var(--font-body);
     font-size: var(--fs-body);
-    line-height: 1.65;
-    color: var(--text-secondary);
+    line-height: var(--np-l, 32px);
+    color: var(--text-primary);
   }
 
   .c-reply,
   .c-cancel,
-  .c-cancel-reply {
+  .c-cancel-reply,
+  .c-open {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: var(--np-l, 32px);
+    margin: 0;
+    padding: 0;
     background: none;
     border: none;
-    padding: 0;
-    margin-top: 0.5rem;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
+    line-height: 1;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
+    letter-spacing: 0.14em;
+    color: var(--np-pen-ink, var(--accent-ink));
+    text-decoration: underline;
+    text-decoration-color: var(--np-pen, var(--accent));
+    text-underline-offset: 5px;
     cursor: pointer;
+  }
+
+  /* 44px targets without growing the line. */
+  .c-reply::after,
+  .c-cancel::after,
+  .c-cancel-reply::after,
+  .c-open::after {
+    content: '';
+    position: absolute;
+    inset: -6px -4px;
   }
 
   .c-reply:hover,
   .c-cancel:hover,
-  .c-cancel-reply:hover {
-    color: var(--accent);
+  .c-cancel-reply:hover,
+  .c-open:hover {
+    color: var(--text-primary);
   }
 
   .c-open {
-    margin-top: 1.5rem;
-    padding: 0.55rem 1rem;
-    background: transparent;
-    border: 1px solid var(--card-border);
-    font-family: var(--font-mono);
-    font-size: var(--fs-label);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: border-color 0.15s ease-out, color 0.15s ease-out;
-  }
-
-  .c-open:hover {
-    border-color: var(--accent);
-    color: var(--accent);
+    align-self: flex-start;
+    padding: 0 0.9rem;
+    background: var(--np-card, var(--surface-card));
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+    text-decoration: none;
   }
 
   .c-form {
-    margin-top: 1.5rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    margin: 0 0 calc(var(--np-l, 32px) + var(--np-snap, 0px));
+    padding: 18px 20px;
+    background: var(--np-card, var(--surface-card));
+    box-shadow:
+      0 0 0 1px var(--line-strong),
+      0 14px 26px -20px rgba(26, 16, 8, 0.4);
   }
 
   .c-replying {
     margin: 0;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
 
   .c-field {
@@ -340,16 +407,20 @@
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
+    letter-spacing: 0.14em;
+    color: var(--np-pen-ink, var(--accent-ink));
   }
 
   .c-input,
   .c-textarea {
     width: 100%;
     padding: 0.6rem 0.75rem;
-    background: var(--bg);
-    border: 1px solid var(--card-border);
+    background: var(--np-paper, var(--bg));
+    /* Petrol, not the hairline: a field's edge has to clear three to one
+       against the card (WCAG 1.4.11); at three quarters it is about 3.6:1 in
+       every reading theme. */
+    border: 1px solid color-mix(in srgb, var(--np-pen-ink, var(--accent-ink)) 75%, var(--np-card, var(--surface-card)));
+    border-radius: 0;
     color: var(--text-primary);
     font-family: var(--font-body);
     /* 16px, not smaller: mobile Safari force-zooms the viewport on any focused
@@ -363,11 +434,12 @@
     min-height: 7rem;
   }
 
-  .c-input:focus,
-  .c-textarea:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-    border-color: var(--accent);
+  .c-input:focus-visible,
+  .c-textarea:focus-visible {
+    outline: 2px solid var(--accent-hover);
+    outline-offset: 4px;
+    border-radius: 2px;
+    border-color: var(--np-pen-ink, var(--accent-ink));
   }
 
   .c-count {
@@ -376,11 +448,11 @@
     top: 0;
     font-family: var(--font-mono);
     font-size: var(--fs-label-xs);
-    color: var(--text-ghost, var(--text-muted));
+    color: var(--text-muted);
   }
 
   .c-count.low {
-    color: var(--warn);
+    color: var(--accent-hover);
   }
 
   .c-hp {
@@ -394,8 +466,8 @@
   .c-error {
     margin: 0;
     padding: 0.5rem 0.75rem;
-    border-left: 3px solid var(--error);
-    background: var(--card-bg);
+    box-shadow: inset 3px 0 0 var(--error);
+    background: var(--np-paper, var(--bg));
     font-size: var(--fs-body-sm);
     color: var(--text-primary);
   }
@@ -403,24 +475,25 @@
   .c-actions {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 1.25rem;
   }
 
   .c-submit {
-    padding: 0.55rem 1.1rem;
-    background: var(--accent);
-    border: 1px solid var(--accent);
-    color: var(--bg);
+    min-height: 44px;
+    padding: 0 1.1rem;
+    background: var(--np-pen-ink, var(--accent-ink));
+    border: 1px solid var(--np-pen-ink, var(--accent-ink));
+    color: var(--np-paper, var(--bg));
     font-family: var(--font-mono);
-    font-size: var(--fs-label);
+    font-size: var(--fs-label-xs);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.14em;
     cursor: pointer;
   }
 
   .c-submit:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
+    background: var(--text-primary);
+    border-color: var(--text-primary);
   }
 
   .c-submit:disabled {
@@ -428,23 +501,30 @@
     cursor: default;
   }
 
-  .c-cancel {
-    margin-top: 0;
-  }
-
-  .c-note,
-  .c-sent {
+  .c-note {
     margin: 0;
     font-size: var(--fs-body-sm);
     line-height: 1.5;
-    color: var(--text-muted);
+    color: var(--text-secondary);
   }
 
+  /* Thanks, on a sticky note (fixed light, so fixed ink). */
   .c-sent {
-    margin-top: 1.5rem;
-    padding: 0.75rem 1rem;
-    border-left: 3px solid var(--success);
-    background: var(--card-bg);
+    align-self: flex-start;
+    margin: 0 0 calc(var(--np-l, 32px) + var(--np-snap, 0px));
+    padding: 0;
+  }
+
+  .c-sent p {
+    margin: 0;
+    font-size: var(--fs-body-sm);
+    line-height: 1.5;
+  }
+
+  .comments :is(button, input, textarea):focus-visible {
+    outline: 2px solid var(--accent-hover);
+    outline-offset: 4px;
+    border-radius: 2px;
   }
 
   @media print {

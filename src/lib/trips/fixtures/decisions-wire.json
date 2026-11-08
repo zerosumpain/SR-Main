@@ -1,0 +1,207 @@
+{
+  "decisions": {
+    "brief": {
+      "items": [
+        { "key": "destination", "kind": "destination", "label": "Rome", "detail": "Rome, Italy · Europe/Rome", "origin": "you", "note": null, "ref": null, "editable": true },
+        { "key": "dates", "kind": "dates", "label": "26–30 Oct", "detail": "Mon 26 Oct – Fri 30 Oct, 5 days", "origin": "you", "note": null, "ref": null, "editable": true },
+        { "key": "travellers", "kind": "travellers", "label": "John, Sam + 2", "detail": "John, Sam (9), Alex, Robin", "origin": "notes", "note": "From the family roster", "ref": null, "editable": true },
+        { "key": "pace", "kind": "pace", "label": "Normal pace", "detail": null, "origin": "you", "note": null, "ref": null, "editable": true },
+        { "key": "stay:7b0c5d0e-4c55-4a77-9e0a-1d2f3a4b5c6d", "kind": "stay", "label": "Stay: Parione", "detail": "Flat near Piazza Navona, 4 nights", "origin": "notes", "note": "Airbnb booking in your notes", "ref": "memory:812", "editable": true },
+        { "key": "transport:5f0e1b2a-0000-4000-8000-000000000001", "kind": "transport", "label": "NCL 07:35 → FCO", "detail": "Mon 26 Oct, lands 11:30", "origin": "you", "note": null, "ref": null, "editable": false },
+        { "key": "meal-times", "kind": "assumption", "label": "Dinner around 19:30", "detail": "Assumed from the pace; change it if you eat later", "origin": "assumed", "note": "Assumed: normal pace", "ref": null, "editable": true }
+      ],
+      "assumed": 1,
+      "missing": []
+    },
+    "questions": [
+      {
+        "id": "2c1d7e10-8a4b-4c0e-9f00-000000000101",
+        "key": "after-vatican-2026-10-28",
+        "origin": "tie",
+        "prompt": "After the Vatican tour on Wednesday — rest or carry on?",
+        "why": "Changes Wednesday afternoon (3 stops)",
+        "answers": [
+          { "id": "a0", "label": "Back to the flat", "ops": [ { "op": "setTrip", "fields": { "dayLoads": { "2026-10-28": "light" } } } ], "brief": null, "remember": null, "summary": "Wednesday afternoon: rest at the flat, 2 stops move to Thursday", "changes": 3 },
+          { "id": "a1", "label": "Carry on", "ops": [], "brief": null, "remember": null, "summary": null, "changes": 0 }
+        ],
+        "defaultAnswerId": "a1",
+        "appliedDefault": true,
+        "ifSkipped": "Carry on, with a long lunch.",
+        "affects": { "dates": ["2026-10-28"], "stops": 3 },
+        "impact": 3,
+        "audience": "owner",
+        "deadline": null,
+        "status": "open",
+        "answerId": null,
+        "answeredByName": null,
+        "votes": {},
+        "basedOnVersion": 12,
+        "createdAt": "2026-10-21T13:00:00.000Z",
+        "answeredAt": null
+      }
+    ],
+    "answered": [
+      {
+        "id": "2c1d7e10-8a4b-4c0e-9f00-000000000102",
+        "key": "book-colosseum-underground",
+        "origin": "research",
+        "prompt": "Colosseum underground needs a timed ticket, about 14 days ahead. Include it?",
+        "why": "Changes Thursday morning (2 stops)",
+        "answers": [
+          { "id": "a0", "label": "Yes, I'll book", "ops": [], "brief": null, "remember": null, "summary": "Thursday morning: underground tour at 09:30", "changes": 2 },
+          { "id": "a1", "label": "Standard ticket", "ops": [], "brief": null, "remember": null, "summary": null, "changes": 0 },
+          { "id": "a2", "label": "Skip the Colosseum", "ops": [], "brief": null, "remember": null, "summary": "Thursday morning: Palazzo Massimo instead", "changes": 2 }
+        ],
+        "defaultAnswerId": "a1",
+        "appliedDefault": true,
+        "ifSkipped": "Standard ticket, no timed slot.",
+        "affects": { "dates": ["2026-10-29"], "stops": 2 },
+        "impact": 6,
+        "audience": "family",
+        "deadline": "2026-10-15",
+        "status": "answered",
+        "answerId": "a1",
+        "answeredByName": "John",
+        "votes": { "a0": ["Sam"], "a1": ["John"] },
+        "basedOnVersion": 11,
+        "createdAt": "2026-10-21T12:40:00.000Z",
+        "answeredAt": "2026-10-21T12:45:00.000Z"
+      }
+    ],
+    "proposals": [
+      {
+        "id": "9a8b7c6d-0000-4000-8000-000000000201",
+        "groupId": "swap:2026-10-27:afternoon:1",
+        "kind": "swap",
+        "title": "Palazzo Altemps",
+        "why": "Ancient sculpture in a quiet palace, five minutes from the flat — calmer than the big museums.",
+        "scope": { "date": "2026-10-27", "stage": "afternoon", "stopId": "b1c2d3e4-0000-4000-8000-000000000301", "wishId": "b1c2d3e4-0000-4000-8000-000000000301" },
+        "ops": [
+          { "op": "removeWish", "id": "b1c2d3e4-0000-4000-8000-000000000301" },
+          { "op": "addWish", "wish": { "title": "Palazzo Altemps", "placeQuery": null, "priority": "nice", "durationMin": 75, "partOfDay": "afternoon", "fixedDate": "2026-10-27", "fixedStartMin": null, "note": null, "replacesMeal": null, "place": { "name": "Palazzo Altemps", "location": { "lat": 41.9007, "lng": 12.4728 }, "osmId": "way/30970813", "address": "Piazza di Sant'Apollinare 46" } } }
+        ],
+        "diff": {
+          "lines": ["Palazzo Altemps added on Tue 27 Oct at 15:10.", "Capitoline Museums is no longer planned."],
+          "changes": [
+            { "kind": "added", "wishId": "dry-wish-1", "title": "Palazzo Altemps", "date": "2026-10-27", "fromDate": null, "fromMin": null, "toMin": 910, "reason": null },
+            { "kind": "removed", "wishId": "b1c2d3e4-0000-4000-8000-000000000301", "title": "Capitoline Museums", "date": null, "fromDate": "2026-10-27", "fromMin": 900, "toMin": null, "reason": null }
+          ],
+          "dates": ["2026-10-27"],
+          "walkDeltaM": -850,
+          "dropped": []
+        },
+        "tradeoffs": { "fits": true, "fitText": "15:10–16:25, 12 min walk in", "walkMin": -11, "walkKmPerDay": null, "earlyStarts": null, "toBook": 0, "costText": "€10 each", "indoor": true, "kidFriendly": true, "lessVisited": true, "pushesOut": [], "moves": [] },
+        "evidence": [ { "url": "https://www.museonazionaleromano.beniculturali.it/palazzo-altemps/", "title": "Museo Nazionale Romano — Palazzo Altemps" } ],
+        "place": { "name": "Palazzo Altemps", "location": { "lat": 41.9007, "lng": 12.4728 } },
+        "image": { "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Palazzo_Altemps.jpg/800px-Palazzo_Altemps.jpg", "width": 800, "height": 533, "credit": "Jane Smith", "license": "CC BY-SA 4.0", "sourceUrl": "https://commons.wikimedia.org/wiki/File:Palazzo_Altemps.jpg", "wikidata": "Q1247474" },
+        "packPlaceId": "c0ffee00-0000-4000-8000-000000000401",
+        "shape": null,
+        "preview": [],
+        "basedOnVersion": 12,
+        "status": "open",
+        "reason": null,
+        "createdAt": "2026-10-21T13:02:00.000Z",
+        "decidedAt": null
+      },
+      {
+        "id": "9a8b7c6d-0000-4000-8000-000000000202",
+        "groupId": "shapes:1",
+        "kind": "shape",
+        "title": "Ancient Rome first, slow afternoons",
+        "why": "The big ancient sites in the cool of the morning, then gentle afternoons near the flat.",
+        "scope": { "date": null, "stage": null, "stopId": null, "wishId": null },
+        "ops": [],
+        "diff": { "lines": ["First plan."], "changes": [], "dates": ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30"], "walkDeltaM": null, "dropped": [] },
+        "tradeoffs": { "fits": true, "fitText": null, "walkMin": null, "walkKmPerDay": 6.1, "earlyStarts": 2, "toBook": 2, "costText": null, "indoor": null, "kidFriendly": true, "lessVisited": true, "pushesOut": [], "moves": [] },
+        "evidence": [],
+        "place": null,
+        "image": null,
+        "packPlaceId": null,
+        "shape": {
+          "headline": "Ancient Rome first, slow afternoons",
+          "days": [
+            { "date": "2026-10-26", "line": "Land 11:30 · lunch in Parione · Piazza Navona at dusk" },
+            { "date": "2026-10-27", "line": "Colosseum and Forum · long lunch in Monti · Palazzo Altemps" },
+            { "date": "2026-10-28", "line": "Vatican tour 08:15 · rest · Trastevere for dinner" },
+            { "date": "2026-10-29", "line": "Pantheon · Trevi · gelato crawl" },
+            { "date": "2026-10-30", "line": "Breakfast at Campo de' Fiori · fly 10:40" }
+          ],
+          "leavesOut": ["Borghese Gallery"]
+        },
+        "preview": [],
+        "basedOnVersion": null,
+        "status": "open",
+        "reason": null,
+        "createdAt": "2026-10-21T12:30:00.000Z",
+        "decidedAt": null
+      }
+    ],
+    "pack": {
+      "status": "ready",
+      "stage": null,
+      "builtAt": "2026-10-21T12:28:00.000Z",
+      "refreshedAt": null,
+      "counts": { "places": 38, "food": 14, "toBook": 3, "lessVisited": 9, "rainy": 11 },
+      "calendar": [
+        { "date": "2026-10-29", "kind": "weather", "text": "Rain likely in the afternoon", "placeId": null, "sources": [] },
+        { "date": null, "kind": "closure", "text": "Pantheon now charges entry (€5) and is busiest 11:00–15:00", "placeId": "c0ffee00-0000-4000-8000-000000000402", "sources": [ { "url": "https://www.pantheonroma.com/", "title": "Pantheon" } ] }
+      ],
+      "neighbourhoods": [ { "name": "Parione", "line": "Baroque squares and cafés around Piazza Navona", "places": ["Piazza Navona", "Palazzo Altemps"] } ],
+      "highlights": ["Found 38 places", "14 places to eat near where you'll be", "3 need booking — Colosseum underground about 14 days ahead", "Rain likely Thu afternoon"]
+    }
+  },
+  "packPlace": {
+    "id": "c0ffee00-0000-4000-8000-000000000401",
+    "name": "Palazzo Altemps",
+    "kind": "museum",
+    "tags": ["rainy-day", "roman", "sculpture"],
+    "place": { "name": "Palazzo Altemps", "location": { "lat": 41.9007, "lng": 12.4728 }, "osmId": "way/30970813", "address": "Piazza di Sant'Apollinare 46" },
+    "why": "Ancient sculpture in a quiet palace, five minutes from the flat.",
+    "neighbourhood": "Parione",
+    "durationMin": 75,
+    "indoor": true,
+    "kidFriendly": true,
+    "costText": "€10 each",
+    "lessVisited": true,
+    "bookingRequired": false,
+    "bookAheadDays": null,
+    "facts": null,
+    "image": null,
+    "wikidata": "Q1247474",
+    "sources": [ { "url": "https://www.museonazionaleromano.beniculturali.it/palazzo-altemps/", "title": "Museo Nazionale Romano — Palazzo Altemps" } ],
+    "status": "candidate",
+    "rejectReason": null,
+    "wishId": null,
+    "checkedAt": "2026-10-21T12:27:00.000Z"
+  },
+  "job": {
+    "id": "f00dfeed-0000-4000-8000-000000000501",
+    "kind": "start",
+    "status": "running",
+    "tripId": "ac7cde28-7d32-4456-95bc-01dffa53078f",
+    "startedAt": "2026-10-21T12:26:00.000Z",
+    "finishedAt": null,
+    "result": { "id": "ac7cde28-7d32-4456-95bc-01dffa53078f" },
+    "error": null,
+    "stages": [
+      { "key": "brief", "label": "Setting up the trip", "state": "done", "detail": "Rome, 26–30 Oct, 4 travellers" },
+      { "key": "places", "label": "Finding places", "state": "done", "detail": "Found 38 places" },
+      { "key": "food", "label": "Finding places to eat", "state": "done", "detail": "14 near where you'll be" },
+      { "key": "hours", "label": "Checking opening hours on your dates", "state": "running", "detail": null },
+      { "key": "shapes", "label": "Drafting three ways to do it", "state": "waiting", "detail": null }
+    ]
+  },
+  "notes": [
+    { "id": "note:transport:1", "kind": "transport", "label": "Flights NCL 07:35 → FCO, back 10:40 Fri", "detail": "From your notes: booking confirmation", "ops": [], "ref": "memory:790" },
+    { "id": "note:stay:1", "kind": "stay", "label": "Airbnb in Parione, near Piazza Navona", "detail": "26–30 Oct", "ops": [], "ref": "memory:812" }
+  ],
+  "start": {
+    "destination": "Rome",
+    "startDate": "2026-10-26",
+    "endDate": "2026-10-30",
+    "travellers": [ { "name": "John", "age": null, "personId": "john" }, { "name": "Sam", "age": 9, "personId": "sam-demo" } ],
+    "pace": "normal",
+    "confirmNotes": ["note:transport:1", "note:stay:1"],
+    "text": "We love food markets"
+  }
+}

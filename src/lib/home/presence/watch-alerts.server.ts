@@ -89,7 +89,7 @@ export async function deliverWatchAlerts(now = new Date()): Promise<{ raised: nu
   if (settings['leave-by']) {
     if (!agendaMemo || +now - agendaMemo.at > 10 * 60_000) {
       const { loadAgenda } = await import('./agenda.server');
-      const a = await loadAgenda({ routes: read.insights.routes, live: read.insights.live, homeId: read.homeId, now });
+      const a = await loadAgenda({ routes: read.insights.routes, live: read.insights.live, homeId: read.homeId, now, routines: read.forecast.routines, cal: read.cal });
       agendaMemo = { at: +now, items: a.available ? a.items : [] };
     }
     agenda = agendaMemo.items;

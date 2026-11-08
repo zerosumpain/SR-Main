@@ -10,6 +10,7 @@ import { loadFrontier } from '$lib/deepdive/frontier';
 import { rankSources, mediaMix } from '$lib/deepdive/media-type';
 import { driveFileStem, existingStems, researchFolder } from '$lib/deepdive/to-drive';
 import { coerceGrounding, groundingOption, isGrounded } from '$lib/deepdive/grounding';
+import { isShared } from '$lib/deepdive/share';
 
 export const load: PageServerLoad = async (event) => {
   const { params } = event;
@@ -192,7 +193,8 @@ export const load: PageServerLoad = async (event) => {
       errorMessage: session.errorMessage,
       createdAt: session.createdAt.toISOString(),
       scopeLabel: describeScope(coerceScope(session.scope)),
-      shareToken: session.shareToken,
+      /** Whether a share link is live. Its token is stored hashed and never sent back. */
+      shared: isShared(session),
       /** Set only while paused — the phase a Resume would pick up at. */
       resumeFrom: session.resumeFrom,
       /** How an instant run reached the web; 'off' on every other tier. */

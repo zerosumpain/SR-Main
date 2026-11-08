@@ -17,7 +17,7 @@
   import BacklogEditor from './BacklogEditor.svelte';
   import { matchClaim, sharedTerms, stepPriority } from '$lib/selfimprove/backlog-board';
   import { STAGE_META, kindLabel, type WorkItem } from '$lib/selfimprove/board';
-  import type { BacklogEpic } from '$lib/selfimprove/epic-backlog';
+  import type { BacklogEpic } from '$lib/selfimprove/backlog-room';
   import { ago } from '$lib/daydream/format';
 
   import { COMMISSION_LABELS, type CommissionState } from '$lib/daydream/commissioning';

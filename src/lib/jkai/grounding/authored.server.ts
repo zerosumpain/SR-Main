@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { parse } from '@babel/parser';
 import { staticScan } from '$lib/security/authored-scan';
-import type { ToolResult } from '$lib/workflows/site-tools/registry-internal';
+import type { ToolResult } from '$lib/tools/registry-internal';
 
 export function validateHandler(code: string) {
   const scan = staticScan(code);
@@ -61,7 +61,7 @@ export function runAuthored(code: string, args: Record<string, unknown>, call: (
           if (opts.method && !['GET', 'HEAD'].includes(String(opts.method).toUpperCase())) throw new Error('Public fetch is read-only; compose an authorized platform tool for writes');
           const headers = new Headers(opts.headers);
           if ([...headers.keys()].some(k => /authorization|cookie|key|token/i.test(k))) throw new Error('Use platform.call for authenticated services');
-          const { guardedFetch } = await import('$lib/workflows/site-tools/tools/apis');
+          const { guardedFetch } = await import('$lib/tools/tools/apis');
           result = await guardedFetch(String(msg.args.url), { method: opts.method, headers: Object.fromEntries(headers) });
         } else throw new Error('Unknown sandbox capability');
         if (!ended) child.stdin.write(JSON.stringify({ id: msg.id, result }) + '\n');

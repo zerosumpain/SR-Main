@@ -65,6 +65,15 @@ export async function tavilyAccountUsage(now = Date.now()): Promise<TavilyAccoun
   return value;
 }
 
+/**
+ * The last figure fetched, without fetching. The search balancer weighs
+ * providers on every search and must not wait on Tavily's usage endpoint to do
+ * it; it reads this and refreshes in the background.
+ */
+export function cachedTavilyAccountUsage(): TavilyAccountUsage | null {
+  return cached?.value ?? null;
+}
+
 /** Test seam — drops the memo so a test does not wait a minute. */
 export function resetTavilyUsageCache(): void {
   cached = null;

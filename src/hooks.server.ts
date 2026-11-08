@@ -1,10 +1,28 @@
 import { privacyMaintenance } from '$lib/people/privacy-maintenance';
 import { building } from '$app/environment';
+// Daydream registers its chat toolset itself; see $lib/daydream/chat-tools.
+import '$lib/daydream/chat-tools';
+// The owner's private reads, trips and captures register theirs the same way
+// (overhaul plan 2026-10-28, slice 7a).
+import '$lib/owner-data/chat-tools';
+import '$lib/trips/chat-tools';
+import '$lib/captures/chat-tools';
+// Commissioning's quota reader and backlog intake, registered by the domains
+// that own them so $lib/jkai never imports them back (see $lib/jkai/commission/ports).
+import { registerCommissionQuota } from '$lib/daydream/commission-port';
+import { registerCommissionIntake } from '$lib/selfimprove/commission-port';
+registerCommissionQuota();
+registerCommissionIntake();
+// WhatsApp reply codes reach the tool catalogue through a port, so
+// $lib/integrations never imports $lib/tools (see reply-code-port).
+import { registerReplyCodeToolRuntime } from '$lib/tools/reply-code-runtime';
+registerReplyCodeToolRuntime();
+// The capability-gap queue (slice 7b): chat files a not-built-yet ask, the
+// backlog takes it in out of band. Registered by selfimprove, which owns the
+// backlog, so $lib/capabilities stays a leaf.
+import { registerCapabilityGapQueue, drainCapabilityGaps, GAP_DRAIN_INTERVAL_MS } from '$lib/selfimprove/capability-gaps';
+registerCapabilityGapQueue();
 import { startForgeScheduler, stopForgeScheduler } from '$lib/jkai/forge-scheduler';
-import {
-  startHeroTitlesScheduler,
-  stopHeroTitlesScheduler,
-} from '$lib/landing/hero-titles-scheduler';
 import {
   startDependencyMonitor,
   stopDependencyMonitor,
@@ -20,6 +38,9 @@ import { startConnectorWatch, stopConnectorWatch } from '$lib/connectors/watch';
 // Side-effect import: every integration adapter registers itself on load.
 // The barrel is maintained by the node-builder codegen.
 import '$lib/integrations/adapters';
+// Boots WhatsApp (delegated to the worker), the owner WhatsApp channel and
+// Home Assistant, as the workflows barrel used to on import.
+import '$lib/integrations/platform-boot';
 import { isPublicPath, isGuestAllowedPath } from '$lib/auth';
 import { requiredFor, satisfies } from '$lib/access/catalogue';
 import { requestHost } from '$lib/request-host';
@@ -41,15 +62,16 @@ import { actAsDeviceMember, actAsDeviceOwner, memberDevice, nativeDevice, native
 import { hasMaintenanceSecret } from '$lib/server/maintenance-auth';
 import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
-import { invokeLaneFor, hasJkaiServiceToken } from '$lib/server/invoke-auth';
+import { invokeLaneFor, hasJkaiServiceToken, presentsCommissionToken } from '$lib/server/invoke-auth';
+import { modelServiceAppFor } from '$lib/server/model-service-auth';
 import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
 import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
-import { runsService } from '$lib/workflows/service-role';
-import { initEventLoopMonitor, startBlockReporter } from '$lib/workflows/engine-runtime';
+import { runsService } from '$lib/server/service-role';
+import { initEventLoopMonitor, startBlockReporter } from '$lib/server/runtime-monitor';
 
 // Main's watchdog measures this process, independently of Workflows ownership.
 if (!building) {
@@ -67,9 +89,9 @@ if (!building) {
  * Returns a 429 Response when the caller is over, or null to proceed.
  */
 function rateLimited(pathname: string, method: string, callerKey: string): Response | null {
-  const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname));
+  const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname) && (!r.methods || r.methods.includes(method)));
   if (!limit || method === 'GET') return null;
-  const result = rateLimit(`${callerKey}:${pathname}`, {
+  const result = rateLimit(`${callerKey}:${limit.bucket ?? pathname}`, {
     capacity: limit.capacity,
     refillPerSecond: limit.refillPerSecond,
   });
@@ -87,8 +109,16 @@ function rateLimited(pathname: string, method: string, callerKey: string): Respo
 }
 
 // Expensive endpoints — apply per-user rate limits.
-// Pattern → { capacity (burst), refillPerSecond (steady-state) }.
-const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: number }> = [
+// Pattern → { capacity (burst), refillPerSecond (steady-state) }. `methods`
+// narrows an entry to those verbs; `bucket` shares one bucket across every
+// path the pattern matches (otherwise each path has its own).
+const RATE_LIMITS: Array<{
+  pattern: RegExp;
+  capacity: number;
+  refillPerSecond: number;
+  methods?: string[];
+  bucket?: string;
+}> = [
   // Synthesis is a per-toggle streamed LLM pass — costlier than a deep run kickoff
   // and user-triggerable in bursts. Must precede the broad /api/deepdive rule
   // because RATE_LIMITS.find() returns the FIRST matching pattern.
@@ -116,6 +146,23 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   // in that window could hold open at once.
   { pattern: /^\/api\/jkai\/run-snippet(\/|$)/, capacity: 20, refillPerSecond: 20 / 60 },
   { pattern: /^\/api\/projects\/share(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 }, // share-link create/revoke
+  // The phone's Drive uploads: one POST per file, so importing 200 photos (or
+  // "move from phone" draining an album) is 200 writes in a minute or two and
+  // broke on the 60/min lane below. Its own, larger bucket — 300 burst,
+  // refilling at 5/s — still caps a runaway retry loop, and Drive's quota is
+  // what bounds the bytes. Must precede the broad /api/native rule (first
+  // match wins). Only the upload paths: `files` exactly (not a file's own
+  // rename, delete or jkai calls) and the chunked `uploads` lane (phase 2).
+  //
+  // A chunk PUT of a resumable upload has its own bucket, ONE per device across
+  // every session: a 4 GiB video is 512 sequential 8 MiB PUTs and several files
+  // may go at once, so at ~10/s the 5/s refill above would 429 a long video
+  // part-way. 20/s sustained (160 MiB/s of pieces — more than any phone sends)
+  // with a 600 burst never starves a real upload and still caps a runaway loop;
+  // Drive's 6 open sessions, staging guard and quota bound the bytes. Must
+  // precede the entry below (first match wins).
+  { pattern: /^\/api\/native\/drive\/uploads\/[^/]+$/, methods: ['PUT'], capacity: 600, refillPerSecond: 20, bucket: 'native-drive-chunks' },
+  { pattern: /^\/api\/native\/drive\/(files|uploads(\/.*)?)$/, capacity: 300, refillPerSecond: 5 },
   // The phone's writes. Matched nothing until now: the per-device key was being
   // computed and handed to a table with no pattern for it, so `rateLimited`
   // returned null and the lane was uncapped. The limiter only fires on non-GET,
@@ -134,9 +181,6 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
 if (runsService('scheduler')) startForgeScheduler().catch((err) => {
   console.error('[hooks.server] Forge scheduler failed to start:', err);
 });
-
-// Start the landing-page hero-title regeneration scheduler
-if (runsService('scheduler')) startHeroTitlesScheduler();
 
 // Record the public journey and upstream provider state every five minutes,
 // including while nobody has /admin open.
@@ -206,6 +250,31 @@ import { startModelRouting, stopModelRouting } from '$lib/routing/engine';
 // in a non-terminal status before this existed, the oldest for four months. CI
 // deploys on every merge, so the exposure is continuous.
 import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
+// Durable family game rooms: wakes async games whose deadline passed, drops
+// idle ones from memory and deletes rows past retention. Inert until a game
+// declares `durable` (spec 2026-10-22-family-games-durable-rooms.md).
+// Imported only where it runs: the registry pulls in every game module.
+if (runsService('background')) {
+  void import('$lib/games/rooms.server')
+    .then((m) => m.startGameRoomSweep())
+    .catch((err) => console.error('[hooks.server] game room sweep:', err));
+}
+// Re-enabled custom tools (plan P2-0a): the web process only, and only the
+// reviewed allow-list in $lib/tools/custom-tools-enabled. JKAI_CUSTOM_TOOLS=off
+// is the kill switch; =on loads them whatever the role (the local preview,
+// whose Main runs as 'builder' so no WhatsApp or engines start).
+import { resolveServiceRole } from '$lib/server/service-role';
+import { keepsOwnNativeCache } from '$lib/drive/native-preview-cache';
+const customToolsSwitch = (process.env.JKAI_CUSTOM_TOOLS ?? '').trim().toLowerCase();
+if (!building && customToolsSwitch !== 'off' && (customToolsSwitch === 'on' || resolveServiceRole() === 'web')) {
+  void import('$lib/tools/custom-tool-loader')
+    .then((m) => m.loadCustomTools())
+    .catch((err) => console.error('[hooks.server] custom tools:', err));
+}
+// Gaps a restart left queued; the usual path drains right after the chat call.
+if (!building && runsService('background')) {
+  setInterval(() => void drainCapabilityGaps(), GAP_DRAIN_INTERVAL_MS).unref?.();
+}
 if (runsService('background')) {
   startDatastoreReaper();
   startSelfImprovementSeeds();
@@ -242,7 +311,6 @@ if (runsService('background')) {
 }
 
 // Graceful shutdown — stop schedulers so process can exit on SIGTERM
-import { engine as workflowEngine } from '$lib/workflows';
 
 let shuttingDown = false;
 async function gracefulShutdown() {
@@ -250,18 +318,10 @@ async function gracefulShutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log('[hooks.server] Shutting down...');
-  // #10 GRACEFUL DRAIN: let in-flight workflow runs finish (bounded) BEFORE we
-  // tear down schedulers and exit, so a deploy mid-run doesn't orphan it.
-  // Bounded at 25s so shutdown can never hang past the supervisor's kill grace.
-  try {
-    await workflowEngine.drain(25_000);
-  } catch (err) {
-    console.warn('[hooks.server] engine drain failed:', err);
-  }
+  // No workflow drain: this process runs no workflows (SR-Workflows does).
   stopHeartbeatEngine();
   stopScheduledEngine();
   stopForgeScheduler();
-  stopHeroTitlesScheduler();
   stopDependencyMonitor();
   stopHealthWatch();
   stopPushDispatch();
@@ -270,6 +330,14 @@ async function gracefulShutdown() {
   stopBriefingEngine();
   stopConnectorWatch();
   stopModelRouting();
+  // Durable game rooms write behind the move; save what is still unsaved
+  // (bounded) so a deploy restart does not roll a room back.
+  try {
+    const { drainRoomWrites } = await import('$lib/games/rooms.server');
+    await drainRoomWrites(2_000);
+  } catch (err) {
+    console.error('[hooks.server] game room drain failed:', err);
+  }
   process.exit(0);
 }
 
@@ -480,7 +548,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
 
   // JKAI's small ambient/configuration pages were folded into the two places
   // they conceptually belong: background intelligence lives in Daydreams,
-  // while prompts live beside the agents they shape. Keep exact redirects for
+  // while prompts have their own page in SR-Jkai-Core. Keep exact redirects for
   // old bookmarks and notification payloads, but only the destination pages
   // are presented as features. Existing query parameters are retained unless
   // they would override the destination tab.
@@ -489,7 +557,6 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     ['/jkai/monitors', '/jkai/daydreams/watches'],
     ['/jkai/improvement', '/jkai/develop/improvement'],
     ['/jkai/doctor', '/jkai/develop/doctor'],
-    ['/jkai/prompts', '/jkai/agents?tab=prompts'],
     ['/jkai/research', '/research'],
     // The household moved to its own top-level section, /home (2026-09-25).
     ['/jkai/voice', '/home/voice'],
@@ -550,6 +617,21 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // The handler validates a dedicated, audience-bound credential itself.
 
   if (isPublicPath(pathname)) {
+    return resolve(event);
+  }
+
+  // Main's owner-only OpenID provider ($lib/server/oidc/provider): Immich signs
+  // the owner in with this site's session. These four authenticate themselves
+  // (discovery and keys are public metadata; token checks the client secret,
+  // the sealed code and the PKCE verifier; userinfo checks its bearer) and all
+  // 404 while the provider is unconfigured. EXACT paths. /oauth/authorize is
+  // deliberately NOT here: it needs the session and the owner gate below.
+  if (
+    pathname === '/.well-known/openid-configuration' ||
+    pathname === '/oauth/jwks' ||
+    pathname === '/oauth/token' ||
+    pathname === '/oauth/userinfo'
+  ) {
     return resolve(event);
   }
 
@@ -761,8 +843,30 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // tree, so nothing new under /api/platform/tools is reachable by existing.
   if (
     ((pathname === '/api/platform/tools/invoke' && event.request.method === 'POST') ||
-      (pathname === '/api/platform/tools/catalogue' && event.request.method === 'GET')) &&
+      (pathname === '/api/platform/tools/catalogue' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/daydream/briefing' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/briefing/context' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/jkai/today' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/backlog/intake' && event.request.method === 'POST')) &&
     invokeLaneFor(event.request) !== 'none'
+  ) {
+    return resolve(event);
+  }
+  // The commission credential reaches exactly one path and verb, and the route
+  // then opens only the commission lane with it (`presentsCommissionToken`).
+  if (pathname === '/api/platform/tools/invoke' && event.request.method === 'POST' && presentsCommissionToken(event.request)) {
+    return resolve(event);
+  }
+
+  // The model-plumbing lane: an extracted application (Drive, Health, Policy
+  // Engine, DfE Data Strategy, Data Standard Designer) reading its model
+  // configuration and sending LLM usage into the cost ledger. One credential
+  // per application (/server/model-service-auth), re-checked in each
+  // handler. Named one path and verb at a time, like the tool lane above.
+  if (
+    ((pathname === '/api/platform/models/config' && event.request.method === 'GET') ||
+      (pathname === '/api/platform/models/usage' && event.request.method === 'POST')) &&
+    modelServiceAppFor(event.request) !== null
   ) {
     return resolve(event);
   }
@@ -936,6 +1040,12 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     throw redirect(302, `/login?callbackUrl=${callbackUrl}`);
   }
 
+  // Signing in to another app with this site ($lib/server/oidc/provider): a
+  // SIGNED-IN non-owner reaches the handler so it can say "only the owner"
+  // with a 403, rather than being bounced to `/` with no explanation. Session
+  // already required above; the handler gives a code to an owner only.
+  if (pathname === '/oauth/authorize') return resolve(event);
+
   // Authed pages are owner-only by default. A guest on the login allow-list can
   // sign in but only reach public pages plus any guest-allowed prefix
   // (isGuestAllowedPath — empty by default). /jkai, /admin, /live, /deepdive, the
@@ -1010,7 +1120,11 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  if (event.url.pathname.startsWith('/api/native/')) response.headers.set('Cache-Control', 'private, no-store');
+  // The phone's API is never cached — except the Drive previews, whose
+  // private, ETag-keyed headers are what let the app keep a tile instead of
+  // fetching it again (SR-Drive sets them; the relay refuses anything public).
+  const keepsPreviewCache = keepsOwnNativeCache(event.route.id, response.status, response.headers.get('Cache-Control'));
+  if (event.url.pathname.startsWith('/api/native/') && !keepsPreviewCache) response.headers.set('Cache-Control', 'private, no-store');
   // Defence-in-depth for share links: any /projects/* response opened with a
   // share token (?t=) must never be edge-cached, indexed, or leak the token
   // onward via Referer — even if a route handler forgets. (Per-route guards

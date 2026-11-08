@@ -16,11 +16,13 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import { listMcpTools, todayLine } from './server';
-import { executeTool } from '$lib/workflows/site-tools/registry';
-import { publishToolStep, requestToolConfirmation } from '$lib/jkai/tool-step-bus';
-import { isDestructive, describeDestructiveAction } from '$lib/workflows/chat/confirmation-gate';
-import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/workflows/chat/tool-summary';
+import { executeTool } from '$lib/tools/registry';
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
+import { hasToolConfirmer, publishToolStep, requestToolConfirmation } from '$lib/jkai/tool-step-bus';
+import { isDestructive, describeDestructiveAction } from '$lib/jkai/chat/confirmation-gate';
+import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/jkai/chat/tool-summary';
 import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
+import { withoutDisplay } from '$lib/jkai/grounding/evidence';
 
 // Every registered tool is exposed via MCP. We don't gate at the MCP layer.
 
@@ -28,16 +30,12 @@ import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
 // it so unit tests (which use plain process.env via beforeAll) don't need to
 // stub the $env module. In SvelteKit runtime, `env` wins; in vitest,
 // `process.env` is the fallback.
-//
-// `HERMES_BRIDGE_SECRET` is the OLD name, read second so a host that has not
-// yet had the new one written keeps working. Drop the fallback once both
-// hosts' .env files carry SERVICE_BRIDGE_SECRET — see $lib/config/service-secret.
 async function resolveSecret(): Promise<string> {
-  const fromProcess = process.env.SERVICE_BRIDGE_SECRET ?? process.env.HERMES_BRIDGE_SECRET;
+  const fromProcess = process.env.SERVICE_BRIDGE_SECRET;
   if (fromProcess) return fromProcess;
   try {
     const mod = await import('$env/dynamic/private');
-    return mod.env.SERVICE_BRIDGE_SECRET ?? mod.env.HERMES_BRIDGE_SECRET ?? '';
+    return mod.env.SERVICE_BRIDGE_SECRET ?? '';
   } catch {
     return '';
   }
@@ -376,6 +374,13 @@ export async function dispatchJsonRpc(
             // their SSE/requester channel by this key, not by conversationId —
             // on a canvas chat the two differ.
             busKey: busKey || undefined,
+            // Attended only when a confirmer is actually subscribed on this
+            // bus: someone is there to answer the gate above. `busKey` alone
+            // is just a string from the call's own arguments (`workflow_id`)
+            // or meta, so naming one must not make a headless client attended.
+            principal: busKey && hasToolConfirmer(busKey)
+              ? { principalId: 'owner', via: 'session' as const, attended: true, jobId: `mcp:${busKey}`.slice(0, 128), purpose: 'mcp' }
+              : unattendedPrincipal('mcp'),
             emit: (msg: string) => {
               // Heavyweight tools (workflow_create, generateWorkflow's internal
               // loop) can run for minutes. The Streamable HTTP transport buffers
@@ -457,7 +462,8 @@ export async function dispatchJsonRpc(
                 content: [
                   {
                     type: 'text',
-                    text: typeof out === 'string' ? out : JSON.stringify(out),
+                    // `display` (thumbnails) is for a chat screen, not an MCP client's model.
+                    text: typeof out === 'string' ? out : JSON.stringify(out, withoutDisplay),
                   },
                   ...datestampContent(name, args),
                 ],

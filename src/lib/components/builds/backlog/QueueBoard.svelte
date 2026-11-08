@@ -36,7 +36,7 @@
     type CardSort,
   } from '$lib/selfimprove/backlog-board';
   import { BACKLOG_KINDS, KIND_META, STAGE_META, WORK_STAGES, kindLabel, type WorkStage } from '$lib/selfimprove/board';
-  import type { BacklogEpic } from '$lib/selfimprove/epic-backlog';
+  import type { BacklogEpic } from '$lib/selfimprove/backlog-room';
   import { ago } from '$lib/daydream/format';
 
   interface Props {

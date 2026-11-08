@@ -33,7 +33,7 @@ vi.mock('./grants', () => ({
 }));
 // chat-access.server reaches for these at import; nothing here calls them.
 vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null }));
-vi.mock('$lib/workflows/chat/job-store', () => ({ getJob: () => null }));
+vi.mock('$lib/jkai/chat/job-store', () => ({ getJob: () => null }));
 
 const { withDevice, withNativeAccess } = await import('./native-handler');
 const { actAsDeviceMember, memberDevice, nativeDevice } = await import('./native-gate');

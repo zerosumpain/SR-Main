@@ -11,7 +11,7 @@
 // first thing it guesses wrong is "you have not left the house in three days"
 // when the truth is that homeserv was down.
 
-import { and, desc, eq, gte, inArray, isNotNull, lt, max } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, max } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamTrail, daydreamPlaces } from '$lib/db/schema';
 import {
@@ -26,7 +26,6 @@ import {
   DEFAULT_SUBJECT,
   MAX_USABLE_ACCURACY_M,
   RAIL_MIN_FIXES,
-  TRAIL_RETENTION_DAYS,
   errMsg,
   type IncomingFix,
   type MovementMode,
@@ -78,6 +77,7 @@ function resolveIsHome(haState: string | null | undefined, distanceHomeKm: numbe
 // Two copies of this query with different ordering would put two different
 // houses into distance_home_km and the weather fallback.
 import { getHomePlace } from './places';
+import { trailChanged } from './trail-generation';
 
 /**
  * The most recent positioned fixes, for deriving speed and spotting rail.
@@ -154,7 +154,7 @@ export async function recordFix(
       ? Math.round(reported * 10) / 10
       : speedKmhBetween(prev ? { ts: prev.ts, lat: prev.lat, lon: prev.lon } : null, fix.lat, fix.lon, ts);
 
-  let mode = inferMode(speedKmh);
+  let mode = fix.mode ?? inferMode(speedKmh);
   if (mode === 'vehicle') {
     // `priors` is newest-first; looksLikeRail wants newest-last, and the
     // current fix is the newest of all.
@@ -196,6 +196,7 @@ export async function recordFix(
       readingAgeS: fix.readingAgeS ?? null,
     })
     .returning({ id: daydreamTrail.id, ts: daydreamTrail.ts, isHome: daydreamTrail.isHome });
+  trailChanged();
 
   if (!row) throw Object.assign(new Error('A pre-deletion companion fix was discarded'), { name: 'CompanionDeletionFloor' });
 
@@ -229,6 +230,7 @@ export async function recordGap(
     mode: 'unknown',
     note: reason.slice(0, 500),
   });
+  trailChanged();
 }
 
 /** True when a fix has landed recently enough that the poll floor can stand
@@ -273,17 +275,6 @@ export async function latestTsBySource(
     if (r.ts) out.set(r.subject, r.ts instanceof Date ? r.ts : new Date(r.ts));
   }
   return out;
-}
-
-/** Drop raw fixes past the retention horizon. Places, which are the point of
- *  having kept them, are aggregates and survive. */
-export async function pruneTrail(retentionDays = TRAIL_RETENTION_DAYS): Promise<number> {
-  const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
-  const deleted = await db
-    .delete(daydreamTrail)
-    .where(lt(daydreamTrail.ts, cutoff))
-    .returning({ id: daydreamTrail.id });
-  return deleted.length;
 }
 
 /**
@@ -366,7 +357,7 @@ export async function pollHomeAssistant(
   personEntity = 'person.john',
 ): Promise<{ fix: IncomingFix } | { error: string }> {
   try {
-    const { getHomeAssistantService } = await import('$lib/workflows/homeassistant/service');
+    const { getHomeAssistantService } = await import('$lib/integrations/homeassistant/service');
     const res = await getHomeAssistantService().queryState(personEntity);
     if (!res.success || !res.data) {
       return { error: `HA unreachable or entity missing: ${res.error ?? 'no data'}` };
@@ -392,7 +383,7 @@ export async function pollAllSubjects(
 ): Promise<Map<string, { fix: IncomingFix } | { error: string }>> {
   const out = new Map<string, { fix: IncomingFix } | { error: string }>();
   try {
-    const { getHomeAssistantService } = await import('$lib/workflows/homeassistant/service');
+    const { getHomeAssistantService } = await import('$lib/integrations/homeassistant/service');
     const res = await getHomeAssistantService().queryAllStates();
     if (!res.success || !Array.isArray(res.data)) {
       const error = `HA unreachable: ${res.error ?? 'no data'}`;

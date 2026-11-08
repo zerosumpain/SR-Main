@@ -44,7 +44,10 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   {
     id: 'chat',
     label: 'jkai',
-    description: 'A turn that finished while you were away, or one waiting on you.',
+    // The reply-ready budget (decision 16) is stated here because this is the
+    // line the phone's settings screen shows; keep it in step with Core's
+    // REPLY_PUSH_BUDGET_LINE in $lib/workflows/chat/reply-push (a test pins it).
+    description: 'A turn that finished while you were away, or one waiting on you. Reply-ready pushes for turns sent from the phone: at most 5 a day, one per thread per 10 minutes; the rest wait in the thread.',
     // NOT WhatsApp by default, and this is the one default that is not simply
     // "keep today's behaviour". These alerts previously reached NOTHING — the
     // push shim they went through was empty — and chat already escalates to
@@ -57,7 +60,10 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   {
     id: 'build',
     label: 'Builds',
-    description: 'Autonomous builds and workflow runs reaching a terminal state.',
+    // The jkai push budget (decision 16) is stated here because this is the
+    // line the phone's settings screen shows; keep it in step with
+    // DELIVERY_PUSH_BUDGET_LINE in $lib/jkai/delivery-push (a test pins it).
+    description: 'Autonomous builds and workflow runs reaching a terminal state. Commissioned-build stage pushes: at most 5 a day, one per build per 15 minutes, except a new stage that needs you or a shipped build; the rest are noted in the thread.',
     whatsapp: true,
     native: true,
     minIntervalSeconds: 0,
@@ -111,6 +117,17 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     minIntervalSeconds: 24 * 60 * 60,
   },
   {
+    id: 'wishlist',
+    label: 'Wish list',
+    description: 'A listing that meets what you asked for, or a price you are watching that fell.',
+    whatsapp: true,
+    native: true,
+    // No floor: the sweep already folds one item's finds into one message and
+    // only re-alerts a listing when its price falls again, so a second message
+    // is always news.
+    minIntervalSeconds: 0,
+  },
+  {
     id: 'connections',
     label: 'Connections that need you',
     description: 'An account that needs signing in again, or a service that stopped working.',
@@ -140,6 +157,40 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
     // Phone only: these are "have a look" nudges, and each kind stays off
     // until it is switched on at /home/people. Every raise carries a dedupe
     // key per occurrence, so no floor is needed on the category.
+    whatsapp: false,
+    native: true,
+    minIntervalSeconds: 0,
+  },
+  {
+    id: 'reminder',
+    label: 'Reminders',
+    description: 'Reminders you asked for — "Do it for me" on a daydream note, at the time it said.',
+    // Both: a reminder you asked for has to arrive wherever you are. Each one
+    // is a single scheduled event with its own key, so there is no floor.
+    whatsapp: true,
+    native: true,
+    minIntervalSeconds: 0,
+  },
+  {
+    id: 'captures',
+    label: 'Captures',
+    description: 'A recording from the phone has been analysed and is ready to review.',
+    // Phone only: the review screen is on the phone, and a capture is the
+    // owner's own action, not news he needs chasing on WhatsApp. One raise per
+    // capture (keyed by its id), so no floor.
+    whatsapp: false,
+    native: true,
+    minIntervalSeconds: 0,
+  },
+  {
+    id: 'drive',
+    label: 'Drive',
+    description: 'Attachments saved from important mail, and what jkai found in them.',
+    // Phone only. Raised by SR-Jkai-Core's mail-filing rules, one per email
+    // (keyed by the message), with an `sr://drive?…` url — and the WhatsApp
+    // text prefixes the site origin onto any url, which turns `sr://` into a
+    // dead link. The entry is byte-identical in Core's catalogue: Core maps an
+    // unknown category to `system`.
     whatsapp: false,
     native: true,
     minIntervalSeconds: 0,

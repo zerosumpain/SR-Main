@@ -81,8 +81,8 @@ An entity's `summary` is an LLM-distilled ~200-300 char description. Instead of 
 | `src/lib/jkai/intel/graph.ts` | Entity graph persistence (extract → persist → embed) |
 | `src/lib/jkai/intel/analytics/insights.ts` | Rule-based detectors (10 kinds) |
 | `src/lib/knowledge/search.ts` | `knowledge_search` — fan-out across 6 stores |
-| `src/lib/workflows/site-tools/tools/knowledge.ts` | MCP tool definition for `knowledge_search` |
-| `src/lib/workflows/site-tools/tools/intel-graph.ts` | MCP tool definitions for all `intel_*` tools |
+| `src/lib/tools/tools/knowledge.ts` | MCP tool definition for `knowledge_search` |
+| `src/lib/tools/tools/intel-graph.ts` | MCP tool definitions for all `intel_*` tools |
 | `src/lib/jkai/intel/embed.ts` | Embedding generation for entities + notes |
 | `src/lib/jkai/intel/extract.ts` | LLM-based entity extraction from note text |
 | `src/lib/jkai/intel/confirm-link.ts` | Manual link confirmation endpoint |

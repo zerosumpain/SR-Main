@@ -50,7 +50,7 @@
     if (t.source === 'household') return `${mins(t.median)} · from ${t.basis}’s trips`;
     return `${mins(t.median)} ${t.mode === 'vehicle' ? 'by car' : 'on foot'} · routed, nobody has made this trip yet`;
   };
-  const WHY = { previous: 'after the last thing', now: 'from where they are', home: 'from home' } as const;
+  const WHY = { previous: 'after the last thing', now: 'from where they are', routine: 'from where they usually are then', home: 'from home' } as const;
   const selected = (c: string) => {
     const v = calendarMap[c];
     return v == null ? 'auto' : v.length ? v.join(',') : 'nobody';
@@ -153,7 +153,8 @@
     border-top: 1px solid var(--line);
   }
   li[data-issue='tight'],
-  li[data-issue='overlap'] {
+  li[data-issue='overlap'],
+  li[data-issue='early'] {
     box-shadow: inset 3px 0 0 var(--accent);
     padding-left: 8px;
   }

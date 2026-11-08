@@ -21,7 +21,7 @@ import {
   designSystemPromptBlock,
   type BuildPromptMode,
 } from '$lib/jkai/prompt';
-import { getToolsetManifest } from '$lib/workflows/site-tools/registry';
+import { getToolsetManifest } from '$lib/tools/registry';
 import { BUILDER_SOCKET_PATH } from '$lib/jkai/builder-client';
 
 /**

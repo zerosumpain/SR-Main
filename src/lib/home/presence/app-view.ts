@@ -24,14 +24,15 @@
 // Every view also says what the app may OFFER the person beyond the family
 // (`access`: chat, news, … — `$lib/server/app-access`), and, for a member who
 // has just asked, carries the one-time code that pairs their phone with the
-// site (`sitePair`). That is the only way a member's code is ever minted: the
-// owner mints his at /api/admin/native-devices, behind his session; a member
-// has no page that could, so the push answers the app's request instead.
+// site (`sitePair`). The owner mints codes from a person's page under
+// /admin/access, behind his session; a member has no page that could, so the
+// push answers the app's request instead — with the same held code
+// (`$lib/server/pair-codes`), so neither cancels the other's.
 
 import { and, asc, gte, inArray, isNotNull, lt } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { allowedUser, daydreamPlaces, daydreamTrail } from '$lib/db/schema';
-import { companionToken, companionUrl, fetchHousehold, loadCompanionUsers, type HouseholdUser } from './companion';
+import { companionToken, companionUrl, fetchHouseholdUsers, loadCompanionUsers, type HouseholdUser } from './companion';
 import { inferMode } from './cluster';
 import { distanceM } from './geo';
 import { listPanelPlaces } from './places';
@@ -40,8 +41,9 @@ import type { HouseholdMember } from './members';
 import { nowStatus, nowSub, type NowStatus } from './now';
 import { ABSURD_SPEED_KMH, LOCAL_TZ, MAX_USABLE_ACCURACY_M, activeLabels, errMsg, localDayStart } from './types';
 import { peopleViewerForEmail, scopeHousehold, type PeopleViewer, type ScopedPresence } from './viewer';
+import { loadHoldContext, ownerSubjects } from './location-hold.server';
 import { appAccessForEmail, type AppAccess } from '$lib/server/app-access';
-import { createPairingCode, isPairingCodeLive } from '$lib/server/native-auth';
+import { forgetPairingCode, pairingCode, resetPairingCodes, REUSE_FLOOR_MS } from '$lib/server/pair-codes';
 
 /** Two fixes further apart than this are not joined: the line would be a guess. */
 export const TRAIL_GAP_S = 600;
@@ -393,21 +395,27 @@ function withWatch(view: AppPeopleView, watch: WatchedPlace[] | undefined): AppP
 
 /** How recent `sitePairWanted` must be for the push to answer it. */
 export const SITE_PAIR_WANTED_MS = 15 * 60_000;
-/** A cached code with less life than this left is replaced, not re-sent. */
-export const SITE_PAIR_REUSE_FLOOR_MS = 2 * 60_000;
-
 /**
- * Codes minted by this process, by email, so a push every 30 s re-sends the
- * code the phone may be halfway through redeeming instead of rotating it —
- * `createPairingCode` deletes the email's previous code, so a fresh one each
- * cycle would kill the one on the screen. Lost on restart, which costs one
- * rotation, and the phone simply picks up the new code on its next read.
+ * Who in a view the pilot may lay a live point over: companion phones the
+ * view shows, sharing, and not held (`location-hold`). PURE.
  */
-const sitePairCodes = new Map<string, { code: string; expiresAt: Date }>();
+export function liveSources(
+  members: readonly HouseholdMember[],
+  view: Pick<AppHouseholdView, 'people'>,
+  held: ReadonlySet<string>,
+): Array<{ subject: string; email: string }> {
+  return members
+    .filter((m) => m.source === 'companion' && !!m.email && !held.has(m.subject))
+    .filter((m) => view.people.some((p) => p.subject === m.subject && p.status !== 'off'))
+    .map((m) => ({ subject: m.subject, email: m.email as string }));
+}
 
-/** For tests: forget every cached code. */
+/** A held code with less life than this left is replaced, not re-sent (`pair-codes`). */
+export const SITE_PAIR_REUSE_FLOOR_MS = REUSE_FLOOR_MS;
+
+/** For tests: forget every held code (`$lib/server/pair-codes`). */
 export function resetSitePairCache(): void {
-  sitePairCodes.clear();
+  resetPairingCodes();
 }
 
 /**
@@ -449,20 +457,15 @@ async function sitePairFor(
   wanted: string | null | undefined,
   now: Date,
 ): Promise<SitePair | null> {
-  if (access.owner || !(access.chat || access.news || access.games) || !sitePairWanted(wanted, now)) {
-    sitePairCodes.delete(email);
+  if (access.owner || !(access.chat || access.news || access.games || access.drive) || !sitePairWanted(wanted, now)) {
+    forgetPairingCode(email, 'pair');
     return null;
   }
   try {
-    let held = sitePairCodes.get(email);
-    const reusable =
-      !!held &&
-      held.expiresAt.getTime() - now.getTime() > SITE_PAIR_REUSE_FLOOR_MS &&
-      (await isPairingCodeLive(held.code));
-    if (!held || !reusable) {
-      held = await createPairingCode(email);
-      sitePairCodes.set(email, held);
-    }
+    // The held code (`pair-codes`): a push every 30 s re-sends the code the
+    // phone may be halfway through redeeming, and the one the owner just put
+    // on his screen for them, instead of rotating it.
+    const held = await pairingCode(email, 'pair', { now });
     return { server: siteOrigin(), code: held.code, expiresAt: held.expiresAt.toISOString() };
   } catch (err) {
     console.error('[app-view] could not mint a site pairing code:', errMsg(err));
@@ -611,7 +614,7 @@ export async function pushAppViews(
 ): Promise<AppViewsResult | null> {
   const token = companionToken();
   if (!token) return null;
-  const snapshot = await fetchHousehold('', fetchImpl).catch(() => null);
+  const snapshot = await fetchHouseholdUsers(fetchImpl).catch(() => null);
   if (!snapshot?.revision) return null;
   const users = snapshot.users;
 
@@ -673,9 +676,17 @@ export async function pushAppViews(
     const view: AppHouseholdView = { generatedAt: now.toISOString(), viewer: 'none', people: [], access: accessOf(email) };
     views.push({ email, view: household && watch ? { ...view, watch } : view });
   }
+  // Held people are never live sources: the pilot lays a source's newest
+  // point over its pin, and the point from just before a hold can be newer
+  // than the held pin's jittered "seen" time.
+  let held: ReadonlySet<string> = new Set();
   if (viewers.length) {
     const dayStart = localDayStart(now);
-    const [{ members: presence }, positions] = await Promise.all([loadHousehold(), livePositions().catch(() => [])]);
+    const [{ members: presence }, positions, hold] = await Promise.all([
+      loadHousehold(),
+      livePositions().catch(() => []),
+      loadHoldContext(members, now),
+    ]);
     const scopedBy = viewers.map((v) => ({ ...v, scoped: scopeHousehold(presence, v.viewer) }));
     const wanted = [...new Set(scopedBy.flatMap((v) => trailSubjects(v.scoped)))];
     const trails = await loadTodayTrails(wanted, dayStart);
@@ -685,6 +696,14 @@ export async function pushAppViews(
       positions.map((p) => p.subject),
       new Date(now.getTime() - MOVING_WINDOW_S * 1000),
     ).catch(() => new Map<string, TrailPoint[]>());
+    // The owner's location hold: everyone but the owner sees him at the held
+    // point, fresh and still (`location-hold`). Built once; the owner's own
+    // view — and so his phone's — reads the real trail.
+    if (hold) held = new Set(ownerSubjects(members));
+    const heldView = hold?.apply<TrailPoint>({ presence, positions, recent }) ?? null;
+    if (heldView) {
+      for (const v of scopedBy) if (v.viewer.kind !== 'owner') v.scoped = scopeHousehold(heldView.presence, v.viewer);
+    }
     const placeIds = [...new Set([...trails.values()].flat().map((p) => p.placeId).filter((x): x is string => !!x))];
     const labels = await loadLabels(placeIds);
     const history = await loadHistory(wanted, dayStart, now);
@@ -698,9 +717,9 @@ export async function pushAppViews(
           self: members.find((m) => m.email === v.email)?.subject ?? null,
           scoped: v.scoped,
           names,
-          positions,
+          positions: heldView && v.viewer.kind !== 'owner' ? heldView.positions : positions,
           trails,
-          recent,
+          recent: heldView && v.viewer.kind !== 'owner' ? heldView.recent : recent,
           labels,
           history,
           dayStart,
@@ -720,7 +739,7 @@ export async function pushAppViews(
     const res = await fetchImpl(`${companionUrl()}/api/apple/household/views`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ views: withPreviews.map(v => ({ ...v, sources: members.filter(m => m.source === 'companion' && m.email && v.view.people.some(p => p.subject === m.subject && p.status !== 'off')).map(m => ({ subject: m.subject, email: m.email })) })), revision: snapshot.revision }),
+      body: JSON.stringify({ views: withPreviews.map((v) => ({ ...v, sources: liveSources(members, v.view, held) })), revision: snapshot.revision }),
       signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
     });
     if (!res.ok) return { stored: 0, refused, error: `views answered ${res.status}` };

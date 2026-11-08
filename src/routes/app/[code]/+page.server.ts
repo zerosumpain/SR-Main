@@ -1,0 +1,44 @@
+import { error } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
+import { qrDataUrl } from '$lib/server/qr';
+import type { PageServerLoad } from './$types';
+import { APP_COOKIE, appCookie, joinDisplayName, verifyJoinCode } from '$lib/server/adhoc-install';
+import { joinCandidates } from '$lib/server/app-devices';
+import { openInAppLink } from '$lib/server/app-links';
+
+/**
+ * /app/<code> — the link the owner sends one person (`$lib/server/adhoc-install`).
+ * Public (`/app` in PUBLIC_PATHS); the code is the permission. On an iPhone
+ * it walks through the one-time profile; anywhere else it shows a QR code to
+ * open it on the phone. Either way it leaves the cookie that lets /app — the
+ * address to come back to — recognise this phone's Safari.
+ */
+export const load: PageServerLoad = async ({ params, url, request, cookies, setHeaders }) => {
+  setHeaders({ 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow' });
+  const link = verifyJoinCode(params.code, env.AUTH_SECRET, await joinCandidates());
+  if (!link || !env.AUTH_SECRET) throw error(404, 'This link has expired. Ask John for a new one.');
+  const slug = link.slug;
+
+  cookies.set(APP_COOKIE, appCookie(slug, env.AUTH_SECRET), {
+    path: '/',
+    httpOnly: true,
+    secure: url.protocol === 'https:',
+    sameSite: 'lax',
+    maxAge: 400 * 24 * 60 * 60,
+  });
+
+  const ua = request.headers.get('user-agent') ?? '';
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && /Mobile\//.test(ua));
+  // Chrome, Firefox and in-app browsers on iOS cannot hand a profile to Settings.
+  const safari = ios && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram|WhatsApp|Line\//.test(ua);
+  const href = `${url.origin}/app/${params.code}`;
+  return {
+    name: joinDisplayName(slug),
+    code: params.code,
+    device: safari ? ('safari' as const) : ios ? ('ios-other' as const) : ('elsewhere' as const),
+    link: href,
+    qr: ios ? null : await qrDataUrl(href),
+    // Already installed: the app opens and connects this phone as them.
+    open: openInAppLink(params.code, url.origin),
+  };
+};

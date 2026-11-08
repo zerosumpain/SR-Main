@@ -57,7 +57,7 @@ const FAILED_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>(['failed']);
 export const daydreamImprove: ActivityHandler = {
   name: NAME,
   description:
-    'The self-improvement run: mines recent questions into the improvement backlog (the one intake queue, shared with the think loop and the workflow doctor); grows the API catalogue; repairs existing runtime tools behind verify.ts; hands backlog items whose brief the owner accepted to the autonomous builder as a change request (or to the monitor generator for a watch); and only then measures tool-call efficiency. One improvement_runs record per night. Skips when the owner has been active in the last hour.',
+    'The self-improvement run: mines recent questions into the improvement backlog (the one intake queue, shared with the think loop and the workflow doctor); grows the API catalogue; repairs existing runtime tools behind verify.ts; turns backlog items whose brief the owner accepted into /jkai/develop development deliveries (or hands a watch to the monitor generator); and only then measures tool-call efficiency. One improvement_runs record per night. Skips when the owner has been active in the last hour.',
   // Daily. The window below is what actually decides when it lands; the cadence
   // only stops it running twice in one night.
   defaultCadenceSeconds: 86_400,
@@ -99,7 +99,7 @@ export const daydreamImprove: ActivityHandler = {
     let data;
     try {
       // The two builders the engine may not import for itself — the
-      // autonomous repo build behind `/jkai/builds`, and the monitor
+      // development delivery behind `/jkai/develop`, and the monitor
       // generator. Injected here because `$lib/heartbeat -> $lib/jkai` is a
       // one-way edge and `$lib/selfimprove -> $lib/jkai` would be a cycle.
       ({ runId, data } = await runImprovementNow({ trigger: 'cron', lanes: liveBuildLanes(), isUserActive: () => isUserActive() }));
@@ -118,7 +118,7 @@ export const daydreamImprove: ActivityHandler = {
     const repaired = data.actions.filter((a) => a.kind === 'tool_repaired').length;
     const queued = data.actions.filter((a) => a.kind === 'backlog_added').length;
     const prs = data.actions.filter((a) => a.kind === 'pr_opened').length;
-    const builds = data.actions.filter((a) => a.kind === 'change_requested').length;
+    const builds = data.actions.filter((a) => a.kind === 'delivery_started' || a.kind === 'change_requested').length;
     const watches = data.actions.filter((a) => a.kind === 'watch_created').length;
     const policy = data.actions.filter(
       (a) => a.kind === 'policy_published' || a.kind === 'policy_kept' || a.kind === 'policy_reverted',
@@ -129,7 +129,7 @@ export const daydreamImprove: ActivityHandler = {
       `${shipped} tool(s) shipped`,
       ...(repaired ? [`${repaired} repaired`] : []),
       `${queued} queued`,
-      ...(builds ? [`${builds} change request(s) → /jkai/develop`] : []),
+      ...(builds ? [`${builds} delivery(ies) → /jkai/develop`] : []),
       ...(watches ? [`${watches} watch(es)`] : []),
       ...(prs ? [`${prs} draft PR(s)`] : []),
       ...(policy ? [`${policy} policy action(s)`] : []),

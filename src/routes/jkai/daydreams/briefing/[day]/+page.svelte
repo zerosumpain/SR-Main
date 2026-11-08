@@ -11,6 +11,7 @@
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import FactList from '$lib/components/jkai/daydream/hub/FactList.svelte';
+  import BriefingFactors from '$lib/components/jkai/daydream/BriefingFactors.svelte';
   import {
     briefingFactRows,
     briefingFactSections,
@@ -27,6 +28,12 @@
   const gaps = $derived(detail?.gaps ?? []);
   const sources = $derived(detail?.sources ?? []);
   const factCount = $derived(detail?.facts?.length ?? 0);
+  // The 19 factor cards and their connections (records from 2026-10-27 on).
+  const factors = $derived(Array.isArray(detail?.factors) ? detail.factors : []);
+  const connections = $derived(Array.isArray(detail?.connections) ? detail.connections : []);
+  const hasFactors = $derived(factors.length > 0 || connections.length > 0);
+  // B is the factor band when there is one; everything after shifts along.
+  const shift = $derived(hasFactors ? 1 : 0);
 
   const dateLabel = $derived(detail?.dateLabel || briefing.title || briefing.id);
   const titleLines = $derived(
@@ -35,11 +42,11 @@
 
   const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const letter = (i: number) => ALPHABET[i % ALPHABET.length];
-  // A is the rollup; the fact sections take B onwards, and the three closing
-  // bands carry on from wherever they stop.
-  const sentLetter = $derived(letter(sections.length + 1));
-  const healthLetter = $derived(letter(sections.length + 2));
-  const stripLetter = $derived(letter(sections.length + 3));
+  // A is the rollup, B the factors when present; the fact sections follow, and
+  // the three closing bands carry on from wherever they stop.
+  const sentLetter = $derived(letter(sections.length + shift + 1));
+  const healthLetter = $derived(letter(sections.length + shift + 2));
+  const stripLetter = $derived(letter(sections.length + shift + 3));
 
   const STATUS_LABEL: Record<BriefingSourceRow['status'], string> = {
     ok: 'reported',
@@ -63,7 +70,7 @@
   }
 </script>
 
-<svelte:head><title>Briefing {briefing.id} — JKAI</title></svelte:head>
+<svelte:head><title>Briefing {briefing.id} — jkai</title></svelte:head>
 
 <section class="band flush">
   <div class="inner">
@@ -83,11 +90,24 @@
   </div>
 </section>
 
-{#each sections as section, i (section.slug)}
-  <section class="band anchored" class:sunken={i % 2 === 1} id="sec-{section.slug}">
+{#if hasFactors}
+  <section class="band anchored" id="sec-factors">
     <div class="inner">
       <SectionHead
-        kicker="{letter(i + 1)} / Fact sheet"
+        kicker="B / 19 factors"
+        title={['The morning,', 'factor by factor']}
+        strap="What the composer saw across the {factors.length} factors it watches, and the connections it drew between them. Open a card for the facts behind its line."
+      />
+      <BriefingFactors {factors} {connections} />
+    </div>
+  </section>
+{/if}
+
+{#each sections as section, i (section.slug)}
+  <section class="band anchored" class:sunken={(i + shift) % 2 === 1} id="sec-{section.slug}">
+    <div class="inner">
+      <SectionHead
+        kicker="{letter(i + shift + 1)} / Fact sheet"
         title={[section.section]}
         strap="{section.facts.length} fact{section.facts.length === 1 ? '' : 's'} from {section
           .facts[0]?.source ?? 'the composer'}."
@@ -97,13 +117,24 @@
   </section>
 {/each}
 
-<section class="band anchored" class:sunken={sections.length % 2 === 1} id="sec-as-sent">
+<section class="band anchored" class:sunken={(sections.length + shift) % 2 === 1} id="sec-as-sent">
   <div class="inner">
     <SectionHead
       kicker="{sentLetter} / As sent"
       title={['The message', 'that went out']}
-      strap="The composed summary, verbatim. It may only quote the fact sheet above, so anything here that is not up there is a fault worth reporting."
+      strap="The summary, verbatim. It is written freely and then checked: any number, time or unit not in the fact sheet above and the draft is replaced by the plain facts."
     />
+    {#if detail?.verification && !detail.verification.verified}
+      <div class="card t-watch replaced">
+        <p class="card-kicker">Draft replaced</p>
+        {#if detail.verification.rejectedDraft}
+          <p class="card-body">The written draft stated something the facts do not support ({detail.verification.violations.join('; ')}), so the plain facts were sent instead. The rejected draft:</p>
+          <pre class="sent-block">{detail.verification.rejectedDraft}</pre>
+        {:else}
+          <p class="card-body">No draft was written ({detail.verification.violations.join('; ')}), so the plain facts were sent instead.</p>
+        {/if}
+      </div>
+    {/if}
     {#if briefing.markdown}
       <div class="sent"><ChatMarkdown content={briefing.markdown} /></div>
     {:else}
@@ -117,7 +148,7 @@
   </div>
 </section>
 
-<section class="band anchored" class:sunken={sections.length % 2 === 0} id="sec-run-health">
+<section class="band anchored" class:sunken={(sections.length + shift) % 2 === 0} id="sec-run-health">
   <div class="inner">
     <SectionHead
       kicker="{healthLetter} / Run health"
@@ -127,8 +158,8 @@
     {#if gaps.length}
       <div class="stack tight">
         {#each gaps as gap (gap.section + gap.reason)}
-          <div class="card t-watch">
-            <p class="card-kicker">{gap.section}</p>
+          <div class="card" class:t-watch={!gap.chronic} class:t-quiet={gap.chronic}>
+            <p class="card-kicker">{gap.section}{#if gap.required} · required{/if}{#if gap.chronic} · also missing the day before, left out of the message{/if}</p>
             <p class="card-body">{gap.reason}</p>
           </div>
         {/each}
@@ -162,7 +193,7 @@
   </div>
 </section>
 
-<section class="band" class:sunken={sections.length % 2 === 1}>
+<section class="band" class:sunken={(sections.length + shift) % 2 === 1}>
   <div class="inner">
     <SectionHead
       kicker="{stripLetter} / The archive"
@@ -192,6 +223,14 @@
   }
   .sent-heading {
     margin-top: clamp(24px, 3vw, 40px);
+  }
+  /* The "draft replaced" notice sits above the message it explains. */
+  .replaced {
+    max-width: 78ch;
+    margin-bottom: 16px;
+  }
+  .replaced .sent-block {
+    margin-top: 10px;
   }
   /* The WhatsApp block, exactly as the phone received it: mono, and WRAPPING —
      a `pre` that does not wrap is the widest descendant of a horizontal scroll

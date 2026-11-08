@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { workflowFiles, conversations } from '$lib/db/schema';
-import { newDiskPath, saveBuffer } from '$lib/file-store/storage';
+import { allocateDiskPath, saveBuffer } from '$lib/file-store/storage';
 import { reindexFileInBackground } from './store';
 
 const JKAI_FOLDER = 'jkai/';
@@ -117,7 +117,7 @@ export async function mirrorJkaiAttachmentToDrive(opts: {
       name = `${folder}${stem}-${randomUUID().slice(0, 8)}${ext}`.slice(0, 200);
     }
 
-    const diskPath = newDiskPath(name);
+    const diskPath = await allocateDiskPath(name);
     await saveBuffer(diskPath, opts.buf);
 
     const [row] = await db

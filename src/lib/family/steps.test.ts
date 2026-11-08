@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { buildPayload, pushHeaders } from '$lib/server/apns';
 import {
+  ASK_GAP_MS,
+  askThrottled,
+  dethroneBaseline,
   dethroneDecision,
   dethroneText,
   leaderOf,
@@ -8,6 +12,7 @@ import {
   previousDay,
   rankBoard,
   standingsText,
+  stepsAskPush,
   todaysSteps,
   type BoardRow,
 } from './steps';
@@ -61,6 +66,29 @@ describe('todaysSteps — pick, never sum', () => {
 
   it('keeps raw values (no ×100 scaling) and rounds', () => {
     expect(todaysSteps([{ value: 8412.4, start: '2026-09-28T06:00:00Z', end: '2026-09-28T09:00:00Z' }], w)).toBe(8412);
+  });
+
+  // 27 Oct 2026, the family in Rome with the clocks just gone back: a phone's
+  // day starts at Rome's midnight, 23:00 London time — before London's day.
+  const rome = londonWindow(at('2026-10-27T18:00:00Z'));
+
+  it('counts a phone whose day began before London’s — away in Rome', () => {
+    expect(todaysSteps([{ value: 14_210, start: '2026-10-26T23:00:00Z', end: '2026-10-27T23:00:00Z' }], rome)).toBe(14_210);
+  });
+
+  it('late on, keeps today’s total over the next local day just begun', () => {
+    const late = londonWindow(at('2026-10-27T23:30:00Z'));
+    const records = [
+      { value: 18_900, start: '2026-10-26T23:00:00Z', end: '2026-10-27T23:00:00Z' },
+      { value: 120, start: '2026-10-27T23:00:00Z', end: '2026-10-28T23:00:00Z' },
+    ];
+    expect(todaysSteps(records, late)).toBe(18_900);
+  });
+
+  it('never takes the yesterday of a phone behind London, though it overlaps today', () => {
+    // New York: its 26 Oct runs 04:00Z 26th → 04:00Z 27th.
+    const records = [{ value: 9_000, start: '2026-10-26T04:00:00Z', end: '2026-10-27T04:00:00Z' }];
+    expect(todaysSteps(records, rome)).toBeNull();
   });
 });
 
@@ -148,5 +176,28 @@ describe('the 4pm standings', () => {
     expect([1, 2, 3, 4, 11, 12, 13, 21, 22, 101].map(ordinal)).toEqual([
       '1st', '2nd', '3rd', '4th', '11th', '12th', '13th', '21st', '22nd', '101st',
     ]);
+  });
+});
+
+describe('ask everyone’s phone', () => {
+  it('allows one round a minute, family-wide', () => {
+    const t = Date.parse('2026-10-27T12:00:00Z');
+    expect(askThrottled(null, t)).toBe(false);
+    expect(askThrottled(t, t)).toBe(true);
+    expect(askThrottled(t, t + ASK_GAP_MS - 1)).toBe(true);
+    expect(askThrottled(t, t + ASK_GAP_MS)).toBe(false);
+  });
+
+  it('is a silent background push saying what it wants', () => {
+    const push = stepsAskPush();
+    expect(JSON.parse(buildPayload(push))).toEqual({ category: 'family-report', reason: 'steps', aps: { 'content-available': 1 } });
+    expect(pushHeaders(push)).toMatchObject({ 'apns-push-type': 'background', 'apns-priority': '5' });
+  });
+
+  it('compares the next poll against the leader before a silent re-read, that day only', () => {
+    expect(dethroneBaseline(null, '2026-10-27', 'b@x')).toBe('b@x');
+    expect(dethroneBaseline({ day: '2026-10-27', leader: 'a@x' }, '2026-10-27', 'b@x')).toBe('a@x');
+    expect(dethroneBaseline({ day: '2026-10-27', leader: null }, '2026-10-27', 'b@x')).toBeNull();
+    expect(dethroneBaseline({ day: '2026-10-26', leader: 'a@x' }, '2026-10-27', 'b@x')).toBe('b@x');
   });
 });

@@ -166,12 +166,48 @@ const OPENROUTER_EFFORT: Record<Exclude<ThinkingLevel, 'off'>, 'low' | 'medium' 
  * instead of silently reverting them to the default. `modelId` extends that to
  * the per-model Codex ceiling — pass it wherever you know it.
  */
+/**
+ * OpenRouter models that refuse `reasoning: { enabled: false }`.
+ *
+ * The comment below once held that a model which cannot stop reasoning
+ * ignores the switch. Some now answer it with a 400 — "Reasoning is mandatory
+ * for this endpoint and cannot be disabled" (openai/gpt-oss-120b, the trips
+ * reader's model, 509 times in production from 14 to 21 October: no city
+ * guide, no stop guides, no researched facts). The catalogue has no flag for
+ * it, so a caller that meets the 400 records the model here and asks again;
+ * from then on, in this process, 'off' for that model is sent as the lowest
+ * effort instead.
+ */
+const reasoningMandatory = new Set<string>();
+
+/** True for OpenRouter's "reasoning cannot be disabled" refusal. */
+export function isReasoningMandatoryError(err: unknown): boolean {
+  const e = err as { status?: unknown; message?: unknown } | null;
+  return (e?.status === 400 || e?.status === undefined) && typeof e?.message === 'string' && /reasoning is mandatory/i.test(e.message);
+}
+
+/** Remember that this model must reason; the next `thinkingRequestParams(…, 'off', …)` asks for 'low' instead. */
+export function noteReasoningMandatory(modelId: string | null | undefined): void {
+  if (modelId) reasoningMandatory.add(modelId);
+}
+
+/** True once this model has refused "reasoning off" in this process. */
+export function reasoningIsMandatory(modelId: string | null | undefined): boolean {
+  return !!modelId && reasoningMandatory.has(modelId);
+}
+
+/** Tests only. */
+export function clearReasoningMandatoryForTest(): void {
+  reasoningMandatory.clear();
+}
+
 export function thinkingRequestParams(
   provider: ModelProvider,
   level: ThinkingLevel | null | undefined,
   modelId?: string | null,
 ): Record<string, unknown> {
   if (!level) return {};
+  if (provider !== 'codex' && level === 'off' && modelId && reasoningMandatory.has(modelId)) return { reasoning: { effort: 'low' } };
   if (provider === 'codex') {
     if (level === 'off' || level === 'minimal') return { reasoning_effort: 'low' };
     // A conversation can carry `max` from a model that reasons that deep and

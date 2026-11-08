@@ -14,8 +14,8 @@
   // previous decision in the batch invalidated is reported, never forced.
   import { kindLabel } from '$lib/selfimprove/board';
   import { matchClaim, sharedTerms } from '$lib/selfimprove/backlog-board';
-  import type { BacklogEpic } from '$lib/selfimprove/epic-backlog';
-  import type { GroomingSuggestion } from '$lib/selfimprove/backlog-grooming';
+  import type { BacklogEpic } from '$lib/selfimprove/backlog-room';
+  import type { GroomingSuggestion } from '$lib/selfimprove/backlog-room';
   import type { WorkItem } from '$lib/selfimprove/board';
 
   interface Props {

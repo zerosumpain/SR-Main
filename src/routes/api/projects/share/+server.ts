@@ -1,13 +1,30 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getAllowedProjectKeys } from '$lib/projects/registry';
-import { createShare, listShares, revokeShare } from '$lib/projects/shares';
+import { createShare, listShares, listSharesWithVisits, revokeShare } from '$lib/projects/shares';
+import {
+  normaliseSharePassword,
+  sharePasswordAllowed,
+  SHARE_PASSWORD_MAX,
+  SHARE_PASSWORD_MIN,
+} from '$lib/projects/share-password';
+import { normaliseSharePack, sharePacksFor } from '$lib/projects/share-pack';
 
 // Owner-only management of per-project share links. Auth is enforced by the hook
 // (401 for /api/* when unauthed; bypassed on the homeserv LAN), exactly like the
 // visibility endpoint — the signIn allow-list means any authenticated caller is
 // the owner, so this handler does not re-check the session for access. POST
-// mints a link (returns the raw token ONCE), GET lists, DELETE revokes.
+// mints a link (returns the raw token ONCE), GET lists with each link's visitor
+// numbers ($lib/projects/share-visitor: labels and counts, never a hash),
+// DELETE revokes.
+//
+// A link may ask for a password, on a project whose app checks one
+// (SHARE_PASSWORD_KEYS, today only the Spine). The password is never echoed back and
+// the row keeps only its scrypt verifier.
+//
+// A link may name an audience pack, on a project whose app has more than one
+// (SHARE_PACKS, today only the Spine: 'dfe' or 'school'). No pack is the app's
+// default; a pack the project does not offer is refused, never stored.
 
 async function ownerEmail(locals: App.Locals): Promise<string> {
   try {
@@ -27,11 +44,11 @@ async function validKey(key: string): Promise<boolean> {
 export const GET: RequestHandler = async ({ url }) => {
   const key = url.searchParams.get('key') ?? '';
   if (!(await validKey(key))) return json({ error: 'Unknown project key' }, { status: 400 });
-  return json({ ok: true, key, shares: await listShares(key) });
+  return json({ ok: true, key, shares: await listSharesWithVisits(key) });
 };
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-  let body: { key?: unknown; label?: unknown; expiresInDays?: unknown };
+  let body: { key?: unknown; label?: unknown; expiresInDays?: unknown; password?: unknown; pack?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -39,6 +56,26 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   }
   const key = typeof body.key === 'string' ? body.key : '';
   if (!(await validKey(key))) return json({ error: 'Unknown project key' }, { status: 400 });
+
+  let password: string | null = null;
+  if (body.password !== undefined && body.password !== null) {
+    if (!sharePasswordAllowed(key)) {
+      return json({ error: 'This project does not ask for a password — create the link without one.' }, { status: 400 });
+    }
+    password = normaliseSharePassword(body.password);
+    if (!password) {
+      return json({ error: `Password must be ${SHARE_PASSWORD_MIN}–${SHARE_PASSWORD_MAX} characters.` }, { status: 400 });
+    }
+  }
+
+  let pack: string | null = null;
+  if (body.pack !== undefined && body.pack !== null) {
+    if (!sharePacksFor(key).length) {
+      return json({ error: 'This project has only one pack — create the link without choosing one.' }, { status: 400 });
+    }
+    pack = normaliseSharePack(key, body.pack);
+    if (!pack) return json({ error: 'Unknown pack for this project.' }, { status: 400 });
+  }
 
   // Bound the active-link set per project (owner-only, cheap defence-in-depth).
   const active = (await listShares(key)).filter(
@@ -59,9 +96,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     createdBy: await ownerEmail(locals),
     label,
     expiresAt,
+    password,
+    pack,
   });
-  // token returned ONCE — the DB only stores its sha256.
-  return json({ ok: true, id, token, key, expiresAt });
+  // token returned ONCE — the DB only stores its sha256. The password is never echoed.
+  return json({ ok: true, id, token, key, expiresAt, hasPassword: password !== null, pack });
 };
 
 export const DELETE: RequestHandler = async ({ request }) => {

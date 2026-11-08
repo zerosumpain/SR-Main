@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import QRCode from 'qrcode';
+import { qrDataUrl } from '$lib/server/qr';
 import type { RequestHandler } from './$types';
 import { createInvite, revokeInvite } from '$lib/server/invites';
 import { listGroups } from '$lib/server/grants';
@@ -41,7 +41,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
   });
   if ('error' in made) return json({ error: made.error }, { status: 400 });
   const link = `${url.origin}/welcome/${made.code}`;
-  const qr = await QRCode.toDataURL(link, { errorCorrectionLevel: 'M', margin: 2, scale: 6 });
+  const qr = await qrDataUrl(link);
   return json({ ok: true, link, qr, invite: made.invite, ...(await loadAccessPage()) });
 };
 

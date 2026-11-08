@@ -47,6 +47,7 @@ import {
   COMPANION_CURSOR_KEY,
   COMPANION_USERS_KEY,
   fetchHousehold,
+  fetchHouseholdUsers,
   ingestCompanion,
   notSharingSubjects,
   toIncomingFix,
@@ -118,6 +119,20 @@ describe('toIncomingFix', () => {
     }
   });
 
+  it('takes how the phone was moving as the mode, the e-bike mark first', () => {
+    const at = (over: Partial<HouseholdFix>) => toIncomingFix({ ...fix('a@example.test', '1'), ...over }).mode;
+    expect(at({ motion: 'automotive' })).toBe('vehicle');
+    expect(at({ motion: 'cycling' })).toBe('active');
+    expect(at({ motion: 'running' })).toBe('active');
+    expect(at({ motion: 'walking' })).toBe('walking');
+    expect(at({ motion: 'stationary' })).toBe('still');
+    // Core Motion calls a 25 km/h e-bike a car often enough; the bike mark knows better.
+    expect(at({ motion: 'automotive', bike: true })).toBe('active');
+    expect(at({ bike: true })).toBe('active');
+    // No answer, or one we do not know: the writer infers from speed as before.
+    for (const motion of [null, undefined, 'unknown', 'flying'] as Array<string | null | undefined>) expect(at({ motion })).toBeUndefined();
+  });
+
   it('reads a negative or missing speed as unknown', () => {
     expect(toIncomingFix(fix('a@example.test', '1', { speed: -1 })).speedKmh).toBeNull();
     expect(toIncomingFix(fix('a@example.test', '1', { speed: null })).speedKmh).toBeNull();
@@ -139,6 +154,14 @@ describe('fetchHousehold', () => {
     expect(url).toContain('http://127.0.0.1:5295/api/apple/household?');
     expect(url).toContain('since=c0');
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+  });
+
+  it('reads the people with one fix, not a page of them', async () => {
+    const f = vi.fn(async () => pageResponse({ cursor: 'c1', more: true, users: [], fixes: [] }));
+    await fetchHouseholdUsers(f as unknown as typeof fetch);
+    const [url] = f.mock.calls[0] as unknown as [string];
+    expect(new URL(url).searchParams.get('limit')).toBe('1');
+    expect(new URL(url).searchParams.get('since')).toBe('');
   });
 
   it('throws on a refused token rather than reading it as an empty page', async () => {

@@ -16,8 +16,8 @@ import { createTask, loadTasks, notifyTaskChange } from '$lib/family/tasks.serve
 export const GET: RequestHandler = withNativeAccess('any', async (event, identity, role) => {
   const caller = await familyCaller(event, identity, role);
   if (!caller) return json({ error: NOT_FAMILY }, { status: 403 });
-  const me = await familyPersonFor(caller.email, caller.parent);
   const roster = await familyRoster();
+  const me = await familyPersonFor(caller.email, caller.parent, roster);
   const people = roster.map((p) => ({ id: p.id, name: p.name }));
   if (!roster.some((p) => p.email === me.email)) people.push({ id: me.id, name: me.name });
   const lists = listsFor(await loadTasks(), caller, new Date());

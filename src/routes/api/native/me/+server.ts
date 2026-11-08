@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { withNativeAccess, isOwnerEmail } from '$lib/server/native-handler';
-import { identifyDevice } from '$lib/server/native-auth';
+import { identifyDevice, touchDevice } from '$lib/server/native-auth';
 import { loadMember } from '$lib/server/grants';
 import { registrationOf } from '$lib/server/registration';
 import { appAccessForEmail } from '$lib/server/app-access';
@@ -42,6 +42,10 @@ const memberAnswer = withNativeAccess('any', async (_event, identity, role) => {
  */
 async function meOrRegistrant(event: Parameters<RequestHandler>[0]): Promise<Response> {
   const identity = await identifyDevice(event.request);
+  // A registrant's phone reaches only this route, so this is the one place
+  // its build and last-seen can be recorded (the member path below stamps
+  // again inside withNativeAccess; the stamp is idempotent per request).
+  if (identity) void touchDevice(identity.id, event.request).catch(() => {});
   if (identity && !isOwnerEmail(identity.ownerEmail)) {
     const member = await loadMember(identity.ownerEmail).catch(() => undefined);
     if (member === null) {

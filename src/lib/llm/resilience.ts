@@ -1,10 +1,9 @@
 // src/lib/llm/resilience.ts
 //
 // Provider-agnostic LLM resilience primitives, shared by the deep-research
-// gateway ($lib/deepdive/ai.ts) and the workflow LLM nodes
-// ($lib/llm/workflow-gateway.ts). No key/provider coupling lives here — just the
-// error classification, retry, timeout-signal and concurrency mechanics that
-// both call sites need.
+// gateway ($lib/deepdive/ai.ts), the tool loop and release summaries. No
+// key/provider coupling lives here — just the error classification, retry,
+// timeout-signal and concurrency mechanics those call sites need.
 
 import { APIUserAbortError, APIConnectionTimeoutError } from 'openai';
 

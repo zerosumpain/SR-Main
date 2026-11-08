@@ -5,17 +5,22 @@
  * removed after every case; run only in the hermetic integration lane.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { like } from 'drizzle-orm';
+import { like, or } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { gameResults } from '$lib/db/schema';
 import { leaderboard, recordRound } from './results.server';
 import type { RoundRow } from './results';
+import { recordOfflineResults } from './offline-results.server';
 
 const PREFIX = 'itest_game_results:';
 const NOW = Date.parse('2026-09-29T15:00:00Z');
+/** Offline matches are filed under `offline-<id>`; these ids start `itest-`. */
+const OFFLINE_PREFIX = 'offline-itest-';
 
 async function cleanup(): Promise<void> {
-  await db.delete(gameResults).where(like(gameResults.roomId, `${PREFIX}%`));
+  await db
+    .delete(gameResults)
+    .where(or(like(gameResults.roomId, `${PREFIX}%`), like(gameResults.roomId, `${OFFLINE_PREFIX}%`)));
 }
 
 beforeEach(cleanup);
@@ -68,5 +73,37 @@ describe('game results', () => {
     const boggle = board.games.find((g) => g.game === 'boggle')!;
     const mine = boggle.rows.find((r) => r.playerId === 'p_itest_john')!;
     expect(mine).toMatchObject({ best: 12, wins: 1, played: 1, bestLabel: '4×4 · 90 seconds · easy' });
+  });
+
+  it('files an offline result once per caller, however often the phone sends it', async () => {
+    const result = {
+      id: 'itest-0a1b2c3d-1',
+      game: 'offline:maths-sprint',
+      source: 'offline',
+      title: 'Maths Sprint',
+      mode: 'nearby',
+      finishedAt: NOW - 60_000,
+      players: 2,
+      bots: 0,
+      rank: 1,
+      score: 140,
+      won: true,
+      detail: 'streak 7',
+      opponents: ['Sam'],
+    };
+    const caller = { email: 'itest-kid@example.test', role: 'member' as const };
+    expect(await recordOfflineResults(caller, [result], NOW)).toEqual({ recorded: [result.id], rejected: [] });
+    expect(await recordOfflineResults(caller, [result, { ...result, score: 999 }], NOW)).toEqual({
+      recorded: [result.id],
+      rejected: [],
+    });
+    const stored = await db.select().from(gameResults).where(like(gameResults.roomId, `${OFFLINE_PREFIX}%`));
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({ game: 'offline:maths-sprint', round: 1, score: 140, won: true, difficulty: '' });
+
+    const board = await leaderboard('day', NOW);
+    const offline = board.games.find((g) => g.game === 'offline:maths-sprint')!;
+    expect(offline.title).toBe('Maths Sprint (offline)');
+    expect(offline.rows[0]).toMatchObject({ best: 140, bestLabel: 'streak 7', wins: 1, played: 1 });
   });
 });

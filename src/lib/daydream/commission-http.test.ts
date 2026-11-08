@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({ enabled: true, viewer: 'owner', runtime: vi.fn(), prepare: vi.fn(), decide: vi.fn(), list: vi.fn(), load: vi.fn(), flush: vi.fn() }));
 vi.mock('$lib/server/viewer', () => ({ viewerOf: async () => ({ kind: h.viewer }) }));
-vi.mock('$lib/workflows/runtime-client', () => ({ invokeWorkflowRuntime: h.runtime }));
+vi.mock('$lib/workflows-client/runtime-client', () => ({ invokeWorkflowRuntime: h.runtime }));
 vi.mock('./commission-service.server', () => ({ commissioningEnabled: () => h.enabled, prepareCommission: h.prepare, decideCommission: h.decide }));
 vi.mock('./commission-executor.server', () => ({ flushCommissionOutbox: h.flush }));
 vi.mock('./commission-store.server', () => ({

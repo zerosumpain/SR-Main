@@ -21,13 +21,11 @@ import { existsSync } from 'node:fs';
 
 const execFileP = promisify(execFile);
 
-// NOT the retired gateway. This is a plain Python venv that happens to sit
-// under `hermes-agent/` on homeserv, and it is what transcribes /drive audio.
-// It survives the gateway's removal because it is a live dependency — but the
-// directory it lives in does not, so MOVE THE VENV before deleting that tree,
-// or audio ingest silently reports "unavailable" (existsSync fails closed).
-// Override with LOCAL_AI_PYTHON once it moves.
-const DEFAULT_PYTHON = '/home/john/hermes-agent/venv/bin/python';
+// The venv that transcribes /drive audio on homeserv. It moved out of the
+// retired gateway's `hermes-agent/` tree to `~/jkai-audio-venv`; homeserv's
+// `.env` also names it in LOCAL_AI_PYTHON. A missing interpreter fails closed
+// (existsSync), so a wrong path reads as "unavailable", not as an error.
+const DEFAULT_PYTHON = '/home/john/jkai-audio-venv/bin/python';
 
 export function localPythonBin(): string {
   return process.env.LOCAL_AI_PYTHON || DEFAULT_PYTHON;

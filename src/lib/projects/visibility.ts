@@ -15,7 +15,8 @@
 //    fact). A default the site can trip on its own has to fail closed.
 
 // The hardcoded "Field Study" cards on /projects, keyed by their URL segment
-// (the part after /projects/). These are the ONLY keys that default to public.
+// (the part after /projects/). These are the ONLY keys that can default to
+// public (see PRIVATE_BY_DEFAULT for the exceptions).
 //
 // IMPORTANT: every key rendered by a `visToggle(...)` card in
 // src/routes/projects/+page.svelte MUST appear here, or its public/private
@@ -26,13 +27,16 @@
 // A relocated static bundle belongs here too even when it renders no card —
 // `pulse` is reachable by URL only and is not a build, so without an entry the
 // build default would 404 it.
+//
+// `hometowns` is the same shape: the Hometowns map page, one versioned bundle
+// per page hash at /projects/hometowns/<PAGE_HASH>/mobile.html, loaded by
+// the iPhone app (games/hometowns-view, scripts/hometowns/deploy-page.sh). It
+// has no card and holds no data, so it defaults public. Being a static key is
+// also what gives it FIRST_PARTY_BUNDLE_CSP (no sandbox): the page's forecast
+// runs in a module Web Worker, which an opaque-origin sandboxed document
+// cannot start from its own files.
 export const STATIC_PROJECT_KEYS = [
   'hex',
-  // Not a page in this repo: cloudflared routes /projects/policy-analysis to
-  // SR-Policy-Analysis. The key is here so the card's own toggle works — it is
-  // the only thing it controls, since the application does its own owner check
-  // and never consults this table.
-  'policy-analysis',
   'engine-room',
   'scs-earnings',
   'data-standard-designer',
@@ -40,9 +44,35 @@ export const STATIC_PROJECT_KEYS = [
   'policy-engine',
   'archetype',
   'pulse',
+  'field-study-8',
+  'field-study-9',
+  'data-spine',
+  'spine',
+  'supply-chain-monitor',
+  'marbler',
+  'local-plan-navigator',
+  'wildmind',
+  'casebook',
+  'hometowns',
 ] as const;
 
 const STATIC_KEYS: ReadonlySet<string> = new Set(STATIC_PROJECT_KEYS);
+
+// Hand-built pages that must NEVER default to public. A static key normally
+// defaults public, so registering a private working model would publish it the
+// moment the code deployed, before anyone could toggle it off. Listing it here
+// makes the code itself fail closed: private with no `project_visibility` row,
+// public only if the owner explicitly toggles it. Share links still work.
+const PRIVATE_BY_DEFAULT: ReadonlySet<string> = new Set([
+  'field-study-8',
+  'field-study-9',
+  'data-spine',
+  'spine',
+  'supply-chain-monitor',
+  'local-plan-navigator',
+  'wildmind',
+  'casebook',
+]);
 
 /** A /projects address: one lowercase URL segment, as `slugifyTitle` produces. */
 const PROJECT_SLUG = /^[a-z0-9][a-z0-9-]*$/;
@@ -82,7 +112,7 @@ export function isProjectSlug(slug: string | null | undefined): slug is string {
 
 /** What a key resolves to when `project_visibility` has no row for it. */
 export function defaultsPublic(key: string): boolean {
-  return isStaticProjectKey(key);
+  return isStaticProjectKey(key) && !PRIVATE_BY_DEFAULT.has(key);
 }
 
 /** An explicit row always wins; otherwise the key's own default applies. */

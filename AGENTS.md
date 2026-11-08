@@ -30,7 +30,7 @@ here is one a real build broke. `CLAUDE.md` has the wider picture.
   `onclick`, snippets. No `export let`, `on:click`, `$:` or `<slot>`. The
   `svelte5-pitfalls` skill has the traps.
 - **Design system, not taste.** Tokens in `src/app.css` and
-  `src/lib/styles/nm-tokens.css`; fonts are Archivo Black (display), DM Sans
+  `src/lib/styles/nm-tokens.css`; fonts are Inter ExtraBold (display), DM Sans
   (body), JetBrains Mono (labels), DM Mono (brand mark), and `/jkai` pages use
   Segoe UI for body on purpose. No raw hex colours, no new fonts, nothing under
   12px. New pages wear their family's shell and the one navigation bar — the
@@ -41,9 +41,6 @@ here is one a real build broke. `CLAUDE.md` has the wider picture.
   access to make a page render.
 - **All model calls go through `$lib/llm/client`.** No provider SDK imports and
   no hard-coded model ids; model choice belongs to the workload registry.
-- **Field studies** (`/projects/<slug>` research pages) follow
-  `field-study-system/INSTRUCTIONS.md`: content as data in `study.ts`, every
-  beat on a template. Never a bespoke layout.
 - **Module layers:** `foundation < platform < domain < ui < routes`. A module
   imports its own layer or below, never above, and no route imports another
   route. `scripts/check-module-boundaries.mjs` enforces it.

@@ -3,7 +3,7 @@
 // NOT in PUBLIC_PATHS, and must never be: only `/api/daydream/observe` is
 // listed there, as an exact path, precisely so this sibling stays behind the
 // Auth.js gate. Everything here writes the owner's judgements: verdicts on
-// think notes and the on/off switch. (The engine rooms' actions went with them,
+// think notes, his rulings on their claims, and the on/off switch. (The engine rooms' actions went with them,
 // P4 of the 2026-09-25 simplification; the backlog's moved to
 // `/api/jkai/backlog` with the board, 2026-09-26.)
 
@@ -38,6 +38,27 @@ export const POST: RequestHandler = async ({ request }) => {
           return json({ error: 'verdict must be useful, not_useful or never_kind' }, { status: 400 });
         }
         const res = await recordFeedback(id, verdict, str('note') || undefined);
+        // Worth knowing, and it needs something the site cannot do yet: the
+        // gap goes on the build list (`act/solution.server.ts`). Soft.
+        let filed: string | null = null;
+        if (verdict === 'useful') {
+          const { fileGapOnAccept } = await import('$lib/daydream/act/solution.server');
+          const { backlogPorts } = await import('$lib/selfimprove/follow-ports.server');
+          filed = (await fileGapOnAccept(id, backlogPorts).catch(() => ({ filed: null }))).filed;
+        }
+        return json({ ok: true, ...res, filed });
+      }
+
+      case 'reason': {
+        // His one-tap reason (`reasons.ts`). "Not now" files the note with no
+        // verdict; the others set or confirm one through the verdict writer.
+        const { isReason } = await import('$lib/daydream/reasons');
+        const thoughtId = str('thoughtId');
+        const reason = str('reason');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        if (!isReason(reason)) return json({ error: 'reason must be already_knew, not_my_thing, not_now or did_it' }, { status: 400 });
+        const { recordReason } = await import('$lib/daydream/reasons.server');
+        const res = await recordReason(thoughtId, reason);
         return json({ ok: true, ...res });
       }
 
@@ -59,6 +80,91 @@ export const POST: RequestHandler = async ({ request }) => {
             { status: 400 },
           );
         }
+      }
+
+      case 'file_stale': {
+        // "File it" on a note flagged past its date, or every flagged note at
+        // once (`all: true`). The server re-reads which notes are flagged.
+        const { fileStale } = await import('$lib/daydream/think/notes.server');
+        const thoughtId = str('thoughtId');
+        if (body.all !== true && !thoughtId) return json({ error: 'thoughtId or all is required' }, { status: 400 });
+        const filed = await fileStale(body.all === true ? 'all' : [thoughtId]);
+        return json({ ok: true, filed });
+      }
+
+      case 'keep_current': {
+        const { keepCurrent } = await import('$lib/daydream/think/notes.server');
+        const thoughtId = str('thoughtId');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        const until = await keepCurrent(thoughtId);
+        if (!until) return json({ error: 'no such note' }, { status: 404 });
+        return json({ ok: true, until });
+      }
+
+      case 'owner_verdict': {
+        // "This is wrong, because …" — or "it was right after all". A ruling
+        // on the CLAIM, not the kind: feedback is untouched. His reason
+        // becomes the lesson the think loop reads (`owner-verdict.ts`).
+        const { parseOwnerVerdict, recordOwnerVerdict } = await import('$lib/daydream/owner-verdict');
+        const parsed = parseOwnerVerdict(body);
+        if (!parsed.ok) return json({ error: parsed.error }, { status: 400 });
+        const result = await recordOwnerVerdict(parsed.thoughtId, parsed.verdict, parsed.why);
+        return json({ ok: true, ...result });
+      }
+
+      case 'do_it':
+      case 'undo_it':
+      case 'send_it': {
+        // "Do it for me": carry the note's step out now — the tap is the
+        // consent (`act/act.server.ts`). Reversible, private kinds only.
+        const thoughtId = str('thoughtId');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        const { doIt, undoIt, sendIt } = await import('$lib/daydream/act/act.server');
+        // `send_it` is the guided kind's second tap: a draft he has read.
+        const result = action === 'do_it' ? await doIt(thoughtId) : action === 'send_it' ? await sendIt(thoughtId) : await undoIt(thoughtId);
+        // A refusal is an answer, not a fault: 200 with the reason to show.
+        return json(result);
+      }
+
+      case 'follow': {
+        // Taking a note further (`act/follow.ts`): research, the backlog, a
+        // prototype, a watch, a message he sends, a Home Assistant refresh.
+        // `op` names the tap; each is the owner's own, on his own note.
+        const thoughtId = str('thoughtId');
+        const op = str('op');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        const { isFollowOp, runFollow } = await import('$lib/daydream/act/follow.server');
+        if (!isFollowOp(op)) return json({ error: `unknown follow-up: ${op || '(none)'}` }, { status: 400 });
+        const { backlogPorts } = await import('$lib/selfimprove/follow-ports.server');
+        return json(await runFollow(thoughtId, op, { description: body.description, entities: body.entities }, backlogPorts));
+      }
+
+      case 'solve':
+      case 'unsolve': {
+        // The note's solution, one press (`act/solution.server.ts`); the
+        // second press takes back what can be taken back.
+        const thoughtId = str('thoughtId');
+        if (!thoughtId) return json({ error: 'thoughtId is required' }, { status: 400 });
+        const { runSolution, undoSolution } = await import('$lib/daydream/act/solution.server');
+        if (action === 'unsolve') return json(await undoSolution(thoughtId));
+        const { backlogPorts } = await import('$lib/selfimprove/follow-ports.server');
+        return json(await runSolution(thoughtId, backlogPorts));
+      }
+
+      case 'stop_tracker': {
+        const id = str('trackerId');
+        if (!id) return json({ error: 'trackerId is required' }, { status: 400 });
+        const { stopTracker } = await import('$lib/daydream/act/track.server');
+        return json({ ok: await stopTracker(id) });
+      }
+
+      case 'act_calendar': {
+        // The one-time choice of where "Do it for me" writes.
+        const { chooseCalendar } = await import('$lib/daydream/act/act.server');
+        const name = str('calendar');
+        if (!name) return json({ error: 'calendar is required' }, { status: 400 });
+        const result = await chooseCalendar(name);
+        return json(result, { status: result.ok ? 200 : 400 });
       }
 
       case 'set_enabled': {

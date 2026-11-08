@@ -1,0 +1,225 @@
+/* decisions.css — the shared marks of the v8 decision cards on /trips
+ * (questions as sticky notes, proposals as index cards, "What changed" as a
+ * tick-box ledger, the brief as labelled chips). Loaded once by the trips
+ * layout beside notes-paper.css; every selector is a `dx-` class, so nothing
+ * else on the site is touched. Radii are 0, 2px or 100px; no emoji; labels
+ * never below the 12px floor (--fs-label-xs). Colour is never the only cue:
+ * every tone also says itself in words.
+ */
+
+/* ── Pens: the buttons ── */
+.dx-btn {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1.2;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--text-on-accent, #fff);
+  cursor: pointer;
+}
+.dx-btn.small {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+.dx-btn:hover:not(:disabled),
+.dx-btn:focus-visible {
+  background: var(--accent-hover);
+}
+.dx-btn:focus-visible,
+.dx-pen:focus-visible,
+.dx-link:focus-visible,
+.dx-chip-btn:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+.dx-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+/* A quieter button: ink outline. */
+.dx-btn.ghost {
+  background: transparent;
+  color: var(--np-ink, var(--text-primary));
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.dx-btn.ghost:hover:not(:disabled),
+.dx-btn.ghost:focus-visible {
+  background: var(--accent-ink-tint-06);
+}
+
+/* A dashed pill: nudges, filters, answer chips. Pressed = solid. */
+.dx-pen {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+  padding: 4px 10px;
+  border: 1px dashed var(--np-pen-ink, var(--accent-ink));
+  border-radius: 100px;
+  background: transparent;
+  color: var(--np-pen-ink, var(--accent-ink));
+  cursor: pointer;
+  text-align: left;
+}
+.dx-pen:hover:not(:disabled) {
+  border-style: solid;
+  background: var(--accent-ink-tint-06);
+}
+.dx-pen[aria-pressed='true'] {
+  border-style: solid;
+  background: var(--accent-ink-tint-12);
+  font-weight: 600;
+}
+.dx-pen:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* A link in mono, for small actions. */
+.dx-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.dx-link:disabled {
+  color: var(--text-ghost);
+  text-decoration: none;
+  cursor: default;
+}
+.dx-link.danger {
+  color: var(--error);
+}
+
+/* ── Chips: what a card says about itself ── */
+.dx-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dx-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  line-height: 1.5;
+  padding: 1px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 100px;
+  color: var(--np-ink-soft, var(--text-secondary));
+}
+.dx-chip.good {
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+.dx-chip.warn {
+  border-style: dashed;
+  border-color: var(--accent);
+  color: var(--np-pen-text, var(--accent-hover));
+}
+
+/* Mono caps over a group. */
+.dx-k {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--np-pen-text, var(--accent-hover));
+}
+/* Marginalia. */
+.dx-aside {
+  margin: 0;
+  font-family: var(--fs-serif);
+  font-style: italic;
+  color: var(--np-ink-soft, var(--text-secondary));
+}
+.dx-err {
+  margin: 6px 0 0;
+  font-size: var(--fs-label);
+  color: var(--error);
+}
+.dx-note {
+  margin: 6px 0 0;
+  font-family: var(--fs-serif);
+  font-style: italic;
+  font-size: var(--fs-label);
+  color: var(--np-ink-soft, var(--text-secondary));
+}
+.dx-vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The hand-drawn tick box of the ledgers. */
+.dx-box {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  border: 1.5px solid var(--np-ink, var(--text-primary));
+  border-radius: 2px;
+  transform: rotate(-2deg);
+}
+.dx-box svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  margin: -6px 0 0 -1px;
+  overflow: visible;
+}
+.dx-box path {
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dx-box .tick {
+  stroke: var(--success);
+}
+.dx-box .cross {
+  stroke: var(--accent);
+}
+
+/* A working line: a small pulsing pencil dot. */
+.dx-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 100px;
+  background: var(--accent);
+  animation: dx-pulse 1.1s ease-in-out infinite;
+}
+@keyframes dx-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dx-pulse {
+    animation: none;
+  }
+}
+
+@media print {
+  .dx-btn,
+  .dx-pen,
+  .dx-link {
+    display: none !important;
+  }
+}

@@ -26,6 +26,13 @@
  * Configuration, all from the VPS `.env` (escrowed in `homeserv-recovery`):
  * `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID`, `APNS_KEY_BASE64` (the .p8,
  * base64) and `APNS_ENV` (the gateway for a token that did not say).
+ *
+ * `APNS_CRITICAL_ALERTS=1` lets the family alarm (`$lib/family/alarm`) send a
+ * CRITICAL alert — it sounds at full volume through silent mode and every
+ * Focus. Off by default and must stay off until Apple has granted the app the
+ * `com.apple.developer.usernotifications.critical-alerts` entitlement and the
+ * provisioning profile carries it; without that, iOS ignores the critical
+ * fields and the alarm rings as time-sensitive.
  */
 
 import { connect, constants, type ClientHttp2Session } from 'node:http2';
@@ -33,8 +40,15 @@ import { createPrivateKey, sign, type KeyObject } from 'node:crypto';
 
 export type ApnsEnv = 'production' | 'sandbox';
 
-/** How loudly. `time-sensitive` breaks through a Focus; the app must hold the entitlement. */
-export type InterruptionLevel = 'passive' | 'active' | 'time-sensitive';
+/**
+ * How loudly. `time-sensitive` breaks through a Focus; the app must hold the
+ * entitlement. `critical` also ignores the mute switch, and needs Apple's
+ * separately granted critical-alerts entitlement (see `APNS_CRITICAL_ALERTS`).
+ */
+export type InterruptionLevel = 'passive' | 'active' | 'time-sensitive' | 'critical';
+
+/** A sound file bundled in the app, or a critical alert's sound (`critical: 1`, volume 0–1). */
+export type PushSound = string | { critical: 1; name: string; volume: number };
 
 export interface PushMessage {
   title: string;
@@ -48,12 +62,22 @@ export interface PushMessage {
   relevance?: number;
   /** A later push with the same id REPLACES this one on the phone. ≤ 64 bytes. */
   collapseId?: string;
+  /** Overrides the default sound: a bundled file name, or a critical sound. */
+  sound?: PushSound;
   /** Read by the app's tap and button handlers. Keys beside `aps`. */
-  userInfo?: Record<string, string>;
+  userInfo?: Record<string, string | number | null>;
   /** Seconds Apple keeps trying a phone that is off. 0 = once, now. */
   ttlSeconds?: number;
   /** Server-only current consent check. Never serialized into APNs payloads. */
   authorizeTargets?: (emails: readonly string[]) => Promise<readonly string[]>;
+  /**
+   * A SILENT background push: nothing on the lock screen — no alert, sound or
+   * badge — just `aps: { content-available: 1 }` and `userInfo`, sent as push
+   * type `background` at priority 5 (Apple refuses 10 for one). iOS wakes the
+   * app briefly to act on it, when it judges it can. `title`, `body`, `sound`,
+   * `level`, `category` and `threadId` are ignored.
+   */
+  background?: boolean;
 }
 
 export interface ApnsResult {
@@ -140,9 +164,10 @@ function providerToken(config: ApnsConfig, now = Date.now()): string {
  * and a notification that is cut short is better than one that never arrives.
  */
 export function buildPayload(message: PushMessage): string {
+  if (message.background) return JSON.stringify({ ...(message.userInfo ?? {}), aps: { 'content-available': 1 } });
   const aps: Record<string, unknown> = {
     alert: { title: message.title.slice(0, 200), body: message.body.slice(0, 1000) },
-    sound: message.level === 'passive' ? undefined : 'default',
+    sound: message.sound ?? (message.level === 'passive' ? undefined : 'default'),
     'interruption-level': message.level ?? 'active',
   };
   if (message.category) aps.category = message.category;
@@ -192,23 +217,29 @@ function sessionFor(env: ApnsEnv): ClientHttp2Session {
   return session;
 }
 
+/** The APNs headers for one push (bar auth and topic). PURE. */
+export function pushHeaders(message: PushMessage, now = Date.now()): Record<string, string> {
+  const passive = message.level === 'passive';
+  const headers: Record<string, string> = {
+    'apns-push-type': message.background ? 'background' : 'alert',
+    // 5 lets iOS batch a passive one with the next wake; 10 is "now". A
+    // background push must be 5.
+    'apns-priority': message.background || passive ? '5' : '10',
+    'apns-expiration': String(
+      message.ttlSeconds === 0 ? 0 : Math.floor(now / 1000) + (message.ttlSeconds ?? 3600),
+    ),
+  };
+  if (message.collapseId) headers['apns-collapse-id'] = message.collapseId.slice(0, 64);
+  return headers;
+}
+
 /** Send one push. Never throws. */
 export async function sendPush(
   deviceToken: string,
   message: PushMessage,
   env?: ApnsEnv | null,
 ): Promise<ApnsResult> {
-  const passive = message.level === 'passive';
-  const headers: Record<string, string> = {
-    'apns-push-type': 'alert',
-    // 5 lets iOS batch a passive one with the next wake; 10 is "now".
-    'apns-priority': passive ? '5' : '10',
-    'apns-expiration': String(
-      message.ttlSeconds === 0 ? 0 : Math.floor(Date.now() / 1000) + (message.ttlSeconds ?? 3600),
-    ),
-  };
-  if (message.collapseId) headers['apns-collapse-id'] = message.collapseId.slice(0, 64);
-  return post(deviceToken, headers, buildPayload(message), env, '');
+  return post(deviceToken, pushHeaders(message), buildPayload(message), env, '');
 }
 
 /**

@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "builtAt": "corpus-ca123bd7",
+  "builtAt": "corpus-63dea683",
   "invariants": [
     "British English throughout: -ise not -ize, -our not -or, whilst and amongst are fine.",
     "Ordinary words. If a plain word will do, it does.",
@@ -32,7 +32,7 @@
     "words": 3198,
     "contrastPosts": 3,
     "contrastWords": 1537,
-    "sourceNote": "public-prose measured over blog posts tagged 'human' of at least 100 words (ids 6, 8, 9, 11, 13). Distinctive terms are scored against the 3 post(s) tagged 'generated' (ids 10, 12, 14) — a thin contrast, so read the z-scores as a ranking rather than a significance test. chat measured over 1122 of John's own typed turns on web conversations."
+    "sourceNote": "public-prose measured over blog posts tagged 'human' of at least 100 words (ids 6, 8, 9, 11, 13). Distinctive terms are scored against the 3 post(s) tagged 'generated' (ids 10, 12, 14) — a thin contrast, so read the z-scores as a ranking rather than a significance test. chat measured over 1849 of John's own typed turns on web conversations."
   },
   "registers": {
     "public-prose": {
@@ -232,35 +232,35 @@
         "Closing with an offer of further help."
       ],
       "measured": {
-        "posts": 1122,
-        "words": 16268,
-        "sentences": 1509,
-        "paragraphs": 1189,
-        "fleschReadingEase": 69.6,
-        "fleschKincaidGrade": 8.2,
-        "audience": "Plain English · 8–9th-grade",
+        "posts": 1849,
+        "words": 25579,
+        "sentences": 2332,
+        "paragraphs": 1921,
+        "fleschReadingEase": 72.2,
+        "fleschKincaidGrade": 7.6,
+        "audience": "Fairly easy · 7th-grade reader",
         "sentenceWords": {
-          "median": 10,
-          "p90": 20,
-          "max": 66
+          "median": 12,
+          "p90": 18,
+          "max": 80
         },
         "paragraphWords": {
-          "median": 12,
-          "p90": 25,
-          "max": 232
+          "median": 13,
+          "p90": 22,
+          "max": 489
         },
-        "shortSentenceRate": 0.28,
+        "shortSentenceRate": 0.24,
         "rates": {
-          "contractions": 12.66,
-          "firstPerson": 23.36,
-          "emDash": 17.03,
-          "semicolon": 0.61,
-          "colon": 11.43,
-          "parenthetical": 4.18,
-          "exclamation": 2.46,
-          "question": 29.2,
-          "britishSpellings": 5.72,
-          "americanisms": 0.25
+          "contractions": 10.28,
+          "firstPerson": 20.41,
+          "emDash": 26.55,
+          "semicolon": 0.39,
+          "colon": 9.46,
+          "parenthetical": 3.75,
+          "exclamation": 1.72,
+          "question": 37.22,
+          "britishSpellings": 4.77,
+          "americanisms": 0.16
         },
         "distinctive": []
       },

@@ -46,11 +46,11 @@
   }
 </script>
 
-<svelte:head><title>Activity — JKAI</title></svelte:head>
+<svelte:head><title>Activity — jkai</title></svelte:head>
 
 <main class="activity-shell source-surface">
   <header class="activity-head">
-    <p class="eyebrow">JKAI · Evidence audit</p>
+    <p class="eyebrow">jkai · Evidence audit</p>
     <div class="title-row">
       <div>
         <h1>Activity</h1>

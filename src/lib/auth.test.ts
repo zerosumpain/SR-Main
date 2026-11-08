@@ -113,7 +113,7 @@ describe('isMemberAllowedRoute — a member reaches their own intel space and no
   });
 });
 
-describe('family:circle — a Family Circle member reaches People and nothing else', () => {
+describe('family:circle — a Family Circle member reaches People and the family backlog, nothing else', () => {
   const circle = (id: string | null | undefined, m = 'GET') => requiredFor(id, m) === 'family:circle';
 
   it('opens /home/people and one person under it, GET and HEAD only', () => {
@@ -125,6 +125,12 @@ describe('family:circle — a Family Circle member reaches People and nothing el
       expect(requiredFor('/home/people', m), m).toBeNull();
       expect(requiredFor('/home/people/[subject]', m), m).toBeNull();
     }
+  });
+
+  it('opens the backlog page, read and its three form actions (POST), nothing else', () => {
+    expect(circle('/home/backlog')).toBe(true);
+    expect(circle('/home/backlog', 'POST')).toBe(true);
+    for (const m of ['PUT', 'PATCH', 'DELETE']) expect(requiredFor('/home/backlog', m), m).toBeNull();
   });
 
   it("opens none of /home's other rooms, the owner's surfaces or intel to the circle", () => {
@@ -169,6 +175,7 @@ describe('family:circle — a Family Circle member reaches People and nothing el
     // The pages, plus one API: "Your day", keyed on the session alone.
     expect(routeIdsFor('family:circle').sort()).toEqual([
       '/api/home/people/my-day',
+      '/home/backlog',
       '/home/people',
       '/home/people/[subject]',
     ]);

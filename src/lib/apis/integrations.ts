@@ -29,7 +29,7 @@ import {
   updateRecord,
 } from '$lib/datastore';
 import { safeFunction } from '$lib/utils/safe-eval';
-import { slugifyName } from '$lib/workflows/site-tools/tools/apis';
+import { slugifyName } from '$lib/tools/tools/apis';
 import { apiRegistryDisabled } from './registry-enabled';
 
 export const INTEGRATIONS_COLLECTION = 'api_integrations';
@@ -222,7 +222,7 @@ export async function saveIntegration(
   }
 
   // The catalogue entry must exist — that is where baseUrl + auth live.
-  const { findApiEntry } = await import('$lib/workflows/site-tools/tools/apis');
+  const { findApiEntry } = await import('$lib/tools/tools/apis');
   const entry = await findApiEntry(api);
   if (!entry) {
     throw new IntegrationError(
@@ -437,7 +437,7 @@ export async function callIntegration(opts: {
     };
   }
 
-  const { callCatalogApi } = await import('$lib/workflows/site-tools/tools/apis');
+  const { callCatalogApi } = await import('$lib/tools/tools/apis');
   const result = await callCatalogApi({
     api: integration.api,
     path,
@@ -554,7 +554,7 @@ export async function listIntegrationsForPicker(): Promise<
 > {
   const [integrations, apis] = await Promise.all([
     listIntegrations(),
-    import('$lib/workflows/site-tools/tools/apis').then((m) => m.listCatalogApis()),
+    import('$lib/tools/tools/apis').then((m) => m.listCatalogApis()),
   ]);
   const byKey = new Map(apis.map((a) => [a.key, a]));
   return integrations.map((i) => {

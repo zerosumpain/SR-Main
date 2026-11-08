@@ -13,6 +13,16 @@ export interface VitalsLocation {
 // query. `town` stays null so the hero never displays a wrong place name.
 const FALLBACK: VitalsLocation = { lat: 51.5, lon: -0.1, town: null };
 
+/**
+ * True when `loc` is the cold-start default rather than a position Home
+ * Assistant ever gave (by identity: the fallback is never copied). A caller
+ * that draws something from the position itself, like the landing sky's sun,
+ * uses this to say "unknown" instead of describing London.
+ */
+export function isColdFallback(loc: VitalsLocation): boolean {
+  return loc === FALLBACK;
+}
+
 const HA_ENTITY = 'person.john';
 const LOCATION_TTL_MS = 10 * 60 * 1000; // HA position re-query cadence
 const COLD_TTL_MS = 60 * 1000; // brief cache when HA is unreachable
@@ -104,16 +114,11 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
   return hit?.town ?? null;
 }
 
-/**
- * Resolve the current location from Home Assistant's `person.john`
- * entity, reverse-geocoded to a town. Coordinates are for server-side weather
- * lookup only; never expose them to clients. Falls back to the last known
- * location, then a neutral default, and never throws.
- */
-export async function getVitalsLocation(): Promise<VitalsLocation> {
-  const now = Date.now();
-  if (cached && cached.expires > now) return cached.value;
+/** The one read in flight, so concurrent callers on a cold cache share it. */
+let inflight: Promise<VitalsLocation> | null = null;
 
+async function resolveLocation(): Promise<VitalsLocation> {
+  const now = Date.now();
   const coords = await queryHaCoords();
   if (!coords) {
     const fb = lastGood ?? FALLBACK;
@@ -124,6 +129,35 @@ export async function getVitalsLocation(): Promise<VitalsLocation> {
   const town = await reverseGeocode(coords.lat, coords.lon);
   const value: VitalsLocation = { lat: coords.lat, lon: coords.lon, town };
   lastGood = value;
-  cached = { value, expires: now + LOCATION_TTL_MS };
+  cached = { value, expires: Date.now() + LOCATION_TTL_MS };
   return value;
+}
+
+/**
+ * Resolve the current location from Home Assistant's `person.john`
+ * entity, reverse-geocoded to a town. Coordinates are for server-side weather
+ * lookup only; never expose them to clients. Falls back to the last known
+ * location, then a neutral default, and never throws.
+ *
+ * Single-flight: however many callers arrive while the cache is cold (the
+ * landing page's load, /api/vitals/state, several visitors at once), one
+ * Home Assistant query and at most one reverse geocode run, and they all
+ * receive its answer.
+ */
+export function getVitalsLocation(): Promise<VitalsLocation> {
+  if (cached && cached.expires > Date.now()) return Promise.resolve(cached.value);
+  return (inflight ??= resolveLocation().finally(() => {
+    inflight = null;
+  }));
+}
+
+/**
+ * The newest location already resolved, without waiting: the cached answer
+ * even if it has expired (the position moves slowly), or null before Home
+ * Assistant has been asked at all. When the cache has expired it starts the
+ * one shared refresh in the background, so the next caller has a fresh one.
+ */
+export function peekVitalsLocation(): VitalsLocation | null {
+  if (!cached || cached.expires <= Date.now()) void getVitalsLocation().catch(() => {});
+  return cached?.value ?? null;
 }

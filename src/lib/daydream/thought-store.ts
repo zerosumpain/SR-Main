@@ -264,7 +264,16 @@ export function buildScoringContext(
  */
 export async function persistCandidates(
   candidates: Candidate[],
-  opts: { runId: string; now?: Date; subject?: string },
+  opts: {
+    runId: string;
+    now?: Date;
+    subject?: string;
+    /** Dedupe keys the think loop's subject rule already judged NEW — a
+     *  revision with a figure the earlier note lacked (`think/subjects.ts`).
+     *  The live-echo guard would fold one back into the very note it revises:
+     *  same subject, same reads, a similar title. Every other guard applies. */
+    revisions?: ReadonlySet<string>;
+  },
 ): Promise<PersistResult> {
   const now = opts.now ?? new Date();
   const result: PersistResult = { ...EMPTY_PERSIST, createdKeys: [] };
@@ -375,7 +384,10 @@ export async function persistCandidates(
           components,
           evidence: candidate.evidence,
           placeId: candidate.placeId ?? null,
-          proposedActions: candidate.proposedActions,
+          // A step already carried out ("Do it for me") keeps its record —
+          // Undo finds the diary entry through it.
+          proposedActions: sql`case when jsonb_path_exists(${daydreamThoughts.proposedActions}, '$[*] ? (exists(@.done))')
+            then ${daydreamThoughts.proposedActions} else ${JSON.stringify(candidate.proposedActions)}::jsonb end`,
           status,
           suppressedReason,
           runId: opts.runId,
@@ -392,7 +404,7 @@ export async function persistCandidates(
       // The same claim, already live under another key: fold in, do not add.
       // The existing row keeps its text — a verdict, a ruling memory and a
       // note attach to THAT sentence — and records the re-proposal.
-      const twin = liveEchoOf(candidate, live, familyId, now);
+      const twin = opts.revisions?.has(candidate.dedupeKey) ? null : liveEchoOf(candidate, live, familyId, now);
       if (twin) {
         await db
           .update(daydreamThoughts)

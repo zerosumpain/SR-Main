@@ -4,11 +4,13 @@ import {
   inScope,
   isForPhone,
   isOnFeed,
+  livingPlanId,
   noteHref,
   parseFeedbackBody,
   parseScope,
   thinkChannelOf,
   toFeedNote,
+  toNativeDetail,
   toNativeNote,
   todayNotes,
   type ThinkRow,
@@ -161,6 +163,28 @@ describe('toNativeNote — the fixed wire shape', () => {
     expect(f.outcomeLabel).toBe('A connection');
     expect(f.channelLabel).toBe('Chat');
   });
+
+  it('a step carried out is the note\'s result; a diary-shaped step is offered', () => {
+    const plan = JSON.stringify({ kind: 'calendar_event', title: 'Chase', date: '2026-10-10', time: null });
+    const done = toFeedNote(row({ feedback: null, proposedActions: [{ kind: 'calendar_event', label: 'Add “Chase” to your Home calendar on Sat 10 Oct', payload: plan, done: { at: 'x', calendar: 'Home', uid: 'u', eventId: null, undoneAt: null } }] }), new Set());
+    expect(done.act?.status).toBe('done');
+    expect(done.stage).toBe('result');
+    expect(done.bucket).toBe('done');
+    const open = toFeedNote(row({ feedback: null, narrative: 'The bike is late.\n\nNext: Put 10 October in the diary to chase it.' }), new Set());
+    expect(open.act?.status).toBe('open');
+    expect(toNativeDetail(row({ narrative: 'Nothing to do.\n\nNext: Cancel it.' })).act).toBeNull();
+  });
+
+  it('a ruling on the claim travels with the note, and his own counts as an answer', () => {
+    const mine = toFeedNote(row({ feedback: null, reviewVerdict: 'refuted', reviewModel: 'owner', reviewReasoning: 'One is the receipt.', reviewNarrative: 'One is the receipt.' }), new Set());
+    expect(mine.review).toEqual({ verdict: 'wrong', by: 'owner', reasoning: 'One is the receipt.', lesson: 'One is the receipt.' });
+    expect(mine.bucket).toBe('done');
+    const checked = toFeedNote(row({ feedback: null, reviewVerdict: 'verified', reviewModel: 'gpt-x', reviewNarrative: null }), new Set());
+    expect(checked.review).toMatchObject({ verdict: 'holds', by: 'check', lesson: null });
+    // A check's verdict is information, not his answer: still his call.
+    expect(checked.bucket).toBe('decide');
+    expect(toFeedNote(row({}), new Set()).review).toBeNull();
+  });
 });
 
 describe('input', () => {
@@ -220,5 +244,32 @@ describe('buildIdeaFromNote — a build note becomes a backlog idea (D3)', () =>
   it('refuses a note resting on refuted rows, or one the owner turned down', () => {
     expect(buildIdeaFromNote(build({ status: 'suppressed', suppressedReason: 'already_refuted (x)' }))).toBeNull();
     expect(buildIdeaFromNote(build({ status: 'dismissed' }))).toBeNull();
+  });
+});
+
+describe('the living week plan', () => {
+  const plan = (id: string, h: number, over: Partial<ThinkRow> = {}) => row({ id, kind: 'think_health_plan', title: `Plan ${id}`, createdAt: hoursAgo(h), ...over });
+
+  it('is the newest plan of the last week still on the feed', () => {
+    expect(livingPlanId([plan('a', 90), plan('b', 30), row({ id: 'c' })], NOW)).toBe('b');
+    expect(livingPlanId([plan('a', 8 * 24)], NOW)).toBeNull();
+    expect(livingPlanId([plan('a', 30, { status: 'archived', suppressedReason: 'superseded: b' })], NOW)).toBeNull();
+    expect(livingPlanId([plan('a', 30, { status: 'dismissed', feedback: 'not_useful' })], NOW)).toBeNull();
+  });
+
+  it('leads the Today card, even when it is older than 48 hours', () => {
+    const rows = [row({ id: 'n1', createdAt: hoursAgo(1) }), row({ id: 'n2', createdAt: hoursAgo(3) }), plan('p', 60)];
+    expect(todayNotes(rows, new Set(), NOW).map((r) => r.id)).toEqual(['p', 'n1']);
+    expect(todayNotes(rows.slice(0, 2), new Set(), NOW).map((r) => r.id)).toEqual(['n1', 'n2']);
+  });
+
+  it('carries his reason and the days it was found again onto the card', () => {
+    const n = toFeedNote(
+      row({ feedback: 'not_useful', feedbackNote: 'already_knew', proposedActions: [{ kind: 'seen_again', label: 'Found again 1 time', payload: '["2026-09-24"]', done: { at: 'x' } }] }),
+      new Set(),
+    );
+    expect(n.reason).toBe('already_knew');
+    expect(n.seenAgain).toEqual(['2026-09-24']);
+    expect(n.living).toBe(false);
   });
 });

@@ -15,7 +15,40 @@ const { handler } = await import('../build/handler.js');
 
 const PORT = Number(process.env.PORT ?? 4173);
 const HOST = process.env.HOST ?? '0.0.0.0';
-const server = http.createServer(handler);
+
+/**
+ * POST /oauth/token is the OpenID provider's server-to-server leg
+ * ($lib/server/oidc/provider): Immich's server posts a form there with no
+ * Origin header. SvelteKit's CSRF check 403s any form POST whose Origin is not
+ * the site's own — missing included — and it runs before hooks.server.ts, so
+ * the route cannot opt out. CSRF is a cookie problem, and this endpoint reads
+ * no cookie (the client secret, sealed code and PKCE verifier are the
+ * credentials), so on EXACTLY this method and path the site's own origin is
+ * stamped on and cookies are removed. Every other request is untouched.
+ */
+function oidcTokenRequest(req) {
+  if (req.method !== 'POST') return;
+  const url = req.url ?? '';
+  const q = url.indexOf('?');
+  if ((q === -1 ? url : url.slice(0, q)) !== '/oauth/token') return;
+  let origin = '';
+  if (process.env.ORIGIN) {
+    try { origin = new URL(process.env.ORIGIN).origin; } catch { origin = ''; }
+  } else {
+    // adapter-node's own rule when ORIGIN is unset.
+    const proto = (process.env.PROTOCOL_HEADER && String(req.headers[process.env.PROTOCOL_HEADER.toLowerCase()] ?? '')) || 'https';
+    const host = (process.env.HOST_HEADER && String(req.headers[process.env.HOST_HEADER.toLowerCase()] ?? '')) || req.headers.host;
+    if (host && !proto.includes(':')) origin = `${proto}://${host}`;
+  }
+  if (!origin) return;
+  req.headers.origin = origin;
+  delete req.headers.cookie;
+}
+
+const server = http.createServer((req, res) => {
+  oidcTokenRequest(req);
+  return handler(req, res);
+});
 
 server.listen(PORT, HOST, () => {
   console.log(`Listening on http://${HOST}:${PORT}`);

@@ -12,8 +12,7 @@ import { resolveDefaultModel } from '$lib/server/models/settings';
 import { isSelectionRunning } from '$lib/routing/run';
 import { buildSuccessIndex, type ProfileModelStat } from '$lib/routing/success';
 import {
-  CRON_EXPR,
-  CRON_TZ,
+  SCHEDULE_WINDOW,
   RUNS_COLLECTION,
   EVENTS_COLLECTION,
   PROFILES,
@@ -56,7 +55,7 @@ export const load: PageServerLoad = async () => {
     defaults: DEFAULT_CONFIG,
     priceWeightCap: PRICE_WEIGHT_CAP,
     running: isSelectionRunning(),
-    schedule: { expr: CRON_EXPR, tz: CRON_TZ, display: '04:00 Europe/London' },
+    schedule: { display: `${SCHEDULE_WINDOW.start} ${SCHEDULE_WINDOW.tz}` },
     runs,
     stats,
     eventCount: events.length,

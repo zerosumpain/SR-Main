@@ -188,3 +188,59 @@ describe('benjaminiHochberg', () => {
     expect(out.find((o) => o.item === 'real')?.significant).toBe(true);
   });
 });
+
+import { compareGroups, partialCorrelate, MIN_GROUP } from './tests';
+
+describe('partialCorrelate', () => {
+  it('removes a link that a third factor explains', () => {
+    // x and y both follow z; with z held fixed they share nothing.
+    const z = Array.from({ length: 60 }, (_, i) => i);
+    const noiseA = z.map((_, i) => ((i * 7) % 11) - 5);
+    const noiseB = z.map((_, i) => ((i * 5) % 13) - 6);
+    const x = z.map((v, i) => v + noiseA[i]);
+    const y = z.map((v, i) => v + noiseB[i]);
+    const out = partialCorrelate(x, y, z);
+    expect(out.rawR).toBeGreaterThan(0.9);
+    expect(Math.abs(out.r)).toBeLessThan(0.4);
+    expect(out.n).toBe(60);
+  });
+
+  it('keeps a link the third factor does not explain', () => {
+    const z = Array.from({ length: 40 }, (_, i) => (i * 13) % 17);
+    // Not a trend: a trend is one sticky series, and the serial-correlation
+    // guard rightly counts it as a handful of independent days.
+    const x = Array.from({ length: 40 }, (_, i) => (i * 11) % 23);
+    const y = x.map((v, i) => v * 2 + ((i * 3) % 5));
+    const out = partialCorrelate(x, y, z);
+    expect(out.r).toBeGreaterThan(0.9);
+    expect(out.p).toBeLessThan(0.01);
+  });
+
+  it('drops days missing any of the three and refuses too few', () => {
+    const out = partialCorrelate([1, 2, null, 4], [1, 2, 3, 4], [1, null, 3, 4]);
+    expect(out.n).toBe(2);
+    expect(out.p).toBe(1);
+  });
+});
+
+describe('compareGroups', () => {
+  it('finds a clear difference between two kinds of day', () => {
+    const values = [...Array(12).fill(0).map((_, i) => 70 + i), ...Array(12).fill(0).map((_, i) => 40 + i)];
+    const cond = [...Array(12).fill(true), ...Array(12).fill(false)];
+    const out = compareGroups(values, cond)!;
+    expect(out.medianIn).toBeGreaterThan(out.medianOut);
+    expect(out.p).toBeLessThan(0.001);
+    expect(out.probabilityHigher).toBe(1);
+  });
+
+  it('says nothing for interleaved groups', () => {
+    const values = Array.from({ length: 30 }, (_, i) => i);
+    const cond = values.map((_, i) => i % 2 === 0);
+    const out = compareGroups(values, cond)!;
+    expect(out.p).toBeGreaterThan(0.5);
+  });
+
+  it(`needs ${MIN_GROUP} days on each side, and skips unknown days`, () => {
+    expect(compareGroups([1, 2, 3, 4, 5, 6], [true, true, false, false, null, true])).toBeNull();
+  });
+});

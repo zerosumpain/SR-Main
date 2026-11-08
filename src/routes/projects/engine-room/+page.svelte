@@ -1,244 +1,231 @@
 <script lang="ts">
-  // The index — read as one continuous piece, top to bottom.
+  // The overview. Five bands, in the order a stranger needs them:
+  //   1. what this is, in one breath, beside the machine itself (three meshing gears);
+  //   2. live proof that it runs, as three counters;
+  //   3. the loop told as a story, one beat per scroll, pinned beside a changing drawing;
+  //   4. the three parts, each a door;
+  //   5. why the figures on these pages can be trusted.
   //
-  // What this replaced: a hero, then five instruments stacked with small headings over
-  // them. Every block was individually fine and the page had no argument running through
-  // it — you arrived, met a diagram, met another diagram, and left. It read as a contents
-  // page wearing an essay's clothes.
-  //
-  // Now it is seven chapters with one thesis: it looks like a blog · here is every room ·
-  // here is the same thing cut away · watch one message actually go through · watch it
-  // rebuild itself at 3am · here is where the detail lives · here is what I have to prove.
-  // Each chapter is a number, a title you can stop on, one sentence, then the visual.
-  //
-  // The two isometric set pieces are the punch-outs. They are the only places in the study
-  // that ANIMATE an argument rather than let you operate one, and they are deliberately
-  // placed where the prose is at its least intuitive — the cost of carrying, and a machine
-  // editing itself unattended.
-  import Chapter from './components/Chapter.svelte';
-  import SiteTour from './components/SiteTour.svelte';
-  import SystemMap from './components/SystemMap.svelte';
-  import CityRun from './components/CityRun.svelte';
-  import StatWall from './components/StatWall.svelte';
-  import { CLAIMS } from './lib/system';
-  import { NIGHT_ROUTE, NIGHT_VERDICT } from './lib/city';
+  // Every number comes from data.facts (imported from the feature code) or data.live (the
+  // database, totals only). The words are lib/story.ts, with an engineering twin for each.
+  import Band from './components/kit/Band.svelte';
+  import Counter from './components/kit/Counter.svelte';
+  import LoopEngine from './components/art/LoopEngine.svelte';
+  import LoopStory from './components/art/LoopStory.svelte';
+  import PartGlyph from './components/art/PartGlyph.svelte';
   import { PARTS, href } from './lib/nav';
   import { app } from './lib/appState.svelte';
+  import { APP } from './lib/app';
+  import { OVERVIEW_COPY as C } from './lib/story';
+  import { reveal, cascade, shown } from './lib/motion';
 
+  let { data } = $props();
   const eli = $derived(app.narrative === 'eli5');
-  let openClaim = $state<string | null>(null);
+  const f = $derived(data.facts);
+  const live = $derived(data.live);
+  const endpoints = $derived(f.app.nativeAreas.reduce((a, x) => a + x.endpoints, 0));
+
+  const channel = $derived(new Map<string, string>(f.daydream.channels.map((c) => [c.id, c.label])));
+  const outcome = $derived(new Map<string, string>(f.daydream.outcomes.map((o) => [o.id, o.label])));
+  const next = $derived(f.daydream.upcoming[0]);
+  const question = $derived(next ? { channel: channel.get(next.channel) ?? next.channel, outcome: outcome.get(next.outcome) ?? next.outcome } : null);
+
+  const figures = $derived([
+    { part: 'daydream', value: live.daydream?.noticed ?? null, label: `notes it wrote me in the last ${f.daydream.impactWindowDays} days` },
+    { part: 'build', value: live.build ? live.build.lanes.shipped ?? 0 : null, label: 'features it has built and shipped' },
+    { part: 'app', value: endpoints, label: 'doorways the phone can knock on' },
+  ] as const);
+
+  const headline: Record<string, { value: number | null; suffix?: string; label: string }> = $derived({
+    daydream: { value: live.daydream?.hitRate == null ? null : Math.round(live.daydream.hitRate * 100), suffix: '%', label: 'of the notes I rated were useful' },
+    build: { value: live.build?.deliveries ?? null, label: 'features asked for so far' },
+    app: { value: APP.tabs.length, label: 'tabs on the phone, and a watch app' },
+  });
+
+  const SOURCES = $derived([
+    { k: 'Feature code', v: 'names, limits and schedules', how: 'imported at every deploy' },
+    { k: 'Database', v: 'live totals, never anyone’s data', how: `re-read every few minutes` },
+    { k: 'App source', v: 'tabs, widgets and permissions', how: 'read from its Swift' },
+  ]);
 </script>
 
 <svelte:head>
-  <title>The Engine Room — how this site works</title>
-  <meta name="description" content="A walkthrough of the architecture behind strangeramblings.com: a personal knowledge engine with an assistant, a workflow engine, retrieval, a knowledge graph, and a system that improves itself overnight." />
+  <title>The Engine Room — Daydream, Build and the App</title>
+  <meta name="description" content="A website that thinks about my life while I'm busy, builds the ideas I say yes to, and lives in my pocket. How the three unusual parts of strangeramblings.com work, with every figure read from the running code." />
 </svelte:head>
 
-<section class="pe-route wide er-index">
-  <!-- ---- the hero ---------------------------------------------------- -->
-  <header class="hero">
-    <span class="pe-eyebrow">Field study · This site, explained</span>
-    <h1 class="hero-title">The Engine&nbsp;Room</h1>
-    <p class="hero-line">
-      {#if eli}
-        This site looks like an ordinary blog. Behind it is an assistant that reads my email, runs my house,
-        remembers what it learns, and quietly rewrites bits of its own code while I am asleep. This page takes
-        the lid off: what each part does, why it was built, and what it turned out to be worth.
-      {:else}
-        This site looks like a blog. It is a blog. It is also an assistant with its hands in my mail, my files
-        and my house, a workflow engine, a knowledge graph that grades its own confidence, and a night shift
-        that rewrites the codebase while I sleep — all of which seemed like a sensible weekend project at the
-        time. Here it is with the lid off.
-      {/if}
-    </p>
-    <div class="hero-foot">
-      <a class="hero-cta" href={href('turn', 'trace')}>
-        <span class="c-txt"><b>Skip to the instrument</b><em>One message, six stages, six layers, with a live clock</em></span>
-        <span class="c-go" aria-hidden="true">→</span>
-      </a>
-      <span class="hero-scroll" aria-hidden="true">or keep scrolling <i>↓</i></span>
+<!-- 1 · hero -->
+<Band surface="ink" pad="hero" label="The Engine Room">
+  <div class="hero">
+    <div class="h-words">
+      <span class="er-kicker" {@attach reveal({ y: 10 })}>A field study of strangeramblings.com</span>
+      <h1 class="er-display h-title">
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0, parent: true })}>A website</span></span>
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.07, parent: true })}>that <em data-part="daydream">thinks</em>,</span></span>
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.14, parent: true })}><em data-part="build">builds</em> itself</span></span>
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.21, parent: true })}>and lives in</span></span>
+        <span class="ln"><span {@attach reveal({ y: 70, delay: 0.28, parent: true })}>my <em data-part="app">pocket</em>.</span></span>
+      </h1>
+      <p class="h-lede" {@attach reveal({ y: 20, delay: 0.4 })}>{eli ? C.hero.plain : C.hero.eng}</p>
+      <div class="h-cta" {@attach reveal({ y: 20, delay: 0.5 })}>
+        <a class="btn" href="#story">See how it works <span aria-hidden="true">↓</span></a>
+        <button class="btn ghost" onclick={() => (app.askOpen = true)}><span aria-hidden="true">✦</span> Ask it a question</button>
+      </div>
     </div>
+    <div class="h-art" {@attach reveal({ y: 30, delay: 0.2, duration: 1.2 })}>
+      <LoopEngine captions={{ daydream: `thinks every ${f.daydream.cadenceMinutes} min`, build: 'builds while I sleep', app: `${APP.targets.length} pieces, one doorway` }} />
+    </div>
+  </div>
+
+  <ul class="figures" {@attach cascade()}>
+    {#each figures as x (x.part)}
+      <li data-part={x.part}>
+        <b class="fg-n"><Counter value={x.value} /></b>
+        <span class="fg-l">{x.label}</span>
+      </li>
+    {/each}
+  </ul>
+</Band>
+
+<!-- 2 · the story -->
+<Band surface="paper" id="story" label="How a thought becomes a feature">
+  <header class="s-head">
+    <span class="er-kicker">The loop, in five moves</span>
+    <h2 class="er-display s-title" {@attach reveal({ y: 40 })}>How a passing thought<br />becomes a feature</h2>
+    <p class="er-lede s-lede">Follow one idea all the way round. Scroll, and the drawing keeps up.</p>
   </header>
+  <LoopStory {question} stages={f.daydream.stages.map((s) => s.label)} cadence={f.daydream.cadenceMinutes}
+    gates={f.build.gates.filter((g) => g !== 'cmd' && g !== 'gate')} tabs={APP.tabs.length} />
+</Band>
 
-  <Chapter
-    no="Chapter one"
-    title="It really does look like a blog"
-    sub="Nineteen pages hold this place up. Five of them you can see without asking; the other fourteen need a password, and they are where the actual work happens. Hover any card to see what it connects to — click one for a proper look."
-    lead
-  >
-    <SiteTour />
-  </Chapter>
+<!-- 3 · the parts -->
+<Band surface="deep" label="The three parts">
+  <header class="s-head">
+    <span class="er-kicker">Three parts, ten chapters</span>
+    <h2 class="er-display s-title" {@attach reveal({ y: 40 })}>Pick a door</h2>
+  </header>
+  <div class="doors" {@attach cascade(':scope > a', { gap: 0.12 })}>
+    {#each PARTS as p (p.id)}
+      {@const h = headline[p.id]}
+      <a class="door" href={href(p.id)} data-part={p.id}>
+        <span class="d-no">Part {p.no}</span>
+        <span class="d-glyph"><PartGlyph part={p.id} /></span>
+        <b class="d-name">{p.name}</b>
+        <span class="d-strap">{p.strap}</span>
+        <span class="d-fig"><b><Counter value={h.value} suffix={h.suffix ?? ''} /></b>{h.label}</span>
+        <span class="d-asks">
+          {#each p.leaves as l}<span>{l.ask}</span>{/each}
+        </span>
+        <span class="d-go">Go to {p.name} <span aria-hidden="true">→</span></span>
+      </a>
+    {/each}
+  </div>
+</Band>
 
-  <Chapter
-    no="Chapter two"
-    title="Underneath, six floors"
-    sub="The same system with the front taken off. Every box is a real component and every curve is a real dependency — hover one and only its own connections light up, because all nineteen at once is a hairball, not a diagram."
-    tone="var(--accent)"
-  >
-    <SystemMap />
-  </Chapter>
-
-  <Chapter
-    no="Chapter three"
-    title="Now watch one message go through"
-    sub="A single turn, walked across town: six buildings, nine legs, and a meter in the corner running real money. The thing worth noticing is which legs cost anything."
-    tone="#c2703d"
-  >
-    <CityRun />
-  </Chapter>
-
-  <Chapter
-    no="Chapter four"
-    title="And what it gets up to at half three"
-    sub="Same town, nobody in it. Every night the machine reads back its own failures, writes tools to do better, and tests them in a sandbox — then reaches the one door it is not allowed through."
-    tone="#8a2d3a"
-  >
-    <CityRun
-      route={NIGHT_ROUTE}
-      verdict={NIGHT_VERDICT}
-      night
-      showMeter={false}
-      idle="Seven legs, one night, nobody watching. Press play."
-      playLabel="Run the night shift"
-    />
-  </Chapter>
-
-  <Chapter
-    no="Chapter five"
-    title="Five parts, twenty-nine pages"
-    sub="Everything above is the tour. This is the study proper — each part is a short hub over a handful of single-idea pages, and every page carries one instrument you can actually drive."
-    tone="var(--accent-ink)"
-  >
-    <nav class="parts" aria-label="Parts of the study">
-      {#each PARTS as p}
-        <a class="part" href={href(p.id)} style="--tone:{p.tone}">
-          <span class="p-no">Part {p.no}</span>
-          <b class="p-name">{p.name}</b>
-          <span class="p-strap">{p.strap}</span>
-          <ol class="p-leaves">
-            {#each p.leaves as l}<li>{l.label}</li>{/each}
-          </ol>
-          <span class="p-count">{p.leaves.length} pages →</span>
-        </a>
+<!-- 4 · trust -->
+<Band surface="ink" label="How these pages stay true">
+  <div class="trust">
+    <header class="t-head">
+      <span class="er-kicker">Why you can believe the numbers</span>
+      <h2 class="er-display s-title" {@attach reveal({ y: 40 })}>Nothing here<br />is typed by hand</h2>
+      <p class="er-lede">{eli ? C.trust.plain : C.trust.eng}</p>
+    </header>
+    <div class="pipe" {@attach shown({ amount: 0.4 })}>
+      {#each SOURCES as s, i}
+        <div class="p-src" style="--d:{i * 0.2}s"><b>{s.k}</b><span>{s.v}</span></div>
+        <svg class="p-wire" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true" style="grid-row:{i + 1}">
+          <path d="M0 20 H200" pathLength="1" data-draw style="--d:{0.3 + i * 0.2}s" />
+          <path class="flow" d="M0 20 H200" />
+        </svg>
+        <span class="p-how" style="grid-row:{i + 1}">{s.how}</span>
       {/each}
-    </nav>
-  </Chapter>
-
-  <Chapter
-    no="Chapter six"
-    title="Five things I have to earn"
-    sub="A field study that only describes itself is a brochure. These are the claims the rest of the pages exist to prove — press one for the argument, then go and check it."
-    tone="var(--accent)"
-  >
-    <div class="claims">
-      {#each CLAIMS as c}
-        <div class="claim" class:open={openClaim === c.n}>
-          <button class="c-head" onclick={() => (openClaim = openClaim === c.n ? null : c.n)}
-                  aria-expanded={openClaim === c.n}>
-            <span class="c-n">{c.n}</span>
-            <span class="c-title">{c.title}</span>
-            <span class="c-chev" aria-hidden="true">{openClaim === c.n ? '−' : '+'}</span>
-          </button>
-          {#if openClaim === c.n}
-            <div class="c-body">
-              <p>{eli ? c.eli5 : c.body}</p>
-              <a class="c-ev" href="/projects/engine-room/{c.section}">the evidence →</a>
-            </div>
-          {/if}
-        </div>
-      {/each}
+      <div class="p-page"><b>This page</b><span>built from all three, every time it’s served</span></div>
+      <div class="p-fail"><span class="pf-x" aria-hidden="true">✕</span><span><b>A feature changes and the words don’t?</b> The site refuses to build, so the page can’t quietly lie.</span></div>
     </div>
-  </Chapter>
-
-  <Chapter
-    no="Chapter seven"
-    title="The size of the thing"
-    sub="Counted from the source tree rather than estimated, and every tile carries the command that produced it. One person, evenings and weekends, over about a year."
-    tone="#5a6b7a"
-  >
-    <StatWall />
-  </Chapter>
-
-  <p class="idx-note">
-    <b>What is deliberately not here.</b> No credentials, keys, addresses or personal data appear anywhere in this
-    study — not obscured, never written. The screenshots in chapter one are real pages with the real content
-    replaced in the browser before the picture was taken. Where something would be unsafe to publish, it is
-    described by shape.
-  </p>
-</section>
+  </div>
+</Band>
 
 <style>
-  .er-index { padding-bottom: 40px; }
+  /* hero */
+  .hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: clamp(28px, 4vw, 72px); align-items: center; }
+  .h-title { font-size: clamp(42px, 5.6vw, 92px); display: flex; flex-direction: column; margin-bottom: 28px; }
+  .ln { display: block; overflow: hidden; padding-bottom: 0.03em; }
+  .ln > span { display: inline-block; }
+  .h-title em { font-style: normal; color: var(--tone-text); }
+  .h-lede { font-size: clamp(16px, 1.35vw, 19px); line-height: 1.6; color: var(--fg-2); max-width: 54ch; margin: 0 0 28px; }
+  .h-cta { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; font-family: var(--er-mono); font-size: var(--fs-label); letter-spacing: 0.06em;
+    text-transform: uppercase; padding: 13px 20px; border-radius: var(--radius-pill); text-decoration: none; cursor: pointer;
+    background: var(--er-orange-ink); color: var(--er-ink); border: 1px solid var(--er-orange-ink); transition: background 0.2s, color 0.2s; }
+  .btn:hover { background: var(--er-cream); border-color: var(--er-cream); }
+  .btn.ghost { background: transparent; color: var(--fg); border-color: var(--rule-strong); }
+  .btn.ghost:hover { border-color: var(--fg); background: var(--wash); }
+  .h-art { min-width: 0; }
 
-  /* ---- hero — full width under the headline, like every headline here. */
-  .hero { margin: 0 0 clamp(52px, 8vw, 104px); }
-  .hero-title {
-    margin: 6px 0 16px;
-    font-family: var(--fs-serif); font-weight: 600;
-    font-size: clamp(44px, 9vw, 104px);
-    line-height: 0.94; letter-spacing: -0.03em;
-    color: var(--text-primary);
+  .figures { list-style: none; margin: clamp(40px, 6vw, 88px) 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0;
+    border-top: 1px solid var(--rule); }
+  .figures li { padding: 22px 24px 4px 0; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid var(--rule); padding-left: 24px; }
+  .figures li:first-child { padding-left: 0; }
+  .figures li:last-child { border-right: none; }
+  .fg-n { font-family: var(--er-display); font-weight: 400; font-size: clamp(48px, 6vw, 92px); line-height: 0.9; color: var(--tone-text); }
+  .fg-l { font-size: var(--fs-body-sm); color: var(--fg-2); max-width: 26ch; }
+
+  @media (max-width: 960px) {
+    .hero { grid-template-columns: minmax(0, 1fr); }
+    .h-art { max-width: 560px; }
   }
-  .hero-line {
-    margin: 0 0 24px;
-    font-size: clamp(17px, 1.9vw, 22px);
-    line-height: 1.5; color: rgba(28, 22, 17, 0.78);
-    text-wrap: pretty;
+  @media (max-width: 640px) {
+    .figures { grid-template-columns: minmax(0, 1fr); }
+    .figures li { border-right: none; border-bottom: 1px solid var(--rule); padding: 18px 0; }
   }
-  .hero-foot { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-  .hero-cta { display: inline-flex; align-items: center; gap: 14px; text-decoration: none;
-    background: var(--accent-ink); color: #fff; padding: 13px 20px; border-radius: var(--radius-sharp); }
-  .hero-cta:hover { background: #0b4a53; }
-  .c-txt { display: flex; flex-direction: column; gap: 2px; }
-  .c-txt b { font-size: var(--fs-body-sm); font-weight: 600; }
-  .c-txt em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs); opacity: 0.78; }
-  .hero-cta .c-go { font-size: 17px; opacity: 0.8; }
-  .hero-scroll { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.14em;
-    text-transform: uppercase; color: rgba(28, 22, 17, 0.42); }
-  .hero-scroll i { font-style: normal; display: inline-block; animation: nudge 2.4s ease-in-out infinite; }
-  @keyframes nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
-  @media (prefers-reduced-motion: reduce) { .hero-scroll i { animation: none; } }
 
-  /* ---- parts --------------------------------------------------------- */
-  .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-  .part { display: flex; flex-direction: column; gap: 3px; text-decoration: none;
-    border: 1px solid rgba(28,22,17,0.16); border-top: 3px solid var(--tone);
-    border-radius: var(--radius-sharp); background: rgba(255,255,255,0.5); padding: 14px 16px 12px;
-    transition: background 0.13s, border-color 0.13s, transform 0.13s; }
-  .part:hover { background: rgba(255,255,255,0.9); border-color: rgba(28,22,17,0.32);
-    border-top-color: var(--tone); transform: translateY(-2px); }
-  .p-no { font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.16em;
-    text-transform: uppercase; color: var(--tone); }
-  .p-name { font-family: var(--fs-serif); font-weight: 600; font-size: 22px; line-height: 1.1; color: var(--text-primary); }
-  .p-strap { font-size: var(--fs-label); line-height: 1.45; color: rgba(28,22,17,0.68); margin-bottom: 7px; }
-  .p-leaves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px;
-    border-top: 1px dashed rgba(28,22,17,0.16); padding-top: 8px; }
-  .p-leaves li { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.5;
-    color: rgba(28,22,17,0.6); }
-  .p-count { margin-top: 9px; font-family: var(--font-mono); font-size: var(--fs-label-xs);
-    letter-spacing: 0.06em; color: var(--tone); }
+  /* section heads */
+  .s-head { margin-bottom: clamp(28px, 4vw, 56px); max-width: 900px; }
+  .s-title { font-size: clamp(34px, 4.6vw, 72px); margin-bottom: 22px; }
+  .s-lede { max-width: 52ch; }
 
-  /* ---- claims -------------------------------------------------------- */
-  .claims { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 8px; }
-  .claim { border: 1px solid rgba(28,22,17,0.16); border-radius: var(--radius-sharp);
-    background: rgba(255,255,255,0.55); overflow: hidden; align-self: start; }
-  .claim.open { border-color: rgba(28,22,17,0.34); }
-  .c-head { width: 100%; display: flex; align-items: baseline; gap: 9px; text-align: left;
-    background: none; border: none; padding: 12px 14px; cursor: pointer; font-family: inherit; }
-  .c-head:hover { background: rgba(28,22,17,0.04); }
-  .c-n { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent); flex-shrink: 0; }
-  .c-title { font-family: var(--fs-serif); font-weight: 600; font-size: var(--fs-body); line-height: 1.24;
-    color: var(--text-primary); min-width: 0; }
-  .c-chev { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-nav);
-    color: rgba(28,22,17,0.4); flex-shrink: 0; }
-  .c-body { padding: 0 14px 13px; }
-  .c-body p { margin: 0 0 8px; font-size: var(--fs-label); line-height: 1.58; color: rgba(28,22,17,0.76); }
-  .c-ev { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--accent-ink); text-decoration: none; }
-  .c-ev:hover { text-decoration: underline; }
+  /* doors */
+  .doors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .door { position: relative; display: flex; flex-direction: column; gap: 12px; padding: clamp(22px, 2.6vw, 36px); text-decoration: none; color: inherit;
+    background: var(--er-paper-hi); overflow: hidden; transition: background 0.4s; }
+  .door::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 6px; background: var(--tone); transform: scaleX(0.18); transform-origin: left;
+    transition: transform 0.6s var(--er-ease); }
+  .door:hover::after, .door:focus-visible::after { transform: scaleX(1); }
+  .door:hover { background: #fbf6ec; }
+  .d-no { font-family: var(--er-mono); font-size: var(--fs-label-xs); letter-spacing: 0.18em; text-transform: uppercase; color: var(--tone-text); }
+  .d-glyph { width: clamp(96px, 10vw, 140px); aspect-ratio: 1; margin: 6px 0 4px; }
+  .d-name { font-family: var(--er-display); font-weight: 400; text-transform: uppercase; font-size: clamp(34px, 3.6vw, 54px); line-height: 0.9; }
+  .d-strap { font-family: var(--er-serif); font-style: italic; font-size: clamp(18px, 1.5vw, 21px); line-height: 1.3; color: var(--fg); }
+  .d-fig { display: flex; flex-direction: column; gap: 2px; padding: 14px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); font-size: var(--fs-label); color: var(--fg-2); }
+  .d-fig b { font-family: var(--er-display); font-weight: 400; font-size: 34px; line-height: 1; color: var(--tone-text); }
+  .d-asks { display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-body-sm); color: var(--fg-2); }
+  .d-asks span::before { content: '— '; color: var(--tone-text); }
+  .d-go { margin-top: auto; padding-top: 10px; font-family: var(--er-mono); font-size: var(--fs-label-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--tone-text); }
+  .door:hover .d-go span { display: inline-block; transform: translateX(6px); transition: transform 0.4s var(--er-ease); }
+  @media (max-width: 960px) { .doors { grid-template-columns: minmax(0, 1fr); } }
 
-  /* ---- closing note -------------------------------------------------- */
-  .idx-note { margin: 0; padding: 12px 16px; border-left: 3px solid rgba(28,22,17,0.28);
-    background: rgba(28,22,17,0.035); border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0;
-    font-size: var(--fs-label); line-height: 1.6; color: rgba(28,22,17,0.7); max-width: 92ch; }
-  .idx-note b { color: var(--text-primary); }
+  /* trust */
+  .trust { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(28px, 5vw, 80px); align-items: center; }
+  .pipe { display: grid; grid-template-columns: minmax(0, 1fr) minmax(40px, 0.7fr) minmax(0, 1fr); grid-template-rows: repeat(3, auto) auto; gap: 14px 0; align-items: center; }
+  .p-src { grid-column: 1; border: 1px solid var(--rule-strong); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; background: var(--lift); }
+  .p-src b { font-family: var(--er-display); font-weight: 400; text-transform: uppercase; font-size: 18px; color: var(--fg); }
+  .p-src span { font-size: var(--fs-label); color: var(--fg-3); }
+  .p-wire { grid-column: 2; width: 100%; height: 40px; overflow: visible; }
+  .p-wire path { fill: none; stroke: var(--rule-strong); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .p-wire .flow { stroke: var(--er-orange-ink); stroke-dasharray: 3 14; animation: pflow 1.4s linear infinite; vector-effect: non-scaling-stroke; }
+  @keyframes pflow { to { stroke-dashoffset: -34; } }
+  .p-how { grid-column: 2; align-self: start; margin-top: -2px; text-align: center; font-family: var(--er-mono); font-size: var(--fs-label-xs); color: var(--fg-3); padding: 0 6px; transform: translateY(26px); }
+  .p-page { grid-column: 3; grid-row: 1 / 4; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 22px;
+    border: 2px solid var(--er-orange-ink); background: rgba(232, 134, 58, 0.08); }
+  .p-page b { font-family: var(--er-display); font-weight: 400; text-transform: uppercase; font-size: clamp(24px, 2.4vw, 34px); color: var(--er-orange-ink); line-height: 1; }
+  .p-page span { font-size: var(--fs-label); color: var(--fg-2); }
+  .p-fail { grid-column: 1 / -1; display: flex; gap: 14px; align-items: flex-start; margin-top: 16px; padding: 16px; border: 1px dashed var(--fail); font-size: var(--fs-label); color: var(--fg-2); line-height: 1.5; }
+  .p-fail b { color: var(--fg); }
+  .pf-x { flex-shrink: 0; width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--radius-pill); background: var(--fail); color: var(--er-ink); font-weight: 700; }
+  @media (max-width: 960px) { .trust { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 560px) {
+    .pipe { grid-template-columns: minmax(0, 1fr); }
+    .p-wire, .p-how { display: none; }
+    .p-page { grid-column: 1; grid-row: auto; }
+  }
 </style>

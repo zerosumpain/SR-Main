@@ -26,7 +26,6 @@ vi.mock('$lib/db/schema', () => ({
   entities: { __t: 'entities' },
   sources: { __t: 'sources' },
   entityMentions: { __t: 'entityMentions' },
-  narrativeItems: { __t: 'narrativeItems' },
 }));
 vi.mock('drizzle-orm', () => ({ eq: () => ({}), and: () => ({}), sql: () => ({}), asc: () => ({}) }));
 

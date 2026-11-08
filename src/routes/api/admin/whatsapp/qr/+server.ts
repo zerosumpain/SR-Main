@@ -1,7 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { getWhatsAppService } from '$lib/workflows/whatsapp/service';
-import { ownsWhatsAppSession } from '$lib/workflows/service-role';
+import { getWhatsAppService } from '$lib/integrations/whatsapp/service';
+import { ownsWhatsAppSession } from '$lib/server/service-role';
 import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 
 /**

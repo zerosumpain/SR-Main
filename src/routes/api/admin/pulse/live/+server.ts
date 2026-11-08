@@ -1,9 +1,9 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { listChatJobs, recentChatPulses } from '$lib/workflows/chat/activity';
-import { getQueueStatus } from '$lib/workflows/chat/followup-queue';
-import { getRuntimeStats, readEventLoopMaxMs } from '$lib/workflows/engine-runtime';
-import { readWorkerStatus } from '$lib/workflows/worker-status.server';
+import { listChatJobs, recentChatPulses } from '$lib/jkai/chat/activity';
+import { getQueueStatus } from '$lib/jkai/chat/followup-queue';
+import { getRuntimeStats, readEventLoopMaxMs } from '$lib/server/runtime-monitor';
+import { readWorkerStatus } from '$lib/server/workflow-worker-status.server';
 import { db } from '$lib/db';
 import { workflowRuns, workflows, healthSyncState } from '$lib/db/schema';
 import { eq, desc, inArray } from 'drizzle-orm';

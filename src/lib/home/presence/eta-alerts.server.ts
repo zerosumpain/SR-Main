@@ -1,4 +1,4 @@
-import { fetchHousehold } from './companion';
+import { fetchHouseholdUsers } from './companion';
 import { createHash } from 'node:crypto';
 import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
@@ -22,7 +22,7 @@ export async function deliverArrivalEstimates(): Promise<{ sent: number }> {
   const canQueue = !!process.env.COMPANION_HOUSEHOLD_TOKEN?.trim();
   const canPush = isApnsConfigured();
   if (!canQueue && !canPush) return { sent: 0 };
-  const snapshot = await fetchHousehold('').catch(() => null);
+  const snapshot = await fetchHouseholdUsers().catch(() => null);
   if (!snapshot?.revision) return { sent: 0 };
   const members = await listMembers();
   const movers = await insightMembers({ kind: 'owner' }, members);

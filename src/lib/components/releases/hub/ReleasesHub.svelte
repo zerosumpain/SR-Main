@@ -3,7 +3,8 @@
   //
   //   A  The record      how much has shipped, and what the queue looks like
   //   B  Cadence         how often it ships, and what those deploys carry
-  //   C  The log         sessions → releases → commits for the owner
+  //   C  The cost        owner only: Claude Code spend, by week and feature
+  //   C/D The log         sessions → releases → commits for the owner
   //
   // Signed out, C is the capability record: the publicly-describable things
   // that went live, grouped by day, complete and indexable. Signed in, C is the
@@ -28,6 +29,7 @@
   import ReleaseFilters from './ReleaseFilters.svelte';
   import CapabilityRecord from './CapabilityRecord.svelte';
   import VersionLog from './VersionLog.svelte';
+  import SpendBand from './SpendBand.svelte';
   import type { ReleasesData, Tile } from './types';
 
   let { data }: { data: ReleasesData } = $props();
@@ -52,6 +54,29 @@
   // handle a function both reads and writes is the documented read-own-write
   // loop that ends in `effect_update_depth_exceeded`.
   let clearTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Archiving a footprint repository shares the same busy line: one action at
+  // a time on this band, and its outcome reads where the summariser's does.
+  async function archiveRepository(id: string, name: string) {
+    if (!confirm(`Archive ${name} on GitHub? It becomes read-only and leaves this list.`)) return;
+    busy = true;
+    busyMsg = `archiving ${name}…`;
+    try {
+      const res = await fetch('/api/site-footprint/archive', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || result?.message || `HTTP ${res.status}`);
+      busyMsg = `${name} archived`;
+      await invalidateAll();
+    } catch (err) {
+      busyMsg = err instanceof Error ? err.message : 'failed';
+    } finally {
+      busy = false;
+    }
+  }
 
   async function summarise(body: Record<string, unknown>, label: string) {
     busy = true;
@@ -128,7 +153,7 @@
   // ——— C ————————————————————————————————————————————————————————————
   const logKicker = $derived(
     data.mode === 'owner'
-      ? `C / Work and releases · page ${data.filters.page + 1}`
+      ? `D / Work and releases · page ${data.filters.page + 1}`
       : `C / What shipped · ${plural(data.items.length, 'entry', 'entries')}`,
   );
 
@@ -172,6 +197,7 @@
     {busy}
     {busyMsg}
     onSummarise={summarise}
+    onArchive={owner ? archiveRepository : undefined}
   />
 
   <section class="filters">
@@ -191,6 +217,8 @@
           impact={data.filters.impact}
           via={data.filters.via}
           vias={data.vias}
+          repo={data.filters.repo}
+          repos={data.repos}
           {result}
         />
       {:else}
@@ -216,6 +244,14 @@
     strap={cadenceStrap}
     filters={data.filters}
   />
+
+  {#if data.mode === 'owner'}
+    <SpendBand
+      spend={data.spend}
+      filters={data.filters}
+      kicker={`C / What it cost · ${plural(data.spend.totals.sessions, 'session', 'sessions')}${data.filters.from || data.filters.to ? ' · filtered window' : ''}`}
+    />
+  {/if}
 
   <section class="c" id="release-log">
     <div class="c-inner">

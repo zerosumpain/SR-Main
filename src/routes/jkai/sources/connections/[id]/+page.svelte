@@ -28,7 +28,7 @@
   );
 
   const consumers = [
-    { id: 'jkai', label: 'JKAI', note: 'Bounded search and detail when your question needs it.' },
+    { id: 'jkai', label: 'jkai', note: 'Bounded search and detail when your question needs it.' },
     { id: 'daydream', label: 'Daydream', note: 'Daily projections, coverage and evidence quality.' },
     { id: 'briefing', label: 'Briefing', note: 'Small changes and summaries.' },
     { id: 'workflow', label: 'Workflows', note: 'Only explicitly selected source data.' },
@@ -301,7 +301,7 @@
 
   {#if needsAuthorization() && data.connection.mode !== 'import'}
     <section class="authorize">
-      <div><p class="section-code">Step 3 / Connect</p><h2>{guide.actionLabel}</h2><p>{guide.actionDescription} No downstream consumer is enabled yet, and JKAI never sees your provider password.</p></div>
+      <div><p class="section-code">Step 3 / Connect</p><h2>{guide.actionLabel}</h2><p>{guide.actionDescription} No downstream consumer is enabled yet, and jkai never sees your provider password.</p></div>
       <button onclick={authorize} disabled={busy !== null || !data.provider.canStart}>{busy === 'authorize' ? 'Opening…' : `${guide.actionLabel} →`}</button>
     </section>
   {/if}
@@ -314,7 +314,7 @@
           <h2>Inspect before importing</h2>
         </div>
       </div>
-      <p class="section-copy">Upload the provider archive as a ZIP. JKAI encrypts it at rest, inspects its manifest, and waits for your confirmation before creating activity events. Maximum size: 100 MB.</p>
+      <p class="section-copy">Upload the provider archive as a ZIP. jkai encrypts it at rest, inspects its manifest, and waits for your confirmation before creating activity events. Maximum size: 100 MB.</p>
       {#if guide.preparation}
         <details class="export-help" open={data.imports.length === 0}>
           <summary>How to prepare the right archive</summary>
@@ -387,7 +387,7 @@
         <div><p class="section-code">Step 5 / Preview</p><h2 id="preview-title">A sample before sharing</h2></div>
         <a href="/jkai/activity?connection={data.connection.id}&sort={data.ordering.sort}&direction={data.ordering.direction}&then={data.ordering.then ?? ''}">Open full audit →</a>
       </div>
-      <p class="section-copy">These normalized records came from the source. They remain unavailable to JKAI and Daydream until you enable their permissions below.</p>
+      <p class="section-copy">These normalized records came from the source. They remain unavailable to jkai and Daydream until you enable their permissions below.</p>
       <EvidenceSort ordering={data.ordering} preserve={{ journey: data.onboardingSession?.id }} />
       <p class="section-copy preview-limit">Up to 5 records in the selected order.</p>
       <ol>
@@ -427,7 +427,7 @@
         <button onclick={saveGrants} disabled={busy !== null}>{busy === 'grants' ? 'Saving…' : 'Save permissions'}</button>
       </div>
     </div>
-    <p class="section-copy"><strong>Recommended</strong> enables activity and metadata for JKAI answers and Daydream summaries only. Briefing, workflows, Intel, external tools and all raw content stay off.</p>
+    <p class="section-copy"><strong>Recommended</strong> enables activity and metadata for jkai answers and Daydream summaries only. Briefing, workflows, Intel, external tools and all raw content stay off.</p>
     <div class="grant-table" style={`--grant-cols: ${data.connection.dataClasses.length}`}>
       <div class="grant-head"><span>Consumer</span>{#each data.connection.dataClasses as dataClass}<span>{dataClass.replaceAll('_', ' ')}</span>{/each}</div>
       {#each consumers as consumer (consumer.id)}

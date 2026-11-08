@@ -14,6 +14,7 @@
   import RollupGrid from '$lib/components/jkai/daydream/hub/RollupGrid.svelte';
   import type { RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import ImprovementPanel from '$lib/components/builds/improvement/ImprovementPanel.svelte';
+  import ImprovementControls from '$lib/components/builds/improvement/ImprovementControls.svelte';
 
   let { data }: { data: PageData } = $props();
 
@@ -83,11 +84,11 @@
 
 </script>
 
-<svelte:head><title>Improvement — JKAI</title></svelte:head>
+<svelte:head><title>Improvement — jkai</title></svelte:head>
 
 <DaydreamShell
   path="/jkai/develop/improvement"
-  kicker="JKAI · Build process · Improvement"
+  kicker="jkai · Build process · Improvement"
   title={['What it built', 'overnight']}
   standfirst="The nightly self-improvement run: what fired in the window and what it cost, whether anything it built is being used, and the loop from an idea arriving on the backlog to something shipped."
   readout={[
@@ -100,15 +101,23 @@
   footer={[
     'strangeramblings.com/jkai/develop/improvement',
     'ideas → your tap → build → verify → live',
-    'switches and budget live in /admin/ai/improvement',
+    'switches and budget: the owner controls on this page',
   ]}
 >
 <DsVocab>
 <nav class="improvement-actions" aria-label="Improvement actions">
   <a class="cta" href="/jkai/develop/doctor">Open Doctor →</a>
-  {#if !data.member}<a class="btn" href="/admin/ai/improvement">Controls →</a>{/if}
+  {#if data.controls}<a class="btn" href="#controls">Controls ↓</a>{/if}
   <a class="btn" href="/jkai/develop/backlog">Epic backlog →</a>
 </nav>
+
+{#if !data.member && data.controls}
+  <div class="improvement-controls">
+    <ImprovementControls {...data.controls} />
+  </div>
+{:else if !data.member}
+  <div class="improvement-controls"><div class="card t-urgent"><p class="card-body">The engine controls could not be read.</p></div></div>
+{/if}
 
 <!-- The night, before anything it produced. One window, one budget: a night
      that overruns is a night that stops rather than a night that spends, so
@@ -160,6 +169,7 @@
 </DaydreamShell>
 
 <style>
+  .improvement-controls { padding: 18px clamp(20px, 3vw, 44px) 0; }
   .improvement-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 18px clamp(20px, 3vw, 44px); border-bottom: 1px solid var(--line); background: var(--surface-rail); }
 
   .ledger {

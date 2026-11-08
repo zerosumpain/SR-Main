@@ -65,9 +65,11 @@ describe('every native route gates itself', () => {
    * takes no credential (it is how one is got, like /pair — guarded by
    * Apple's signature and a per-address ceiling), and withdrawing resolves
    * the device itself because a registrant is no member for
-   * `withNativeAccess` to find.
+   * `withNativeAccess` to find. The update check (`app-update`) answers ANY
+   * paired phone, member or registrant — it already has the app — so it calls
+   * `identifyDevice` itself rather than owner-only `withDevice`.
    */
-  const SELF_GATED = ['native/pair/+server.ts', 'native/register/apple/+server.ts', 'native/review-demo/+server.ts', 'native/companion-policy/+server.ts', 'native/session/+server.ts'];
+  const SELF_GATED = ['native/pair/+server.ts', 'native/register/apple/+server.ts', 'native/review-demo/+server.ts', 'native/companion-policy/+server.ts', 'native/session/+server.ts', 'native/app-update/+server.ts'];
 
   it.each(handlers.filter((p) => !SELF_GATED.some((s) => p.endsWith(s))))(
     '%s resolves a device identity',
@@ -101,12 +103,79 @@ describe('every native route gates itself', () => {
         '/chat/conversations/[id]/messages/+server.ts',
         '/chat/conversations/[id]/model/+server.ts',
         '/companion-pair/+server.ts',
+        // Drive on the phone: drive:self, and then only the caller's own space
+        // and the family's shared folder ($lib/drive/app-lane) — never another
+        // member's folder, and the owner's files only from the owner's phone.
+        '/drive/+server.ts',
+        '/drive/files/+server.ts',
+        '/drive/files/[id]/+server.ts',
+        // jkai on a file (analyse, extract entities): the wrapper resolves the
+        // caller, then the relay 403s anyone but the owner (`requireOwner`).
+        '/drive/files/[id]/analyse/+server.ts',
+        '/drive/files/[id]/intel/+server.ts',
+        // Info screen: a member gets the file and nulls for jkai's fields.
+        '/drive/files/[id]/meta/+server.ts',
+        // Grid tiles and the viewer: a JPEG of a picture the download would serve.
+        '/drive/files/[id]/preview/+server.ts',
+        '/drive/folders/+server.ts',
+        // Photo sync's "which of these do you have?" — fingerprints only, the caller's own space.
+        '/drive/have/+server.ts',
+        // Photo search in Drive: the wrapper resolves the caller, then each
+        // handler 403s anyone but the owner (`requirePhotoOwner`), as Drive's
+        // photo lane does — never a member, nor the owner viewing as one.
+        '/drive/photos/face/[id]/+server.ts',
+        '/drive/photos/people/+server.ts',
+        '/drive/photos/search/+server.ts',
+        '/drive/photos/thumb/[id]/+server.ts',
+        // Names in the caller's own space or the shared folder; contents hits owner-only.
+        '/drive/search/+server.ts',
+        // Resumable uploads for big videos and photos: the same two spaces,
+        // relayed to SR-Drive with the same `x-sr-app-for` naming as files.
+        '/drive/uploads/+server.ts',
+        '/drive/uploads/[id]/+server.ts',
+        '/drive/uploads/[id]/complete/+server.ts',
+        // The family alarm: raise, stand down and list active alarms. The
+        // forecast's audience (owner, or a family:circle/admin member via
+        // `peopleViewerOf` + `familyCaller`); everyone else 403s. Standing one
+        // down is the sender or the owner only.
+        '/family/alarm/+server.ts',
+        '/family/alarm/cancel/+server.ts',
+        // The family backlog (Share → SR): the same audience, `familyCaller`
+        // in each handler; everyone else 403s.
+        '/family/backlog/+server.ts',
+        '/family/backlog/[id]/+server.ts',
+        '/family/backlog/[id]/cast/+server.ts',
+        '/family/backlog/[id]/reaction/+server.ts',
+        '/family/backlog/digest/+server.ts',
         // The travel desk's forecast. Scoped exactly as /home/people is: a
         // Family Circle / Family Admin member gets themselves and their wards.
         '/family/forecast/+server.ts',
+        // "That's wrong" on a next move: the forecast's own audience, and only
+        // a move that viewer's forecast is showing.
+        '/family/forecast/feedback/+server.ts',
+        // One person's moves looked back at: the forecast's own gate and
+        // scope — a member asks after themselves and their wards, else 404.
+        '/family/forecast/history/+server.ts',
         // Family steps and tasks: the owner or a family:circle/admin grant,
         // checked by `familyCaller` in each handler; everyone else 403s.
         '/family/steps/+server.ts',
+        // "Ask everyone's phone" from the steps screen: the same audience;
+        // a silent wake to the rest of the family, throttled family-wide.
+        '/family/steps/ask/+server.ts',
+        // Landgrab beside the steps board: the same audience, `familyCaller`
+        // in each handler; SR-Health computes it over the service lane.
+        '/family/landgrab/+server.ts',
+        '/family/landgrab/changes/+server.ts',
+        '/family/landgrab/explored/+server.ts',
+        // "msg family": the same audience, `familyCaller` in each handler.
+        '/family/messages/+server.ts',
+        '/family/messages/[id]/+server.ts',
+        '/family/messages/[id]/replies/+server.ts',
+        // Family photos: the same audience, `familyCaller` in each handler;
+        // a member sets or clears only their own (PUT/DELETE /family/photo).
+        '/family/photo/+server.ts',
+        '/family/photos/+server.ts',
+        '/family/photos/[id]/+server.ts',
         '/family/tasks/+server.ts',
         '/family/tasks/[id]/+server.ts',
         '/games/+server.ts',
@@ -114,6 +183,16 @@ describe('every native route gates itself', () => {
         '/games/[id]/stream/+server.ts',
         // The family games leaderboard: names and hashed player ids, games:self.
         '/games/leaderboard/+server.ts',
+        // Games played with no internet, filed later: games:self; each result
+        // is filed for the caller alone (their own player id), and View as is
+        // refused by the gate because it is a write.
+        '/games/offline-results/+server.ts',
+        // Sitting down at a TV party from its QR (sr. tv): games:self, the
+        // member joins as themselves only (their own player id).
+        '/games/party/[code]/join/+server.ts',
+        // Game ideas the family would like one day: games:self, then the
+        // family (owner, circle or parent) in the handler; names only.
+        '/games/suggestions/+server.ts',
         '/me/+server.ts',
         // A member's phone registers its APNs token here so their game
         // invites and household departures can be pushed to it. It stores a
@@ -133,6 +212,35 @@ describe('every native route gates itself', () => {
         '/route-session/[id]/+server.ts',
         '/route-session/[id]/end/+server.ts',
         '/route-session/[id]/fixes/+server.ts',
+        // Trips (spec 2026-10-13, v5): open to the family — `nativeTripCaller`
+        // (familyCaller) in each handler; anyone outside the family 403s, and
+        // edits/approvals are gated per trip by `tripAccess`.
+        '/trips/+server.ts',
+        '/trips/[id]/+server.ts',
+        '/trips/[id]/converse/+server.ts',
+        '/trips/[id]/events/+server.ts',
+        '/trips/[id]/ideas/+server.ts',
+        // v8: the research pack (any family member reads; editors build) and
+        // quick questions (members see and vote on family questions only).
+        '/trips/[id]/pack/+server.ts',
+        '/trips/[id]/questions/[qid]/+server.ts',
+        // v8.1: a person's own question notifications for a trip, on or off.
+        '/trips/[id]/question-pushes/+server.ts',
+        '/trips/[id]/replan/+server.ts',
+        '/trips/[id]/route/+server.ts',
+        '/trips/[id]/suggestions/+server.ts',
+        '/trips/[id]/suggestions/[sid]/+server.ts',
+        // v8 decisions: reading is any family member; proposing, deciding,
+        // undoing and editing the brief need `canEdit || canApprove` (403 otherwise).
+        '/trips/[id]/brief/+server.ts',
+        '/trips/[id]/decisions/+server.ts',
+        '/trips/[id]/proposals/+server.ts',
+        '/trips/[id]/proposals/[pid]/+server.ts',
+        '/trips/[id]/undo/+server.ts',
+        '/trips/[id]/versions/+server.ts',
+        '/trips/jobs/[jobId]/+server.ts',
+        // v8: "From your notes" — the owner's phone only; anyone else gets [].
+        '/trips/notes/+server.ts',
       ].sort(),
     );
     // And none of them keeps an owner-only handler beside it by accident.
@@ -159,7 +267,7 @@ describe('every native route gates itself', () => {
   });
 
   it('keeps credential MINTING off the bypassed tree entirely', () => {
-    // Minting lives at /api/admin/native-devices, behind the ordinary owner
+    // Minting lives under /admin/access (a person's page), behind the ordinary owner
     // gate. An endpoint that issues credentials must not sit behind the
     // exemption those credentials open.
     expect(handlers.some((p) => p.includes('devices'))).toBe(false);

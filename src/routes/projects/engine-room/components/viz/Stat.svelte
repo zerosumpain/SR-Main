@@ -1,36 +1,39 @@
 <script lang="ts">
-  // Stat — one measured number, with the command that produced it kept on the tile.
-  // Every figure in this study was counted rather than estimated; the provenance is not
-  // decoration, it is the thing that makes the number worth printing.
+  // Stat — one figure, big, with what it counts underneath.
+  //
+  // A number counts up the first time it is seen (kit/Counter). A string is printed as it
+  // comes: a time window or a range. Every figure on this study is read from code or the
+  // database, never typed, so `how` is there for the rare tile that needs its source spelled out.
+  import Counter from '../kit/Counter.svelte';
+
   interface Props {
-    value: string | number;
+    value: string | number | null | undefined;
     unit?: string;
+    prefix?: string;
+    places?: number;
     label: string;
     /** How it was measured. Shown on hover/focus and to screen readers. */
     how?: string;
+    /** A colour override. Normally the page's part colour is right. */
     tone?: string;
     /** Bigger treatment for the one number that matters most on a page. */
     lead?: boolean;
   }
-  let { value, unit, label, how, tone = 'var(--accent-ink)', lead = false }: Props = $props();
-  const shown = $derived(typeof value === 'number' ? value.toLocaleString('en-GB') : value);
+  let { value, unit, prefix, places = 0, label, how, tone, lead = false }: Props = $props();
 </script>
 
-<div class="stat" class:lead style="--tone:{tone}" title={how}>
-  <b class="s-val">{shown}{#if unit}<span class="s-unit">{unit}</span>{/if}</b>
+<div class="stat" class:lead style={tone ? `--tone:${tone};--tone-text:${tone}` : ''} title={how}>
+  <b class="s-val">{#if typeof value === 'number' || value == null}<Counter {value} {places} prefix={prefix ?? ''} />{:else}{value}{/if}{#if unit}<span class="s-unit">{unit}</span>{/if}</b>
   <span class="s-lab">{label}</span>
   {#if how}<span class="s-how">{how}</span>{/if}
 </div>
 
 <style>
-  .stat { --tone: var(--accent-ink); border: 1px solid rgba(28,22,17,0.14); border-left: 3px solid var(--tone);
-    border-radius: 0 var(--radius-sharp) var(--radius-sharp) 0; background: rgba(255,255,255,0.55);
-    padding: 10px 13px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .s-val { font-family: var(--font-mono); font-weight: 600; font-size: 21px; line-height: 1.05;
-    color: var(--text-primary); letter-spacing: -0.02em; }
-  .lead .s-val { font-size: 30px; }
-  .s-unit { font-size: max(0.55em, var(--fs-label-xs)); font-weight: 500; color: rgba(28,22,17,0.55); margin-left: 2px; }
-  .s-lab { font-size: var(--fs-label-xs); line-height: 1.4; color: rgba(28,22,17,0.74); }
-  .s-how { font-family: var(--font-mono); font-size: var(--fs-label-xs); line-height: 1.4;
-    color: rgba(28,22,17,0.42); overflow-wrap: anywhere; margin-top: 2px; }
+  .stat { border-top: 2px solid var(--tone); padding: 12px 2px 4px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .s-val { font-family: var(--er-display); font-weight: 400; font-size: clamp(30px, 3vw, 42px); line-height: 0.95;
+    color: var(--fg); letter-spacing: -0.01em; }
+  .lead .s-val { font-size: clamp(44px, 5vw, 72px); color: var(--tone-text); }
+  .s-unit { font-family: var(--er-mono); font-size: max(0.36em, var(--fs-label-xs)); font-weight: 500; color: var(--fg-3); margin-left: 4px; letter-spacing: 0; }
+  .s-lab { font-size: var(--fs-label); line-height: 1.45; color: var(--fg-2); max-width: 30ch; }
+  .s-how { font-family: var(--er-mono); font-size: var(--fs-label-xs); line-height: 1.4; color: var(--fg-3); overflow-wrap: anywhere; }
 </style>

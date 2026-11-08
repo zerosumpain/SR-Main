@@ -23,7 +23,7 @@ vi.mock('$lib/selfimprove/backlog', () => ({
 // gateway at load time; none of them is exercised by `queueBuildNotes`.
 vi.mock('$lib/server/models/settings', () => ({ getSetting: vi.fn() }));
 vi.mock('$lib/heartbeat/idle', () => ({ isUserActive: vi.fn() }));
-vi.mock('$lib/workflows/chat/activity', () => ({ listChatJobs: vi.fn() }));
+vi.mock('$lib/jkai/chat/activity', () => ({ listChatJobs: vi.fn() }));
 vi.mock('$lib/daydream/budget', () => ({ attributeSpend: vi.fn(), budgetStatus: vi.fn(), readQuotaMark: vi.fn(), ZERO_SPEND: {} }));
 vi.mock('$lib/daydream/model', () => ({ resolveDaydreamModel: vi.fn() }));
 vi.mock('$lib/daydream/think/run', () => ({ runThink: vi.fn(), MAX_ROUNDS: 6 }));

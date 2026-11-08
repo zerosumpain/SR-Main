@@ -6,7 +6,7 @@
 // probe says so via `live: false` rather than implying it verified something.
 import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 import type { ConnectorReport, ConnectorStatus, ConnectorTier } from './types';
-import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
+import { ownerGmailWhere } from '$lib/integrations/gmail/owner-accounts';
 
 const TIMEOUT_MS = 8000;
 
@@ -79,7 +79,7 @@ async function probeGmail(): Promise<ConnectorReport[]> {
   return Promise.all(
     accounts.map((acc) =>
       guard(`gmail:${acc.id}`, `Gmail · ${acc.email}`, 'Email', 'account', async () => {
-        const { gmailService } = await import('$lib/workflows/gmail/service');
+        const { gmailService } = await import('$lib/integrations/gmail/service');
         // Re-authorising is a consent redirect, so it has to be a real
         // navigation rather than a form post.
         const reconnect = {
@@ -486,14 +486,14 @@ async function probeIntegrationCredentials(): Promise<ConnectorReport[]> {
                 live: false,
                 lastOkAt,
                 impact,
-                fixUrl: '/admin/connections/credentials',
+                fixUrl: `/admin/connections/credentials?replace=${cred.id}`,
                 fixHint:
                   type === 'apple-calendar'
                     ? 'App-specific passwords are revoked when you change your Apple ID password — generate a new one'
                     : 'Re-enter the credential',
                 actions: [
                   test,
-                  { kind: 'link', target: '/admin/connections/credentials', label: 'Re-enter' },
+                  { kind: 'link', target: `/admin/connections/credentials?replace=${cred.id}`, label: 'Re-enter' },
                 ],
               };
             }
@@ -754,6 +754,25 @@ async function probeTavily(): Promise<ConnectorReport> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Brave Search — presence only, like Tavily. Optional: without it the search
+// balancer sends every search to Tavily, so a missing key is absent, not broken.
+// ---------------------------------------------------------------------------
+async function probeBrave(): Promise<ConnectorReport> {
+  return guard('brave', 'Brave Search (web search)', 'AI', 'service', async () => {
+    const { getBraveApiKey } = await import('$lib/deepdive/brave');
+    const key = await getBraveApiKey();
+    return key
+      ? { status: 'ok' as ConnectorStatus, detail: 'key present (not test-searched — searches use the allowance)', live: false }
+      : {
+          status: 'unconfigured' as ConnectorStatus,
+          detail: 'no key — every search goes to Tavily alone',
+          live: false,
+          fixHint: 'Save a Brave Search key at /admin/ai/keys',
+        };
+  });
+}
+
 /** Probe everything, concurrently. Never throws. */
 export async function probeAll(): Promise<ConnectorReport[]> {
   const [gmail, integrations, oauthSecrets, ...rest] = await Promise.all([
@@ -767,6 +786,7 @@ export async function probeAll(): Promise<ConnectorReport[]> {
     probeOpenRouter(),
     probeWhatsApp(),
     probeTavily(),
+    probeBrave(),
   ]);
   return [...gmail, ...integrations, ...oauthSecrets, ...(rest as ConnectorReport[])];
 }

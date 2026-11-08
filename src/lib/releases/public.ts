@@ -20,9 +20,10 @@
 
 import { db } from '$lib/db';
 import { releases, releaseItems, projectVisibility } from '$lib/db/schema';
-import { desc, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { isItemPublic, redactItem } from './public-filter';
 import { correctedStats } from './corrected-facts';
+import { localDayCadence, type LocalDayCount } from './local-days';
 import type { ReleaseItemKind, ReleaseStats } from './types';
 
 /** Release data only changes when a deploy lands, so this can be generous. */
@@ -76,6 +77,8 @@ export interface ShowcaseItem {
 export interface ShowcasePayload {
   totals: ShowcaseTotals;
   cadence: CadenceDay[];
+  /** Deploys per LONDON day, for the landing sentence's "today" (see ./local-days). */
+  localCadence: LocalDayCount[];
   kindMix: KindSlice[];
   items: ShowcaseItem[];
   generatedAt: string;
@@ -122,10 +125,19 @@ const EMPTY: ShowcasePayload = {
     shipped: 0, firstDeploy: null, lastDeploy: null, days: 0,
   },
   cadence: [],
+  localCadence: [],
   kindMix: [],
   items: [],
   generatedAt: new Date(0).toISOString(),
 };
+
+/**
+ * The public record is SR-Main's alone. Since 2026-11-08 the porkserv collector
+ * also records releases from every other site repository, most of them
+ * private; their summaries were never written with the public filter's
+ * assumptions in mind, so they stay in the owner console.
+ */
+export const PUBLIC_REPO = 'zerosumpain/SR-Main';
 
 async function compute(): Promise<ShowcasePayload> {
   const [statRows, itemRows, vis] = await Promise.all([
@@ -137,7 +149,8 @@ async function compute(): Promise<ShowcasePayload> {
         stats: releases.stats,
         deployedAt: releases.deployedAt,
       })
-      .from(releases),
+      .from(releases)
+      .where(eq(releases.repo, PUBLIC_REPO)),
     // Every summarised item, newest first. 1,056 rows of short text is a single
     // cheap read, and the safety filter has to run in Node anyway — it depends
     // on the visibility map and on prose matching.
@@ -154,6 +167,7 @@ async function compute(): Promise<ShowcasePayload> {
       })
       .from(releaseItems)
       .innerJoin(releases, sql`${releases.id} = ${releaseItems.releaseId}`)
+      .where(eq(releases.repo, PUBLIC_REPO))
       .orderBy(desc(releases.deployedAt), desc(releaseItems.ordinal)),
     visibilityMap(),
   ]);
@@ -207,6 +221,7 @@ async function compute(): Promise<ShowcasePayload> {
           : 0,
     },
     cadence: first && last ? denseCadence(dayCounts, shippedByDay, first, last) : [],
+    localCadence: localDayCadence(statRows.map((r) => r.deployedAt)),
     kindMix: [...kindCounts.entries()]
       .map(([kind, count]) => ({ kind, count }))
       .sort((a, b) => b.count - a.count),

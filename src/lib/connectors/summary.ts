@@ -19,7 +19,7 @@
 import { db } from '$lib/db';
 import { appleHealthMetrics, gmailAccounts, healthSyncState, integrationCredentials } from '$lib/db/schema';
 import { inArray, ne, sql } from 'drizzle-orm';
-import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
+import { ownerGmailWhere } from '$lib/integrations/gmail/owner-accounts';
 import { confirmedMarks } from './watch-store';
 import { mergeBannerNames } from './watch-core';
 

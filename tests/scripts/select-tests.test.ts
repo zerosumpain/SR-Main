@@ -55,9 +55,9 @@ describe('test selector', () => {
 	// repo. The selector was blind to that form, so changing a tool module
 	// reached through the registry selected exactly the always-run baseline.
 	it('follows a bare side-effect import as an edge', () => {
-		const r = select(['src/lib/workflows/site-tools/tools/whatsapp.ts']);
+		const r = select(['src/lib/tools/tools/whatsapp.ts']);
 		expect(r.mode).toBe('selected');
-		expect(r.files).toContain('tests/lib/workflows/browser/tools.test.ts');
+		expect(r.files).toContain('tests/lib/browser/tools.test.ts');
 	});
 
 	it('includes a changed test file itself', () => {

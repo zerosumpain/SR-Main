@@ -1,0 +1,272 @@
+{
+  "schema": 1,
+  "profile": "quick",
+  "createdAt": "2026-10-24T11:46:38.591Z",
+  "engineHash": "5f07b7e3842591f4",
+  "paramsHash": "8416454bc6f5802a",
+  "seeds": 12,
+  "days": 20,
+  "gates": {
+    "G1": "pending",
+    "G2": "fail",
+    "G2b": "fail",
+    "G13": "pass",
+    "G3": "fail",
+    "G4": "pending",
+    "G5": "pending",
+    "G6": "pending",
+    "G7": "pending",
+    "G8": "fail",
+    "G9": "pass",
+    "G10": "fail",
+    "G11": "pending",
+    "G12": "fail"
+  },
+  "metrics": {
+    "balanced.finalPop": {
+      "value": 5903.5,
+      "better": 1
+    },
+    "balanced.happy": {
+      "value": 81.4,
+      "better": 1
+    },
+    "balanced.composite": {
+      "value": 4989,
+      "better": 1
+    },
+    "balanced.day.tier1": {
+      "value": 3,
+      "better": -1
+    },
+    "balanced.day.tier2": {
+      "value": 11,
+      "better": -1
+    },
+    "tourist.finalPop": {
+      "value": 6384,
+      "better": 1
+    },
+    "tourist.happy": {
+      "value": 85.9,
+      "better": 1
+    },
+    "tourist.composite": {
+      "value": 5402,
+      "better": 1
+    },
+    "tourist.day.tier1": {
+      "value": 3,
+      "better": -1
+    },
+    "industrial.finalPop": {
+      "value": 3993,
+      "better": 1
+    },
+    "industrial.happy": {
+      "value": 83.4,
+      "better": 1
+    },
+    "industrial.composite": {
+      "value": 3001,
+      "better": 1
+    },
+    "industrial.day.tier1": {
+      "value": 3,
+      "better": -1
+    },
+    "suburb.finalPop": {
+      "value": 9154.5,
+      "better": 1
+    },
+    "suburb.happy": {
+      "value": 93.2,
+      "better": 1
+    },
+    "suburb.composite": {
+      "value": 8525,
+      "better": 1
+    },
+    "suburb.day.tier1": {
+      "value": 3,
+      "better": -1
+    },
+    "suburb.day.tier2": {
+      "value": 12.5,
+      "better": -1
+    },
+    "greedy.finalPop": {
+      "value": 590.5,
+      "better": 1
+    },
+    "greedy.happy": {
+      "value": 53.5,
+      "better": 1
+    },
+    "greedy.composite": {
+      "value": 330,
+      "better": 1
+    },
+    "debt.finalPop": {
+      "value": 3269,
+      "better": 1
+    },
+    "debt.happy": {
+      "value": 71.3,
+      "better": 1
+    },
+    "debt.composite": {
+      "value": 3196,
+      "better": 1
+    },
+    "debt.day.tier1": {
+      "value": 3.5,
+      "better": -1
+    },
+    "debt.day.tier2": {
+      "value": 13.5,
+      "better": -1
+    },
+    "poacher.finalPop": {
+      "value": 2855.5,
+      "better": 1
+    },
+    "poacher.happy": {
+      "value": 71.8,
+      "better": 1
+    },
+    "poacher.composite": {
+      "value": 2046,
+      "better": 1
+    },
+    "poacher.day.tier1": {
+      "value": 3,
+      "better": -1
+    },
+    "hermit.finalPop": {
+      "value": 8888,
+      "better": 1
+    },
+    "hermit.happy": {
+      "value": 80.5,
+      "better": 1
+    },
+    "hermit.composite": {
+      "value": 7030,
+      "better": 1
+    },
+    "hermit.day.tier1": {
+      "value": 3,
+      "better": -1
+    },
+    "hermit.day.tier2": {
+      "value": 11.5,
+      "better": -1
+    },
+    "cooperator.finalPop": {
+      "value": 9005.5,
+      "better": 1
+    },
+    "cooperator.happy": {
+      "value": 80.7,
+      "better": 1
+    },
+    "cooperator.composite": {
+      "value": 6725,
+      "better": 1
+    },
+    "cooperator.day.tier1": {
+      "value": 3,
+      "better": -1
+    },
+    "cooperator.day.tier2": {
+      "value": 12,
+      "better": -1
+    },
+    "kid.finalPop": {
+      "value": 937,
+      "better": 1
+    },
+    "kid.happy": {
+      "value": 53,
+      "better": 1
+    },
+    "kid.composite": {
+      "value": 531,
+      "better": 1
+    },
+    "kid.day.tier1": {
+      "value": 11,
+      "better": -1
+    },
+    "weekly.finalPop": {
+      "value": 1678,
+      "better": 1
+    },
+    "weekly.happy": {
+      "value": 68.6,
+      "better": 1
+    },
+    "weekly.composite": {
+      "value": 1036,
+      "better": 1
+    },
+    "weekly.day.tier1": {
+      "value": 7,
+      "better": -1
+    },
+    "absent.finalPop": {
+      "value": 102,
+      "better": 1
+    },
+    "absent.happy": {
+      "value": 2.1,
+      "better": 1
+    },
+    "absent.composite": {
+      "value": 3,
+      "better": 1
+    },
+    "spammer.finalPop": {
+      "value": 311,
+      "better": 1
+    },
+    "spammer.happy": {
+      "value": 4.1,
+      "better": 1
+    },
+    "spammer.composite": {
+      "value": 13,
+      "better": 1
+    },
+    "G13.Residents after 12 sprint ticks in 60–120": {
+      "value": 0.972,
+      "better": 1
+    },
+    "G13.Homes £, Shops and Farms meters positive at tap 3": {
+      "value": 1,
+      "better": 1
+    },
+    "G8.Absent reaches Village": {
+      "value": 0,
+      "better": 1
+    },
+    "G8.Never more than 3 days in a row in Helper Mode": {
+      "value": 1,
+      "better": 1
+    },
+    "G8.Never more than 15% below its peak": {
+      "value": 0.5,
+      "better": 1
+    },
+    "G9.Town-months where the top 3 terms explain ≥ 70% of population": {
+      "value": 1,
+      "better": 1
+    },
+    "G9.Town-months where the top 3 terms explain ≥ 70% of revenue": {
+      "value": 1,
+      "better": 1
+    }
+  },
+  "spectralThreshold": 37.60223366469824
+}

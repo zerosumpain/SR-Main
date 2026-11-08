@@ -1,24 +1,21 @@
 import type { PageServerLoad } from './$types';
-import { autoGroomBacklog } from '$lib/workflows/backlog-grooming.server';
 import { EMPTY_BOARD } from '$lib/selfimprove/board';
 import { errMsg } from '$lib/selfimprove/types';
-import { readBacklogRoom } from '$lib/selfimprove/epic-backlog.server';
+import { readBacklogRoom } from '$lib/selfimprove/backlog-room.server';
 import { isOwnerRequest } from '$lib/server/owner';
 import { memberBacklog } from '$lib/member-view';
 
 /**
- * The room reads one thing.
+ * The room reads one thing, and writes nothing.
  *
- * `autoGroomBacklog` already builds the board on its way to the epics, and the
- * deck, the burndown and the intake window all come off it — so the alternative
- * is a second full pass over the same 470 rows to recompute what the first one
- * threw away.
+ * `readBacklogRoom` builds the board on its way to the epics, and the deck, the
+ * burndown and the intake window all come off it. The automatic grooming that
+ * used to run here on every owner view — saving epic memberships and applying
+ * merges inside a GET — is the heartbeat's `backlog-grooming` activity now.
  */
 export const load: PageServerLoad = async (event) => {
   if (!(await isOwnerRequest(event))) {
-    // jkai · develop, read-only. Never `autoGroomBacklog`: it applies the
-    // engine's grooming decisions, and a member's page view must write nothing.
-    // `readBacklogRoom` reads and folds, and the result is redacted.
+    // jkai · develop, read-only, and redacted: no grooming lane.
     try {
       const { epics, board } = await readBacklogRoom();
       return { ...memberBacklog(epics, board), error: null, member: true };
@@ -28,7 +25,7 @@ export const load: PageServerLoad = async (event) => {
     }
   }
   try {
-    const { epics, board } = await autoGroomBacklog();
+    const { epics, board } = await readBacklogRoom({ grooming: true });
     return { epics, board, error: null, member: false };
   } catch (error) {
     // EMPTY_BOARD rather than null, for the reason it exists: every consumer

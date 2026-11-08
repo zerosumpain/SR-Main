@@ -3,6 +3,7 @@ import { render } from 'svelte/server';
 import ReleasesHub from './ReleasesHub.svelte';
 import { monthlyReleaseBuckets, parseConsoleFilters, weeklyCadence } from '$lib/releases/console';
 import { groupReleaseWork } from './work-groups';
+import { buildSpendBand } from '$lib/releases/spend';
 import type { OwnerReleasesData, PublicReleasesData } from './types';
 
 // /releases serves two documents at one URL, and the anonymous one is the
@@ -74,7 +75,7 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
     mode: 'owner',
     today: '2026-09-25',
     sourceFootprint: footprint,
-    filters: { kind: 'all', impact: 'all', via: 'all', q: '', from: '', to: '', page: 0 },
+    filters: { repo: 'all', kind: 'all', impact: 'all', via: 'all', q: '', from: '', to: '', page: 0 },
     totals: {
       releases: 418,
       commits: 2338,
@@ -87,12 +88,14 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
       maxDate: '2026-07-29',
     },
     vias: [{ via: 'github-actions', count: 400 }],
+    repos: [{ repo: 'zerosumpain/SR-Main', count: 400 }, { repo: 'zerosumpain/SR-Drive', count: 72 }],
     kindDist: [{ kind: 'feature', count: 308 }],
     cadence: [{ week: '2026-W30', deploys: 9, shipped: 14, insertions: 120, deletions: 34 }],
     timeBuckets: [{ month: '2026-07', deploys: 9 }],
     items: [
       {
         id: 1,
+        repo: 'zerosumpain/SR-Main',
         version: '2026.07.29.6',
         sha: SHA,
         shortSha: SHA.slice(0, 8),
@@ -162,6 +165,25 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
       unlinkedInWindow: 3,
       sessionsWithoutPrs: 41,
     },
+    spend: buildSpendBand(
+      [
+        {
+          id: 'sess-1',
+          title: 'Fold the changelog into the release log',
+          project: 'strange-rambling-svelte',
+          startedAt: '2026-07-29T09:00:00Z',
+          costUsd: 18.42,
+          costKnown: true,
+          prs: [761],
+          touched: [],
+          tokens: { input: 10, cacheRead: 990 },
+          breakdown: [{ model: 'claude-opus-5-5', source: 'subagent', costUsd: 4.2 }],
+          stages: [{ stage: 'result', costUsd: 18.42 }],
+          messageCount: 214,
+        },
+      ],
+      [{ id: 1, deployedAt: '2026-07-29T13:52:00Z', prs: [761], files: [{ path: 'src/routes/releases/+page.svelte', insertions: 40, deletions: 2 }], items: ['Connector health'] }],
+    ),
     ...over,
   };
 }
@@ -227,6 +249,11 @@ describe('the public document', () => {
     // rendered output too, because the type is only half the guarantee.
     const body = html(publicData());
     expect(body).not.toContain('The work behind it');
+    expect(body).not.toContain('What the work');
+    expect(body).not.toContain('Cost of a feature');
+    expect(body).not.toContain('Feature ledger');
+    expect(body).not.toContain('£');
+    expect(body).not.toContain('$');
     expect(body).not.toContain('sess-1');
     expect(body).not.toMatch(/pull\/\d+/);
     expect(body.toLowerCase()).not.toContain('pull request');
@@ -247,7 +274,7 @@ describe('the owner document', () => {
     expect(body).toContain('2026.07.29.6');
     expect(body).toContain('Connector health monitoring');
     expect(body).toContain('Fold the changelog into the release log');
-    expect(body).toContain('$18.42');
+    expect(body).toContain('£14.55');
     expect(body).toContain('1 commit');
     expect(body).toContain('fix jid normalisation');
     expect(body).toContain('All sources');
@@ -272,6 +299,16 @@ describe('the owner document', () => {
     const clean = html(ownerData({ totals: { ...ownerData().totals, pending: 0, failed: 0 } }));
     expect(clean).toContain('Every release in this view has been summarised.');
     expect(clean).not.toContain('Retry');
+  });
+
+  it('shows what the work cost, by feature', () => {
+    expect(body).toContain('What the work');
+    expect(body).toContain('Estimated spend');
+    expect(body).toContain('Cost of a feature');
+    expect(body).toContain('Feature ledger');
+    expect(body).toContain('Shipped (/releases)');
+    expect(body).toContain('£3.32');
+    expect(body).toContain('D / Work and releases');
   });
 
   it('is not indexable copy — it names the full read', () => {
@@ -399,4 +436,66 @@ describe('weeklyCadence', () => {
    expect(owner).toContain('12345678');
    expect(owner).toContain('7 Sep');
    expect(html(publicData())).not.toContain('SR-Health');
+ });
+
+ it('shows when each repository last moved, and offers the owner an archive button except on SR-Main', () => {
+   const repository = {
+     id: 'smashamole', name: 'smashamole', url: 'https://github.com/zerosumpain/smashamole',
+     role: 'Game', revision: 'abcdef1234567890', updatedAt: '2026-04-12T10:00:00Z',
+     measuredAt: '2026-11-08T03:40:00Z', source: 'revision snapshot', code: { lines: 10, files: 1 },
+     documentation: { lines: 0, files: 0 }, tests: { lines: 0, files: 0 },
+   };
+   const owner = html(ownerData({ sourceFootprint: { ...footprint, repositories: [repository] } }));
+   expect(owner).toContain('datetime="2026-04-12T10:00:00Z"');
+   expect(owner).toContain('Archive smashamole on GitHub');
+   const mainOnly = html(ownerData({ sourceFootprint: { ...footprint, repositories: [{ ...repository, id: 'main', name: 'SR-Main' }] } }));
+   expect(mainOnly).not.toContain('Archive SR-Main on GitHub');
+   expect(html(publicData())).not.toContain('on GitHub"');
+ });
+
+ it('links a repository to where it runs, only when that is a web address', () => {
+   const base = {
+     name: 'Policy Lab', url: 'https://github.com/zerosumpain/policy-lab', role: 'Policy Lab',
+     revision: 'abcdef1234567890', measuredAt: '2026-11-08T03:40:00Z', source: 'revision snapshot',
+     code: { lines: 10, files: 1 }, documentation: { lines: 0, files: 0 }, tests: { lines: 0, files: 0 },
+   };
+   const owner = html(ownerData({ sourceFootprint: { ...footprint, repositories: [
+     { ...base, id: 'policy-lab', liveUrl: 'https://policy-lab.strangeramblings.com/' },
+     { ...base, id: 'odd', name: 'Odd', liveUrl: 'javascript:alert(1)' },
+     { ...base, id: 'none', name: 'Nowhere' },
+   ] } }));
+   expect(owner).toContain('href="https://policy-lab.strangeramblings.com/"');
+   expect(owner).toContain('Access Policy Lab live');
+   expect(owner).not.toContain('javascript:');
+   expect(owner).not.toContain('Access Nowhere live');
+ });
+
+ it('reads a repository filter and refuses anything not shaped like owner/name', () => {
+   expect(parseConsoleFilters(new URL('https://example.test/releases?repo=zerosumpain/SR-Drive')).repo).toBe('zerosumpain/SR-Drive');
+   expect(parseConsoleFilters(new URL('https://example.test/releases')).repo).toBe('all');
+   expect(parseConsoleFilters(new URL("https://example.test/releases?repo=x'%20or%201=1")).repo).toBe('all');
+ });
+
+ it('offers the owner a repository picker and tags releases from other repositories', () => {
+   const base = ownerData();
+   const drive = { ...base.items[0], id: 9, repo: 'zerosumpain/SR-Drive', version: '2026.07.29.9' };
+   const owner = html(ownerData({ items: [base.items[0], drive] }));
+   expect(owner).toContain('All repositories');
+   expect(owner).toContain('SR-Drive (72)');
+   expect(owner).toMatch(/class="chip repo[ "]/);
+   expect(owner).toMatch(/chip repo[^>]*>SR-Drive</);
+   expect(html(publicData())).not.toContain('All repositories');
+ });
+
+ it('offers sortable column headings on the repository table', () => {
+   const repository = {
+     id: 'tv', name: 'SR-TV', url: 'https://github.com/zerosumpain/SR-TV', role: 'TV', revision: 'abcdef12',
+     updatedAt: '2026-11-02T10:00:00Z', measuredAt: '2026-11-08T03:40:00Z', source: 'revision snapshot',
+     code: { lines: 463, files: 2 }, documentation: { lines: 60, files: 1 }, tests: { lines: 0, files: 0 },
+   };
+   const owner = html(ownerData({ sourceFootprint: { ...footprint, repositories: [repository] } }));
+   for (const label of ['Repository', 'Code', 'Documentation', 'Tests', 'Updated']) {
+     expect(owner).toMatch(new RegExp(`<button type="button" class="a-sort[^"]*"[^>]*>${label}`));
+   }
+   expect(owner).toContain('aria-sort="none"');
  });

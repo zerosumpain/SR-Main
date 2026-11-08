@@ -89,7 +89,7 @@ const candidates = git(['ls-files', '-co', '--exclude-standard', '-z'])
   .filter((file, index, files) => file && files.indexOf(file) === index)
   .filter((file) => existsSync(path.join(ROOT, file)) && isCode(file));
 const counts = { production: 0, projects: 0, workflows: 0, panels: 0, tests: 0 };
-const maintainedRoots = /^(?:src|packages|services|field-study-system|vite-plugins)\//;
+const maintainedRoots = /^(?:src|packages|services|vite-plugins)\//;
 
 for (const file of candidates) {
   const lines = linesIn(file);

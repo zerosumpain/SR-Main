@@ -1,11 +1,11 @@
 // Runtime access to the committed Voice Card.
 //
 // The card is built by `scripts/build-voice-card.ts` and committed to
-// data/voice/. It is read from disk rather than imported, for the same reason
-// data/prompts is: `ci-release.sh` rsyncs data/ to the VPS wholesale, so a
-// rebuilt card reaches production with the next deploy and needs no allow-list
-// entry — and reading it means a card edit does not require a rebuild to take
-// effect locally.
+// data/voice/. It is read from disk rather than imported, because
+// `ci-release.sh` rsyncs data/ to the VPS wholesale, so a rebuilt card
+// reaches production with the next deploy and needs no allow-list entry —
+// and reading it means a card edit does not require a rebuild to take effect
+// locally.
 //
 // SERVER ONLY. It touches the filesystem, so importing it from a component
 // would break the client build.

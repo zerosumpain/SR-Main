@@ -11,7 +11,8 @@ export const GET: RequestHandler = withNativeAccess('games', async (event, ident
 /**
  * POST /api/native/games/[id] — `{ action, …the move's fields }`.
  * Lobby verbs join | decline | leave | start | again, `invite` {invite: [playerId]}
- * (the host, while the lobby is open), or the game's own move
+ * (the host, while the lobby is open), `close` (a parent, any lobby not yet
+ * started — the room closes for everyone in it), or the game's own move
  * (Tap Duel `tap` {round, reactionMs, early}; Wordle Race `guess` {word}).
  * Answers with the room after it; a `since` (Draw & Guess's drawing revision)
  * asks for the drawing as the changes after it.

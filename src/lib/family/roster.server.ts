@@ -26,9 +26,32 @@ export interface FamilyPerson {
   stepsSharing?: boolean;
 }
 
-export function familyId(email: string): string {
+function familyHash(input: string, prefix = 'f_', length = 12): string {
   const key = env.AUTH_SECRET || 'sr-family';
-  return 'f_' + createHmac('sha256', key).update(email.trim().toLowerCase()).digest('hex').slice(0, 12);
+  return prefix + createHmac('sha256', key).update(input).digest('hex').slice(0, length);
+}
+
+export function familyId(email: string): string {
+  return familyHash(email.trim().toLowerCase());
+}
+
+/**
+ * The id of a household member who has no email (someone on Life360 only), for
+ * boards keyed by trail subject. Same key and shape as `familyId`; the
+ * `subject:` prefix keeps it from ever colliding with an email's id.
+ */
+export function familySubjectId(subject: string): string {
+  return familyHash('subject:' + subject);
+}
+
+/**
+ * An opaque, stable id for an upstream record whose own id may carry a subject
+ * (a Landgrab change: `unattributed:<subject>`, `trail:<subject>:…`). Same key
+ * as `familyId`, prefix `c_`, so the phone can select by it across refreshes
+ * without ever seeing the subject inside.
+ */
+export function familyChangeId(upstreamId: string): string {
+  return familyHash('change:' + upstreamId, 'c_', 16);
 }
 
 export function nameFromEmail(email: string): string {
@@ -53,7 +76,13 @@ export async function familyRoster(now = Date.now()): Promise<FamilyPerson[]> {
   const stepsSharing = new Set<string>();
   const candidates = new Set<string>();
 
-  for (const u of (await loadCompanionUsers().catch(() => null)) ?? []) {
+  // Three independent reads; none waits for another.
+  const [companionUsers, members, devices] = await Promise.all([
+    loadCompanionUsers().catch(() => null),
+    listMembers().catch(() => []),
+    listAllSiteDevices().catch(() => []),
+  ]);
+  for (const u of companionUsers ?? []) {
     const e = norm(u.email);
     if (!e) continue;
     pilot.add(e);
@@ -62,21 +91,23 @@ export async function familyRoster(now = Date.now()): Promise<FamilyPerson[]> {
     if (u.name && u.name !== u.email) names.set(e, u.name);
   }
   // The household roster's name wins over the pilot's: it is what the site calls them.
-  for (const m of await listMembers().catch(() => [])) {
+  for (const m of members) {
     const e = norm(m.email);
     if (!e) continue;
     candidates.add(e);
     names.set(e, m.displayName);
   }
-  for (const d of await listAllSiteDevices().catch(() => [])) {
+  for (const d of devices) {
     if (d.revokedAt || d.expiresAt.getTime() <= now) continue;
     candidates.add(norm(d.ownerEmail));
   }
 
+  // Each person's grants, read fresh and side by side rather than in turn.
+  const emails = [...candidates].filter(Boolean);
+  const roles = await Promise.all(emails.map((email) => familyRole(email)));
   const people: FamilyPerson[] = [];
-  for (const email of candidates) {
-    if (!email) continue;
-    const role = await familyRole(email);
+  for (const [i, email] of emails.entries()) {
+    const role = roles[i];
     if (!role) continue;
     people.push({
       id: familyId(email),
@@ -91,10 +122,18 @@ export async function familyRoster(now = Date.now()): Promise<FamilyPerson[]> {
   return people;
 }
 
-/** The caller as a family person, whether or not the roster has caught up with them. */
-export async function familyPersonFor(email: string, parent: boolean): Promise<FamilyPerson> {
+/**
+ * The caller as a family person, whether or not the roster has caught up with
+ * them. A caller that has just built the roster passes it, rather than this
+ * building a second one in the same request.
+ */
+export async function familyPersonFor(
+  email: string,
+  parent: boolean,
+  roster?: FamilyPerson[],
+): Promise<FamilyPerson> {
   const e = norm(email);
-  const known = (await familyRoster()).find((p) => p.email === e);
+  const known = (roster ?? (await familyRoster())).find((p) => p.email === e);
   if (known) return { ...known, parent };
   const member = await listMembers()
     .then((all) => all.find((m) => norm(m.email) === e))

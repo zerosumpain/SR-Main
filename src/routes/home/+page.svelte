@@ -12,8 +12,30 @@
   import type { DeckTile, RollupCell } from '$lib/components/jkai/daydream/hub/types';
   import type { Tone } from '$lib/daydream/priority';
   import { ago } from '$lib/daydream/format';
+  import TodayAhead from '$lib/components/home/people/TodayAhead.svelte';
+
+  type Ahead = NonNullable<Awaited<PageData['ahead']>>;
 
   let { data }: { data: PageData } = $props();
+
+  // The day ahead streams; keep the last answer while a refresh reads the next.
+  let ahead = $state<Ahead | null>(null);
+  let aheadState = $state<'pending' | 'ready' | 'failed'>('pending');
+  $effect(() => {
+    const promise = data.ahead;
+    let current = true;
+    promise.then((v) => {
+      if (!current) return;
+      if (v) {
+        ahead = v;
+        aheadState = 'ready';
+      } else if (!ahead) aheadState = 'failed';
+    });
+    return () => {
+      current = false;
+    };
+  });
+  const aheadNames = $derived(new Map(Object.entries(ahead?.names ?? {})));
 
   /** Over this many minutes without a fix, "home" is a guess — as on /home/people. */
   const STALE_MINS = 30;
@@ -127,14 +149,45 @@
         <RollupGrid cells={people} min={180} />
       {/if}
       <p class="more"><a class="link" href="/home/people">Today's movements and each person's patterns →</a></p>
+      {#if data.showBacklog}
+        <p class="more"><a class="link" href="/home/backlog">What the family wants to watch — the backlog →</a></p>
+      {/if}
+    </div>
+  </section>
+  {/if}
+
+  {#if data.showPeople}
+  <section class="band sunken">
+    <div class="inner">
+      <SectionHead kicker="B / Ahead" title={['The rest of', 'today']} strap="Where each person's own routines put them until midnight, and the journeys between. Learned from the trips they have made; school holidays honoured." />
+      {#if ahead}
+        <TodayAhead ahead={ahead.ahead} names={aheadNames} now={ahead.now} />
+        {#if ahead.changes.length}
+          <ul class="changes">
+            {#each ahead.changes as c (c.key)}
+              <li><strong>{c.title}</strong> <span>{c.detail}</span></li>
+            {/each}
+          </ul>
+        {/if}
+      {:else if aheadState === 'failed'}
+        <LoadErrorCard kicker="The day ahead did not load" message="Routines could not be read just now; who is in, above, is unaffected." />
+      {:else}
+        <p class="note">Reading the routines…</p>
+      {/if}
+      {#if ahead?.isOwner}
+        <p class="more"><a class="link" href="/home/people/forecast">How good the forecast is, what changed, and where next →</a></p>
+        <p class="more"><a class="link" href="/home/people/patterns">Ninety days of movement patterns: places, times, who is with whom, steps →</a></p>
+      {:else}
+        <p class="more"><a class="link" href="/home/people">Your routines, what changed, and your week →</a></p>
+      {/if}
     </div>
   </section>
   {/if}
 
   {#if data.showEchoes}
-  <section class="band sunken">
+  <section class="band">
     <div class="inner">
-      <SectionHead kicker="B / Echoes" title={['What the Echoes', 'read']} strap="Room sensors, the next alarm or timer set on any Echo, and the last track played today." />
+      <SectionHead kicker="C / Echoes" title={['What the Echoes', 'read']} strap="Room sensors, the next alarm or timer set on any Echo, and the last track played today." />
       {#if data.houseError}
         <LoadErrorCard kicker="The Echo signals did not load" message={data.houseError} />
       {:else}
@@ -146,9 +199,9 @@
   {/if}
 
   {#if data.showVoice}
-  <section class="band">
+  <section class="band sunken">
     <div class="inner">
-      <SectionHead kicker="C / Voice" title={['Lately', 'said']} strap="The newest things said to an Echo, and what Alexa said back." />
+      <SectionHead kicker="D / Voice" title={['Lately', 'said']} strap="The newest things said to an Echo, and what Alexa said back." />
       {#if data.saidError}
         <LoadErrorCard kicker="The voice log did not load" message={data.saidError} />
       {:else}
@@ -174,10 +227,23 @@
   </section>
   {/if}
 
-  <section class="band sunken">
+  {#if data.boards.length}
+  <section class="band">
+    <div class="inner">
+      <SectionHead kicker="E / Games" title={['On the', 'TV']} strap="Open a board on the television, then type the code it shows into a game room in the app." />
+      <ul class="boards">
+        {#each data.boards as b (b.game)}
+          <li><a class="link" href="/games/{b.game}">{b.title}</a> <span>strangeramblings.com/games/{b.game}</span></li>
+        {/each}
+      </ul>
+    </div>
+  </section>
+  {/if}
+
+  <section class="band{data.boards.length ? ' sunken' : ''}">
     <div class="inner">
       <SectionHead
-        kicker="D / Devices"
+        kicker="F / Devices"
         title={broken.length ? ['What is', 'not working'] : ['Everything is', 'answering']}
         strap="Home Assistant integrations that are down, or with a quarter or more of their devices unavailable."
       />
@@ -212,6 +278,43 @@
     font-size: var(--fs-label-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+  .changes {
+    list-style: none;
+    margin: 18px 0 0;
+    padding: 0;
+    border-top: 1px solid var(--line);
+  }
+  .changes li {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .changes span {
+    display: block;
+    color: var(--text-muted);
+    font-size: var(--fs-body-sm);
+  }
+  .boards {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line);
+  }
+  .boards li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .boards a {
+    font-weight: 700;
+  }
+  .boards span {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
   }
   .reply {
     display: block;

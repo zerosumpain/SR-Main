@@ -1,0 +1,335 @@
+/**
+ * Apple (iCloud) Calendar over CalDAV, for the `apple-calendar` site tools.
+ *
+ * Extracted from the retired workflow node executor of the same name (the node
+ * itself is owned by SR-Workflows). Only the site tools call this in Main.
+ */
+import { getCredential } from '$lib/integrations/credentials';
+// Default-import interop: tsdav is CJS; a named import works under Vite's
+// interop but breaks standalone tsx runs (run-eval.ts, scripts/*) on Node 22.
+import tsdav from 'tsdav';
+import ical from 'ical.js';
+
+const { createDAVClient } = tsdav;
+
+/** What one CalDAV operation returns: the tool's data and how many rows it touched. */
+export interface AppleCalendarResult {
+  output: Record<string, unknown>;
+  rowCount: number;
+}
+
+export const MAX_CALENDAR_LIST_EVENTS = 100;
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  location: string;
+  start: string;
+  end: string;
+  description: string;
+  uid?: string;
+  organizer?: { cn?: string; address: string };
+  attendees?: Array<{ cn?: string; address: string; partstat?: string; role?: string }>;
+  created?: string;
+  lastModified?: string;
+  dtstamp?: string;
+  sequence?: string;
+  status?: string;
+  /** The unmodified CalDAV calendar object, including its VEVENT. */
+  rawIcs?: string;
+  /** Vendor/extension properties carried by the VEVENT. */
+  rawProperties?: Array<{ name: string; value: string; parameters?: Record<string, string | string[]> }>;
+  /** Present only when the iCalendar body could not be read. */
+  parseError?: string;
+}
+
+function propertyValue(property: ical.Property | null): string | undefined {
+  const value = property?.getFirstValue();
+  return value == null ? undefined : String(value);
+}
+
+function person(property: ical.Property): { cn?: string; address: string; partstat?: string; role?: string } {
+  const result = { address: String(property.getFirstValue() ?? '') } as { cn?: string; address: string; partstat?: string; role?: string };
+  for (const name of ['cn', 'partstat', 'role'] as const) {
+    const value = property.getFirstParameter(name);
+    if (value) result[name] = value;
+  }
+  return result;
+}
+
+function rawExtensionProperty(property: ical.Property): { name: string; value: string; parameters?: Record<string, string | string[]> } {
+  const parameters = Object.fromEntries(Object.entries(property.jCal[1] ?? {}).map(([name, value]) => [name.toUpperCase(), value as string | string[]]));
+  return {
+    name: property.name.toUpperCase(),
+    value: String(property.getFirstValue() ?? ''),
+    ...(Object.keys(parameters).length ? { parameters } : {}),
+  };
+}
+
+const ISO_8601_DATE_TIME = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+
+export function parseCalendarDateRange(start: unknown, end: unknown): { start: Date; end: Date } | { error: string } {
+  const parse = (value: unknown, name: string): Date | { error: string } => {
+    if (typeof value !== 'string' || !ISO_8601_DATE_TIME.test(value)) return { error: `${name} must be an ISO-8601 date or date-time.` };
+    const date = new Date(value);
+    const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+    const calendarDate = new Date(Date.UTC(year, month - 1, day));
+    if (Number.isNaN(date.getTime()) || calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 || calendarDate.getUTCDate() !== day) return { error: `${name} must be a valid ISO-8601 date or date-time.` };
+    return date;
+  };
+  const rangeStart = parse(start, 'dateRangeStart');
+  if (rangeStart instanceof Date === false) return rangeStart;
+  const rangeEnd = parse(end, 'dateRangeEnd');
+  if (rangeEnd instanceof Date === false) return rangeEnd;
+  if (rangeStart > rangeEnd) return { error: 'dateRangeStart must be on or before dateRangeEnd.' };
+  return { start: rangeStart, end: rangeEnd };
+}
+
+function overlapsRange(start: Date, end: Date, range: { start: Date; end: Date }): boolean {
+  return start < range.end && end > range.start;
+}
+
+function dateFromIcalTime(time: ical.Time): Date | null {
+  const date = time.toJSDate();
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Expand a CalDAV object locally because servers may ignore a REPORT time range.
+ * Recurring rows are represented by the occurrence that overlaps the requested range.
+ */
+export function calendarObjectEventsInRange(url: string, data: string, range: { start: Date; end: Date }): CalendarEvent[] {
+  const parsed = parseCalendarObject(url, data);
+  if (parsed.parseError) return [];
+  try {
+    const component = new ical.Component(ical.parse(data));
+    const vevent = component.getFirstSubcomponent('vevent');
+    if (!vevent) return [];
+    const event = new ical.Event(vevent);
+    if (!event.isRecurring()) {
+      const start = new Date(parsed.start);
+      const end = new Date(parsed.end);
+      return Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !overlapsRange(start, end, range) ? [] : [parsed];
+    }
+
+    const occurrences: CalendarEvent[] = [];
+    const iterator = event.iterator();
+    for (let count = 0; count < 100_000; count++) {
+      const occurrence = iterator.next();
+      if (!occurrence) break;
+      const details = event.getOccurrenceDetails(occurrence);
+      const start = dateFromIcalTime(details.startDate);
+      const end = dateFromIcalTime(details.endDate);
+      if (!start || !end) continue;
+      if (start >= range.end) break;
+      if (overlapsRange(start, end, range)) {
+        occurrences.push({ ...parsed, start: start.toISOString(), end: end.toISOString() });
+      }
+    }
+    return occurrences;
+  } catch {
+    return [];
+  }
+}
+
+export function compactCalendarEvent(event: CalendarEvent, includeRawIcs = false): Record<string, unknown> {
+  const { rawIcs, rawProperties, parseError, sequence, ...compact } = event;
+  return includeRawIcs ? { ...compact, ...(rawIcs ? { rawIcs } : {}), ...(rawProperties ? { rawProperties } : {}), ...(parseError ? { parseError } : {}), ...(sequence ? { sequence } : {}) } : compact;
+}
+
+/**
+ * Turn one CalDAV resource into an event row.
+ *
+ * `ICAL.parse` returns a jCal triple — `[name, properties, components]` — and
+ * `ICAL.Component` expects that whole triple, not its third element. Passing
+ * `jcal[2]` threw `Cannot read properties of undefined` on **every** event, and
+ * a bare `catch` turned each throw into a row with a blank title, blank dates
+ * and a blank description. So the list operation appeared to work, returned the
+ * right NUMBER of events, and had never once returned a readable one. It went
+ * unnoticed because a calendar of empty rows looks much like a quiet month.
+ *
+ * Extracted from the executor so it can be tested against a real iCalendar
+ * body without a CalDAV server, which is what would have caught it.
+ */
+export function parseCalendarObject(url: string, data: string): CalendarEvent {
+  const blank = { id: url, title: '', location: '', start: '', end: '', description: '', rawIcs: data };
+  try {
+    const component = new ical.Component(ical.parse(data));
+    // A VCALENDAR may carry VTIMEZONE and other siblings; take the event.
+    const vevent = component.getFirstSubcomponent('vevent');
+    if (!vevent) return { ...blank, parseError: 'no VEVENT in calendar object' };
+    const event = new ical.Event(vevent);
+    const organizer = vevent.getFirstProperty('organizer');
+    const attendees = vevent.getAllProperties('attendee').map(person);
+    const rawProperties = vevent.getAllProperties().filter((property) => property.name.startsWith('x-')).map(rawExtensionProperty);
+    return {
+      id: url,
+      title: event.summary || '',
+      location: event.location || '',
+      start: event.startDate?.toJSDate()?.toISOString() || '',
+      end: event.endDate?.toJSDate()?.toISOString() || '',
+      description: event.description || '',
+      ...(propertyValue(vevent.getFirstProperty('uid')) ? { uid: propertyValue(vevent.getFirstProperty('uid')) } : {}),
+      ...(organizer ? { organizer: person(organizer) } : {}),
+      ...(attendees.length ? { attendees } : {}),
+      ...(propertyValue(vevent.getFirstProperty('created')) ? { created: propertyValue(vevent.getFirstProperty('created')) } : {}),
+      ...(propertyValue(vevent.getFirstProperty('last-modified')) ? { lastModified: propertyValue(vevent.getFirstProperty('last-modified')) } : {}),
+      ...(propertyValue(vevent.getFirstProperty('dtstamp')) ? { dtstamp: propertyValue(vevent.getFirstProperty('dtstamp')) } : {}),
+      ...(propertyValue(vevent.getFirstProperty('sequence')) ? { sequence: propertyValue(vevent.getFirstProperty('sequence')) } : {}),
+      ...(propertyValue(vevent.getFirstProperty('status')) ? { status: propertyValue(vevent.getFirstProperty('status')) } : {}),
+      rawIcs: data,
+      ...(rawProperties.length ? { rawProperties } : {}),
+    };
+  } catch (err) {
+    // Still return a row — one malformed invite should not empty the list —
+    // but say so, rather than pass a blank off as an event with no title.
+    return { ...blank, parseError: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * ical.js accepts extended ISO values, while the workflow stores iCalendar basics.
+ *
+ * Calls the date and date-time constructors directly rather than `fromString`,
+ * which takes a second `aProperty` argument and only exists to pick between
+ * these two by length — a choice this function has already made from the regex.
+ * The one-argument `fromString` call this replaces was the single type error
+ * that stopped change request #216 reaching production: `vitest` transpiles
+ * without typechecking, so the focused tests passed, and the gate's complaint
+ * fell outside the slice of output the agent is shown.
+ */
+export function icalTime(value: string): ical.Time {
+  const date = value.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (date) return ical.Time.fromDateString(`${date[1]}-${date[2]}-${date[3]}`);
+  const dateTime = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+  if (dateTime) {
+    return ical.Time.fromDateTimeString(
+      `${dateTime[1]}-${dateTime[2]}-${dateTime[3]}T${dateTime[4]}:${dateTime[5]}:${dateTime[6]}${dateTime[7] ?? ''}`,
+    );
+  }
+  // Already an extended value. Same length rule fromString uses.
+  return value.length > 10 ? ical.Time.fromDateTimeString(value) : ical.Time.fromDateString(value);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function runAppleCalendar(config: Record<string, any>): Promise<AppleCalendarResult> {
+    const cred = await getCredential<'basic'>(config.credentialId);
+        if (!cred) throw new Error('Credential not found: ' + config.credentialId);
+        if (cred.kind !== 'basic') throw new Error('Apple Calendar needs a basic credential');
+        const client = await createDAVClient({
+          serverUrl: 'https://caldav.icloud.com',
+          credentials: { username: cred.payload.username, password: cred.payload.password },
+          authMethod: 'Basic',
+          defaultAccountType: 'caldav',
+        });
+        const calendars = await client.fetchCalendars();
+        const target = calendars.find((c: any) => c.url === config.calendar);
+        if (!target) throw new Error('Unknown calendar: ' + config.calendar);
+
+        if (config.operation === 'list') {
+          if (!target) throw new Error('No calendar selected');
+          const range = parseCalendarDateRange(config.dateRangeStart, config.dateRangeEnd);
+          if ('error' in range) throw new Error(range.error);
+          const objects = await client.fetchCalendarObjects({
+            calendar: target,
+            timeRange: { start: config.dateRangeStart, end: config.dateRangeEnd },
+          });
+          // iCloud can return objects outside the REPORT range, so enforce it
+          // again before serialising a bounded, compact tool response.
+          const matching = objects.flatMap((obj: any) => calendarObjectEventsInRange(obj.url, obj.data, range));
+          const events = matching.slice(0, MAX_CALENDAR_LIST_EVENTS).map((event) => compactCalendarEvent(event, config.includeRawIcs === true));
+          return {
+            output: { events, truncated: matching.length > MAX_CALENDAR_LIST_EVENTS, totalCount: matching.length, limit: MAX_CALENDAR_LIST_EVENTS },
+            rowCount: events.length,
+          };
+        }
+        if (config.operation === 'create') {
+          const uid = config.eventUid || crypto.randomUUID();
+          // A deterministic UID makes a retry safe. Check only this event's
+          // requested range, then return the existing CalDAV resource.
+          const existing = await client.fetchCalendarObjects({
+            calendar: target!,
+            timeRange: { start: config.duplicateRangeStart || config.eventStart, end: config.duplicateRangeEnd || config.eventEnd },
+          });
+          const duplicate = existing.find((obj: any) => obj.data?.includes('UID:' + uid));
+          if (duplicate) {
+            return { output: { id: uid, url: duplicate.url, title: config.eventTitle || '', calendar: target!.displayName || config.calendar, start: config.eventStart, end: config.eventEnd, duplicate: true }, rowCount: 1 };
+          }
+          const now = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+          // All-day events are dates, so they carry VALUE=DATE and no zone.
+          // A timed event is expected to arrive as a UTC instant (…Z) and needs
+          // no parameter at all. Deliberately NOT ';TZID=<zone>': RFC 5545 wants
+          // a matching VTIMEZONE component for any zone referenced, this object
+          // has none, and a CalDAV server may reject the lot on that basis.
+          const datePrefix = config.allDay ? ';VALUE=DATE' : '';
+          const icalStr = [
+            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//jkai//EN', 'BEGIN:VEVENT',
+            'UID:' + uid, 'DTSTAMP:' + now, 'DTSTART' + datePrefix + ':' + config.eventStart,
+            'DTEND' + datePrefix + ':' + config.eventEnd, 'SUMMARY:' + (config.eventTitle || ''),
+            ...(config.eventLocation ? ['LOCATION:' + config.eventLocation] : []),
+            ...(config.eventNotes ? ['DESCRIPTION:' + config.eventNotes] : []),
+            'END:VEVENT', 'END:VCALENDAR',
+          ].join('\r\n');
+          const resp = await client.createCalendarObject({
+            calendar: target!,
+            filename: uid + '.ics',
+            iCalString: icalStr,
+          });
+          return { output: { id: uid, url: resp.headers?.get('Location') || uid, title: config.eventTitle || '', calendar: target!.displayName || config.calendar, start: config.eventStart, end: config.eventEnd }, rowCount: 1 };
+        }
+        if (config.operation === 'update' || config.operation === 'delete') {
+          // Looking up the resource through the selected calendar is deliberate:
+          // an event URL from another calendar (or credential) must never become
+          // a capability to modify it.
+          const objects = await client.fetchCalendarObjects({ calendar: target! });
+          const calendarObject = objects.find((object: any) => object.url === config.eventId);
+          if (!calendarObject) throw new Error('Event not found in the selected calendar.');
+          const existing = parseCalendarObject(calendarObject.url, calendarObject.data);
+          if (existing.parseError) throw new Error(`Unable to read event: ${existing.parseError}`);
+          const metadata = { id: existing.id, title: existing.title, calendar: target!.displayName || config.calendar, start: existing.start, end: existing.end, location: existing.location, notes: existing.description };
+          if (config.operation === 'delete') {
+            await client.deleteCalendarObject({ calendarObject: { url: calendarObject.url, etag: calendarObject.etag || '*' } });
+            return { output: { ...metadata, deleted: true }, rowCount: 1 };
+          }
+
+          const component = new ical.Component(ical.parse(calendarObject.data));
+          const event = component.getFirstSubcomponent('vevent');
+          if (!event) throw new Error('Event not found in calendar object.');
+          const has = (key: string) => Object.prototype.hasOwnProperty.call(config, key);
+          const setText = (name: string, value: string) => {
+            if (value) event.updatePropertyWithValue(name, value);
+            else event.removeAllProperties(name);
+          };
+          if (has('eventTitle')) setText('summary', config.eventTitle);
+          if (has('eventLocation')) setText('location', config.eventLocation);
+          if (has('eventNotes')) setText('description', config.eventNotes);
+          const allDay = config.allDay === true;
+          for (const [name, value] of [['dtstart', config.eventStart], ['dtend', config.eventEnd]] as const) {
+            if (!has(name === 'dtstart' ? 'eventStart' : 'eventEnd')) continue;
+            const property = event.updatePropertyWithValue(name, icalTime(value));
+            property.removeParameter('tzid');
+            if (allDay) property.setParameter('value', 'date');
+            else property.removeParameter('value');
+          }
+          const data = component.toString();
+          await client.updateCalendarObject({
+            calendarObject: { url: calendarObject.url, etag: calendarObject.etag || '*', data },
+          });
+          const updated = parseCalendarObject(calendarObject.url, data);
+          return { output: { id: updated.id, title: updated.title, calendar: target!.displayName || config.calendar, start: updated.start, end: updated.end, location: updated.location, notes: updated.description }, rowCount: 1 };
+        }
+        throw new Error('Unknown operation: ' + config.operation);
+}
+
+export async function resolveOptions_calendar(credentialId: string): Promise<{ value: string; label: string }[]> {
+  const cred = await getCredential<'basic'>(credentialId);
+        if (!cred) return [];
+        const client = await createDAVClient({
+          serverUrl: 'https://caldav.icloud.com',
+          credentials: { username: cred.payload.username, password: cred.payload.password },
+          authMethod: 'Basic',
+          defaultAccountType: 'caldav',
+        });
+        const calendars = await client.fetchCalendars();
+        return calendars.map((c: any) => ({ value: c.url, label: c.displayName || c.url }));
+}

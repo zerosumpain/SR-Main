@@ -42,7 +42,3 @@ export function startSelfImprovementSeeds(): void {
     .catch((err) => console.error('[selfimprove] boot seed failed:', errMsg(err)));
 }
 
-/** Test hook — lets a suite re-arm the once-only guard. */
-export function resetSelfImprovementSeeds(): void {
-  seeded = false;
-}

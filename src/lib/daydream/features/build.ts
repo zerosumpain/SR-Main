@@ -19,7 +19,6 @@ import {
   activities,
   appleHealthMetrics,
   daydreamDayFeatures,
-  daydreamSpend,
   daydreamTrail,
   whoopCycles,
   whoopRecovery,
@@ -37,6 +36,7 @@ import {
   strainValue,
 } from './normalise';
 import { fetchCalendarDays, toolChunkFetch, type CalendarDay } from './calendar';
+import { localDay, appleLocalDay } from '$lib/owner-data/day';
 
 /** How many days one build covers by default. */
 export const DEFAULT_WINDOW_DAYS = 120;
@@ -61,31 +61,8 @@ export interface BuildResult {
 
 export const EMPTY_BUILD: BuildResult = { days: 0, written: 0, absent: {}, errors: [] };
 
-/** The Europe/London calendar day for an instant. */
-export function localDay(d: Date, tz = LOCAL_TZ): string {
-  // en-CA renders ISO-ordered YYYY-MM-DD, which is the only reason it is used
-  // here — the alternative is hand-assembling parts and getting the padding
-  // wrong.
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(d);
-}
-
-/**
- * The local day for one of Apple's `date_local` strings.
- *
- * These already carry the local offset ("2026-08-26 08:20:47 +0100"), so the
- * date is the first ten characters and re-parsing would only introduce a chance
- * to shift it. Falls back to the epoch column when the string is malformed.
- */
-export function appleLocalDay(dateLocal: string, epochSeconds: number): string {
-  const head = dateLocal.slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head;
-  return localDay(new Date(epochSeconds * 1000));
-}
+// `localDay` and `appleLocalDay` moved to `$lib/owner-data/day` (P2-2).
+export { localDay, appleLocalDay };
 
 /** Minutes since local midnight, for "when did he first leave". */
 export function localMinutes(d: Date, tz = LOCAL_TZ): number {
@@ -244,11 +221,12 @@ export async function buildDayFeatures(
   // ── Whoop cycles (strain) ── owner only
   if (isOwner) try {
     const rows = await db
-      .select({ startDateLocal: whoopCycles.startDateLocal, strain: whoopCycles.strain })
+      .select({ startDate: whoopCycles.startDate, strain: whoopCycles.strain })
       .from(whoopCycles);
     for (const r of rows) {
-      const day = (r.startDateLocal ?? '').slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      // A cycle starts at sleep onset, the evening BEFORE the day it measures;
+      // twelve hours on lands in that waking day (SR-Health's cycleDay).
+      const day = new Date((r.startDate + 12 * 3600) * 1000).toLocaleDateString('en-CA', { timeZone: LOCAL_TZ });
       const v = strainValue(r.strain);
       if (v != null) bucket(day).strain.push(v);
     }
@@ -351,13 +329,17 @@ export async function buildDayFeatures(
   // spending habit for a nine-year-old.
   let spendReadable = false;
   if (isOwner) try {
-    const rows = await db
-      .select({ day: daydreamSpend.day, total: sql<number>`sum(${daydreamSpend.amountMinor})::int` })
-      .from(daydreamSpend)
-      .where(and(eq(daydreamSpend.verified, true), gte(daydreamSpend.day, localDay(from))))
-      .groupBy(daydreamSpend.day);
+    // Reconciled, not summed raw: a receipt and the bank line it is about are
+    // one payment, and a bank top-up of PayPal is not spend on top of the
+    // PayPal payments it funded (`spend/ledger.ts`).
+    const { loadLedger } = await import('../spend/ledger.server');
+    const since = localDay(from);
+    const totals = new Map<string, number>();
+    for (const l of await loadLedger(since)) {
+      if (l.counts && l.day >= since) totals.set(l.day, (totals.get(l.day) ?? 0) + l.amountMinor);
+    }
     spendReadable = true;
-    for (const r of rows) bucket(r.day).spendMinor = r.total;
+    for (const [day, total] of totals) bucket(day).spendMinor = total;
   } catch (err) {
     result.errors.push(`spend: ${errMsg(err)}`);
   }

@@ -18,12 +18,16 @@ import { localDayStart } from '../budget';
 import { DEFAULT_SUBJECT } from '../types';
 import { mutedKinds } from '../thought-store';
 import { loadNoteContexts } from './context.server';
+import { REPLACES_KIND, TOPIC_KINDS, TOPIC_WINDOW_DAYS, replacesEntry, supersededBy, type TopicCandidate } from './topics';
 import { THINK_CADENCE_MS, questionAt, type Channel, type Outcome } from './questions';
+import { dayToStored, keptUntil, sweepDue } from './shelf';
+import { PLAN_FRESH_DAYS } from './subjects';
 import {
   channelLabel,
   inScope,
   isForPhone,
   isOnFeed,
+  livingPlanId,
   outcomeLabel,
   todayNotes,
   toFeedNote,
@@ -52,6 +56,13 @@ const ROW_COLUMNS = {
   createdAt: daydreamThoughts.createdAt,
   deliveredAt: daydreamThoughts.deliveredAt,
   note: daydreamThoughts.note,
+  reviewVerdict: daydreamThoughts.reviewVerdict,
+  reviewReasoning: daydreamThoughts.reviewReasoning,
+  reviewNarrative: daydreamThoughts.reviewNarrative,
+  reviewModel: daydreamThoughts.reviewModel,
+  proposedActions: daydreamThoughts.proposedActions,
+  relevantUntil: daydreamThoughts.relevantUntil,
+  feedbackNote: daydreamThoughts.feedbackNote,
 };
 
 /** The newest think rows for the owner, before any reader's rules. */
@@ -69,7 +80,8 @@ async function loadThinkRows(opts: { since?: Date; limit: number }): Promise<Thi
 /** The phone's Today card: the newest two from the last 48 hours. */
 export async function loadTodayNotes(now = new Date()): Promise<NativeNote[]> {
   const [rows, muted] = await Promise.all([
-    loadThinkRows({ since: new Date(now.getTime() - 48 * 3_600_000), limit: 100 }),
+    // A week, not 48 hours: the living plan can be that old (`todayNotes`).
+    loadThinkRows({ since: new Date(now.getTime() - PLAN_FRESH_DAYS * 86_400_000), limit: 200 }),
     mutedKinds(),
   ]);
   return todayNotes(rows, muted, now).map(toNativeNote);
@@ -96,23 +108,31 @@ export async function loadFeedNotes(opts: { days?: number; now?: Date } = {}): P
   const [rows, muted] = await Promise.all([loadThinkRows({ since, limit: 400 }), mutedKinds()]);
   const shown = rows.filter(isOnFeed);
   const ctx = await loadNoteContexts(shown);
-  return shown.map((r) => toFeedNote(r, muted, ctx.get(r.id)));
+  const planId = livingPlanId(shown, now);
+  return shown.map((r) => ({ ...toFeedNote(r, muted, ctx.get(r.id), now), living: r.id === planId }));
 }
 
 /** The phone's Daydream page: its notes with stage, next step and sources,
  *  and the pipeline counted over EVERY note the phone may show — not just the
- *  page it was sent — so "3 to decide" is the truth, not the page's share. */
-export async function loadNativeDetail(opts: { limit: number }): Promise<{
+ *  page it was sent — so "3 to decide" is the truth, not the page's share.
+ *  `stale` counts the notes past their date the same way: they are older than
+ *  the forty the page holds, so the phone cannot count them itself.
+ *  `staleOnly` sends just those notes, for the phone's "past their date" list. */
+export async function loadNativeDetail(opts: { limit: number; staleOnly?: boolean; now?: Date }): Promise<{
   notes: NativeNoteDetail[];
   pipeline: Record<'decide' | 'motion' | 'done', number>;
+  stale: number;
 }> {
+  const now = opts.now ?? new Date();
   const [rows, muted] = await Promise.all([loadThinkRows({ limit: 300 }), mutedKinds()]);
   const shown = rows.filter((r) => isForPhone(r, muted));
   const ctx = await loadNoteContexts(shown);
-  const all = shown.map((r) => toNativeDetail(r, ctx.get(r.id)));
+  const planId = livingPlanId(shown, now);
+  const all = shown.map((r) => ({ ...toNativeDetail(r, ctx.get(r.id), now), living: r.id === planId }));
   const pipeline = { decide: 0, motion: 0, done: 0 };
   for (const n of all) pipeline[n.bucket]++;
-  return { notes: all.slice(0, opts.limit), pipeline };
+  const past = all.filter((n) => n.stale);
+  return { notes: (opts.staleOnly ? past : all).slice(0, opts.limit), pipeline, stale: past.length };
 }
 
 /** One note by id, for `?note=` when it sits outside the loaded window. */
@@ -187,10 +207,13 @@ function questionLabel(channel: string | null, outcome: string | null): string |
   return channel && outcome ? `${channelLabel(channel)} · ${outcomeLabel(outcome).toLowerCase()}` : null;
 }
 
-const THINK_ACTION = 'daydream-think';
+/** The heartbeat action the think loop runs as. */
+export const THINK_ACTION = 'daydream-think';
+/** Pulse outcomes of a think that ran (asked its question), as opposed to one skipped. */
+export const THINK_RAN_OUTCOMES = ['ok', 'error'] as const;
 
 export async function loadEngineStrip(now = new Date()): Promise<EngineStrip> {
-  const ran = inArray(heartbeatPulses.outcome, ['ok', 'error']);
+  const ran = inArray(heartbeatPulses.outcome, [...THINK_RAN_OUTCOMES]);
   const [lastRows, cycleRows, raisedToday] = await Promise.all([
     db
       .select({
@@ -232,4 +255,127 @@ export async function loadEngineStrip(now = new Date()): Promise<EngineStrip> {
     raisedToday,
     next: { channel: next.channel, outcome: next.outcome, question: questionLabel(next.channel, next.outcome) ?? '' },
   };
+}
+
+/**
+ * A new research note replaces older, unanswered notes on the same subject
+ * (`topics.ts`). The older rows are archived with the reason, never deleted;
+ * the new one records what it replaced so the card can say so. Returns how
+ * many were replaced. Soft: a failure here must not cost the cycle.
+ */
+export async function supersedeOnTopic(createdKeys: readonly string[], now = new Date()): Promise<number> {
+  if (createdKeys.length === 0) return 0;
+  const fresh = (await loadThinkRowsByKeys(createdKeys)).filter((r) => (TOPIC_KINDS as readonly string[]).includes(r.kind));
+  if (fresh.length === 0) return 0;
+  const since = new Date(now.getTime() - TOPIC_WINDOW_DAYS * 86_400_000);
+  const rows = await db
+    .select({
+      id: daydreamThoughts.id,
+      kind: daydreamThoughts.kind,
+      title: daydreamThoughts.title,
+      createdAt: daydreamThoughts.createdAt,
+      feedback: daydreamThoughts.feedback,
+      reviewVerdict: daydreamThoughts.reviewVerdict,
+      note: daydreamThoughts.note,
+      proposedActions: daydreamThoughts.proposedActions,
+      status: daydreamThoughts.status,
+      // A check he commissioned is an answer too.
+      checked: sql<boolean>`exists (select 1 from daydream_commissions c where c.thought_id = daydream_thoughts.id)`,
+    })
+    .from(daydreamThoughts)
+    .where(
+      and(
+        inArray(daydreamThoughts.kind, [...TOPIC_KINDS]),
+        eq(daydreamThoughts.subject, DEFAULT_SUBJECT),
+        gte(daydreamThoughts.createdAt, since),
+        inArray(daydreamThoughts.status, ['new', 'delivered', 'seen', 'suppressed']),
+      ),
+    );
+  const older: TopicCandidate[] = rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    createdAt: r.createdAt,
+    answered:
+      !!r.feedback || !!r.reviewVerdict || !!r.note || r.checked === true ||
+      (Array.isArray(r.proposedActions) && (r.proposedActions as Array<{ done?: unknown }>).some((a) => !!a?.done)),
+  }));
+  let replaced = 0;
+  for (const f of fresh) {
+    const gone = supersededBy({ id: f.id, kind: f.kind, title: f.title, createdAt: f.createdAt }, older);
+    if (gone.length === 0) continue;
+    await db.transaction(async (tx) => {
+      await tx
+        .update(daydreamThoughts)
+        .set({ status: 'archived', suppressedReason: `superseded: ${f.id}`, updatedAt: now })
+        .where(inArray(daydreamThoughts.id, gone.map((g) => g.id)));
+      const actions = Array.isArray(f.proposedActions) ? (f.proposedActions as unknown[]) : [];
+      await tx
+        .update(daydreamThoughts)
+        .set({ proposedActions: [...actions.filter((a) => (a as { kind?: unknown })?.kind !== REPLACES_KIND), replacesEntry(gone, now)] as Array<{ kind: string; label: string; payload: string }>, updatedAt: now })
+        .where(eq(daydreamThoughts.id, f.id));
+    });
+    // Each older note is replaced once, by the first new note that claims it.
+    for (const g of gone) g.answered = true;
+    replaced += gone.length;
+  }
+  return replaced;
+}
+
+// ── Past its date (`shelf.ts`) ─────────────────────────────────────────────
+
+/** Statuses a note may be filed from. Anything else is already filed away or
+ *  was put off by him, and filing must not overwrite that. */
+const FILEABLE_STATUSES = ['new', 'delivered', 'seen', 'suppressed'];
+export const FILED_STALE_REASON = 'past its date: filed by owner';
+/** The sweep's own reason, so its filings can be counted, and put back with
+ *  one UPDATE, apart from his. */
+export const SWEPT_STALE_REASON = 'past its date: filed automatically';
+
+/** Set `expired` on the given notes, from a fileable status only. */
+async function expireNotes(ids: readonly string[], reason: string, now: Date): Promise<number> {
+  if (ids.length === 0) return 0;
+  const done = await db
+    .update(daydreamThoughts)
+    .set({ status: 'expired', suppressedReason: reason, updatedAt: now })
+    .where(and(inArray(daydreamThoughts.id, [...ids]), inArray(daydreamThoughts.status, FILEABLE_STATUSES)))
+    .returning({ id: daydreamThoughts.id });
+  return done.length;
+}
+
+/**
+ * File notes the feed flags as past their date: `expired`, which every reader
+ * already keeps off the feed and the think loop treats as protected. Not a
+ * verdict — it says nothing about whether the kind was any good, so the
+ * learned weights do not move. Only ids the feed flags RIGHT NOW are filed;
+ * a stale page cannot file a note that has since been answered.
+ */
+export async function fileStale(ids: readonly string[] | 'all', now = new Date()): Promise<number> {
+  const flagged = (await loadFeedNotes({ now })).filter((n) => n.stale && (ids === 'all' || ids.includes(n.id))).map((n) => n.id);
+  return expireNotes(flagged, FILED_STALE_REASON, now);
+}
+
+/**
+ * The sweep: file every note that has carried the flag, unanswered, for more
+ * than `SWEEP_GRACE_DAYS`. The same read as the Inbox, so it can only file
+ * what he was shown flagged, and the same rule as "File it". Returns the
+ * filed titles for the pulse.
+ */
+export async function sweepStale(now = new Date()): Promise<{ filed: number; flagged: number; titles: string[] }> {
+  const flagged = (await loadFeedNotes({ now })).filter((n) => n.stale);
+  const due = flagged.filter((n) => sweepDue(n.stale, now));
+  const filed = await expireNotes(due.map((n) => n.id), SWEPT_STALE_REASON, now);
+  return { filed, flagged: flagged.length, titles: due.map((n) => n.title) };
+}
+
+/** "Still relevant": keep it off the flag for another fortnight. Returns the
+ *  day it is now kept to, or null when the id is not a think note. */
+export async function keepCurrent(id: string, now = new Date()): Promise<string | null> {
+  const day = keptUntil(now);
+  const done = await db
+    .update(daydreamThoughts)
+    .set({ relevantUntil: dayToStored(day), updatedAt: now })
+    .where(and(eq(daydreamThoughts.id, id), THINK_KIND))
+    .returning({ id: daydreamThoughts.id });
+  return done.length ? day : null;
 }

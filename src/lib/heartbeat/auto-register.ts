@@ -3,7 +3,7 @@ import { heartbeatActions } from '$lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { getTaskStateProvider } from './state-providers';
 import { normaliseConversationId } from '$lib/jkai/conversation-id';
-import type { ProducesLongRunningTask } from '$lib/workflows/site-tools/registry-internal';
+import type { ProducesLongRunningTask } from '$lib/tools/registry-internal';
 
 /**
  * Generic auto-registration of a heartbeat watcher for ANY tool whose

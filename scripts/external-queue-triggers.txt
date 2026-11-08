@@ -1,5 +1,5 @@
 # GENERATED — do not hand-edit. The source of truth is EXTRACTED_TRIGGERS in
-# src/lib/workflows/trigger-ownership.ts, and tests/lib/workflows/trigger-ownership.test.ts
+# src/lib/workflows-client/trigger-ownership.ts, and tests/lib/workflows-client/trigger-ownership.test.ts
 # fails if the two disagree.
 #
 # Queue triggers whose runs are executed by an independently deployed
@@ -10,4 +10,3 @@
 # This file exists because the deploy drain is bash and cannot import the
 # TypeScript registry. Read it with scripts/lib/queue-triggers.sh, which also
 # honours EXTERNAL_QUEUE_TRIGGERS so the override moves both halves at once.
-policy-analysis

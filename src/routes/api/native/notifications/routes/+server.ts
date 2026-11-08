@@ -11,7 +11,7 @@ import { isKnownCategory } from '$lib/server/notify/categories';
  * The phone is an owner-authenticated device, so this is not an admin surface
  * behind a second gate: it is the owner's own preferences read and written by
  * the owner's own phone. Minting a credential still is not — that stays on
- * `/api/admin/native-devices`, because an endpoint that issues credentials must
+ * a person's page under `/admin/access`, because an endpoint that issues credentials must
  * not sit behind the exemption those credentials open.
  */
 export const GET: RequestHandler = withDevice(async () => ({ categories: await listRoutes() }));

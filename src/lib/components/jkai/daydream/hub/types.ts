@@ -14,7 +14,7 @@ export interface ShellTab {
   /** A real route. Every room of the daydream hub is its own page, so a tab
    *  is a link, never a `?tab=` state change — that was the same-route
    *  navigation trap. Optional only for the shell's other tenant
-   *  (`/jkai/agents`), whose two tabs are still in-page state and go through
+   *  (`/jkai/develop`), whose tabs are still in-page state and go through
    *  `ontab`. */
   href?: string;
   /** Rendered as a pill count. Omit or `0` and nothing renders. */
@@ -89,4 +89,6 @@ export interface FactRow {
   tone?: Tone;
   /** Mono, for ids and stamps. */
   mono?: boolean;
+  /** A short second line under the value — e.g. how a figure compares. */
+  note?: string | null;
 }

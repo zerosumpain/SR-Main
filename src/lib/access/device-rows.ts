@@ -13,6 +13,17 @@ export const LANE_LABEL: Record<Lane, string> = {
   site: 'Chat & news',
 };
 
+/** What a phone last said it was running (`$lib/server/native-telemetry`). */
+export interface AppOnPhone {
+  version: string | null;
+  build: number;
+  commit: string | null;
+  /** 'testflight' | 'adhoc' | 'xcode', from a build that says; null from one older than the field. */
+  channel: string | null;
+  /** When this build was first seen on the phone. */
+  since: string | null;
+}
+
 export interface DeviceRow {
   /** Unique across lanes, for keyed each-blocks. */
   key: string;
@@ -25,6 +36,14 @@ export interface DeviceRow {
   lastUsed: string | null;
   expires: string | null;
   status: 'active' | 'revoked' | 'expired';
+  /** Null from an app older than the telemetry headers. */
+  app: AppOnPhone | null;
+  os: string | null;
+  model: string | null;
+  /** The name the phone gave itself — the one thing that tells two of a person's phones apart. */
+  deviceName: string | null;
+  /** Registered for push (site lane); null where the lane does not say. */
+  push: boolean | null;
 }
 
 export interface SiteDeviceIn {
@@ -35,6 +54,15 @@ export interface SiteDeviceIn {
   expiresAt: Date | string;
   revokedAt: Date | string | null;
   lastUsedAt: Date | string | null;
+  appVersion?: string | null;
+  appBuild?: number | null;
+  appCommit?: string | null;
+  appChannel?: string | null;
+  appSeenAt?: Date | string | null;
+  osVersion?: string | null;
+  deviceModel?: string | null;
+  deviceName?: string | null;
+  hasPush?: boolean;
 }
 
 export interface PilotDeviceIn {
@@ -45,12 +73,32 @@ export interface PilotDeviceIn {
   created: string | null;
   expires: string | null;
   lastUsed: string | null;
+  app?: AppOnPhone | null;
+  os?: string | null;
+  model?: string | null;
+  deviceName?: string | null;
 }
 
 function iso(v: Date | string | null | undefined): string | null {
   if (!v) return null;
   const d = v instanceof Date ? v : new Date(v);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** "0.1.136 (136)" for a phone that said, nothing for one that did not. */
+export function appLabel(row: Pick<DeviceRow, 'app'>): string | null {
+  if (!row.app) return null;
+  return row.app.version ? `${row.app.version} (${row.app.build})` : `build ${row.app.build}`;
+}
+
+/**
+ * What to call the phone: its own name first, then the lane's label
+ * ("SR iPhone", "iPhone"), with the model beside it when known so two phones
+ * of one person read differently even before either is named.
+ */
+export function phoneLabel(row: Pick<DeviceRow, 'label' | 'model' | 'deviceName'>): string {
+  const name = row.deviceName ?? row.label ?? 'iPhone';
+  return row.model && row.model !== name ? `${name} · ${row.model}` : name;
 }
 
 /**
@@ -87,6 +135,13 @@ export function mergeDeviceRows(
         lastUsed: iso(d.lastUsedAt),
         expires,
         status,
+        app: d.appBuild
+          ? { version: d.appVersion ?? null, build: d.appBuild, commit: d.appCommit ?? null, channel: d.appChannel ?? null, since: iso(d.appSeenAt) }
+          : null,
+        os: d.osVersion ?? null,
+        model: d.deviceModel ?? null,
+        deviceName: d.deviceName ?? null,
+        push: d.hasPush ?? null,
       };
     }),
     // The pilot lists live credentials only, so every row it sends is active
@@ -104,6 +159,11 @@ export function mergeDeviceRows(
         lastUsed: iso(d.lastUsed),
         expires,
         status: expires && new Date(expires).getTime() <= now.getTime() ? 'expired' : 'active',
+        app: d.app ?? null,
+        os: d.os ?? null,
+        model: d.model ?? null,
+        deviceName: d.deviceName ?? null,
+        push: null,
       };
     }),
   ];

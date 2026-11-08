@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { navCellsFor, subnavFor, visibleItems, SITE_ITEMS } from './site-nav';
+import { navCellsFor, subnavFor, visibleItems, JKAI_ITEM, SITE_ITEMS } from './site-nav';
 
 describe('a member is offered exactly what they can reach', () => {
   it('shows an owner-only site cell they reach, and links a cell to the first page under it', () => {
     const cells = navCellsFor('/', false, ['/jkai/notes', '/research']);
     const byLabel = Object.fromEntries(cells.map((c) => [c.label, c.href]));
     expect(byLabel.Research).toBe('/research');
-    expect(byLabel.jkai).toBe('/jkai/notes');
+    // jkai is its own menu cell on every bar, outside the strip.
+    expect(byLabel.jkai).toBeUndefined();
+    expect(visibleItems([JKAI_ITEM], false, ['/jkai/notes', '/research'])[0]?.href).toBe('/jkai/notes');
     expect(byLabel.News).toBeUndefined();
     expect(byLabel.Drive).toBeUndefined();
   });

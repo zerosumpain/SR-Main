@@ -61,6 +61,7 @@ describe('modules shared with the extracted applications', () => {
     expect(Object.keys(manifest.files).sort()).toEqual([
       'src/lib/access/catalogue.ts',
       'src/lib/access/effective.ts',
+      'src/lib/components/JkaiMenu.svelte',
       'src/lib/components/SiteHeader.svelte',
       'src/lib/config/owner.ts',
       'src/lib/constants/apple-health-scale.ts',
@@ -72,13 +73,19 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/file-index/describe.ts',
       'src/lib/file-index/embed.ts',
       'src/lib/file-index/hash.ts',
-      'src/lib/file-index/jkai-mirror.ts',
       'src/lib/file-index/search.ts',
       'src/lib/file-shares.ts',
+      'src/lib/file-store/backends.ts',
+      'src/lib/file-store/connected.ts',
+      'src/lib/file-store/location.ts',
       'src/lib/file-store/storage.ts',
       'src/lib/health-sync/types.ts',
+      'src/lib/jkai/jkai-theme.svelte.ts',
+      'src/lib/jkai/panel/schema.ts',
       'src/lib/llm/client.ts',
       'src/lib/llm/keys.ts',
+      'src/lib/llm/model-service-client.ts',
+      'src/lib/llm/model-service-contract.ts',
       'src/lib/llm/pricing.ts',
       'src/lib/llm/usage-capture.ts',
       'src/lib/llm/usage-log.ts',
@@ -96,6 +103,11 @@ describe('modules shared with the extracted applications', () => {
       'src/lib/server/owner.ts',
       'src/lib/server/rate-limit.ts',
       'src/lib/server/ssrf-guard.ts',
+      // The tool wire and ToolExecContext. Core and Workflows hold them at
+      // src/lib/workflows/site-tools/ (SR-Infra mainPathOverrides).
+      'src/lib/tools/invoke-contract.ts',
+      'src/lib/tools/principal-seal.ts',
+      'src/lib/tools/registry-internal.ts',
     ]);
   });
 

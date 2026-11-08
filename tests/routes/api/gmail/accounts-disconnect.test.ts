@@ -28,7 +28,7 @@ vi.mock('$lib/db', () => {
     },
   };
 });
-vi.mock('$lib/workflows/gmail/owner-accounts', () => ({ ownerGmailWhere: (x: unknown) => x }));
+vi.mock('$lib/integrations/gmail/owner-accounts', () => ({ ownerGmailWhere: (x: unknown) => x }));
 
 async function del(query: string) {
   const mod = await import('../../../../src/routes/api/gmail/accounts/+server');

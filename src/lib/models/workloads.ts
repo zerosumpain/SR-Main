@@ -43,7 +43,6 @@ import {
   DEFAULT_IMAGE_TOOL_MODEL_ID,
   DEFAULT_EMBEDDING_MODEL_ID,
   DEFAULT_AUDIO_MODEL_ID,
-  DEFAULT_ART_DIRECTOR_MODEL_ID,
   DEFAULT_DESIGN_REVIEW_MODEL_ID,
   DEFAULT_NOTE_REVIEW_MODEL_ID,
 } from '$lib/constants/default-models';
@@ -271,18 +270,6 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     catalogue: 'tools',
     reason:
       "Must accept an `input_audio` content part. OpenAI's whisper endpoint is not reachable through this repo's OpenRouter-only gateway, so transcription rides a multimodal chat model rather than a dedicated speech API.",
-  },
-  {
-    id: 'art-director',
-    scope: 'site',
-    label: 'Deck art director',
-    blurb: 'Composing slide layouts and block choices in the decks builder.',
-    key: 'jkai.decks.art_director_model',
-    fallbackModelId: DEFAULT_ART_DIRECTOR_MODEL_ID,
-    requires: 'tools',
-    catalogue: 'tools',
-    reason:
-      'A one-shot composition, not an agentic loop, so a slower higher-quality model earns its latency here where the agentic roles cannot afford it.',
   },
   {
     id: 'image-tool',
@@ -527,6 +514,18 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
       'The ANSWER model, not the embedding model — those are separate roles because they are separately consequential: changing this one is free, and changing Embeddings invalidates every stored vector.',
   },
   {
+    id: 'drive-analysis',
+    scope: 'site',
+    label: 'Drive file analysis',
+    blurb: 'Summarising a /drive file into a document type, key facts, dates, amounts and any action needed — on demand and for mail attachments filed by rule.',
+    key: 'jkai.drive_analysis.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Unpinned, it follows RAG answering rather than the site default, because both read the same indexed document text; pin it here to split them.',
+  },
+  {
     id: 'mapping',
     scope: 'site',
     label: 'Canvas edge mapping',
@@ -605,6 +604,23 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
       'Follows the site default. A conversation STAMPS this model when it is created and keeps it for life, so changing it moves new threads only — the existing ones are on what they were opened with, and the composer\'s own picker still beats both. Deliberately separate from the site default so chat can be moved without moving every unpinned background role with it.',
   },
   {
+    // Slice 9 (owner decision 14): Siri, the Action Button and the Watch get a
+    // short spoken answer. Its own row so the hands-free spend shows on
+    // /admin/ops/costs apart from the desk's, and so it can be moved to a
+    // faster model without moving chat. Core resolves it for every turn whose
+    // envelope says 'siri' or 'watch' and tags the turn with this id.
+    id: 'jkai.voice',
+    scope: 'site',
+    label: 'jkai hands-free answers',
+    blurb: 'Quick answers from Siri, the Action Button and the Watch: read-only tools, a few rounds, a spoken reply.',
+    key: 'jkai.voice.model',
+    fallbackModelId: null,
+    requires: 'tools',
+    catalogue: 'tools',
+    reason:
+      'Follows the site default. Separate from chat turns because a spoken answer is waited on with the phone at your ear: a faster model may be worth pinning here without moving the desk.',
+  },
+  {
     id: 'workflow-node',
     scope: 'site',
     label: 'Canvas LLM nodes',
@@ -644,13 +660,37 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
     id: 'games-quiz',
     scope: 'site',
     label: 'Quiz Night writer',
-    blurb: 'Writes the ten questions for a family Quiz Night in the iPhone app, once per game.',
+    blurb: 'Writes the ten questions for a family Quiz Night in the iPhone app, then checks every answer: two calls per game.',
     key: 'games.quiz.model',
     fallbackModelId: null,
     requires: null,
     catalogue: 'tools',
     reason:
-      'Follows the site default: one ~2k-token call per game, and wrong "facts" are the one failure a quiz cannot hide, so it is not pinned to a cheaper model than the default. The server marks answers; the model only drafts.',
+      'Follows the site default: a writing call and a checking call per game, and wrong "facts" are the one failure a quiz cannot hide (worse on a GCSE revision quiz), so it is not pinned to a cheaper model than the default. The server marks answers; the model drafts, then answers its own questions blind.',
+  },
+  {
+    id: 'trips-reader',
+    scope: 'site',
+    label: 'Trip planner reader',
+    blurb: 'Turns "what do you want to do?" into trip wishes, and reads one web search per wish into its fact sheet.',
+    key: 'trips.reader.model',
+    fallbackModelId: DEFAULT_EXTRACTION_MODEL_ID,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Pinned cheap on purpose (D4, the brief scan): mechanical JSON against a fixed schema, one short call per wish, and every answer is checked — links must appear in the search results and not be a reseller, and the person confirms each wish. The money belongs in the search, not the reading. Also writes the stored guidance (how to do each leg, what to know at each stop, the city guide).',
+  },
+  {
+    id: 'trips-planner',
+    scope: 'site',
+    label: 'Trip planner conversation',
+    blurb: 'The planning conversation on /trips and in the app: reads the trip, answers, and changes it through validated operations.',
+    key: 'trips.planner.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Follows the site default deliberately: this is the product\'s brain — it leads the intake, proposes, explains warnings and re-plans on request — so it gets a capable model, not the cheap extraction one. One call per turn; every operation it returns is validated server-side before anything changes.',
   },
 ];
 

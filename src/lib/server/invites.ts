@@ -17,10 +17,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { accessInvite, allowedUser } from '$lib/db/schema';
+import { accessInvite } from '$lib/db/schema';
 import { getOwnerEmails, isEmailAllowedToSignIn } from './access';
-import { addToAllowList } from './allow-list';
-import { asList, setUserAccess } from './grants';
+import { admitToAllowList } from './admission';
+import { asList } from './grants';
 
 export type InviteRow = typeof accessInvite.$inferSelect;
 
@@ -118,24 +118,6 @@ export async function decideSignIn(
   return { allow: true, via: 'invite' };
 }
 
-/**
- * Add groups to a person without taking any away, and keep their one-off
- * grants. `setUserAccess` REPLACES both, which is right for the owner's editor
- * and wrong here: approving a request must never quietly demote someone.
- */
-export async function joinGroups(email: string, groups: readonly string[]): Promise<void> {
-  if (groups.length === 0) return;
-  const e = email.trim().toLowerCase();
-  const [row] = await db
-    .select({ groups: allowedUser.groups, grants: allowedUser.grants })
-    .from(allowedUser)
-    .where(eq(allowedUser.email, e))
-    .limit(1);
-  if (!row) return;
-  const current = asList(row.groups).filter((g): g is string => typeof g === 'string');
-  await setUserAccess(e, { groups: [...current, ...groups.filter((g) => !current.includes(g))], grants: asList(row.grants) });
-}
-
 const dbDeps: SignInDeps = {
   isAllowed: (email) => isEmailAllowedToSignIn(email),
   ownersConfigured: () => getOwnerEmails().length > 0,
@@ -159,8 +141,12 @@ const dbDeps: SignInDeps = {
     return rows.length > 0;
   },
   async admit(invite, email) {
-    await addToAllowList({ email, note: invite.name ?? invite.note, addedBy: invite.createdBy });
-    await joinGroups(email, asList(invite.groups).filter((g): g is string => typeof g === 'string'));
+    await admitToAllowList({
+      email,
+      name: invite.name ?? invite.note,
+      groups: asList(invite.groups).filter((g): g is string => typeof g === 'string'),
+      addedBy: invite.createdBy,
+    });
   },
   now: () => new Date(),
 };

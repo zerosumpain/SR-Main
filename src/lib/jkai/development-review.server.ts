@@ -44,7 +44,8 @@ import { resolveChatAltOpenRouterModel } from '$lib/server/models/settings';
 import { resolveModelForProfile } from '$lib/routing/events';
 import { withActivity } from '$lib/context/activity';
 import { thinkingRequestParams } from '$lib/models/thinking';
-import { loadDelivery, mutateDelivery, relevantLessons } from './development-state.server';
+import { loadDelivery, mutateDelivery } from './development-state.server';
+import { areaLessons as listAreaLessons } from '$lib/codegraph/build-lessons.server';
 import { workspaceBroker } from './development-workspace.server';
 import type { DeliveryState } from './development';
 
@@ -173,8 +174,8 @@ export interface PreviewObservation {
 /** The (at most two) end-state screenshots `/inspect` returns as bytes. */
 export interface ReviewScreenshot { width: number; route: string; text: string; mediaType: string; base64: string }
 /**
- * `origin` decides the weight: `area` lessons are owner-accepted
- * (jkai_build_lessons) and bind as house rules; `codegraph` lessons are
+ * `origin` decides the weight: `area` lessons are owner-accepted build
+ * lessons for this product area and bind as house rules; `codegraph` lessons are
  * retrieved precedent, unverified, and may only be raised as a concern.
  */
 export interface ReviewLesson { id: string; origin: 'area' | 'codegraph'; lesson: string; paths?: string[] }
@@ -204,10 +205,10 @@ const clipList = (value: unknown) => (Array.isArray(value) ? value : []).slice(0
  * owner accepted them for this very part of the site.
  */
 export function reviewerLessons(
-  area: Array<{ id: number; lesson: string; evidence: string }>,
+  area: Array<{ id: string; lesson: string; evidence: string }>,
   files: Array<{ id: string; title: string; body: string; citedPaths?: string[] }>,
 ): ReviewLesson[] {
-  const areaIds = new Set(area.map(l => `development-lesson:${l.id}`));
+  const areaIds = new Set(area.map(l => l.id));
   const all: ReviewLesson[] = [
     ...area.slice(0, REVIEW_LIMITS.areaLessons).map(l => ({ id: `area-${l.id}`, origin: 'area' as const, lesson: clip(`${l.lesson} (evidence: ${l.evidence})`, REVIEW_LIMITS.lessonChars) })),
     ...files.filter(l => !areaIds.has(l.id)).slice(0, REVIEW_LIMITS.fileLessons).map(l => ({ id: l.id, origin: 'codegraph' as const,
@@ -302,7 +303,7 @@ export function reviewContent(payload: string, images: ReviewScreenshot[]): stri
  */
 async function reviewInputs(buildId: string, area: string, inspection: Awaited<ReturnType<typeof workspaceBroker>>, assessor: Parameters<typeof coerceModelContext>[0]) {
   const [areaLessons, fileLessons] = await Promise.all([
-    relevantLessons(area).catch(() => []),
+    listAreaLessons(area).catch(() => []),
     import('$lib/codegraph/development.server').then(m => m.contextForBuild(buildId)).then(r => r.lessons).catch(() => []),
   ]);
   const images = reviewImages(inspection.screenshots, getModelCapabilities(coerceModelContext(assessor)));
@@ -485,7 +486,7 @@ export async function continueDevelopment(buildId: string, expectedRevision: num
       }),
       blocker: acceptanceBlocker(current.state),
       veto,
-      lessons: await relevantLessons(current.state.area).catch(() => []),
+      lessons: await listAreaLessons(current.state.area).catch(() => []),
       round: (pilot?.rounds ?? 0) + 1,
       maxRounds: pilot?.maxRounds ?? 1,
       independent: independentlyJudged(current.state),

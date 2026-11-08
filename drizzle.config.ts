@@ -32,6 +32,24 @@ export default defineConfig({
     // Keeping the rows is deliberate; declaring them is not wanted. Drop the
     // table when the migration is trusted, and delete this line with it.
     '!geo_capture_events_weight_backup_20260911',
+    // Compatibility VIEWS left in public by
+    // scripts/migrations/2026-10-02-app-owned-schemas.sql when these tables
+    // moved into their applications' own schemas (drive, policy, dfe, dsd).
+    // Push drops an undeclared view, so each is excluded until the release that
+    // drops the views and Main's pgSchema declarations together.
+    '!rag_collections',
+    '!rag_messages',
+    '!policy_indicator_snapshots',
+    '!keystone_intel',
+    '!keystone_intel_runs',
+    '!standard_registry_entries',
+    '!standard_registry_source_runs',
   ],
+  // Main manages `public` and nothing else. Explicit rather than drizzle-kit's
+  // default because it is load-bearing: schema.ts still declares the app-owned
+  // tables above with pgSchema('drive' | 'policy' | 'dfe' | 'dsd'), and this
+  // filter is what keeps push from creating, altering or dropping anything in
+  // those schemas. Adding one of them here would hand it back to Main.
+  schemaFilter: ['public'],
   dbCredentials: { url },
 });

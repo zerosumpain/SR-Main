@@ -1,6 +1,6 @@
 // Shared canvas-shell geometry — PURE functions extracted verbatim from the two
 // near-identical implementations in `src/routes/jkai/canvas/[slug]/+page.svelte`
-// and `src/lib/canvas/intelligence/ResearchDesk.svelte` (E1 / M5a).
+// and `src/lib/research/ResearchDesk.svelte` (E1 / M5a).
 //
 // Rules of engagement: these are the SAME formulas both surfaces already ship;
 // nothing here changes behaviour. Constants are parameterised with defaults that

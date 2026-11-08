@@ -17,7 +17,7 @@ vi.mock('$lib/toolpolicy/policy', async (orig) => {
 import { listMcpTools } from './server';
 import { dispatchMetaTool } from './meta-tool';
 
-beforeAll(async () => { await import('$lib/workflows/site-tools/registry'); });
+beforeAll(async () => { await import('$lib/tools/registry'); });
 afterEach(() => invalidateToolPolicyCache());
 
 describe('promoting a tool moves it between the two surfaces', () => {

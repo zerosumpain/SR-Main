@@ -1,0 +1,457 @@
+/* notes-paper.css — the landing page's notes theme, lifted into a neutral
+ * kit so other surfaces (the blog first) can be written on the same
+ * exercise-book paper. The landing's own components (HeroNotes, the notes
+ * showcase) keep their private copies of these values; nothing here touches
+ * them, and every selector below is an `np-` class or a custom property, so
+ * this sheet can stay in the document after a client-side navigation away
+ * from the page that loaded it without restyling anything else.
+ *
+ * THE RECIPE (measured off src/lib/components/landing/showcase/notes):
+ *   paper      var(--bg) #ede4d4, on a desk of var(--surface-rail-deep)
+ *   rules      1px of rgba(14, 91, 102, 0.16) (faint petrol), one per 32px,
+ *              sat just under the writing's baseline
+ *   margin     a double red-orange rule, 1px at 0.55 then 1px at 0.35, 4px
+ *              apart, down the whole sheet
+ *   kicker     mono caps in --accent-hover, 0.14em tracking, set right up
+ *              against the margin rule; it turns to run DOWN the margin on
+ *              phones
+ *   type       Inter 800 headings, Fraunces italic marginalia, mono labels
+ *
+ * THE BASELINE GRID. A ruled page is only pleasant to read when every line of
+ * copy sits ON a rule. Two things make that exact here:
+ *
+ *   1. The pitch is derived from the TYPE. `--np-l` is the line height of the
+ *      body copy (2rem at the reader's scale) and `--np-y`, where the rule sits
+ *      inside each pitch, comes from the body face's own baseline (`--np-k`,
+ *      measured per face, see the table below) so the line falls just under
+ *      the letters whichever face the author picked.
+ *   2. Every ruled block carries ITS OWN ruling, anchored at its own top
+ *      (`.np-lined`), instead of the column carrying one long ruling. A block
+ *      whose height the browser decides (a figure, a table) can then never put
+ *      the next paragraph out of step with its lines: the paragraph starts its
+ *      ruling again from its own first line. `snap.ts` additionally keeps those
+ *      odd-height blocks a whole number of rules tall when JavaScript runs, so
+ *      the ruling also reads as one continuous sheet.
+ *
+ * Baseline ratios (`--np-k`): baseline offset from the middle of a line box,
+ * as a fraction of the font size. Measured in Chromium from the live faces
+ * (scratchpad metrics probe, 2026-10-10): Selawik 0.39, DM Sans 0.34,
+ * JetBrains Mono 0.36, Fraunces 0.36, Inter 0.36.
+ */
+
+/* Registered so getComputedStyle hands snap.ts a resolved length, and so the
+   values animate (they never do) and inherit as lengths rather than strings. */
+@property --np-l {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 32px;
+}
+@property --np-y {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 25px;
+}
+
+/* ------------------------------------------------------------------ tokens */
+
+.np-paper {
+  --np-paper: var(--bg);
+  --np-desk: var(--surface-rail-deep);
+  --np-card: var(--surface-card);
+  --np-ink: var(--text-primary);
+  --np-ink-soft: var(--text-secondary);
+  /* The feint: the landing's petrol rule, exactly. */
+  --np-rule: rgba(14, 91, 102, 0.16);
+  /* The margin's double rule. */
+  --np-margin-a: rgba(196, 87, 10, 0.55);
+  --np-margin-b: rgba(196, 87, 10, 0.35);
+  /* Where the margin rule falls, measured from the sheet's left edge. Pages
+     set this to the same value their margin column uses. */
+  --np-margin-x: clamp(84px, 9vw, 148px);
+  /* Pens. Orange for what matters, petrol for structure. */
+  --np-pen: var(--accent);
+  --np-pen-text: var(--accent-hover);
+  --np-pen-ink: var(--accent-ink);
+  /* Graph paper, the landing's health-page inset. */
+  --np-graph-major: rgba(14, 91, 102, 0.14);
+  --np-graph-minor: rgba(14, 91, 102, 0.06);
+  /* Masking tape, for a picture taped onto the page. */
+  --np-tape: rgba(214, 196, 160, 0.72);
+}
+
+/* The two reading themes the blog's reader controls set on <html>. Only the
+   paper's own inks change; the layout never does. */
+html[data-reading-theme='sepia'] .np-paper {
+  --np-rule: rgba(14, 91, 102, 0.15);
+  --np-tape: rgba(206, 184, 140, 0.7);
+}
+html[data-reading-theme='night'] .np-paper {
+  --np-desk: #0e0b08;
+  --np-card: #1e1913;
+  --np-rule: rgba(127, 184, 192, 0.13);
+  --np-margin-a: rgba(224, 123, 42, 0.5);
+  --np-margin-b: rgba(224, 123, 42, 0.3);
+  --np-pen-text: var(--accent);
+  --np-graph-major: rgba(127, 184, 192, 0.14);
+  --np-graph-minor: rgba(127, 184, 192, 0.06);
+  --np-tape: rgba(236, 227, 214, 0.16);
+}
+
+/* ------------------------------------------------------------ the ruling */
+
+/* A ruled region: the pitch, where the rule falls in it, and the rule itself.
+   Set `data-np-font` to the post's body face key (read | body | mono) so the
+   rule sits under THAT face's baseline. `--reader-scale` is the blog reader's
+   text-size control; everything here follows it. */
+.np-ruled {
+  --np-scale: var(--reader-scale, 1);
+  --np-s: calc(1.125rem * var(--np-scale));
+  --np-l: calc(2rem * var(--np-scale));
+  --np-k: 0.39;
+  /* Just under the baseline: a tenth of the type size below it, the same
+     1.6px the landing's 16px copy sits above its rule. Whole pixels, so the
+     feint is one crisp device line rather than two half-lit ones. */
+  --np-y: round(calc(var(--np-l) / 2 + (var(--np-k) + 0.1) * var(--np-s)), 1px);
+  --np-lines: repeating-linear-gradient(
+    to bottom,
+    transparent 0 var(--np-y),
+    var(--np-rule) var(--np-y) calc(var(--np-y) + 1px),
+    transparent calc(var(--np-y) + 1px) var(--np-l)
+  );
+}
+.np-ruled[data-np-font='body'] {
+  --np-k: 0.34;
+}
+/* Mono runs wide: a size down keeps the measure near seventy characters, and
+   the pitch stays the same so the page's rules do not change with the face. */
+.np-ruled[data-np-font='mono'] {
+  --np-k: 0.36;
+  --np-s: calc(1rem * var(--np-scale));
+}
+
+/* Body copy on the rules: the size and the pitch. */
+.np-text {
+  font-size: var(--np-s);
+  line-height: var(--np-l);
+}
+
+/* A block that carries its own ruling, anchored at its own top. Use padding,
+   never margin, for the space after it, so the gap is ruled too. */
+.np-lined {
+  background-image: var(--np-lines);
+}
+/* The same ruling carried out sideways past the block, without widening the
+   layout (border-image outset is ink overflow, not scrollable overflow), so a
+   column of ruled blocks reads as a full sheet. Set --np-bleed to limit it. */
+.np-lined-bleed {
+  /* The fill paints the block itself too, so the plain background is
+     dropped: the two together would double the feint inside the block. */
+  background-image: none;
+  border-image: var(--np-lines) fill 0 / 0 / 0 var(--np-bleed, 100vw);
+}
+
+/* A block in ANOTHER face or size (a heading, a caption) set on the rules.
+   Its line height is `--np-n` rules; its first baseline is moved onto the
+   first rule's writing line by a relative nudge (`--np-shift`), and its own
+   ruling is redrawn that much higher (`--np-lines` again, from a shifted
+   `--np-y`) so the lines stay where the page has them, in the background and
+   in a bleed alike. Inputs: --np-fs (its font size), --np-n (rules per line),
+   --np-kf (its face's baseline ratio, from the table above). The nudge is
+   small (under the rule's own offset), so the sliver it uncovers at one end
+   never holds a rule. A custom property's var() is resolved where it is
+   declared, which is why the gradient is written out again here rather than
+   inherited. */
+.np-set {
+  --np-n: 1;
+  --np-kf: 0.36;
+  --np-shift: round(
+    calc(
+      (var(--np-n) - 1) * var(--np-l) + var(--np-y) - 0.1 * var(--np-s) - var(--np-n) * var(--np-l) / 2 -
+        var(--np-kf) * var(--np-fs, var(--np-s))
+    ),
+    1px
+  );
+  --np-y-set: mod(calc(var(--np-y) - var(--np-shift)), var(--np-l));
+  --np-lines: repeating-linear-gradient(
+    to bottom,
+    transparent 0 var(--np-y-set),
+    var(--np-rule) var(--np-y-set) calc(var(--np-y-set) + 1px),
+    transparent calc(var(--np-y-set) + 1px) var(--np-l)
+  );
+  position: relative;
+  top: var(--np-shift);
+  font-size: var(--np-fs, var(--np-s));
+  line-height: calc(var(--np-n) * var(--np-l));
+}
+
+/* Inline things that would otherwise grow a line box past the pitch and
+   push every later line off its rule: superscripts, code in another face,
+   marks with padding. Line-height 0 leaves the strut (the pitch) in charge. */
+.np-ruled :where(sup, sub, code, kbd, samp, mark, small, span[style]) {
+  line-height: 0;
+}
+
+/* A block kept a whole number of rules tall by snap.ts. Zero-specificity, so
+   a block with its own foot padding writes calc(<its padding> + var(--np-snap, 0px)). */
+:where(.np-snap) {
+  padding-bottom: var(--np-snap, 0px);
+}
+
+/* -------------------------------------------------------------- the sheet */
+
+/* The paper, with its margin: the double red-orange rule down the sheet. */
+.np-sheet {
+  position: relative;
+  background-color: var(--np-paper);
+  color: var(--np-ink);
+}
+.np-sheet::before {
+  content: '';
+  position: absolute;
+  top: var(--np-margin-top, 0);
+  bottom: 0;
+  left: calc(var(--np-margin-x) - 1px);
+  z-index: 1;
+  width: 4px;
+  border-left: 1px solid var(--np-margin-a);
+  border-right: 1px solid var(--np-margin-b);
+  pointer-events: none;
+}
+/* The sheet lying on the desk: on a wide screen the paper stops and casts
+   the landing's soft shadow. */
+.np-desk {
+  background: var(--np-desk);
+}
+.np-desk > .np-sheet {
+  box-shadow:
+    0 1px 0 rgba(26, 16, 8, 0.08),
+    0 24px 48px -24px rgba(26, 16, 8, 0.35);
+}
+
+/* The ink cover's torn edge laid over the top of the first page, and the
+   shadow where the cover lifts (the landing's hero-to-showcase join). */
+.np-tear {
+  position: relative;
+}
+.np-tear::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 30px;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, var(--text-primary) 25%, transparent 25%) -6px 0 / 12px 12px repeat-x,
+    linear-gradient(225deg, var(--text-primary) 25%, transparent 25%) -6px 0 / 12px 12px repeat-x,
+    linear-gradient(rgba(26, 16, 8, 0.18), transparent) 0 0 / 100% 26px no-repeat;
+}
+/* The site bar keeps its ink in the night theme (app.css), so its torn edge
+   does too, rather than turning cream with --text-primary. */
+html[data-reading-theme='night'] .np-tear::after {
+  --text-primary: #1a1008;
+}
+
+/* ------------------------------------------------------------- the marks */
+
+/* A margin kicker: mono caps, right up against the margin rule, one rule
+   tall so it sits on the line beside the heading it labels. */
+.np-kicker {
+  margin: 0;
+  padding-right: 22px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  font-weight: 400;
+  line-height: var(--np-l, 32px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: right;
+  color: var(--np-pen-text);
+}
+/* A label over a reading or a group: the same mono caps, in petrol. */
+.np-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-label-xs);
+  font-weight: 400;
+  line-height: var(--np-l, 32px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--np-pen-ink);
+}
+/* Marginalia: Fraunces italic, lower case, softer ink, on the lines. */
+.np-aside {
+  margin: 0;
+  font-family: var(--fs-serif);
+  font-optical-sizing: auto;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 17px;
+  line-height: var(--np-l, 32px);
+  color: var(--np-ink-soft);
+}
+
+/* An index card pinned to the page: card stock, a red head rule and petrol
+   lines under it (as a real index card is printed), set a degree or so off
+   true by --np-tilt. Ink on paper inside, in every reading theme. */
+.np-card {
+  --np-tilt: 0deg;
+  position: relative;
+  padding: 18px 20px 16px;
+  background-color: var(--np-card);
+  background-image:
+    linear-gradient(var(--np-margin-a), var(--np-margin-a)),
+    repeating-linear-gradient(to bottom, transparent 0 23px, var(--np-rule) 23px 24px);
+  background-size:
+    100% 1px,
+    100% 100%;
+  background-position:
+    0 44px,
+    0 44px;
+  background-repeat: no-repeat, repeat-y;
+  border: 1px solid var(--line-strong);
+  color: var(--np-ink);
+  transform: rotate(var(--np-tilt));
+}
+.np-card--plain {
+  background-image: none;
+}
+/* The pin: the landing's orange drawing pin, a pill-radius dot. */
+.np-pin {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  width: 13px;
+  height: 13px;
+  margin-left: -6px;
+  border-radius: 100px;
+  background: radial-gradient(circle at 35% 35%, #f6b37a 0 2px, var(--accent-on-dark) 3px, #b2561a 100%);
+  pointer-events: none;
+}
+
+/* A sticky note, pale orange and a couple of degrees off. */
+.np-sticky {
+  --np-tilt: -2.2deg;
+  padding: 18px 18px 22px;
+  background: linear-gradient(160deg, #f7d9b4, #f2c99a);
+  color: #1a1008;
+  transform: rotate(var(--np-tilt));
+}
+
+/* Graph paper: a petrol grid on half the rule pitch, a darker line every
+   five squares. For code, sums and charts. Kept faint enough that text set
+   on it keeps its full contrast against the card stock beneath. */
+.np-graph {
+  background-color: var(--np-card);
+  background-image:
+    linear-gradient(var(--np-graph-major) 1px, transparent 1px),
+    linear-gradient(90deg, var(--np-graph-major) 1px, transparent 1px),
+    linear-gradient(var(--np-graph-minor) 1px, transparent 1px),
+    linear-gradient(90deg, var(--np-graph-minor) 1px, transparent 1px);
+  background-size:
+    80px 80px,
+    80px 80px,
+    16px 16px,
+    16px 16px;
+  border: 1px solid rgba(14, 91, 102, 0.3);
+}
+
+/* Masking tape across a picture's top edge. Put it on the figure (or any
+   positioned box); --np-tape-tilt turns it a little. */
+.np-taped {
+  position: relative;
+}
+.np-taped::before {
+  content: '';
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  z-index: 1;
+  width: min(120px, 30%);
+  height: 22px;
+  background: var(--np-tape);
+  transform: translateX(-50%) rotate(var(--np-tape-tilt, -2deg));
+  pointer-events: none;
+}
+
+/* The end of a piece: a small inked mark, centred, with a rule's room. */
+.np-end {
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin: 0 auto;
+  color: var(--np-pen);
+}
+
+/* ------------------------------------------------------------- phones */
+
+@media (max-width: 760px) {
+  .np-paper {
+    --np-margin-x: 30px;
+  }
+  /* The kicker turns to run down the margin, as a phone's margin is narrow. */
+  .np-kicker {
+    padding: 4px 0 0;
+    line-height: 1.4;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    justify-self: center;
+    align-self: start;
+  }
+  .np-aside {
+    font-size: 16px;
+  }
+}
+
+/* ------------------------------------------------------------- motion */
+
+/* Nothing in this kit moves on its own. Tilts are static. */
+@media (prefers-reduced-motion: reduce) {
+  .np-card,
+  .np-sticky {
+    transition: none;
+  }
+}
+
+/* -------------------------------------------------------------- print */
+
+/* Paper prints as paper: ink on white, no feint, no margin rule, no desk,
+   no tape, no tilt. */
+@media print {
+  .np-paper,
+  .np-sheet,
+  .np-desk,
+  .np-lined,
+  .np-card,
+  .np-sticky,
+  .np-graph {
+    background: none !important;
+    box-shadow: none !important;
+    color: #1a1008 !important;
+  }
+  .np-lined-bleed {
+    border-image: none !important;
+  }
+  .np-sheet::before,
+  .np-tear::after,
+  .np-taped::before,
+  .np-pin {
+    display: none !important;
+  }
+  .np-card,
+  .np-sticky {
+    transform: none !important;
+    border: 1px solid #1a1008;
+  }
+  .np-set {
+    top: 0 !important;
+  }
+  .np-kicker,
+  .np-label,
+  .np-aside {
+    color: #1a1008 !important;
+    writing-mode: horizontal-tb;
+    transform: none;
+  }
+}

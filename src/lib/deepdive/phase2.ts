@@ -7,7 +7,7 @@ import { toVectorLiteral } from './vector';
 import { extractContent } from './extract-content';
 import { indexSourceContent } from './source-index';
 import { getEmbeddingModel } from '$lib/llm/keys';
-import { search as tavilySearch } from './tavily';
+import { search as webSearch } from './web-search';
 import { emitLog, emitStats, shouldStop, throwIfStopped } from './worker';
 import { emitArtefact } from './desk-events';
 import { hasOpenRouter } from '$lib/llm/keys';
@@ -247,7 +247,7 @@ export async function runPhase2(
     // Fetch content — skip extraction if snippet is already rich
     let content = source.snippet ?? '';
     if (content.length < 500) {
-      const result = await extractContent(source.url, content);
+      const result = await extractContent(source.url, content, { purpose: 'research.phase2.source' });
       content = result.content.slice(0, 10000);
       if (result.method !== 'snippet') {
         emitLog(sessionId, '\u{1F4E5}', `Extracted via ${result.method}: ${source.title?.slice(0, 40) ?? source.url}`);
@@ -517,16 +517,18 @@ export async function runPhase2(
           linkedinSearched.add(pe.name.toLowerCase());
 
           try {
-            const liResults = await tavilySearch(
+            const liResults = await webSearch(
               `site:linkedin.com/in/ "${pe.name}"`,
-              { maxResults: 3, searchDepth: 'basic' },
+              { purpose: 'research.phase2.linkedin', maxResults: 3, searchDepth: 'basic' },
             );
 
             if (liResults.results?.length > 0) {
               const topResult = liResults.results[0];
 
               // Try to extract profile content
-              const profileResult = await extractContent(topResult.url, topResult.content ?? '');
+              const profileResult = await extractContent(topResult.url, topResult.content ?? '', {
+                purpose: 'research.phase2.linkedin',
+              });
               let profileContent = profileResult.content.slice(0, 5000);
 
               if (profileContent) {

@@ -15,17 +15,34 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 
+/**
+ * Bumped after every write and every cache clear. A read that was already
+ * querying when a write landed may return the row as it was before the write;
+ * caching that would put the old value back for a whole TTL after the write
+ * had cleared it, so getSetting only caches when no write happened while its
+ * query ran. (It still returns what it read: that request began before the
+ * write.)
+ */
+let writes = 0;
+
+function invalidate(key?: string): void {
+  writes++;
+  if (key === undefined) cache.clear();
+  else cache.delete(key);
+}
+
 export function clearSettingsCache(): void {
-  cache.clear();
+  invalidate();
 }
 
 export async function getSetting<T = unknown>(key: string): Promise<T | null> {
   const hit = cache.get(key);
   if (hit && hit.expiresAt > Date.now()) return hit.value as T;
 
+  const startedAt = writes;
   const [row] = await db.select().from(appSettings).where(eq(appSettings.key, key)).limit(1);
   const value = (row?.value ?? null) as T | null;
-  cache.set(key, { value, expiresAt: Date.now() + TTL_MS });
+  if (writes === startedAt) cache.set(key, { value, expiresAt: Date.now() + TTL_MS });
   return value;
 }
 
@@ -41,7 +58,7 @@ export async function getSetting<T = unknown>(key: string): Promise<T | null> {
  */
 export async function deleteSetting(key: string): Promise<void> {
   await db.delete(appSettings).where(eq(appSettings.key, key));
-  cache.delete(key);
+  invalidate(key);
 }
 
 export async function setSetting(key: string, value: unknown): Promise<void> {
@@ -52,7 +69,7 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
       target: appSettings.key,
       set: { value, updatedAt: new Date() },
     });
-  cache.delete(key);
+  invalidate(key);
 }
 
 /**

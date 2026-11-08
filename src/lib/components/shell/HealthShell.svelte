@@ -25,9 +25,10 @@
   // elevation.
   import type { Snippet } from 'svelte';
   import SiteHeader from '$lib/components/SiteHeader.svelte';
+  import JkaiMenu from '$lib/components/JkaiMenu.svelte';
   import { currentIsOwner, currentPath } from '$lib/nav/page-path';
   import { currentReach } from '$lib/nav/reach';
-  import { isItemActive, parentHref, parentLabel, subnavFor } from '$lib/nav/site-nav';
+  import { JKAI_ITEM, isItemActive, parentHref, parentLabel, subnavFor, visibleItems } from '$lib/nav/site-nav';
 
   interface NavLink {
     href: string;
@@ -116,6 +117,7 @@
   const here = $derived(currentPath());
   const isOwner = $derived(currentIsOwner());
   const reach = $derived(currentReach());
+  const jkaiCell = $derived(visibleItems([JKAI_ITEM], isOwner, reach)[0] ?? null);
 
   // `undefined` means "not passed" and takes the manifest's answer; an explicit
   // `null` still suppresses the link. Defaulting the prop to `null` would have
@@ -189,6 +191,12 @@
         {/each}
         {#if actions}{@render actions()}{/if}
       </div>
+      {#if jkaiCell}
+        <!-- The jkai cell every bar carries, at the head's right edge and its
+             full height, as on the site bar. A sibling of the right-hand group,
+             not inside it: /news hides that group on a phone. -->
+        <span class="hs-jkai"><JkaiMenu item={jkaiCell} path={here} /></span>
+      {/if}
     </header>
   {/if}
 
@@ -270,6 +278,23 @@
     gap: 14px;
     flex-wrap: wrap;
     min-width: 0;
+  }
+  /* Pinned to the head's top-right corner at the first row's height, so it
+     stays put however the groups beside it wrap on a phone. */
+  .hs-jkai {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 46px;
+    display: flex;
+  }
+  .hs-head:has(.hs-jkai) {
+    padding-right: calc(80px + 16px);
+  }
+  @media (max-width: 640px) {
+    .hs-head:has(.hs-jkai) {
+      padding-right: calc(68px + 12px);
+    }
   }
   .hs-head-right {
     align-items: center;

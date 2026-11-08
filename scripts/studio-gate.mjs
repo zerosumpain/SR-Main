@@ -458,7 +458,7 @@ async function main() {
 
         // ——— Field Study invariants ———
         //
-        // The mechanical half of field-study-system/CHECKLIST.md. The
+        // The mechanical half of the field-study ship checklist. The
         // judgement calls in that list (is the risk column honest? is the
         // lesson transferable?) stay with a human; these four are the ones a
         // browser can settle, and leaving them to review is how three studies

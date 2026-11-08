@@ -18,7 +18,7 @@
     normaliseGrooming,
     renderBacklogBrief,
     type GroomingModelResult,
-  } from '$lib/selfimprove/grooming';
+  } from '$lib/jkai/development-brief';
   import type { BacklogGroomingData, BacklogNote } from '$lib/selfimprove/types';
 
   interface Props {
@@ -520,6 +520,21 @@
               <p>{draft.readiness.reason}</p>
             </div>
 
+            {#if draft.lint}
+              <!-- The development brief check, run when the draft was groomed:
+                   the lane, the target routes and whether a reviewer could
+                   check each criterion. Advisory here; the delivery checks again. -->
+              <div class="side-block questions">
+                <h3>Brief check</h3>
+                <p>Lane: {draft.lint.lane.lane}{draft.lint.lane.repo ? ` (${draft.lint.lane.repo})` : ''}. {draft.lint.lane.reason}</p>
+                {#if draft.lint.findings.length}
+                  <ul>{#each draft.lint.findings as finding, i (i)}<li>{finding.severity === 'block' ? 'Fix' : 'Note'}: {finding.subject ? `${finding.subject.slice(0, 80)} — ` : ''}{finding.message}</li>{/each}</ul>
+                {:else}
+                  <p>No problems found.</p>
+                {/if}
+              </div>
+            {/if}
+
             {#if draft.openQuestions.length}
               <div class="side-block questions">
                 <h3>Questions to resolve</h3>
@@ -704,6 +719,8 @@
                 <label class="field"><span>Decisions made</span><textarea class="control" rows="4" value={listValue(g.decisions)} oninput={(event) => updateDraft('decisions', lines(event.currentTarget.value))}></textarea></label>
                 <label class="field"><span>Assumptions to verify</span><textarea class="control" rows="4" value={listValue(g.assumptions)} oninput={(event) => updateDraft('assumptions', lines(event.currentTarget.value))}></textarea></label>
                 <label class="field full"><span>Open questions</span><textarea class="control" rows="4" value={listValue(g.openQuestions)} oninput={(event) => updateDraft('openQuestions', lines(event.currentTarget.value))}></textarea><small>Any item here keeps readiness in “needs input”. Remove it only when it is genuinely resolved.</small></label>
+                <label class="field"><span>Target routes</span><textarea class="control" rows="3" value={listValue(g.routes ?? [])} oninput={(event) => updateDraft('routes', lines(event.currentTarget.value))}></textarea><small>Existing site paths the change touches, one per line.</small></label>
+                <label class="field"><span>New routes</span><textarea class="control" rows="3" value={listValue(g.newRoutes ?? [])} oninput={(event) => updateDraft('newRoutes', lines(event.currentTarget.value))}></textarea><small>Paths the change would create.</small></label>
                 <label class="field"><span>Effort</span><select class="control" value={g.effort} onchange={(event) => updateDraft('effort', event.currentTarget.value as BacklogGroomingData['effort'])}>{#each BACKLOG_EFFORTS as value}<option value={value}>{value}</option>{/each}</select></label>
                 <label class="field"><span>Risk</span><select class="control" value={g.risk} onchange={(event) => updateDraft('risk', event.currentTarget.value as BacklogGroomingData['risk'])}>{#each BACKLOG_RISKS as value}<option value={value}>{value}</option>{/each}</select></label>
                 {#if g.relatedItems.length}

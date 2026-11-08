@@ -58,7 +58,7 @@ async function loadCapabilityInventory(): Promise<CapabilityInventory | null> {
   };
 
   try {
-    const { getToolsetManifest } = await import('$lib/workflows/site-tools/registry');
+    const { getToolsetManifest } = await import('$lib/tools/registry');
     inventory.platformToolsets = getToolsetManifest()
       .map((t) => ({ name: t.toolset, tools: t.tools.length }))
       .sort((a, b) => a.name.localeCompare(b.name));

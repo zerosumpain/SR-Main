@@ -30,7 +30,7 @@
 //   ha_get_history   GET /api/history/period/…                     read
 //   memory_search    SELECT over jkai_memories (personal scope)    read
 //   health_timeline  service-lane GET to SR-Health                 read
-//   research_web_search   Tavily search, 300-char snippets         read (web)
+//   research_web_search   provider-grounded search, cited pages    read (web)
 //   fetch_url        GET a public URL, private ranges refused      read (web)
 //
 // NOT listed, deliberately: `ha_render_template` (arbitrary Jinja is a larger
@@ -39,6 +39,10 @@
 // `apple_calendar_list` (bypasses the owner's diary exclusions — `diary` reads
 // through them), every `gmail_*` (picks a mailbox; see reads.ts).
 //
+//   compare_days     the same day store, split by a condition       read
+//   household_patterns  the stored patterns report + live forecast   read
+//                    (owner's view; named places, never coordinates)
+
 // ── Cards ──────────────────────────────────────────────────────────────────
 //
 // Every result is wrapped by CODE as a card `{id, tool, args, text}`, and the
@@ -47,9 +51,11 @@
 // pack" to "code built every card the model saw" — the property
 // `ponder/lookups.ts` was protecting, kept rather than traded away.
 
-import { createCorrelator, correlateDescription } from './correlate';
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
+import { compareDaysDescription, createCorrelator, createDayComparer, correlateDescription, type LedgerSession } from './correlate';
 import { HUB_SECTIONS, activitiesTool, healthHubTool, healthSeriesDescription, healthSeriesTool } from './health';
 import { chatThreadsTool, diaryTool, mailFactsTool, spendTool } from './reads';
+import { MOVEMENT_SECTIONS } from '$lib/owner-data/household';
 import { isResearchChannel, type Channel } from './questions';
 import { errMsg } from '../types';
 
@@ -57,7 +63,7 @@ import { errMsg } from '../types';
 export const PRIVATE_SITE_TOOLS = ['ha_find', 'ha_query_state', 'ha_get_history', 'memory_search', 'health_timeline'] as const;
 
 /** Tools implemented here, over the owner's data. PRIVATE only. */
-export const LOCAL_TOOLS = ['health_hub', 'health_series', 'correlate', 'mail_facts', 'diary', 'spend', 'chat_threads', 'activities'] as const;
+export const LOCAL_TOOLS = ['health_hub', 'health_series', 'correlate', 'compare_days', 'mail_facts', 'diary', 'spend', 'chat_threads', 'activities', 'household_patterns'] as const;
 export type LocalTool = (typeof LOCAL_TOOLS)[number];
 
 /** Registered site tools a RESEARCH cycle may call. */
@@ -160,8 +166,25 @@ const LOCAL_DEFINITIONS: Record<LocalTool, () => ToolDefinition['function']> = {
         a: { type: 'string', description: 'First metric key.' },
         b: { type: 'string', description: 'Second metric key. The lagged test reads a today against b tomorrow.' },
         days: { type: 'number', description: 'Window in days, 21–365. Default 90.' },
+        control: { type: 'string', description: 'Optional third metric to hold fixed (partial correlation).' },
       },
       required: ['a', 'b'],
+    },
+  }),
+  compare_days: () => ({
+    name: 'compare_days',
+    description: compareDaysDescription(),
+    parameters: {
+      type: 'object',
+      properties: {
+        metric: { type: 'string', description: 'The metric to compare.' },
+        when: { type: 'string', description: 'The metric that splits the days.' },
+        above: { type: 'number', description: 'Condition: `when` above this.' },
+        below: { type: 'number', description: 'Condition: `when` below this (used if above is not given).' },
+        nextDay: { type: 'boolean', description: 'Read `metric` the day after the condition.' },
+        days: { type: 'number', description: 'Window in days, 21–365. Default 90.' },
+      },
+      required: ['metric', 'when'],
     },
   }),
   mail_facts: () => ({
@@ -193,7 +216,7 @@ const LOCAL_DEFINITIONS: Record<LocalTool, () => ToolDefinition['function']> = {
   spend: () => ({
     name: 'spend',
     description:
-      'His verified spend rows (receipts and bank lines that passed verification), totalled by merchant and listed by day.',
+      'His spend, reconciled against the bank: each line is tagged [bank], [PayPal], [bank→PayPal top-up] or [email]. Only bank and PayPal lines are payments; an email is a receipt or heads-up about one and is paired with it; a top-up funds PayPal payments. Totals count payments only.',
     parameters: {
       type: 'object',
       properties: {
@@ -220,6 +243,18 @@ const LOCAL_DEFINITIONS: Record<LocalTool, () => ToolDefinition['function']> = {
       properties: { limit: { type: 'number', description: 'Most recent N, 5–60. Default 30.' } },
     },
   }),
+  household_patterns: () => ({
+    name: 'household_patterns',
+    description:
+      "The household's movement over ninety days (/home/people/patterns) and today's forecast (/home/people): who goes where, when and for how long, their routines, who is out with whom, steps person by person, and each person's forecast rest of today with anything that looks off and how accurate the forecast has been. One section per call. Context for timing and fitting a suggestion to the family's real week — not a subject to report on.",
+    parameters: {
+      type: 'object',
+      properties: {
+        section: { type: 'string', enum: [...MOVEMENT_SECTIONS], description: 'Default "summary".' },
+        person: { type: 'string', description: 'For section "person": their name.' },
+      },
+    },
+  }),
 };
 
 function isLocal(name: string): name is LocalTool {
@@ -237,10 +272,14 @@ export interface ToolCallOutcome {
  * One cycle's tools: the definitions to offer, and a caller that refuses
  * anything outside the cycle's set BEFORE it runs, and cards what it runs.
  */
-export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subject: string }) {
+export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subject: string; ledger?: LedgerSession }) {
   const allowed = toolsIn(opts.set);
   const cards = new Map<string, Card>();
-  const correlate = createCorrelator({ subject: opts.subject, now: opts.now });
+  /** Cards of correlate() pairs tested recently with nothing new (`ledger.ts`). */
+  const staleCards = new Set<string>();
+  const correlate = createCorrelator({ subject: opts.subject, now: opts.now, ledger: opts.ledger });
+  const compareDays = createDayComparer({ subject: opts.subject, now: opts.now });
+  let lastStale = false;
   let calls = 0;
 
   async function runLocal(name: LocalTool, args: Record<string, unknown>): Promise<string> {
@@ -249,8 +288,13 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         return healthHubTool(args);
       case 'health_series':
         return healthSeriesTool(args, opts.now);
-      case 'correlate':
-        return (await correlate(args)).text;
+      case 'correlate': {
+        const out = await correlate(args);
+        lastStale = out.stale === true;
+        return out.text;
+      }
+      case 'compare_days':
+        return compareDays(args);
       case 'mail_facts':
         return mailFactsTool(args, opts.now);
       case 'diary':
@@ -261,6 +305,10 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         return chatThreadsTool(args, opts.now);
       case 'activities':
         return activitiesTool(args);
+      case 'household_patterns': {
+        const { householdPatternsTool } = await import('$lib/owner-data/household.server');
+        return householdPatternsTool(args, opts.now);
+      }
     }
   }
 
@@ -268,6 +316,7 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
     set: opts.set,
     allowed,
     cards,
+    staleCards,
     get calls() {
       return calls;
     },
@@ -277,7 +326,7 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
       const siteNames = allowed.filter((n) => !isLocal(n));
       let site: ToolDefinition[] = [];
       if (siteNames.length) {
-        const { getToolDefinitionsByName } = await import('$lib/workflows/site-tools/llm-tools');
+        const { getToolDefinitionsByName } = await import('$lib/tools/llm-tools');
         site = (await getToolDefinitionsByName(siteNames)) as ToolDefinition[];
       }
       return [...local, ...site];
@@ -291,14 +340,15 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
         return { card: null, failed: true, content: `Refused: this cycle has used all ${MAX_TOOL_CALLS} tool calls. Write your answer.` };
       }
       calls++;
+      lastStale = false;
       let raw: unknown;
       try {
         if (isLocal(name)) {
           raw = await runLocal(name, args);
         } else {
-          const { executeSiteTool } = await import('$lib/workflows/site-tools/executor');
+          const { executeSiteTool } = await import('$lib/tools/executor');
           // The allow-list again, as the executor's own capability scope.
-          const res = await executeSiteTool(name, args, { emit: () => {}, allowedTools: [...allowed] });
+          const res = await executeSiteTool(name, args, { emit: () => {}, allowedTools: [...allowed], principal: unattendedPrincipal('daydream-think', allowed) });
           if (!res?.success) {
             return { card: null, failed: true, content: `No card — ${name} failed: ${(res?.error ?? 'no result').slice(0, 200)}` };
           }
@@ -309,7 +359,19 @@ export function createToolbox(opts: { set: ToolSet; now: Date; day: string; subj
       }
       const card = makeCard(cards.size + 1, name, args, raw, opts.day);
       cards.set(card.id, card);
+      if (lastStale) staleCards.add(card.id);
       return { card, failed: false, content: renderCard(card) };
+    },
+
+    /**
+     * A card code issues before the model looks — the ledger on a summary
+     * cycle. It takes the next id like any other, is citable like any other,
+     * and costs none of the cycle's tool calls.
+     */
+    seed(tool: string, args: Record<string, unknown>, text: string): Card {
+      const card = makeCard(cards.size + 1, tool, args, text, opts.day);
+      cards.set(card.id, card);
+      return card;
     },
   };
 }

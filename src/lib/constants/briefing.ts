@@ -14,6 +14,8 @@ export type BriefingSourceKey =
   | 'daydreams'
   | 'memories'
   | 'calendar'
+  | 'news'
+  | 'automations'
   | 'research'
   | 'files'
   | 'web';
@@ -55,7 +57,9 @@ export const BRIEFING_SOURCE_CATALOG: BriefingSourceDefinition[] = [
   { key: 'readiness', label: 'Readiness', description: 'Recovery score and the current recommendation.', group: 'Personal', mode: 'workflow', nodeTypes: ['health-query'] },
   { key: 'email', label: 'Email', description: 'New mail selected by the briefing workflow.', group: 'Personal', mode: 'workflow', nodeTypes: ['gmail-search', 'gmail-fetch'] },
   { key: 'knowledge', label: 'Knowledge graph', description: 'Relevant context already connected across JKAI.', group: 'Knowledge', mode: 'workflow', nodeTypes: ['intel-query'] },
-  { key: 'calendar', label: 'Calendar', description: 'Upcoming events supplied by a calendar node.', group: 'Personal', mode: 'extension', nodeTypes: ['apple-calendar'] },
+  { key: 'calendar', label: 'Calendar', description: 'Today’s diary, tomorrow’s first event, and the week ahead on Mondays.', group: 'Personal', mode: 'workflow', nodeTypes: ['site-tool', 'apple-calendar'] },
+  { key: 'news', label: 'News', description: 'Up to two headlines from the news desk, preferring your briefing topics.', group: 'Knowledge', mode: 'workflow', nodeTypes: ['site-tool'] },
+  { key: 'automations', label: 'Automations', description: 'Workflow runs that failed since the last briefing.', group: 'Now', mode: 'native', nodeTypes: [] },
   { key: 'research', label: 'Research', description: 'Fresh findings or completed research relevant today.', group: 'Knowledge', mode: 'extension', nodeTypes: ['research-search', 'deep-dive-list', 'deep-dive-report'] },
   { key: 'files', label: 'Files', description: 'Selected documents, notes or recently changed files.', group: 'Knowledge', mode: 'extension', nodeTypes: ['file-search', 'file-read', 'file-extract'] },
   { key: 'web', label: 'Web sources', description: 'News, searches or pages gathered by workflow nodes.', group: 'Knowledge', mode: 'extension', nodeTypes: ['tavily-search', 'web-scrape', 'stealth-scrape'] },

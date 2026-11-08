@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { OWNER_ONLY_CARDS } from './owner-cards.server';
 import { PROJECT_CARDS } from './cards';
+import { SHARE_PASSWORD_KEYS, sharePasswordAllowed } from '$lib/projects/share-password';
+import { SHARE_PACKS, SHARE_PACK_ID } from '$lib/projects/share-pack';
 import { STATIC_PROJECT_KEYS } from '$lib/projects/registry';
 
 // The inverse of registry-cards.test.ts. That one forces every PUBLIC card's
@@ -30,7 +32,53 @@ describe('/projects owner-only cards', () => {
     for (const c of OWNER_ONLY_CARDS) expect(c.ownerOnly).toBe(true);
   });
 
-  it('points each card at its own /projects address', () => {
-    for (const c of OWNER_ONLY_CARDS) expect(c.href).toBe(`/projects/${c.key}`);
+  it('points each card at its own address on the site', () => {
+    // An app the site routes to its own root path (Wildmind's /wildmind/) is on the site too.
+    for (const c of OWNER_ONLY_CARDS.filter((c) => !c.external)) expect([`/projects/${c.key}`, `/${c.key}/`]).toContain(c.href);
+  });
+
+  it('sends an external card to an absolute address off the site', () => {
+    for (const c of OWNER_ONLY_CARDS.filter((c) => c.external)) {
+      expect(c.href).toMatch(/^https?:\/\//);
+      expect(c.href).not.toMatch(/strangeramblings\.com/);
+    }
+  });
+
+  it('allows external links on owner-only cards only', () => {
+    expect(PROJECT_CARDS.filter((c) => c.external).map((c) => c.key)).toEqual([]);
+  });
+});
+
+describe('share links on a project’s own domain', () => {
+  it('sends the Spine’s recipients to data-spine.com, which holds anyone without a link', () => {
+    const spine = PROJECT_CARDS.find((c) => c.key === 'spine');
+    expect(spine?.shareBase).toBe('https://data-spine.com/');
+  });
+
+  it('only ever uses an https root of a domain', () => {
+    for (const c of PROJECT_CARDS) {
+      if (c.shareBase) expect(c.shareBase).toMatch(/^https:\/\/[a-z0-9.-]+\/$/);
+    }
+  });
+});
+
+describe('share links that ask for a password', () => {
+  it('only the Spine checks a link password, so only its links may set one', () => {
+    // The card shows the toggle; the API reads SHARE_PASSWORD_KEYS. They must agree.
+    expect(PROJECT_CARDS.filter((c) => c.sharePassword).map((c) => c.key)).toEqual([...SHARE_PASSWORD_KEYS]);
+    expect([...SHARE_PASSWORD_KEYS]).toEqual(['spine']);
+    expect(sharePasswordAllowed('spine')).toBe(true);
+    expect(sharePasswordAllowed('policy-engine')).toBe(false);
+    expect(sharePasswordAllowed('no-such-project')).toBe(false);
+  });
+});
+
+describe('share links that open one audience pack', () => {
+  it('a card offers exactly the packs the share API accepts, the DfE pack first on the Spine', () => {
+    const offered = Object.fromEntries(PROJECT_CARDS.filter((c) => c.sharePacks?.length).map((c) => [c.key, c.sharePacks]));
+    expect(offered).toEqual(SHARE_PACKS);
+    expect(SHARE_PACKS.spine.map((p) => p.id)).toEqual(['dfe', 'school']);
+    // A pack id the gateway would refuse would make every claim for that link malformed.
+    for (const packs of Object.values(SHARE_PACKS)) for (const p of packs) expect(p.id).toMatch(SHARE_PACK_ID);
   });
 });

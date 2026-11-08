@@ -6,12 +6,12 @@ design language. All values are canonical — do not invent substitutes.
 ## Fonts (Google Fonts CDN)
 
 ```html
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,800&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 ```
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--font-display` | `'Archivo Black', Impact, sans-serif` | Page headings, hero text |
+| `--font-display` | `'Inter', system-ui, sans-serif` | Page headings, hero text |
 | `--font-body` | `'DM Sans', system-ui, sans-serif` | Body copy, paragraphs |
 | `--font-mono` | `'JetBrains Mono', ui-monospace, monospace` | Labels, inputs, tables, code, data |
 

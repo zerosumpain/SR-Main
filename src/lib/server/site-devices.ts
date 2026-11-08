@@ -8,9 +8,10 @@
 //
 // Never selects `token_hash`: this is a list for a page, not a credential store.
 
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { nativeCredentials } from '$lib/db/schema';
+import { DEVICE_TELEMETRY } from './native-auth';
 
 export interface SiteDevice {
   id: string;
@@ -21,6 +22,16 @@ export interface SiteDevice {
   revokedAt: Date | null;
   lastUsedAt: Date | null;
   useCount: number;
+  appVersion: string | null;
+  appBuild: number | null;
+  appCommit: string | null;
+  appChannel: string | null;
+  appSeenAt: Date | null;
+  osVersion: string | null;
+  deviceModel: string | null;
+  deviceName: string | null;
+  /** Whether the phone has registered for push — it has a token, not that it works. */
+  hasPush: boolean;
 }
 
 export async function listAllSiteDevices(): Promise<SiteDevice[]> {
@@ -34,6 +45,8 @@ export async function listAllSiteDevices(): Promise<SiteDevice[]> {
       revokedAt: nativeCredentials.revokedAt,
       lastUsedAt: nativeCredentials.lastUsedAt,
       useCount: nativeCredentials.useCount,
+      ...DEVICE_TELEMETRY,
+      hasPush: sql<boolean>`${nativeCredentials.apnsToken} is not null`,
     })
     .from(nativeCredentials)
     .where(eq(nativeCredentials.kind, 'device'))

@@ -2,11 +2,12 @@
   import { page } from '$app/state';
   import { getContext, onMount } from 'svelte';
   import HubTokenStrip from './HubTokenStrip.svelte';
+  import JkaiMenu from '../JkaiMenu.svelte';
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/utils/cost-format';
   import { codexMeters, type CodexUsageView } from '$lib/llm/usage-meter';
-  import { SECTIONS, activeSection, parentHref, parentLabel } from '$lib/nav/site-nav';
+  import { JKAI_ITEM, SECTIONS, activeSection, parentHref, parentLabel, visibleItems } from '$lib/nav/site-nav';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
 
   let {
@@ -54,6 +55,9 @@
     /** The pages a member's permissions open (`reachablePages`): the menu offers only these. */
     memberReach?: readonly string[];
   } = $props();
+
+  /** The site-wide jkai cell; a member sees it only where their grants reach under it. */
+  const jkaiCell = $derived(visibleItems([JKAI_ITEM], !member, memberReach)[0] ?? null);
 
   /**
    * The model that will actually answer: the active thread's pin when the chat
@@ -177,6 +181,9 @@
     // (the world vs this codebase) and neither is a subsection of the other.
     { label: 'Codegraph', href: '/jkai/codegraph', meta: 'BUILD MEMORY' },
     { label: 'Develop', href: '/jkai/develop', meta: 'AUTONOMOUS' },
+    // Lives at /trips, outside the hub, but it is jkai planning: the site bar's
+    // jkai menu offers it too.
+    { label: 'Trips', href: '/trips', meta: 'PLANNER' },
   ]);
   const library = $derived<MenuRow[]>([
     { label: 'Notes', href: '/jkai/notes', meta: 'NOTEBOOK' },
@@ -198,7 +205,7 @@
     { label: 'Voice', href: '/home/voice', meta: 'ALEXA LOG' },
   ]);
   const system = $derived<MenuRow[]>([
-    { label: 'Agent team', href: '/jkai/agents', meta: 'AGENTS · PROMPTS' },
+    { label: 'Prompts', href: '/jkai/prompts', meta: 'SYSTEM PROMPT' },
       { label: 'Model defaults', href: '/admin/ai/models', meta: 'ADMIN' },
     {
       label: 'Spend & limits',
@@ -393,6 +400,12 @@
           </div>
         {/if}
       </div>
+      {#if jkaiCell}
+        <!-- The jkai cell every bar on the site carries (jkai, Daydreams,
+             Trips), at the right-hand end as on every other bar: its menu
+             drops from the right edge, so on the left it opened off-screen. -->
+        <span class="hub-jkai"><JkaiMenu item={jkaiCell} path={page.url.pathname} /></span>
+      {/if}
     </div>
   </div>
 
@@ -506,8 +519,15 @@
   .hdr-right {
     display: flex;
     align-items: center;
+    align-self: stretch;
     gap: 8px;
     flex: none;
+  }
+  /* Flush with the bar's right edge and its full height, like the site bar's. */
+  .hub-jkai {
+    display: flex;
+    align-self: stretch;
+    margin-right: -16px;
   }
 
   .chip {

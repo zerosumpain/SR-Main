@@ -46,6 +46,10 @@ export async function resolveWorkloadModel(def: WorkloadDef): Promise<ModelConte
   const v = await getSetting<{ provider?: string; modelId?: string } | null>(def.key);
   if (v?.modelId) return coerceModelContext({ modelId: v.modelId });
   if (def.id === 'daydream-review') return resolveChatTurnModel();
+  // Unpinned, file analysis reads documents the way RAG answering does, so it
+  // follows that role (which in turn follows the site default). Same rule in
+  // SR-Drive and SR-Jkai-Core, which make the calls; Main holds the picker.
+  if (def.id === 'drive-analysis') return resolveRagModel();
   if (def.fallbackModelId) return coerceModelContext({ modelId: def.fallbackModelId });
   return resolveDefaultModel();
 }
@@ -246,9 +250,6 @@ export const resolveEmbeddingModel = () => resolveById('embeddings');
 /** Audio transcription for the @files index. Must accept audio input. */
 export const resolveAudioModel = () => resolveById('audio');
 
-/** Deck slide art direction. */
-export const resolveArtDirectorModel = () => resolveById('art-director');
-
 /**
  * Fast research uses an explicit role selection, then the chat selection, the
  * legacy environment setting, or the site default. There is no hidden model
@@ -337,6 +338,13 @@ export const resolveNotebookModel = () => resolveById('notebook');
 export const resolveChatTurnModel = () => resolveById('chat');
 
 /**
+ * The model a hands-free answer (Siri, the Action Button, the Watch) runs on.
+ * Resolved per turn, never stamped on the Quick answers thread, so moving it
+ * moves the next spoken answer.
+ */
+export const resolveVoiceModel = () => resolveById('jkai.voice');
+
+/**
  * The model a canvas LLM node runs on when its own `config.model` is blank.
  *
  * Resolved per run rather than stamped, so a change here reaches existing
@@ -365,6 +373,9 @@ export const resolveDelegationModel = () => resolveById('delegation');
 /** RAG answer synthesis. NOT the embedding model — see `resolveEmbeddingModel`. */
 export const resolveRagModel = () => resolveById('rag');
 
+/** /drive file analysis — summary, document type and facts (`file_analyses`). */
+export const resolveDriveAnalysisModel = () => resolveById('drive-analysis');
+
 /** Canvas edge field-mapping proposals. */
 export const resolveMappingModel = () => resolveById('mapping');
 
@@ -387,6 +398,8 @@ function sourceFor(def: WorkloadDef, set: string | null): WorkloadSource {
 export async function describeSiteWorkloads(): Promise<WorkloadState[]> {
   const siteDefault = await resolveDefaultModel();
   const chatDefault = await resolveChatTurnModel();
+  // Drive analysis follows RAG answering when unpinned (`resolveWorkloadModel`).
+  const ragDefault = await resolveRagModel();
   const stored = await Promise.all(
     SITE_WORKLOADS.map((w) =>
       getSetting<{ modelId?: string } | null>(w.key).then((v) => v?.modelId ?? null),
@@ -399,7 +412,11 @@ export async function describeSiteWorkloads(): Promise<WorkloadState[]> {
     // the code fallback. Reading them in different orders is how the page ends
     // up naming a model nothing is running.
     const effectiveModelId =
-      setModelId ?? envModelFor(def) ?? (def.id === 'daydream-review' ? chatDefault.modelId : def.fallbackModelId ?? siteDefault.modelId);
+      setModelId ?? envModelFor(def) ?? (def.id === 'daydream-review'
+        ? chatDefault.modelId
+        : def.id === 'drive-analysis'
+          ? ragDefault.modelId
+          : def.fallbackModelId ?? siteDefault.modelId);
     return {
       id: def.id,
       scope: def.scope,

@@ -16,7 +16,7 @@ import { db } from '$lib/db';
 import { accessUsage, conversations } from '$lib/db/schema';
 import { areaAccess, canRead, canWrite, readable, type AreaAccess } from '$lib/server/area-scope';
 import { getSetting } from '$lib/server/models/settings';
-import { getJob, type OrchestratorJob } from '$lib/workflows/chat/job-store';
+import { getJob, type OrchestratorJob } from '$lib/jkai/chat/job-store';
 
 export type ConversationRow = typeof conversations.$inferSelect;
 

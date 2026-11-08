@@ -36,9 +36,9 @@ describe('trails → health redirects', () => {
   });
 
   it('leaves every other path alone', () => {
-    // /projects/engine-room/reach/trails is a PUBLIC field study about trails,
-    // and a prefix match that swallowed it would 308 a live public page into an
-    // owner-gated one.
+    // /projects/engine-room/reach/trails is a PUBLIC study URL (it now 308s to the
+    // study's own App part), and a prefix match that swallowed it would send a
+    // public link into an owner-gated page.
     for (const p of [
       '/',
       '/health',

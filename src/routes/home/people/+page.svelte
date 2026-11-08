@@ -14,6 +14,7 @@
   import NamingQueue from '$lib/components/home/people/NamingQueue.svelte';
   import ComingUp from '$lib/components/home/people/ComingUp.svelte';
   import NotifySwitches from '$lib/components/home/people/NotifySwitches.svelte';
+  import ForecastInsights from '$lib/components/home/people/ForecastInsights.svelte';
   import { cap, clock, hours } from '$lib/components/home/people/format';
   import { nowCounts } from '$lib/home/presence/now';
   import type { PageData } from './$types';
@@ -38,6 +39,18 @@
   type Forecast = NonNullable<Awaited<PageData['forecast']>>;
   type Naming = NonNullable<Awaited<NonNullable<PageData['naming']>>>;
   type Agenda = NonNullable<Awaited<NonNullable<PageData['agenda']>>>;
+  type Mine = NonNullable<Awaited<NonNullable<PageData['mine']>>>;
+  let mine = $state<Mine | null>(null);
+  $effect(() => {
+    const promise = data.mine;
+    let current = true;
+    promise?.then((v) => {
+      if (current && v) mine = v;
+    });
+    return () => {
+      current = false;
+    };
+  });
   let agenda = $state<Agenda | null>(null);
   let agendaState = $state<'pending' | 'ready' | 'failed'>('pending');
   $effect(() => {
@@ -341,6 +354,17 @@
       <p class="strap">Departures from home in the last {data.days} days.</p>
       {#if fc}<DepartureHeat grid={fc.forecast.departures} />{:else}<p class="strap">Reading…</p>{/if}
     </section>
+
+    {#if !isOwner && mine}
+      <ForecastInsights
+        changes={mine.changes}
+        odds={fc?.forecast.odds ?? []}
+        health={mine.health}
+        names={Object.fromEntries(names)}
+        isOwner={false}
+        digestAt={mine.digestAt}
+      />
+    {/if}
 
     {#if isOwner}
       <section class="card" aria-labelledby="name-h">

@@ -100,9 +100,8 @@
       errorMsg = 'Enter their Google email';
       return;
     }
-    const added = await send('/api/admin/access', 'POST', { email, note: addName.trim() || undefined }, 'add');
+    const added = await send('/api/admin/access', 'POST', { email, note: addName.trim() || undefined, groups: addRole ? [addRole] : [] }, 'add');
     if (!added) return;
-    if (addRole) await send('/api/admin/access', 'PATCH', { email, groups: [addRole], grants: [] }, 'add');
     addEmail = '';
     addName = '';
   }

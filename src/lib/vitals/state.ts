@@ -30,6 +30,23 @@ export interface VitalsState {
   town?: string;
   /** ISO timestamp of the most recent vitals reading. */
   lastSyncedAt?: string;
+  /**
+   * When the latest heart-rate reading itself was taken. Unlike
+   * `lastSyncedAt`, never a WHOOP recovery row's time, so a page that states
+   * how old the pulse is (the landing sentence) is not misled by a newer
+   * recovery score. Absent when there is no heart-rate reading, or only a
+   * stale one: how long the watch has been off is not for the public feed.
+   */
+  pulseAt?: string;
+  /**
+   * The sun where he is, for the landing place view's sky: altitude in whole
+   * degrees and whether it is climbing (the shape of OwnerSun in
+   * $lib/landing/sun, written out here so this module does not import the
+   * landing page). Worked out on the server from the position rounded to half
+   * a degree; never a coordinate. Null before Home Assistant has ever given a
+   * position.
+   */
+  sun?: { alt: number; rising: boolean } | null;
 }
 
 export const VITALS_DEFAULTS: VitalsState = {
@@ -46,8 +63,9 @@ export const VITALS_DEFAULTS: VitalsState = {
   sources: { heartRate: false, weather: false },
 };
 
+/** Whole beats per minute: the reading as the watch took it, not a band around it. */
 export function roundPulse(bpm: number): number {
-  return Math.round(bpm / 5) * 5;
+  return Math.round(bpm);
 }
 
 export function normalizeStrain(strain: number): number {

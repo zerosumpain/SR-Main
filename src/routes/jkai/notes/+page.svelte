@@ -1,4 +1,4 @@
-<svelte:head><title>Notes — JKAI</title></svelte:head>
+<svelte:head><title>Notes — jkai</title></svelte:head>
 <script lang="ts">
   // ── The notebook ─────────────────────────────────────────────────────────
   //

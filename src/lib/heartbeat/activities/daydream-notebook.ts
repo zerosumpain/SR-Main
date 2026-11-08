@@ -1,6 +1,6 @@
 import { getSetting } from '$lib/server/models/settings';
 import { isUserActive } from '$lib/heartbeat/idle';
-import { listChatJobs } from '$lib/workflows/chat/activity';
+import { listChatJobs } from '$lib/jkai/chat/activity';
 import { quotaGuard } from '$lib/daydream/budget';
 import { resolveDaydreamModel } from '$lib/daydream/model';
 import { SETTINGS_ENABLED_KEY, errMsg } from '$lib/daydream/types';

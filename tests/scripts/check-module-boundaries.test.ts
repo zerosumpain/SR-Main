@@ -97,6 +97,38 @@ describe('module boundary linter', () => {
 		});
 	});
 
+	// R6: the orchestrator runs in the builder sidecar only. A chat build tool
+	// importing it ran the build loop inside the web process, which cannot write
+	// the workspace (2026-10-03, build 915fae11).
+	describe('keeps the build orchestrator in the sidecar', () => {
+		it('catches a dynamic import from a tool', () => {
+			const r = check({ 'src/lib/tools/tools/builds.ts': "const { orchestrator } = await import('$lib/jkai/orchestrator');" });
+			expect(r.code).toBe(1);
+			expect(r.out).toContain('src -> $lib/jkai/orchestrator');
+			expect(r.out).toContain('src/lib/tools/tools/builds.ts');
+		});
+
+		it('catches a relative import from inside $lib/jkai, where the layer rules never look', () => {
+			const r = check({ 'src/lib/jkai/studio.ts': "import { orchestrator } from './orchestrator';" });
+			expect(r.code).toBe(1);
+			expect(r.out).toContain('src/lib/jkai/studio.ts');
+		});
+
+		it('catches a route importing it', () => {
+			const r = check({ 'src/routes/api/jkai/builds/+server.ts': "import { orchestrator } from '$lib/jkai/orchestrator';" });
+			expect(r.code).toBe(1);
+		});
+
+		it('allows builderClient and the orchestrator file itself', () => {
+			expect(
+				check({
+					'src/lib/tools/tools/builds.ts': "await import('$lib/jkai/builder-client');",
+					'src/lib/jkai/orchestrator.ts': "import './executor';",
+				}).code,
+			).toBe(0);
+		});
+	});
+
 	describe('does not invent violations', () => {
 		it('allows importing DOWN a layer', () => {
 			expect(check({ 'src/lib/workflows/a.ts': "import '$lib/db';" }).code).toBe(0);

@@ -13,7 +13,6 @@ that consumes them.
 - [Hero background](hero-background.md)
 - [Voice corpus](voice-corpus.md)
 - [Generated module ownership](module-ownership.json)
-- [Workflow evaluation output](evals/workflow-eval.json)
 
 ## Active design records
 

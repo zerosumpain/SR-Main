@@ -1,6 +1,6 @@
 import { getSetting } from '$lib/server/models/settings';
 import { isUserActive } from '$lib/heartbeat/idle';
-import { listChatJobs } from '$lib/workflows/chat/activity';
+import { listChatJobs } from '$lib/jkai/chat/activity';
 import { quotaGuard, type Depth } from '$lib/daydream/budget';
 import { resolveDaydreamModel } from '$lib/daydream/model';
 import { runThink, MAX_ROUNDS } from '$lib/daydream/think/run';
@@ -83,6 +83,16 @@ export const daydreamThink: ActivityHandler = {
       return { outcome: 'skipped', summary: 'daydreaming disabled' };
     }
 
+    // Trackers that ended get their result now (`act/track.server.ts`) — no
+    // model call, and before the spare-cycle gates, so a busy evening does
+    // not hold a result back.
+    try {
+      const { reportFinishedTrackers } = await import('$lib/daydream/act/track.server');
+      await reportFinishedTrackers(now);
+    } catch (err) {
+      console.error(`[daydream] tracker results not sent: ${errMsg(err)}`);
+    }
+
     // Spare cycles means spare — ponder's two gates, unchanged.
     const running = (await listChatJobs()).filter((j) => j.status === 'running');
     if (running.length > 0) {
@@ -100,14 +110,26 @@ export const daydreamThink: ActivityHandler = {
       return { outcome: 'skipped', summary: `budget: ${verdict.reason}`, details: { budget } };
     }
 
+    // What is already on the build list, so the cycle does not propose it
+    // again (`capability-lines.ts`). Soft: an unreadable backlog costs only that.
+    let backlog: string[] = [];
+    try {
+      const { listBacklog } = await import('$lib/selfimprove/backlog');
+      backlog = (await listBacklog()).filter((i) => i.status === 'open').map((i) => i.title).slice(0, 25);
+    } catch {
+      backlog = [];
+    }
+
     await guard.begin();
     let result;
     try {
-      result = await runThink({ now, maxRounds: ROUNDS_BY_DEPTH[budget.plan.depth] });
+      result = await runThink({ now, maxRounds: ROUNDS_BY_DEPTH[budget.plan.depth], backlog });
     } catch (err) {
       return { outcome: 'error', summary: errMsg(err) };
     }
     const quota = await guard.end();
+    // A research cycle with no interest due asks nothing and spends nothing.
+    if (result.skipped) return { outcome: 'skipped', summary: `${result.channel} × ${result.outcome} · ${result.skipped}`, details: { quota, ...result } };
 
     let queued = { added: 0, merged: 0 };
     try {
@@ -124,6 +146,10 @@ export const daydreamThink: ActivityHandler = {
       // `merged` always shown: its absence is how ponder's repetition went
       // unseen for a month.
       `${n.proposed} note${n.proposed === 1 ? '' : 's'} (${n.created} new${n.merged ? `, ${n.merged} merged` : ''}${n.updated ? `, ${n.updated} refreshed` : ''}${n.suppressed ? `, ${n.suppressed} held` : ''}${n.muted ? `, ${n.muted} muted` : ''})`,
+      ...(result.subjects?.folded || result.subjects?.revised
+        ? [`subjects: ${result.subjects.folded} repeat${result.subjects.folded === 1 ? '' : 's'} folded, ${result.subjects.revised} revised`]
+        : []),
+      ...(result.focus ? [`on: ${result.focus.slice(0, 60)}`] : []),
       ...(result.notified ? [`${result.notified} sent`] : []),
       ...(queued.added || queued.merged
         ? [`backlog +${queued.added}${queued.merged ? ` (${queued.merged} merged)` : ''}`]

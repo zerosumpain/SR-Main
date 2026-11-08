@@ -41,6 +41,23 @@ import { env } from '$env/dynamic/private';
  */
 const MIN_TOKEN_LEN = 32;
 
+/*
+ * ## The third token: commissioning
+ *
+ *   JKAI_INVOKE_COMMISSION_TOKEN   — the commission lane, and NOTHING else
+ *
+ * A commissioned build spends real money on model-written code, so it has its
+ * own credential (overhaul plan, slice 6b). It is deliberately NOT a value of
+ * `invokeLaneFor`: every other platform route asks that function "is this the
+ * chat application?", and the commission token must answer no to all of them.
+ * Only `/api/platform/tools/invoke` asks `presentsCommissionToken`, and then
+ * opens only tools on the commission lane (`develop_commission`, and
+ * `request_change` while it is an alias) — and even then `principalRefusal`
+ * also demands a sealed owner principal attended in a browser session. The
+ * destructive token does not open commissioning. Unset (production's default
+ * until it is put on the VPS by hand) means the lane does not exist.
+ */
+
 export type InvokeLane = 'none' | 'standard' | 'destructive';
 
 function presentedToken(request: Request): string {
@@ -75,6 +92,21 @@ export function invokeLaneFor(request: Request): InvokeLane {
 	if (matches(provided, env.JKAI_INVOKE_DESTRUCTIVE_TOKEN)) return 'destructive';
 	if (matches(provided, env.JKAI_INVOKE_TOKEN)) return 'standard';
 	return 'none';
+}
+
+/**
+ * Does this request carry the commission credential?
+ *
+ * Checked only after `invokeLaneFor` said 'none', so a commission token set
+ * equal to another token (a misconfiguration) resolves to that other lane and
+ * the commission lane stays shut for that string, rather than narrowing or
+ * widening anything.
+ */
+export function presentsCommissionToken(request: Request): boolean {
+  const provided = presentedToken(request);
+  if (!provided) return false;
+  if (invokeLaneFor(request) !== 'none') return false;
+  return matches(provided, env.JKAI_INVOKE_COMMISSION_TOKEN);
 }
 
 /**

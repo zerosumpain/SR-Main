@@ -15,6 +15,8 @@
   import { describeSource, parseCardRef, sourceText } from '$lib/daydream/think/explain';
   import { ago, stamp } from '$lib/daydream/format';
 
+  const VERDICT_WORDS = { holds: 'It holds up', wrong: 'It was wrong', unclear: 'Could not settle it' } as const;
+
   let { c, focused = false }: { c: CommissionView; focused?: boolean } = $props();
 
   let busy = $state(false);
@@ -97,7 +99,9 @@
         <h4>What will happen</h4>
         <ul class="so-list do">
           {#each reads as r, i (i)}<li>Re-read <strong>{r.label}</strong>{r.detail ? ` — ${r.detail}` : ''}</li>{/each}
+          <li>Then argue against the note: name how it could be wrong and test each doubt, looking up more of your data if it needs to</li>
           <li>Save a private report here and tell you when it is ready</li>
+          <li>If the note was wrong, keep the lesson so it thinks twice next time</li>
         </ul>
       </div>
       <div>
@@ -115,7 +119,7 @@
       <div>
         <h4>Limits</h4>
         <ul class="so-list">
-          <li>{c.spec.budget.maxReads} look-up{c.spec.budget.maxReads === 1 ? '' : 's'}, nothing else</li>
+          <li>{c.spec.budget.maxReads} re-read{c.spec.budget.maxReads === 1 ? '' : 's'}, then up to 3 rounds of read-only look-ups to test its doubts</li>
           <li>Up to {c.spec.budget.maxAttempts} tries, {seconds >= 60 ? `${Math.round(seconds / 60)} minutes` : `${seconds} seconds`} each</li>
           <li>Carries on if you close this page</li>
         </ul>
@@ -123,7 +127,7 @@
     </div>
     {#if c.spec.ownerCorrection}<p class="so-said">Includes your note: “{c.spec.ownerCorrection}”</p>{/if}
   {:else if c.state === 'queued' || c.state === 'running'}
-    <p class="so-lede">{c.state === 'queued' ? 'Approved. It is waiting its turn on the workflow runner.' : 'Re-reading the sources now.'} You can leave this page — you will get a notification when the report is ready.</p>
+    <p class="so-lede">{c.state === 'queued' ? 'Approved. It is waiting its turn on the workflow runner.' : 'Re-reading the sources and arguing against the note now.'} You can leave this page — you will get a notification when the report is ready.</p>
   {:else if c.state === 'needs_attention'}
     <p class="so-lede warn">{c.error ?? 'It stopped before it finished.'}</p>
   {:else if stopped}
@@ -131,9 +135,30 @@
   {/if}
 
   {#if c.result}
-    <div class="result">
-      <h4>What the sources say now</h4>
-      <p>{c.result.summary}</p>
+    {@const review = c.result.review}
+    <div class="result" class:wrong={review?.verdict === 'wrong'} class:unsettled={review?.verdict === 'unclear'}>
+      {#if review}
+        <p class="rt-verdict {review.verdict}">{VERDICT_WORDS[review.verdict]}</p>
+        {#if review.claim}<p class="rt-claim">It checked: {review.claim}</p>{/if}
+        <p>{review.reasoning}</p>
+        {#if review.overruled}<p class="rt-note">{review.overruled}</p>{/if}
+        {#if review.challenges.length}
+          <h4>How it tried to prove the note wrong</h4>
+          <ul class="rt-doubts">
+            {#each review.challenges as ch, i (i)}
+              <li class:sank={!ch.survives}>
+                <span class="rt-mark">{ch.survives ? 'Survived' : 'Sank it'}</span>
+                <span><strong>{ch.doubt}</strong> {ch.finding}</span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if review.lesson}<p class="rt-lesson">Lesson kept: “{review.lesson}”</p>{/if}
+        <h4>What the sources say now</h4>
+      {:else}
+        <h4>What the sources say now</h4>
+        <p>{c.result.summary}</p>
+      {/if}
       <ul class="evidence">
         {#each c.result.evidence as e, i (i)}
           <li class:gone={e.status === 'unavailable'}>
@@ -347,9 +372,62 @@
     border-left: 3px solid var(--success);
     background: var(--bg);
   }
+  .result.wrong {
+    border-left-color: var(--warn);
+  }
+  .result.unsettled {
+    border-left-color: var(--line-strong);
+  }
   .result p {
     margin: 0 0 10px;
     line-height: 1.55;
+  }
+  .result h4 {
+    margin: 14px 0 6px;
+  }
+  .rt-verdict {
+    font-weight: 700;
+    font-size: var(--fs-body);
+  }
+  .rt-verdict.wrong {
+    color: var(--warn);
+  }
+  .rt-verdict.holds {
+    color: var(--success);
+  }
+  .rt-claim,
+  .rt-note {
+    font-size: var(--fs-body-sm);
+    color: var(--text-secondary);
+  }
+  .rt-doubts {
+    list-style: none;
+    margin: 0 0 10px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .rt-doubts li {
+    display: grid;
+    grid-template-columns: 6.5em 1fr;
+    gap: 8px;
+    font-size: var(--fs-body-sm);
+    line-height: 1.5;
+  }
+  .rt-mark {
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--success);
+    padding-top: 2px;
+  }
+  .rt-doubts li.sank .rt-mark {
+    color: var(--warn);
+  }
+  .rt-lesson {
+    border-left: 2px solid var(--accent);
+    padding-left: 10px;
   }
   .evidence {
     list-style: none;

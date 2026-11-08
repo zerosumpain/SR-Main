@@ -12,10 +12,9 @@
 // unit-tested on its own (index.test.ts).
 
 import type { DeliveryState } from '$lib/constants/development';
-import type { BacklogEpic } from '$lib/selfimprove/epic-backlog';
+import type { BacklogEpic } from '$lib/selfimprove/backlog-room';
 import type { BoardView, IdeaSource, WorkItem } from '$lib/selfimprove/board';
-import type { NarrativeRun } from '$lib/workflowdoctor/narrative';
-import type { DoctorRunData, PhaseName, PhaseRecord } from '$lib/workflowdoctor/types';
+import type { DoctorRunData, NarrativeRun, PhaseName, PhaseRecord } from '$lib/workflows-client/doctor-client';
 
 // ── develop ──────────────────────────────────────────────────────────────────
 
@@ -154,6 +153,8 @@ const INTAKE_WORDS: Partial<Record<IdeaSource, string>> = {
   fault: 'An idea from daydream',
   doctor: 'A fix the workflow doctor asked for',
   trace: 'An idea from a chat',
+  chat: 'A build John commissioned',
+  phone: 'A build John commissioned',
 };
 
 function titleIsSafe(i: WorkItem): boolean {

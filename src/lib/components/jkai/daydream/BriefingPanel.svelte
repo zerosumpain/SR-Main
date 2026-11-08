@@ -16,6 +16,7 @@
   import SectionHead from './hub/SectionHead.svelte';
   import StatDeck from './hub/StatDeck.svelte';
   import RollupGrid from './hub/RollupGrid.svelte';
+  import BriefingFactors from './BriefingFactors.svelte';
   import type { DeckTile } from './hub/types';
   import {
     briefingFactSections,
@@ -83,7 +84,7 @@
       key: 'when',
       label: 'Briefed',
       value: clock(latest?.startedAt),
-      sub: `${detail?.dateLabel ?? latest?.title ?? ''} · ${latest?.status ?? ''}`.trim(),
+      sub: `${detail?.dateLabel ?? latest?.title ?? ''} · ${detail?.mode ? `${detail.mode} · ` : ''}${latest?.status ?? ''}`.trim(),
       tone: latest?.status === 'complete' ? 'steady' : 'watch',
       lit: true,
     },
@@ -105,6 +106,17 @@
       sub: gapCount
         ? (detail?.gaps ?? []).map((gap) => gap.section).join(', ')
         : 'nothing was left out of the message',
+    },
+    {
+      key: 'checked',
+      label: 'Draft check',
+      value: !detail?.verification ? '—' : detail.verification.verified ? 'Passed' : 'Replaced',
+      tone: !detail?.verification ? 'quiet' : detail.verification.verified ? 'good' : 'watch',
+      sub: !detail?.verification
+        ? 'written before drafts were checked'
+        : detail.verification.verified
+          ? 'every number in the message traces to a fact'
+          : `the plain facts went instead — ${detail.verification.violations.join('; ')}`,
     },
     {
       key: 'facts',
@@ -235,7 +247,7 @@
   }
 </script>
 
-<svelte:head><title>{embedded ? 'Daydreams · JKAI' : 'Briefing · JKAI'}</title></svelte:head>
+<svelte:head><title>{embedded ? 'Daydreams · jkai' : 'Briefing · jkai'}</title></svelte:head>
 
 {#if !embedded}<JkaiPageTitle title="BRIEFING" />{/if}
 
@@ -273,7 +285,7 @@
         <div>
           <span class="eyebrow">Briefing profile</span>
           <h2 id="profile-title">Decide what earns attention</h2>
-          <p>Select the signals JKAI can use, set the editorial priorities, and choose how much recent memory should be carried into each briefing.</p>
+          <p>Select the signals jkai can use, set the editorial priorities, and choose how much recent memory should be carried into each briefing.</p>
         </div>
         <label class="master-switch">
           <input type="checkbox" bind:checked={enabled} />
@@ -373,6 +385,13 @@
         <RollupGrid cells={rollup} min={190} />
       </div>
 
+      {#if detail?.factors?.length || detail?.connections?.length}
+        <div class="section-gap">
+          <p class="field-label">19 factors</p>
+          <BriefingFactors factors={detail.factors ?? []} connections={detail.connections ?? []} />
+        </div>
+      {/if}
+
       <div class="section-gap">
         <SectionHead
           kicker="C / Shared back from daydreaming"
@@ -402,7 +421,7 @@
         <SectionHead
           kicker="D / As sent"
           title={['The message', 'that went out']}
-          strap="The summary exactly as WhatsApp carried it. It may only quote the fact sheet, so anything here that is not in the rollup above is a fault worth reporting."
+          strap="The summary exactly as WhatsApp carried it. It is written freely, then checked: a draft with any number, time or unit not in the fact sheet is replaced by the plain facts."
         />
         {#if latest.markdown}
           <div class="sent"><ChatMarkdown content={latest.markdown} /></div>
@@ -420,10 +439,11 @@
           {:else}
             <label class="field-label" for="briefing-feedback">Tune the next briefing</label>
             <div class="actions">
-              <input class="text-input" id="briefing-feedback" placeholder="Optional topic" bind:value={voteWhat} />
+              <input class="text-input" id="briefing-feedback" placeholder="Optional topic, e.g. weather" bind:value={voteWhat} />
               <button class="btn" type="button" onclick={() => vote('up')}>More like this</button>
               <button class="btn danger" type="button" onclick={() => vote('down')}>Less like this</button>
             </div>
+            <p class="note">Or reply on WhatsApp: “briefing more calendar”, “briefing less weather”.</p>
           {/if}
         </div>
       </div>

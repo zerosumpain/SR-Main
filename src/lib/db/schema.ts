@@ -1,5 +1,6 @@
 import {
   pgTable,
+  pgSchema,
   serial,
   bigserial,
   text,
@@ -445,14 +446,22 @@ export const whoopWorkouts = pgTable('whoop_workouts', {
   kilojoule: doublePrecision('kilojoule').notNull(),
   distanceMeters: doublePrecision('distance_meters'),
   altitudeGainMeters: doublePrecision('altitude_gain_meters'),
+  altitudeChangeMeters: doublePrecision('altitude_change_meters'),
+  // 0-1: the share of the workout the strap actually recorded. Below ~0.9 the
+  // strain, heart rate and zones describe part of the session, not all of it.
+  percentRecorded: doublePrecision('percent_recorded'),
 
-  // Zone durations (milliseconds)
+  // Zone durations (milliseconds). WHOOP v2 sends these as `zone_durations`;
+  // the sync read `zone_duration` until 2026-10-04 and stored zero for all 359.
   zoneZero: integer('zone_zero').notNull(),
   zoneOne: integer('zone_one').notNull(),
   zoneTwo: integer('zone_two').notNull(),
   zoneThree: integer('zone_three').notNull(),
   zoneFour: integer('zone_four').notNull(),
   zoneFive: integer('zone_five').notNull(),
+
+  // WHOOP's own updated_at (unix seconds): moves when WHOOP rescores the record.
+  whoopUpdatedAt: integer('whoop_updated_at'),
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
@@ -474,6 +483,8 @@ export const whoopSleep = pgTable('whoop_sleep', {
   startDate: integer('start_date').notNull(),
   endDate: integer('end_date').notNull(),
   startDateLocal: text('start_date_local').notNull(),
+  timezone: text('timezone'),
+  cycleId: text('cycle_id'), // the WHOOP cycle this sleep belongs to (v2)
   nap: boolean('nap').notNull(),
 
   // Sleep stages (milliseconds)
@@ -482,6 +493,9 @@ export const whoopSleep = pgTable('whoop_sleep', {
   totalLight: integer('total_light').notNull(),
   totalSlowWave: integer('total_slow_wave').notNull(),
   totalRem: integer('total_rem').notNull(),
+  // Time in bed the strap could not read (off-wrist, flat battery). Large values
+  // mean the stage totals undercount the night.
+  totalNoData: integer('total_no_data'),
   sleepCycleCount: integer('sleep_cycle_count').notNull(),
   disturbanceCount: integer('disturbance_count').notNull(),
 
@@ -496,6 +510,8 @@ export const whoopSleep = pgTable('whoop_sleep', {
   sleepPerformance: doublePrecision('sleep_performance').notNull(),
   sleepConsistency: doublePrecision('sleep_consistency').notNull(),
   sleepEfficiency: doublePrecision('sleep_efficiency').notNull(),
+
+  whoopUpdatedAt: integer('whoop_updated_at'),
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
@@ -520,6 +536,10 @@ export const whoopRecovery = pgTable('whoop_recovery', {
   hrvRmssd: doublePrecision('hrv_rmssd').notNull(), // milliseconds
   spo2: doublePrecision('spo2'), // percentage
   skinTemp: integer('skin_temp'), // celsius * 100
+  // True for the first couple of weeks on a strap: WHOOP is still learning the
+  // baselines, so the score is provisional.
+  userCalibrating: boolean('user_calibrating'),
+  whoopUpdatedAt: integer('whoop_updated_at'),
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
@@ -535,7 +555,9 @@ export const whoopCycles = pgTable('whoop_cycles', {
   id: text('id').primaryKey(), // Whoop cycle ID (UUID in v2 API)
   userId: integer('user_id').notNull(),
   startDate: integer('start_date').notNull(), // Unix timestamp
-  endDate: integer('end_date').notNull(),
+  // Null while the cycle is still open (today). The sync wrote 0 here for the
+  // open day and never revisited it until 2026-10-04: 205 of 284 rows.
+  endDate: integer('end_date'),
   startDateLocal: text('start_date_local').notNull(), // ISO string
   timezone: text('timezone').notNull(),
 
@@ -577,6 +599,10 @@ export const whoopCycles = pgTable('whoop_cycles', {
   kilojoule: doublePrecision('kilojoule').notNull(),
   averageHeartrate: integer('average_heartrate').notNull(),
   maxHeartrate: integer('max_heartrate').notNull(),
+  // Steps WHOOP counted across the cycle. A second, independent count beside
+  // Apple's step_count — see docs/apple-whoop-overlap.md before summing them.
+  stepCount: integer('step_count'),
+  whoopUpdatedAt: integer('whoop_updated_at'),
 
   // Sync metadata
   syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
@@ -587,6 +613,19 @@ export const whoopCycles = pgTable('whoop_cycles', {
 ]);
 
 export type WhoopCycleRecord = typeof whoopCycles.$inferSelect;
+
+/**
+ * WHOOP's body measurement, one row per day it was read. The endpoint only ever
+ * returns the current value, so history exists only because the sync keeps it.
+ * `max_heart_rate` is WHOOP's working maximum — what its zones are cut from.
+ */
+export const whoopBodyMeasurements = pgTable('whoop_body_measurements', {
+  measuredOn: text('measured_on').primaryKey(), // YYYY-MM-DD (UTC) of the read
+  heightMeter: doublePrecision('height_meter'),
+  weightKilogram: doublePrecision('weight_kilogram'),
+  maxHeartRate: integer('max_heart_rate'),
+  syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
+});
 
 // ==========================================
 // Health Dashboard - Sync State
@@ -646,6 +685,9 @@ export const appleHealthMetrics = pgTable(
 
     // Metadata
     units: text('units').notNull(), // 'bpm', 'ms', 'count', 'kcal', etc.
+    // The HealthKit source that wrote it (the Watch, the phone, Garmin Connect).
+    // Null for rows from before 2026-10-04 and from the retired webhook.
+    source: text('source'),
 
     // Sync metadata
     syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
@@ -1029,7 +1071,16 @@ export const researchSessions = pgTable('research_session', {
   timeLimitMinutes: integer('time_limit_minutes'),
   config: jsonb('config').notNull().default(sql`'{}'::jsonb`),
   report: jsonb('report'),
+  /**
+   * LEGACY plaintext share token, from before links were hashed (2026-10-02).
+   * Nothing writes a new value here: $lib/deepdive/share moves a legacy token
+   * into `shareTokenHash` (and nulls this) the first time it is used or
+   * re-issued, and scripts/migrations/2026-10-02-research-share-token-hash.sql
+   * does the same for the rest. Kept declared so the push never drops it.
+   */
   shareToken: text('share_token').unique(),
+  /** sha256 (hex) of the share link's token — the raw token is shown once. */
+  shareTokenHash: text('share_token_hash').unique(),
   parentSessionId: text('parent_session_id'),
   seedContext: jsonb('seed_context'),
   /**
@@ -1770,6 +1821,14 @@ export const projectShares = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     useCount: integer('use_count').notNull().default(0),
+    // The link's password verifier ($lib/projects/share-password), null when
+    // the link asks for none. Never sent to a browser: listShares says only
+    // hasPassword. The app checks the answer; Main only mints.
+    passwordHash: text('password_hash'),
+    // The audience pack the link opens ($lib/projects/share-pack), null for the
+    // app's default. Carried as the project claim's `pack`; the Spine's 'dfe'
+    // or 'school'.
+    pack: text('pack'),
   },
   (t) => ({
     byTokenHash: uniqueIndex('project_share_token_hash_idx').on(t.tokenHash),
@@ -1778,6 +1837,37 @@ export const projectShares = pgTable(
 );
 
 export type ProjectShare = typeof projectShares.$inferSelect;
+
+// Who opened a share link (24 Oct 2026), so the owner can tell a link that
+// reached one person from one that was forwarded. One row per browser per
+// network per link, written where the link is validated ($lib/projects/
+// share-visits). Nothing raw is kept: `visitor_hash` is an HMAC of the
+// gateway's random visitor cookie (or, from a gateway that sends none, of the
+// network and browser together), `network_hash` an HMAC of the address's /24
+// or /48 — '' when no address came, so the unique index needs no NULL rule —
+// and `agent` a short label like "Safari · iPhone", never the User-Agent.
+// Capped at 500 rows a link: past that, only known visitors are updated.
+export const projectShareVisits = pgTable(
+  'project_share_visit',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    shareId: text('share_id')
+      .notNull()
+      .references(() => projectShares.id, { onDelete: 'cascade' }),
+    visitorHash: text('visitor_hash').notNull(),
+    networkHash: text('network_hash').notNull().default(''),
+    agent: text('agent'),
+    country: text('country'),
+    firstSeen: timestamp('first_seen', { withTimezone: true }).notNull().defaultNow(),
+    lastSeen: timestamp('last_seen', { withTimezone: true }).notNull().defaultNow(),
+    opens: integer('opens').notNull().default(0),
+    requests: integer('requests').notNull().default(0),
+  },
+  (t) => [
+    uniqueIndex('project_share_visit_who_idx').on(t.shareId, t.visitorHash, t.networkHash),
+    index('project_share_visit_share_idx').on(t.shareId),
+  ],
+);
 
 // ==========================================
 // sr. decks — presentation capability
@@ -2440,6 +2530,126 @@ export type JkaiToolTrace = typeof jkaiToolTraces.$inferSelect;
 export type NewJkaiToolTrace = typeof jkaiToolTraces.$inferInsert;
 
 // ==========================================
+// JKAI durable turns, gates, events and presence (overhaul slice 8)
+// ==========================================
+//
+// SR-Jkai-Core writes these; Main declares them because Main is the schema
+// executor. They are created by HAND-APPLIED SQL
+// (scripts/migrations/2026-10-28-jkai-durable-turns.sql) with GRANTs to both
+// sr_main_runtime and sr_core_runtime in the same script — never by drizzle
+// push, which can hang CI on a new table or exit 0 having applied nothing.
+// The declarations below must match that script column for column, so the
+// push that follows finds nothing to do. Core reads and writes them with raw
+// SQL behind JKAI_DURABLE_TURNS (default off) until the GRANTs are confirmed.
+
+/**
+ * One chat turn (a Core job), from its start to how it ended. Token deltas stay
+ * in memory; this holds the lifecycle, the phase, the last stream seq and the
+ * partial text, so another slot, a restart or the phone can say what happened.
+ * `updated_at` is the owning slot's lease: a row still open whose lease is two
+ * minutes stale belonged to a process that died without draining.
+ */
+export const jkaiTurns = pgTable(
+  'jkai_turns',
+  {
+    jobId: text('job_id').primaryKey(),
+    conversationId: text('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+    /** 'owner' or a member's `u_…` — the same principal the job routes check. */
+    principalId: text('principal_id').notNull().default('owner'),
+    /** The turn envelope's surface ('web', 'ios', 'whatsapp', …). */
+    surface: text('surface'),
+    /** Which process ran it (release id + host), for the operator. */
+    slot: text('slot'),
+    /** running | gated | done | error | interrupted | cancelled */
+    status: text('status').notNull().default('running'),
+    phase: text('phase'),
+    lastSeq: integer('last_seq').notNull().default(0),
+    partialText: text('partial_text').notNull().default(''),
+    /** The turn's budget kind: chat | agentic | delegated (job-store TURN_BUDGET_MS). */
+    workload: text('workload').notNull().default('chat'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    error: text('error'),
+  },
+  (t) => [
+    index('jkai_turns_conversation_idx').on(t.conversationId, t.startedAt),
+    index('jkai_turns_status_idx').on(t.status, t.updatedAt),
+  ],
+);
+
+/**
+ * A gate (plan, clarify, confirm, credential, approval) a turn stopped at. An
+ * answer that reaches a slot which does not hold the job is written here, and
+ * the owning slot's waiter picks it up — so a gate is answerable across slots.
+ */
+export const jkaiGates = pgTable(
+  'jkai_gates',
+  {
+    jobId: text('job_id').notNull().references(() => jkaiTurns.jobId, { onDelete: 'cascade' }),
+    /** The waiter key, `<kind>:<id>` (e.g. `confirm:…`). */
+    gateKey: text('gate_key').notNull(),
+    kind: text('kind').notNull(),
+    principalId: text('principal_id').notNull().default('owner'),
+    conversationId: text('conversation_id'),
+    /** The gate's stream frame, as the chat screen received it. */
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+    answeredAt: timestamp('answered_at', { withTimezone: true }),
+    answer: jsonb('answer').$type<Record<string, unknown>>(),
+    /** Provenance: 'session' | 'device' | 'push', and which slot took it. */
+    answeredBy: text('answered_by'),
+    /** Set by the owning slot once it has handed the answer to its waiter. */
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.jobId, t.gateKey] }),
+    index('jkai_gates_open_idx').on(t.answeredAt, t.openedAt),
+  ],
+);
+
+/**
+ * The per-principal event channel behind `/api/jkai/events?scope=me`: turn
+ * lifecycle, desk sections, follow-ups and gates, for every client of one
+ * principal. `seq` is the SSE `id:` a reconnect resumes from. Pruned after 7 days.
+ */
+export const jkaiEvents = pgTable(
+  'jkai_events',
+  {
+    seq: bigserial('seq', { mode: 'number' }).primaryKey(),
+    principalId: text('principal_id').notNull(),
+    conversationId: text('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
+    /** turn | desk | message | gate | build | daydream | followup */
+    kind: text('kind').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('jkai_events_principal_idx').on(t.principalId, t.seq),
+    index('jkai_events_created_idx').on(t.createdAt),
+  ],
+);
+
+/**
+ * Who is looking at which thread, from which surface — the durable form of
+ * Core's presence map, so WhatsApp escalation can tell a watching phone from a
+ * pocketed one whichever slot took the beat.
+ */
+export const jkaiPresence = pgTable(
+  'jkai_presence',
+  {
+    principalId: text('principal_id').notNull(),
+    conversationId: text('conversation_id').notNull(),
+    surface: text('surface').notNull(),
+    seenAt: timestamp('seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.principalId, t.conversationId, t.surface] }),
+    index('jkai_presence_seen_idx').on(t.seenAt),
+  ],
+);
+
+// ==========================================
 // JKAI Attachments (multimedia I/O)
 // ==========================================
 
@@ -3036,7 +3246,15 @@ export type IntelRelationship = typeof intelRelationships.$inferSelect;
 // this table has NO `vector` column and drizzle-kit push never depends on the
 // pgvector extension for it, and a quality 3072-dim embedding model has a home.
 // ==========================================
-export const ragCollections = pgTable(
+// Owned by SR-Drive and kept in its own Postgres schema since
+// scripts/migrations/2026-10-02-app-owned-schemas.sql. Main has no reader or
+// writer: drizzle.config.ts's schemaFilter (public only) keeps push from
+// managing or recreating it. Declared here for one more release only, so the
+// declaration can be removed without a drop; SR-Drive's own schema slice is the
+// description it reads.
+export const driveSchema = pgSchema('drive');
+
+export const ragCollections = driveSchema.table(
   'rag_collections',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -3062,7 +3280,7 @@ export type NewRagCollection = typeof ragCollections.$inferInsert;
 // One row per chat turn against a collection. Kept deliberately separate from
 // jkai_conversations/orchestrator_chats so the RAG feature is self-contained
 // and does not show up in the jkai cost/metrics ledgers.
-export const ragMessages = pgTable(
+export const ragMessages = driveSchema.table(
   'rag_messages',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -3402,6 +3620,67 @@ export const workflowFiles = pgTable(
 
 export type WorkflowFile = typeof workflowFiles.$inferSelect;
 export type NewWorkflowFile = typeof workflowFiles.$inferInsert;
+
+// What jkai concluded about one /drive file (build map §2.3, D7): a summary, a
+// document type and the facts worth surfacing. One row per file, upserted —
+// written by SR-Drive for on-demand "Analyse" and by SR-Jkai-Core for files
+// filed from mail rules. Deliberately not `workflow_files.description`, which
+// people edit. `content_hash` is the hash that was analysed: the cache key.
+export const fileAnalyses = pgTable(
+  'file_analyses',
+  {
+    id: serial('id').primaryKey(),
+    fileId: text('file_id')
+      .notNull()
+      .references(() => workflowFiles.id, { onDelete: 'cascade' }),
+    contentHash: text('content_hash'),
+    /** 'drive' | 'mail-rule' */
+    source: text('source').notNull(),
+    model: text('model').notNull(),
+    /** ≤1200 chars. */
+    summary: text('summary').notNull(),
+    /** invoice | receipt | contract | statement | letter | report | form | photo | other */
+    docType: text('doc_type').notNull(),
+    /** {keyFacts:[{label,value}]≤8, dates:[{label,date:'YYYY-MM-DD'}], amounts:[{label,value,currency}]} */
+    facts: jsonb('facts').notNull().default(sql`'{}'::jsonb`),
+    /** ≤300 chars; null = nothing to do. */
+    actionNeeded: text('action_needed'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('file_analyses_file_id_key').on(t.fileId)],
+);
+
+// One row per email attachment part SR-Jkai-Core's mail-filing rules saved
+// into /drive (build map §2.3). Dedupe is (account, message, part) — Gmail's
+// attachmentId is unstable — and sha256 across messages. Keyed by account
+// EMAIL, never the Gmail account id, which changes on re-link.
+export const mailAttachmentFiles = pgTable(
+  'mail_attachment_files',
+  {
+    id: serial('id').primaryKey(),
+    accountEmail: text('account_email').notNull(),
+    gmailMessageId: text('gmail_message_id').notNull(),
+    partId: text('part_id').notNull(),
+    gmailThreadId: text('gmail_thread_id').notNull(),
+    filename: text('filename').notNull(),
+    sha256: text('sha256').notNull(),
+    fileId: text('file_id').references(() => workflowFiles.id, { onDelete: 'set null' }),
+    ruleId: text('rule_id').notNull(),
+    fromAddress: text('from_address').notNull(),
+    fromName: text('from_name'),
+    /** ≤300 chars. */
+    subject: text('subject'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
+    analysedAt: timestamp('analysed_at', { withTimezone: true }),
+    notifiedAt: timestamp('notified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('mail_attachment_files_msg_part_key').on(t.accountEmail, t.gmailMessageId, t.partId),
+    index('mail_attachment_files_sha256_idx').on(t.sha256),
+    index('mail_attachment_files_file_id_idx').on(t.fileId),
+  ],
+);
 
 // One high-entropy capability, one drive file. Replaced `route_export_token`,
 // the GPX-only ancestor dropped in #311 — that table's `expires_at` was
@@ -4259,7 +4538,15 @@ export type NewForgeSchedule = typeof forgeSchedules.$inferInsert;
 // announced-policy scenarios, plus a freshness stamp. Written by the ingest route
 // (driven by jkai cron workflows); read by the /monitor page. Mirrors the
 // openrouter_models cached-external-data precedent (raw jsonb + fetchedAt).
-export const policyIndicatorSnapshots = pgTable(
+// Owned by SR-Policy-Engine and kept in its own Postgres schema since
+// scripts/migrations/2026-10-02-app-owned-schemas.sql. Main has no reader or
+// writer: drizzle.config.ts's schemaFilter (public only) keeps push from
+// managing or recreating it. Declared here for one more release only, so the
+// declaration can be removed without a drop; SR-Policy-Engine's own schema slice is the
+// description it reads.
+export const policySchema = pgSchema('policy');
+
+export const policyIndicatorSnapshots = policySchema.table(
   'policy_indicator_snapshots',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -4292,7 +4579,15 @@ export type NewPolicyIndicatorSnapshot = typeof policyIndicatorSnapshots.$inferI
 // discovery is index-driven (GOV.UK Search API etc.), deduped on canonicalId,
 // with cheap change-detection via contentHash. LLM classification only sets
 // kind/confidence/summary — never whether the row exists.
-export const standardRegistryEntries = pgTable(
+// Owned by SR-Data-Standard-Designer and kept in its own Postgres schema since
+// scripts/migrations/2026-10-02-app-owned-schemas.sql. Main has no reader or
+// writer: drizzle.config.ts's schemaFilter (public only) keeps push from
+// managing or recreating it. Declared here for one more release only, so the
+// declaration can be removed without a drop; SR-Data-Standard-Designer's own schema slice is the
+// description it reads.
+export const dsdSchema = pgSchema('dsd');
+
+export const standardRegistryEntries = dsdSchema.table(
   'standard_registry_entries',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -4323,7 +4618,7 @@ export type NewStandardRegistryEntry = typeof standardRegistryEntries.$inferInse
 // Per-source run telemetry — the coverage-health signal. A source that
 // normally returns N and suddenly returns 0 (or errors) shows up here, so a
 // silently-broken feed is visible rather than mistaken for "nothing new".
-export const standardRegistrySourceRuns = pgTable(
+export const standardRegistrySourceRuns = dsdSchema.table(
   'standard_registry_source_runs',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -4345,7 +4640,15 @@ export type StandardRegistrySourceRun = typeof standardRegistrySourceRuns.$infer
 // the LLM classifies each item AGAINST the strategy: how it influences which
 // strategies/pressures, and any considerations / misalignments. Index-driven +
 // deduped on canonicalId; classification enriches, never gates existence.
-export const keystoneIntel = pgTable(
+// Owned by SR-DfE-Data-Strategy and kept in its own Postgres schema since
+// scripts/migrations/2026-10-02-app-owned-schemas.sql. Main has no reader or
+// writer: drizzle.config.ts's schemaFilter (public only) keeps push from
+// managing or recreating it. Declared here for one more release only, so the
+// declaration can be removed without a drop; SR-DfE-Data-Strategy's own schema slice is the
+// description it reads.
+export const dfeSchema = pgSchema('dfe');
+
+export const keystoneIntel = dfeSchema.table(
   'keystone_intel',
   {
     id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
@@ -4373,7 +4676,7 @@ export const keystoneIntel = pgTable(
 );
 export type KeystoneIntel = typeof keystoneIntel.$inferSelect;
 
-export const keystoneIntelRuns = pgTable('keystone_intel_runs', {
+export const keystoneIntelRuns = dfeSchema.table('keystone_intel_runs', {
   id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
   runAt: timestamp('run_at', { withTimezone: true }).notNull().defaultNow(),
   ok: boolean('ok').notNull().default(true),
@@ -4439,6 +4742,15 @@ export const claudeSessions = pgTable(
      * of 180 transcripts on disk carry at least one.
      */
     pullRequests: jsonb('pull_requests').notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Every pull request the session touched, in ANY repository, as lowercased
+     * `owner/repo#N` strings. `pull_requests` above is SR-Main's numbers only,
+     * and joins only to SR-Main releases; this joins the session to releases
+     * other repositories recorded (`releases.repo` + `stats.prs`). A separate
+     * column rather than strings inside `pull_requests`, whose readers cast
+     * every element to int. Parser v6 onwards; older rows hold `[]`.
+     */
+    pullRequestRefs: jsonb('pull_request_refs').notNull().default(sql`'[]'::jsonb`),
     schemaVersion: integer('schema_version').notNull().default(1),
     ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -6278,6 +6590,10 @@ export const daydreamThoughts = pgTable(
      *  'quiet_hours', 'kind_muted', 'evidence_unverified'. */
     suppressedReason: text('suppressed_reason'),
     snoozeUntil: timestamp('snooze_until', { withTimezone: true }),
+    // The last London day a think note is likely to matter, when something said
+    // so: the think loop's own estimate, or the owner's "Still relevant". Null
+    // means work it out from the note (`think/shelf.ts`). Stored at midday UTC.
+    relevantUntil: timestamp('relevant_until', { withTimezone: true }),
     proposedActions: jsonb('proposed_actions')
       .$type<Array<{ kind: string; label: string; payload: string }>>()
       .notNull()
@@ -6666,367 +6982,6 @@ export const codegraphAssessments = pgTable('codegraph_assessments', {
   revision: text('revision'), createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Private policy analysis. Artefacts are individual typed rows, never one report blob.
-export const policyAnalyses = pgTable('policy_analyses', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  owner: text('owner').notNull(),
-  title: text('title').notNull(),
-  jurisdiction: text('jurisdiction'),
-  policyArea: text('policy_area'),
-  context: text('context'),
-  // 'standard' or 'deep' — how many rounds of enquiry the reader asked for.
-  depth: text('depth').notNull().default('standard'),
-  // The Codex model and reasoning effort this assessment was commissioned with.
-  // NULL means "whatever the research-deep workload resolves to", which is what
-  // every assessment before 2026-09-10 ran on and what an unspecified submission
-  // still gets. Text, not an enum, for the same reason `thinking_level` is
-  // elsewhere: a new rung or a new model needs no migration.
-  model: text('model'),
-  thinkingLevel: text('thinking_level'),
-  // How many fan-out units this assessment may have in flight at once. NULL
-  // means one, which is what every assessment before 2026-09-10 ran on — so a
-  // run already in flight when this shipped resumes serially rather than
-  // widening under itself. Nullable integer for the same reason `model` is
-  // nullable text: an unspecified submission takes the default.
-  concurrency: integer('concurrency'),
-  /**
-   * HOW DECOMPOSITION ASKED FOR THE INVENTORY: 'prose' or 'indexed'.
-   *
-   * NULL means 'prose', which is what every assessment before this column ran
-   * on — so a run already in flight when this shipped carries on exactly as it
-   * started, and a reader who never touches the control gets the contract they
-   * have always had. Text rather than a boolean for the same reason `model` and
-   * `thinking_level` are text: a third way of asking needs no migration.
-   *
-   * Kept per run rather than in configuration BECAUSE IT IS THE ROLLBACK. The
-   * same paper can be submitted under each and the two reports compared, and a
-   * bad result is undone by the next submission rather than by a release.
-   */
-  extraction: text('extraction'),
-  /**
-   * Whether the heavy fan-out stages put their SHARED context first and fit it
-   * once, so a provider's prompt cache can match a prefix across the calls of a
-   * stage.
-   *
-   * NOT NULL DEFAULT false, like `sealed`: every assessment before this ran
-   * without it, and false is what an absent form field means. Separate from
-   * `extraction` on purpose — the two changes are independent, and one toggle
-   * for both would make it impossible to say which one moved a number.
-   */
-  sharedContextFirst: boolean('shared_context_first').notNull().default(false),
-  /**
-   * A SEALED run writes no readable bytes.
-   *
-   * Every free-text column below — the document, the artefacts, the stage
-   * outputs, this row's own title and context — is AES-256-GCM under a key that
-   * lives outside this database, and purging the run destroys that key first.
-   * A `DELETE` could never give the guarantee on its own: anything alive at
-   * 02:30 is in up to fourteen nightly dumps and every restic snapshot beside
-   * them, and deleted tuples sit in heap pages and WAL until vacuum. Shredding
-   * the key makes every one of those copies unreadable without having to find
-   * them.
-   *
-   * Boolean and NOT NULL with a false default, so every assessment that ran
-   * before this existed is plainly an unsealed one rather than an unknown. The
-   * decoder keys off the `sealed:v1:` prefix on each value, not off this column,
-   * so a row is readable whichever it is.
-   */
-  sealed: boolean('sealed').notNull().default(false),
-  /**
-   * A sealed policy run the reader has allowed to search externally anyway.
-   *
-   * Owned by SR-Policy-Analysis; declared here because THIS file is what
-   * `drizzle-kit push` applies on every release, so a column missing here is a
-   * column that gets dropped. Sealing still switches off cross-policy comparison
-   * and the persona library unconditionally — those write the paper's substance
-   * into rows that outlive the run, where shredding its key cannot reach. Only
-   * external search is offered as a choice, because its exposure is a third
-   * party's logs rather than anything this site keeps.
-   */
-  sealedResearch: boolean('sealed_research').notNull().default(false),
-  status: text('status').notNull().default('queued'),
-  cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
-  error: text('error'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
-}, (t) => [index('policy_analyses_owner_idx').on(t.owner, t.createdAt)]);
-
-export const policyDocuments = pgTable('policy_documents', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
-  filename: text('filename').notNull(),
-  mimeType: text('mime_type').notNull(),
-  size: integer('size').notNull(),
-  sha256: text('sha256').notNull(),
-  // Base64 of bounded original bytes; private, no public file-store registration.
-  content: text('content').notNull(),
-  extractedText: text('extracted_text'),
-  metadata: jsonb('metadata'),
-}, (t) => [uniqueIndex('policy_documents_analysis_idx').on(t.analysisId)]);
-
-/**
- * Material attached to an assessment AFTER it reported, and the pass that read it.
- *
- * DECLARED HERE BECAUSE THIS FILE IS WHAT `drizzle-kit push` APPLIES. The policy
- * pipeline lives in SR-Policy-Analysis and nothing in this repository reads this
- * table — but a table production holds and this schema does not declare is the
- * drop side of a rename pair, which takes the deploy interactive and hangs it.
- * See `drizzle.config.ts`'s `tablesFilter` for the alternative; declaring it is
- * the better one, because every other `policy_*` table is declared here too.
- *
- * Pass `n` owns stage ordinals `100 * n + k` in `policy_stages`, which is what
- * lets work be appended to a finished assessment without re-running a stage —
- * `policy_artefacts` is keyed on `(analysis_id, id)` and the `s<stage>_` id
- * namespace collides if a stage ever runs twice.
- *
- * KEEP THIS IN STEP WITH SR-Policy-Analysis's own `schema.ts`, exactly as
- * `policy_model_calls` says. The two declare the same table and this one is
- * where the push runs.
- */
-export const policyPasses = pgTable('policy_passes', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
-  /** 1, 2, 3 … The stage ordinals this pass owns are `100 * pass + k`. */
-  pass: integer('pass').notNull(),
-  /** 'addendum' — four stages, carries material — or 'restatement' — one stage, none. */
-  kind: text('kind').notNull(),
-  /** What the reader said the material is; it decides how the model is told to read it. */
-  role: text('role'),
-  note: text('note'),
-  filename: text('filename'),
-  mimeType: text('mime_type'),
-  size: integer('size'),
-  sha256: text('sha256'),
-  /** Base64 of the bounded original bytes, exactly as `policy_documents` holds it. */
-  content: text('content'),
-  extractedText: text('extracted_text'),
-  metadata: jsonb('metadata'),
-  status: text('status').notNull().default('queued'),
-  error: text('error'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
-}, (t) => [uniqueIndex('policy_passes_analysis_pass_idx').on(t.analysisId, t.pass)]);
-
-export const policyStages = pgTable('policy_stages', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
-  runId: text('run_id').references(() => workflowRuns.id),
-  ordinal: integer('ordinal').notNull(),
-  name: text('name').notNull(),
-  status: text('status').notNull().default('pending'),
-  attempts: integer('attempts').notNull().default(0),
-  startedAt: timestamp('started_at', { withTimezone: true }),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
-  error: text('error'),
-  warnings: jsonb('warnings').$type<string[]>().notNull().default([]),
-  output: jsonb('output'),
-}, (t) => [uniqueIndex('policy_stages_order_idx').on(t.analysisId, t.ordinal)]);
-
-export const policyExecutions = pgTable('policy_executions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  stageId: uuid('stage_id').notNull().references(() => policyStages.id, { onDelete: 'cascade' }),
-  runId: text('run_id').notNull().references(() => workflowRuns.id),
-  status: text('status').notNull().default('running'),
-  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
-  error: text('error'),
-}, (t) => [index('policy_executions_stage_idx').on(t.stageId)]);
-
-export const policyArtefacts = pgTable('policy_artefacts', {
-  id: text('id').notNull(),
-  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
-  stage: integer('stage').notNull(),
-  kind: text('kind').notNull(),
-  label: text('label').notNull(),
-  statement: text('statement').notNull(),
-  origin: text('origin').notNull(),
-  confidence: doublePrecision('confidence'),
-  sourceId: text('source_id'),
-  sourceQuote: text('source_quote'),
-  page: integer('page'),
-  section: text('section'),
-  startOffset: integer('start_offset'),
-  endOffset: integer('end_offset'),
-  url: text('url'),
-  fromId: text('from_id'),
-  toId: text('to_id'),
-  relation: text('relation'),
-  temporal: text('temporal'),
-  data: jsonb('data').$type<Record<string, unknown>>().notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  primaryKey({ columns: [t.analysisId, t.id] }),
-  index('policy_artefacts_kind_idx').on(t.analysisId, t.kind),
-  index('policy_artefacts_graph_idx').on(t.analysisId, t.fromId, t.toId),
-  check('policy_confidence_range', sql`${t.confidence} IS NULL OR (${t.confidence} >= 0 AND ${t.confidence} <= 1)`),
-]);
-
-/**
- * Provenance links between artefacts of one analysis.
- *
- * THERE ARE NO COMPOSITE FOREIGN KEYS HERE, AND THAT IS DELIBERATE — see
- * `policy-analysis-personas-and-simulation.md` in the Drive archive linked by
- * `docs/README.md`.
- *
- * `policy_provenance_from_fk` and `_to_fk` used to point (analysis_id, from_id)
- * and (analysis_id, to_id) at `policy_artefacts`' composite primary key. On
- * drizzle-kit 0.31.10 that combination makes EVERY push fail, permanently:
- * drizzle unconditionally recreates both the composite FKs and the composite PK
- * they reference, and it orders the statements
- *
- *   DROP the FKs … ADD the FKs … DROP the PK … ADD the PK
- *
- * so the PK drop runs while the FKs it re-created depend on it, and Postgres
- * refuses with `cannot drop constraint policy_artefacts_analysis_id_id_pk`.
- * Reproduced on 2026-09-10 against a database drizzle had itself created from
- * this file seconds earlier, so it is not drift and no reconciliation fixes it.
- * It cost one failed production release and a hand-applied migration, and it
- * would have cost one on every schema change from here on.
- *
- * What the constraints were buying is bought elsewhere:
- *
- * - "a link names a real artefact" is enforced at WRITE time. Every link comes
- *   from an artefact's `refs`, and `triageArtefacts` has already pruned or
- *   rejected any reference that does not resolve, before the row exists.
- * - "deleting the parent removes the links" still holds through
- *   `analysis_id → policy_analyses.id ON DELETE CASCADE` below. Artefact rows
- *   are never deleted individually; an analysis is the unit of deletion.
- */
-export const policyProvenance = pgTable('policy_provenance', {
-  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
-  fromId: text('from_id').notNull(),
-  toId: text('to_id').notNull(),
-  relation: text('relation').notNull().default('derived_from'),
-}, (t) => [
-  primaryKey({ columns: [t.analysisId, t.fromId, t.toId] }),
-]);
-
-export const policyModelCalls = pgTable('policy_model_calls', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  executionId: uuid('execution_id').notNull().references(() => policyExecutions.id, { onDelete: 'cascade' }),
-  callKey: text('call_key').notNull(),
-  promptVersion: text('prompt_version').notNull(),
-  inputHash: text('input_hash').notNull(),
-  // NULLABLE BECAUSE A SEALED RUN WRITES NEITHER OF THESE. The policy pipeline
-  // lives in SR-Policy-Analysis now, but THIS file is what `drizzle-kit push`
-  // applies on every release here, so this declaration is what the database
-  // actually gets. That application's `provider.ts` stores `input: null` and
-  // `output: null` when a run is sealed — the prompt carries the paper verbatim
-  // and the reply carries the assessment of it, and sealing exists so neither is
-  // ever written in readable form.
-  //
-  // `output` was nullable from the start and `input` was not, so every sealed
-  // assessment died on its FIRST model call with a not-null violation: measured
-  // 2026-09-18, a sealed deep run that failed at stage 1 in 47 seconds having
-  // never reached the provider. Restoring `notNull` here would silently break it
-  // again on the next release from this repository.
-  input: jsonb('input'),
-  output: jsonb('output'),
-  status: text('status').notNull(),
-  provider: text('provider'),
-  model: text('model'),
-  usage: jsonb('usage'),
-  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
-  completedAt: timestamp('completed_at', { withTimezone: true }),
-  error: text('error'),
-}, (t) => [
-  index('policy_model_calls_execution_idx').on(t.executionId),
-  // The reuse probe filters on the hash and the prompt version; without this it
-  // is a sequential scan of every model call the site has ever made.
-  index('policy_model_calls_hash_idx').on(t.inputHash, t.promptVersion),
-]);
-
-/**
- * The persona library: bodies the reader keeps meeting, remembered between
- * assessments.
- *
- * Owner-scoped, like every other row in this feature, and drawn only from that
- * owner's own private assessments. `dossier` is the STANDING description — what
- * this body is and what its position rewards — with each trait carrying its own
- * epistemic origin, because "who it answers to" may be an extracted fact in one
- * paper and an inference in another and averaging that away would be the whole
- * problem.
- *
- * Deliberately no unique index on the name. Identity here is decided by the
- * site's own identity policy (`assessIdentity`), not by string equality, and a
- * unique constraint would either merge two bodies that share a name or refuse a
- * legitimate second one. Duplicates are resolved in code, under the same
- * per-owner advisory lock that serialises intake.
- */
-export const policyPersonas = pgTable('policy_personas', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  owner: text('owner').notNull(),
-  name: text('name').notNull(),
-  entityType: text('entity_type').notNull().default('concept'),
-  aliases: jsonb('aliases').$type<string[]>().notNull().default([]),
-  summary: text('summary'),
-  dossier: jsonb('dossier').$type<{ key: string; label: string; value: string; origin: string; confidence: number | null }[]>().notNull().default([]),
-  jurisdiction: text('jurisdiction'),
-  // How many assessments have met this body. Recomputed from the observations,
-  // never incremented blindly: deleting an assessment must lower it.
-  sightings: integer('sightings').notNull().default(0),
-  researchedAt: timestamp('researched_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index('policy_personas_owner_idx').on(t.owner, t.name)]);
-
-/**
- * One contribution to a persona: an assessment that met it, or a research pass
- * commissioned against it.
- *
- * `analysis_id` is nullable and cascades. Deleting an assessment removes what
- * that assessment observed — those rows point at artefacts that no longer exist
- * — while the persona itself survives with a lower sighting count and its
- * research notes intact.
- */
-export const policyPersonaObservations = pgTable('policy_persona_observations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  personaId: uuid('persona_id').notNull().references(() => policyPersonas.id, { onDelete: 'cascade' }),
-  analysisId: uuid('analysis_id').references(() => policyAnalyses.id, { onDelete: 'cascade' }),
-  kind: text('kind').notNull().default('assessment'),
-  analysisTitle: text('analysis_title'),
-  actorId: text('actor_id'),
-  traits: jsonb('traits').$type<{ key: string; label: string; value: string; origin: string; confidence: number | null }[]>().notNull().default([]),
-  plays: jsonb('plays').$type<{ label: string; band: string; exposure: number; legality: string }[]>().notNull().default([]),
-  sources: jsonb('sources').$type<{ url: string; title: string; quality: string }[]>().notNull().default([]),
-  note: text('note'),
-  observedAt: timestamp('observed_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  index('policy_persona_observations_persona_idx').on(t.personaId, t.observedAt),
-  index('policy_persona_observations_analysis_idx').on(t.analysisId),
-]);
-
-/**
- * Capability links to ONE assessment, for a reader who has no account.
- *
- * Mirrors `deck_share` and `project_share`: only the SHA-256 of the raw token is
- * stored, so a database dump yields no working URLs, and unknown, revoked and
- * expired all resolve to the same 404 so probing learns nothing.
- *
- * `expires_at` is NOT NULL, and that is the one difference worth stating. The
- * drive's first capability table had it nullable and never wrote it, so every
- * link it minted was permanent, unlisted and unkillable — one of them a GPX
- * with home-area GPS. A policy paper under assessment is at least as sensitive,
- * so a link here cannot be minted without a lifetime.
- */
-export const policyShares = pgTable('policy_share', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  analysisId: uuid('analysis_id').notNull().references(() => policyAnalyses.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull(),
-  label: text('label'),
-  createdBy: text('created_by').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  revokedAt: timestamp('revoked_at', { withTimezone: true }),
-  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
-  useCount: integer('use_count').notNull().default(0),
-}, (t) => [
-  uniqueIndex('policy_share_token_hash_idx').on(t.tokenHash),
-  index('policy_share_analysis_idx').on(t.analysisId),
-]);
-
 /**
  * A paired iPhone's credential, and the one-time code that mints it.
  *
@@ -7040,7 +6995,8 @@ export const policyShares = pgTable('policy_share', {
  * a phone and never enough to impersonate one, which is the property that lets
  * the device list render in the browser at all.
  *
- * Modelled on `policyShares` above rather than invented: token hash under a
+ * Modelled on the policy-analysis share table (since removed) rather than
+ * invented: token hash under a
  * unique index, a lifetime that cannot be omitted, an explicit `revokedAt`, and
  * use accounting. Drive's first capability table had a nullable expiry and
  * never wrote it, so every link it minted was permanent and unkillable; a
@@ -7079,10 +7035,54 @@ export const nativeCredentials = pgTable('native_credentials', {
    */
   laStartToken: text('la_start_token'),
   laStartTokenAt: timestamp('la_start_token_at', { withTimezone: true }),
+  /**
+   * What the phone last said it was running, from the X-SR-App / X-SR-Device
+   * headers the app sends on every request (`$lib/server/native-telemetry`),
+   * stamped by `touchDevice`. Null from a build older than the headers. On
+   * the credential rather than a table of its own because a credential IS a
+   * phone here: revoking it takes the record with it. `appSeenAt` is when
+   * this build was first seen — "running 136 since Tuesday".
+   */
+  appVersion: text('app_version'),
+  appBuild: integer('app_build'),
+  appCommit: text('app_commit'),
+  /** 'testflight' | 'adhoc' | 'xcode' — how the copy got onto the phone. */
+  appChannel: text('app_channel'),
+  appSeenAt: timestamp('app_seen_at', { withTimezone: true }),
+  osVersion: text('os_version'),
+  deviceModel: text('device_model'),
+  deviceName: text('device_name'),
 }, (t) => [
   uniqueIndex('native_credentials_token_hash_idx').on(t.tokenHash),
   index('native_credentials_owner_kind_idx').on(t.ownerEmail, t.kind),
 ]);
+
+/**
+ * A phone enrolled for the ad-hoc copy of the iPhone app: the UDID a join
+ * link's one-time profile posted back (`/app/<code>/profile`), and whose
+ * phone it is — the join link is minted for one person and signed over
+ * their address (`$lib/server/adhoc-install`). The developer account and the
+ * ad-hoc build know the phone only by `name`; this is the row that ties the
+ * name to a person. Removal is a stamp, not a delete: a UDID stays in the
+ * signing profile until the build after it is dropped.
+ */
+export const appDevice = pgTable(
+  'app_device',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    udid: text('udid').notNull(),
+    email: text('email').notNull(),
+    /** "Rory's iPhone" — what the developer account calls it (`joinDeviceName`). */
+    name: text('name').notNull(),
+    product: text('product'),
+    osVersion: text('os_version'),
+    enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
+    /** When a build including it was last started from here. */
+    lastBuildAt: timestamp('last_build_at', { withTimezone: true }),
+    removedAt: timestamp('removed_at', { withTimezone: true }),
+  },
+  (t) => [uniqueIndex('app_device_udid_idx').on(t.udid), index('app_device_email_idx').on(t.email)],
+);
 
 /**
  * One thing worth telling the owner about, and how it was told.
@@ -7353,6 +7353,173 @@ export const familyTask = pgTable(
 
 export type FamilyTask = typeof familyTask.$inferSelect;
 
+// The family backlog: links, videos and ideas anyone in the family shares
+// into the iPhone app ("Share → SR") for the family to watch, read or do
+// together. `canonical_url` is the link with its tracking parameters removed,
+// so the same video shared twice is one row. `for_email` null = everyone.
+// `status`: 'new' → 'done' (watched/read/done) or 'dismissed' (not for us),
+// either back to 'new'; 'deleted' is a soft delete.
+export const familyBacklogItem = pgTable(
+  'family_backlog_item',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** 'video' | 'page' | 'idea' */
+    kind: text('kind').notNull(),
+    url: text('url'),
+    canonicalUrl: text('canonical_url'),
+    /** 'youtube' | 'tiktok' | 'instagram' | 'web' — null for an idea */
+    provider: text('provider'),
+    title: text('title'),
+    siteName: text('site_name'),
+    thumbnailUrl: text('thumbnail_url'),
+    note: text('note'),
+    forEmail: text('for_email'),
+    addedByEmail: text('added_by_email').notNull(),
+    /** 'new' | 'done' | 'dismissed' | 'deleted' */
+    status: text('status').notNull().default('new'),
+    doneByEmail: text('done_by_email'),
+    doneAt: timestamp('done_at', { withTimezone: true }),
+    /** The family task an idea was turned into (`family_task.id`), if it was. */
+    taskId: uuid('task_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('family_backlog_item_status_idx').on(t.status, t.createdAt),
+    index('family_backlog_item_canonical_idx').on(t.canonicalUrl),
+  ],
+);
+
+export type FamilyBacklogItem = typeof familyBacklogItem.$inferSelect;
+
+// One person's answer to a backlog item: an emoji from msg family's quick set.
+// One per person per item; a second replaces the first. No foreign key — the
+// item is soft-deleted, never removed, except by account erasure, which
+// deletes these with it.
+export const familyBacklogReaction = pgTable(
+  'family_backlog_reaction',
+  {
+    itemId: uuid('item_id').notNull(),
+    email: text('email').notNull(),
+    emoji: text('emoji').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.email] })],
+);
+
+// Who wants the backlog's evening round-up (off unless they turn it on), and
+// the London day it last went, so a second tick that evening sends nothing.
+export const familyBacklogPref = pgTable('family_backlog_pref', {
+  email: text('email').primaryKey(),
+  digest: boolean('digest').notNull().default(false),
+  digestSentOn: date('digest_sent_on', { mode: 'string' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// The family alarm: one row per "raise the alarm" pressed on the iPhone app.
+// Written by `$lib/family/alarm.server`; every other family member's phone is
+// pushed and `GET /api/native/family/alarm` lists the active ones (raised in
+// the last 30 minutes, not stood down) for phones that cannot be pushed.
+export const familyAlarm = pgTable(
+  'family_alarm',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromEmail: text('from_email').notNull(),
+    /** The name shown at the time, so the list reads without the roster. */
+    fromName: text('from_name').notNull(),
+    /** 'siren' | 'morse' — which sound the phones ring with; 'quiet' — the Bat phone (default sound, per-recipient text). */
+    kind: text('kind').notNull(),
+    message: text('message'),
+    lat: doublePrecision('lat'),
+    lon: doublePrecision('lon'),
+    accuracy: doublePrecision('accuracy'),
+    /** The sender's battery when pressed, 0–1, and where they said they were — both optional. */
+    battery: doublePrecision('battery'),
+    place: text('place'),
+    /** People (not phones) it was addressed to, and phones Apple accepted it for. */
+    recipientCount: integer('recipient_count').notNull().default(0),
+    pushedCount: integer('pushed_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledByEmail: text('cancelled_by_email'),
+  },
+  (t) => [index('family_alarm_created_idx').on(t.createdAt), index('family_alarm_from_idx').on(t.fromEmail, t.createdAt)],
+);
+
+export type FamilyAlarm = typeof familyAlarm.$inferSelect;
+
+// "msg family" in the iPhone app's chat: a message pushed to every other
+// family member's phone, and their replies (an emoji or a line of text) under
+// it. Written by `$lib/family/messages.server`; a reply's push goes to the
+// message's sender only. `reply_to` is null on a message, its id on a reply.
+export const familyMessage = pgTable(
+  'family_message',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromEmail: text('from_email').notNull(),
+    /** The name shown at the time, so the list reads without the roster. */
+    fromName: text('from_name').notNull(),
+    body: text('body').notNull(),
+    replyTo: uuid('reply_to'),
+    /** People (not phones) it was addressed to, and phones Apple accepted it for. */
+    recipientCount: integer('recipient_count').notNull().default(0),
+    pushedCount: integer('pushed_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('family_message_created_idx').on(t.createdAt),
+    index('family_message_reply_idx').on(t.replyTo),
+    index('family_message_from_idx').on(t.fromEmail, t.createdAt),
+  ],
+);
+
+export type FamilyMessage = typeof familyMessage.$inferSelect;
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
+
+// A family member's photo of themselves, shown in place of their initials
+// circle on the iPhone app's steps board, messages and map. One row a person,
+// keyed by lower-cased email — the owner's addresses are one person, stored
+// under the first allow-listed one. A JPEG of at most 300 KB (checked by
+// `$lib/family/photos`); `version` is a short hash of the bytes, so a phone
+// re-downloads only when it changes.
+export const familyPhoto = pgTable('family_photo', {
+  email: text('email').primaryKey(),
+  image: bytea('image').notNull(),
+  version: text('version').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// "That's wrong" on a family forecast's next move — a long press in the app
+// ("Katie isn't going to the station"). `$lib/home/presence/forecast` reads
+// these back: the move is not offered again that day, and each such day
+// counts against the routine's share. `subject` is the trail subject; `date`
+// the local date it was said on.
+export const forecastFeedback = pgTable(
+  'forecast_feedback',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    subject: text('subject').notNull(),
+    /** 'routine' | 'arriving' — which kind of next move was wrong. */
+    kind: text('kind').notNull(),
+    routineId: text('routine_id'),
+    departedAt: text('departed_at'),
+    /** Where the move said they were going, for reading the list back. */
+    toPlace: text('to_place'),
+    date: text('date').notNull(),
+    note: text('note'),
+    reporterEmail: text('reporter_email').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('forecast_feedback_created_idx').on(t.createdAt), index('forecast_feedback_subject_idx').on(t.subject, t.date)],
+);
+
+export type ForecastFeedback = typeof forecastFeedback.$inferSelect;
+
 // Every finished round of a family game, one row per contender — what the
 // games leaderboard (daily / weekly / all-time bests) reads. Written once per
 // round by `$lib/games/results.server` when a room reaches `finished`; a replay
@@ -7389,6 +7556,55 @@ export const gameResults = pgTable(
 );
 
 export type GameResult = typeof gameResults.$inferSelect;
+
+// Durable game rooms (`$lib/games/rooms.server`): a game that declares
+// `durable` in its rules has its room written here after every accepted
+// change, so a deploy is a pause rather than the end of the game. The
+// in-memory registry stays the authority while the process is up; this is
+// what survives a restart. Players are the games' keyed hash (`playerId`),
+// never an email. Text key (the room id): there is no sequence to grant.
+// Spec: docs/superpowers/specs/2026-10-22-family-games-durable-rooms.md.
+export const gameRooms = pgTable(
+  'game_rooms',
+  {
+    /** The room id the phones already hold: 'g_' + 12 hex. */
+    id: text('id').primaryKey(),
+    /** A `GameId` from `$lib/games/catalogue`. */
+    game: text('game').notNull(),
+    /** The game's `durable.schema` when `state` was written; a mismatch goes through `durable.revive`. */
+    stateSchema: integer('state_schema').notNull().default(1),
+    /** 'live' | 'async'. */
+    pace: text('pace').notNull().default('live'),
+    /** The room's `phase`, copied out for the lobby query and the sweep. */
+    phase: text('phase').notNull(),
+    /** Hashed player id (`playerId(email)`), never an email. */
+    hostId: text('host_id').notNull(),
+    /** Every id in `room.players`, any status (hashed). The lobby and erasure look up by containment. */
+    playerIds: text('player_ids').array().notNull(),
+    /** The whole room as the rules module holds it, hidden information included: never sent anywhere but `toWire`. */
+    state: jsonb('state').notNull(),
+    /** The registry's own bookkeeping for the room (invite and push marks, rounds recorded). */
+    meta: jsonb('meta').notNull().default(sql`'{}'::jsonb`),
+    /** Monotonic write counter; every write is compare-and-set on it. */
+    version: integer('version').notNull(),
+    /** `rules.deadline(room)` as a time, null when the room waits on people. The sweep's index. */
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Set when the room reaches `finished`; cleared by "Play again". Retention counts from it. */
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    /** Set when the room reaches `closed`. A closed row is never rehydrated. */
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+  },
+  (t) => [
+    // GIN: "which rooms contain this player" is containment over the array.
+    index('game_rooms_player_ids_idx').using('gin', t.playerIds),
+    index('game_rooms_due_idx').on(t.dueAt).where(sql`${t.closedAt} is null`),
+    index('game_rooms_updated_idx').on(t.updatedAt),
+  ],
+);
+
+export type GameRoomRow = typeof gameRooms.$inferSelect;
 
 // Permission epochs survive removal/re-add; triggers in the security migration
 // revoke device capabilities in the same transaction as access changes.
@@ -7466,3 +7682,485 @@ export const daydreamCommissionOutbox = pgTable('daydream_commission_outbox', {
   check('daydream_commission_outbox_kind_check', sql`${t.kind} IN ('notification','dispatch')`),
   index('daydream_commission_outbox_pending_idx').on(t.availableAt).where(sql`${t.deliveredAt} IS NULL`),
 ]);
+
+// ── Trips — planner on the site, companion on the phone (2026-10-13) ────────
+// Spec: docs/superpowers/specs/2026-10-13-trips.md; shapes: $lib/trips/model.
+// Wishes, stays and bookings are CONSTRAINTS; `trip_plan` holds SOLVED plan
+// versions, append-only, never edited by hand. Owner only until phase 5 (D2),
+// so `owner_email` is always an allow-listed owner. No foreign keys, as the
+// family tables: `$lib/trips/store.server` deletes a trip's rows together.
+export const trip = pgTable(
+  'trip',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerEmail: text('owner_email').notNull(),
+    title: text('title').notNull(),
+    destination: text('destination').notNull(),
+    /** IANA zone; every local date/minute on the trip is in it. */
+    timeZone: text('time_zone').notNull(),
+    startDate: date('start_date', { mode: 'string' }).notNull(),
+    endDate: date('end_date', { mode: 'string' }).notNull(),
+    /** 'relaxed' | 'normal' | 'packed' */
+    pace: text('pace').notNull().default('normal'),
+    /** TravelMode[] */
+    modes: jsonb('modes').$type<string[]>().notNull().default(['walk']),
+    /** 'draft' | 'planned' | 'active' | 'done' */
+    status: text('status').notNull().default('draft'),
+    notes: text('notes'),
+    /** v2.1: { [LocalDate]: 'light' | 'normal' | 'full' } — how full each day should be. */
+    dayLoads: jsonb('day_loads').$type<Partial<Record<string, 'light' | 'normal' | 'full'>>>(),
+    /** The background research job's progress, for the page to poll. */
+    research: jsonb('research').$type<Record<string, unknown>>(),
+    /** v2: TripGuide — city know-how (getting around, taxis, tickets), model-written once. */
+    guide: jsonb('guide').$type<Record<string, unknown>>(),
+    /** v3: TravellerProfile — what the planner already knows (owner's memory, knowledge, family), with sources. */
+    profile: jsonb('profile').$type<Record<string, unknown>>(),
+    /** v8: Provenance (decisions.ts) — where each fact came from: you said / from your notes / found / assumed. */
+    provenance: jsonb('provenance').$type<Record<string, unknown>>(),
+    /** v8: PackSummary (decisions.ts) — the research pack's state, date facts and neighbourhoods; its places are trip_place rows. */
+    pack: jsonb('pack').$type<Record<string, unknown>>(),
+    /** v8.1: lower-cased emails of the people who turned this trip's question notifications off. */
+    questionPushOff: jsonb('question_push_off').$type<string[]>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_owner_idx').on(t.ownerEmail, t.startDate)],
+);
+
+export const tripStay = pgTable(
+  'trip_stay',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    name: text('name').notNull(),
+    address: text('address'),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    fromDate: date('from_date', { mode: 'string' }).notNull(),
+    toDate: date('to_date', { mode: 'string' }).notNull(),
+    checkInMin: integer('check_in_min'),
+    checkOutMin: integer('check_out_min'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_stay_trip_idx').on(t.tripId)],
+);
+
+export const tripWish = pgTable(
+  'trip_wish',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    title: text('title').notNull(),
+    /** { name, location: {lat,lng}, osmId, address } — OSM/Nominatim only, never a Mapbox result. */
+    place: jsonb('place').$type<Record<string, unknown>>(),
+    /** 'must' | 'nice' */
+    priority: text('priority').notNull().default('nice'),
+    durationSec: integer('duration_sec'),
+    /** 'morning' | 'afternoon' | 'evening' | 'any' */
+    partOfDay: text('part_of_day').notNull().default('any'),
+    fixedDate: date('fixed_date', { mode: 'string' }),
+    fixedStartMin: integer('fixed_start_min'),
+    locked: boolean('locked').notNull().default(false),
+    suggested: boolean('suggested').notNull().default(false),
+    skipped: boolean('skipped').notNull().default(false),
+    /** Facts (model.ts) — sources, checked date and unknowns travel with it. */
+    facts: jsonb('facts').$type<Record<string, unknown>>(),
+    note: text('note'),
+    sortHint: integer('sort_hint').notNull().default(0),
+    /** v2.1: 'lunch' | 'dinner' — this wish IS that day's meal (the automatic stop is dropped). */
+    replacesMeal: text('replaces_meal'),
+    /** v2: StopGuide — what to know when you're there, model-written from facts. */
+    guide: jsonb('guide').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_wish_trip_idx').on(t.tripId)],
+);
+
+export const tripBooking = pgTable(
+  'trip_booking',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    wishId: uuid('wish_id'),
+    title: text('title').notNull(),
+    date: date('date', { mode: 'string' }),
+    startMin: integer('start_min'),
+    endMin: integer('end_min'),
+    reference: text('reference'),
+    url: text('url'),
+    /** Drive file id for the ticket. */
+    documentId: text('document_id'),
+    /** 'to-book' | 'booked' | 'cancelled' */
+    status: text('status').notNull().default('to-book'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_booking_trip_idx').on(t.tripId)],
+);
+
+// Append-only: a new edit is a new version. `matrix` is the TravelMatrix the
+// plan was solved against — openrouteservice, Transitous or estimated figures
+// only, never Mapbox (Product Terms §2.10.1; see the spec's D1 storage check).
+export const tripPlan = pgTable(
+  'trip_plan',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    version: integer('version').notNull(),
+    /** 'site' | 'phone' | 'replan' | 'seed' */
+    source: text('source').notNull(),
+    inputHash: text('input_hash').notNull(),
+    plan: jsonb('plan').$type<Record<string, unknown>>().notNull(),
+    matrix: jsonb('matrix').$type<Record<string, unknown>>(),
+    changes: jsonb('changes').$type<string[]>().notNull().default([]),
+    /** v8: TripConstraints (decisions.store.server) — the trip, stays, wishes, bookings and journeys this version was solved from, for undo and restore. */
+    constraints: jsonb('constraints').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('trip_plan_trip_version_key').on(t.tripId, t.version)],
+);
+
+// v2: the planning conversation. The trip is developed by talking to a model;
+// `ops` are the TripOps it applied (or a form edit recorded as ops, role
+// 'event'), `plan_version` the version that turn produced.
+export const tripMessage = pgTable(
+  'trip_message',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    /** 'user' | 'assistant' | 'event' */
+    role: text('role').notNull(),
+    text: text('text').notNull(),
+    ops: jsonb('ops').$type<unknown[]>().notNull().default([]),
+    planVersion: integer('plan_version'),
+    /** 'site' | 'phone' */
+    surface: text('surface').notNull().default('site'),
+    /** v3: ResearchStep[] — what the planner looked up during this turn. */
+    research: jsonb('research').$type<unknown[]>(),
+    /**
+     * v5: who said it (lower-cased email; server-side only, never on the
+     * wire). Each caller sees only their own thread; null on a `user` or
+     * `assistant` row is the creator's (rows from before v5). `event` rows
+     * with no author are plan changes, shown to the whole family.
+     */
+    authorEmail: text('author_email'),
+    /** v5: the speaker's family roster id. */
+    authorId: text('author_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_message_trip_idx').on(t.tripId, t.createdAt)],
+);
+
+// v3: getting there and back — flights, trains and the like. The solver frames
+// the arrival and departure days with them; times are local to each end.
+export const tripTransport = pgTable(
+  'trip_transport',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    /** 'flight' | 'train' | 'coach' | 'ferry' | 'car' */
+    kind: text('kind').notNull(),
+    /** 'outbound' | 'return' | 'internal' */
+    direction: text('direction').notNull(),
+    carrier: text('carrier'),
+    number: text('number'),
+    /** { name, code, location, timeZone } — location from OpenStreetMap, never the model. */
+    fromPlace: jsonb('from_place').$type<Record<string, unknown>>().notNull(),
+    toPlace: jsonb('to_place').$type<Record<string, unknown>>().notNull(),
+    departDate: date('depart_date', { mode: 'string' }).notNull(),
+    departMin: integer('depart_min').notNull(),
+    arriveDate: date('arrive_date', { mode: 'string' }).notNull(),
+    arriveMin: integer('arrive_min').notNull(),
+    /** 'stated' | 'researched' | 'live' */
+    confidence: text('confidence').notNull().default('stated'),
+    status: text('status'),
+    delayMin: integer('delay_min'),
+    bookingRef: text('booking_ref'),
+    sources: jsonb('sources').$type<Array<{ url: string; title: string | null }>>().notNull().default([]),
+    checkedAt: timestamp('checked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_transport_trip_idx').on(t.tripId)],
+);
+
+// v5: a family member's suggestion for a slot of a trip, waiting for a parent.
+// `by_email` / `decided_by_email` never go on the wire (the phone gets roster
+// ids and names); approving one adds the wish through the normal ops path.
+export const tripSuggestion = pgTable(
+  'trip_suggestion',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    byEmail: text('by_email').notNull(),
+    byId: text('by_id').notNull(),
+    byName: text('by_name').notNull(),
+    date: date('date', { mode: 'string' }).notNull(),
+    /** 'morning' | 'lunch' | 'afternoon' | 'evening' */
+    stage: text('stage').notNull(),
+    /** WishDraft */
+    wish: jsonb('wish').$type<Record<string, unknown>>().notNull(),
+    note: text('note'),
+    fitText: text('fit_text'),
+    /** 'pending' | 'approved' | 'rejected' | 'withdrawn' */
+    status: text('status').notNull().default('pending'),
+    decidedByEmail: text('decided_by_email'),
+    decidedById: text('decided_by_id'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_suggestion_trip_idx').on(t.tripId, t.status)],
+);
+
+// What happened on the day, from the phone. Idempotent on the phone's clientId.
+export const tripEvent = pgTable(
+  'trip_event',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    clientId: text('client_id').notNull(),
+    kind: text('kind').notNull(),
+    stopId: text('stop_id'),
+    wishId: text('wish_id'),
+    at: timestamp('at', { withTimezone: true }).notNull(),
+    detail: jsonb('detail').$type<Record<string, unknown>>(),
+    /** The plan version this event produced, for option-applied. */
+    planVersion: integer('plan_version'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique('trip_event_trip_client_key').on(t.tripId, t.clientId)],
+);
+
+// v8 (2026-10-21): propose, research, ask — shapes in $lib/trips/decisions.
+// A proposal is a stored, checked change seen before it lands; accepting it
+// replays `ops` exactly. Alternatives share `group_id`.
+export const tripProposal = pgTable(
+  'trip_proposal',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    groupId: text('group_id').notNull(),
+    /** 'shape' | 'day' | 'swap' | 'fill' | 'fix' | 'change' | 'replan' */
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    why: text('why').notNull().default(''),
+    /** ProposalScope */
+    scope: jsonb('scope').$type<Record<string, unknown>>().notNull(),
+    ops: jsonb('ops').$type<unknown[]>().notNull().default([]),
+    /** PlanDiff */
+    diff: jsonb('diff').$type<Record<string, unknown>>().notNull(),
+    /** ProposalTradeoffs */
+    tradeoffs: jsonb('tradeoffs').$type<Record<string, unknown>>().notNull(),
+    evidence: jsonb('evidence').$type<Array<{ url: string; title: string | null }>>().notNull().default([]),
+    /** { name, location } | null */
+    place: jsonb('place').$type<Record<string, unknown>>(),
+    image: jsonb('image').$type<Record<string, unknown>>(),
+    packPlaceId: uuid('pack_place_id'),
+    /** ShapeSummary | null */
+    shape: jsonb('shape').$type<Record<string, unknown>>(),
+    /** PlannedDay[] — only the days it changes, as solved. */
+    preview: jsonb('preview').$type<unknown[]>().notNull().default([]),
+    basedOnVersion: integer('based_on_version'),
+    /** 'open' | 'accepted' | 'rejected' | 'superseded' | 'expired' */
+    status: text('status').notNull().default('open'),
+    reason: text('reason'),
+    /** Who it was for / made by (server-side only, never on the wire). */
+    authorEmail: text('author_email'),
+    decidedByEmail: text('decided_by_email'),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_proposal_trip_idx').on(t.tripId, t.status), index('trip_proposal_group_idx').on(t.tripId, t.groupId)],
+);
+
+// v8: a short question with tap answers. Exists only when its answers solve to
+// different plans; the default is assumed (and usually applied) meanwhile.
+export const tripQuestion = pgTable(
+  'trip_question',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    /** Dedupe: one open question per key; a skipped key is not re-asked unless it changes. */
+    key: text('key').notNull(),
+    /** 'brief' | 'tie' | 'clash' | 'research' | 'reaction' | 'day' | 'after' | 'planner' */
+    source: text('source').notNull(),
+    prompt: text('prompt').notNull(),
+    why: text('why').notNull().default(''),
+    /** QuestionAnswer[] */
+    answers: jsonb('answers').$type<unknown[]>().notNull(),
+    defaultAnswerId: text('default_answer_id').notNull(),
+    appliedDefault: boolean('applied_default').notNull().default(false),
+    ifSkipped: text('if_skipped').notNull().default(''),
+    /** { dates, stops } */
+    affects: jsonb('affects').$type<Record<string, unknown>>().notNull(),
+    impact: doublePrecision('impact').notNull().default(0),
+    /** 'owner' | 'parents' | 'family' */
+    audience: text('audience').notNull().default('owner'),
+    deadline: date('deadline', { mode: 'string' }),
+    /** 'open' | 'answered' | 'skipped' | 'expired' | 'withdrawn' */
+    status: text('status').notNull().default('open'),
+    answerId: text('answer_id'),
+    answeredByEmail: text('answered_by_email'),
+    answeredByName: text('answered_by_name'),
+    /** { [answerId]: [{ email, name }] } — family votes (emails never on the wire). */
+    votes: jsonb('votes').$type<Record<string, unknown>>().notNull().default({}),
+    basedOnVersion: integer('based_on_version'),
+    /** When it was last pushed as a notification (one a day at most). */
+    pushedAt: timestamp('pushed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    answeredAt: timestamp('answered_at', { withTimezone: true }),
+  },
+  (t) => [index('trip_question_trip_idx').on(t.tripId, t.status), index('trip_question_key_idx').on(t.tripId, t.key)],
+);
+
+// v8: the research pack's places — found once when a trip starts, refreshed a
+// week before, drawn on by every proposal, swap and idea. Places from
+// OpenStreetMap only; facts carry their sources and the date checked.
+export const tripPlace = pgTable(
+  'trip_place',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id').notNull(),
+    name: text('name').notNull(),
+    /** PackKind */
+    kind: text('kind').notNull(),
+    tags: jsonb('tags').$type<string[]>().notNull().default([]),
+    /** { name, location, osmId, address } */
+    place: jsonb('place').$type<Record<string, unknown>>().notNull(),
+    why: text('why'),
+    neighbourhood: text('neighbourhood'),
+    durationMin: integer('duration_min'),
+    indoor: boolean('indoor'),
+    kidFriendly: boolean('kid_friendly'),
+    costText: text('cost_text'),
+    lessVisited: boolean('less_visited').notNull().default(false),
+    bookingRequired: boolean('booking_required'),
+    bookAheadDays: integer('book_ahead_days'),
+    /** Facts (model.ts) */
+    facts: jsonb('facts').$type<Record<string, unknown>>(),
+    /** PlaceImage */
+    image: jsonb('image').$type<Record<string, unknown>>(),
+    wikidata: text('wikidata'),
+    sources: jsonb('sources').$type<Array<{ url: string; title: string | null }>>().notNull().default([]),
+    /** 'candidate' | 'planned' | 'rejected' */
+    status: text('status').notNull().default('candidate'),
+    rejectReason: text('reject_reason'),
+    wishId: uuid('wish_id'),
+    checkedAt: timestamp('checked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('trip_place_trip_idx').on(t.tripId, t.status)],
+);
+
+// v8: durable planner jobs. The work still runs in the process; its state,
+// stages and result are here so a poll survives a restart (an interrupted job
+// reads as failed, never as a 404) and Cancel is real (`cancel_requested`).
+export const tripJob = pgTable(
+  'trip_job',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tripId: uuid('trip_id'),
+    ownerEmail: text('owner_email').notNull(),
+    /** TripJobKind */
+    kind: text('kind').notNull(),
+    /** 'running' | 'done' | 'failed' | 'cancelled' */
+    status: text('status').notNull().default('running'),
+    /** JobStage[] */
+    stages: jsonb('stages').$type<unknown[]>().notNull().default([]),
+    result: jsonb('result').$type<unknown>(),
+    error: text('error'),
+    cancelRequested: boolean('cancel_requested').notNull().default(false),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+  },
+  (t) => [index('trip_job_owner_idx').on(t.ownerEmail, t.startedAt)],
+);
+
+// ==========================================
+// Captures (2026-10-26)
+// ==========================================
+//
+// A dictation or a recorded conversation from the iPhone app: the audio and an
+// optional screenshot (both in the chat media store, `jkai_attachments`), the
+// phone's transcript and diarized turns, and what the analysis pass made of
+// them. Owner-only to start (`withDevice`), but every row carries the
+// recorder's intel `space_id` so family can be added without a migration.
+// Wire contract: SR-Main docs are the plan's CONTRACT.md (captures).
+// A new table: scripts/migrations/2026-10-26-captures-runtime-grant.sql.
+export const capture = pgTable(
+  'capture',
+  {
+    /** `cap_<random>` */
+    id: text('id').primaryKey(),
+    /** The recorder's intel space — `OWNER_SPACE` for now. */
+    spaceId: text('space_id').notNull(),
+    /** The recorder's email, from the device credential. */
+    principal: text('principal').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    endedAt: timestamp('ended_at', { withTimezone: true }),
+    durationS: doublePrecision('duration_s'),
+    /** `jkai_attachments.id` of the audio, once it has arrived. */
+    audioUploadId: text('audio_upload_id'),
+    transcript: text('transcript').notNull().default(''),
+    /** 'phone' | 'server' */
+    transcriptSource: text('transcript_source').notNull().default('phone'),
+    /** CaptureTurn[] */
+    turns: jsonb('turns').$type<unknown[]>().notNull().default([]),
+    /** CaptureSpeaker[] */
+    speakers: jsonb('speakers').$type<unknown[]>().notNull().default([]),
+    screenUploadId: text('screen_upload_id'),
+    /** CaptureScreen | null */
+    screen: jsonb('screen').$type<Record<string, unknown> | null>(),
+    /** { lat, lon, name? } | null */
+    place: jsonb('place').$type<Record<string, unknown> | null>(),
+    title: text('title'),
+    summary: text('summary'),
+    /** CaptureFlowItem[] */
+    flow: jsonb('flow').$type<unknown[]>().notNull().default([]),
+    /** CaptureEntity[] */
+    entities: jsonb('entities').$type<unknown[]>().notNull().default([]),
+    /** What the phone said it would upload and how it was started: { audio, screenshot, source, speakerCount, ownerSpeaker, appHint }. */
+    intake: jsonb('intake').$type<Record<string, unknown>>().notNull().default({}),
+    /** 'received' | 'analysing' | 'ready' | 'failed' */
+    status: text('status').notNull().default('received'),
+    error: text('error'),
+    /** Null when the spend is unknown (an unpriced or subscription model) — never a measured zero. */
+    analysisCostUsd: numeric('analysis_cost_usd', { precision: 12, scale: 6 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('capture_space_started_idx').on(t.spaceId, t.startedAt)],
+);
+
+export type Capture = typeof capture.$inferSelect;
+export type NewCapture = typeof capture.$inferInsert;
+
+/** One follow-up the analysis proposed for a capture. Nothing runs without a tap. */
+export const captureAction = pgTable(
+  'capture_action',
+  {
+    id: text('id').primaryKey(),
+    captureId: text('capture_id').notNull().references(() => capture.id, { onDelete: 'cascade' }),
+    spaceId: text('space_id').notNull(),
+    /** 'todo_me' | 'todo_other' | 'research' | 'calendar' | 'followup' | 'remember' */
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    detail: text('detail'),
+    /** A speaker label or a name, for `todo_other`. */
+    who: text('who'),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
+    /** 'proposed' | 'approved' | 'dismissed' | 'done' | 'failed' | 'refused' */
+    state: text('state').notNull().default('proposed'),
+    refKind: text('ref_kind'),
+    refId: text('ref_id'),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+  },
+  (t) => [index('capture_action_capture_idx').on(t.captureId)],
+);
+
+export type CaptureAction = typeof captureAction.$inferSelect;

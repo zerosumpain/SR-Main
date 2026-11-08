@@ -34,6 +34,14 @@ export type NavItem = {
   ownerOnly?: boolean;
   /** Custom active test; defaults to exact-or-prefix on href. */
   match?: (path: string) => boolean;
+  /**
+   * A cell that opens a menu. The cell itself still links to `href`; hovering
+   * it (or its caret, on a touch screen) offers these as well — the jkai family
+   * that has no section strip of its own on a site page.
+   */
+  children?: NavItem[];
+  /** A short line under the label in a menu ("Plan the days away"). */
+  meta?: string;
 };
 
 export type NavSection = {
@@ -80,6 +88,10 @@ export const CHROME_EXCLUSIONS: { prefix: string; exact?: boolean; why: string }
   },
   { prefix: '/auth-error', why: 'The auth gate’s failure page — same reason as /login.' },
   {
+    prefix: '/games',
+    why: 'TV boards for family games (`/games/<game>`), cast to a television across the room: a full-viewport 16:9 stage with no pointer and no login, so every cell on a nav bar would be a dead end.',
+  },
+  {
     prefix: '/deepdive/share',
     why: 'A full-viewport research desk — `position: fixed; inset: 0` declared on both the host and ResearchDesk’s own shell — already wearing CommandBar.',
   },
@@ -94,37 +106,45 @@ export const CHROME_EXCLUSIONS: { prefix: string; exact?: boolean; why: string }
  * it wears the ordinary bar like everything else.
  */
 
-/** Suffix-matched carve-outs: full-viewport players and machine-read exports. */
+/** Suffix-matched carve-outs: full-viewport surfaces. */
 const EXCLUDED_SUFFIXES = [
-  '/print', // headless-browser PDF + OG poster target; anything above the slides lands in the export
   '/desk', // research desk — fixed inset:0, already wears CommandBar
 ];
 
-/**
- * Deck player: `/decks/<slug>` exactly. DeckShell is `position: fixed; inset: 0`
- * and scales a 1280x720 stage off its measured host, so a 48px bar changes the
- * rendered slide scale. `/decks` and `/decks/<slug>/edit` DO wear the bar.
- */
-function isDeckPlayer(path: string): boolean {
-  const parts = path.split('/').filter(Boolean);
-  return parts.length === 2 && parts[0] === 'decks';
-}
-
 export function wearsSharedChrome(path: string): boolean {
-  if (isDeckPlayer(path)) return false;
   if (EXCLUDED_SUFFIXES.some((s) => path.endsWith(s))) return false;
   return !CHROME_EXCLUSIONS.some((x) => (x.exact ? path === x.prefix : under(x.prefix, path)));
 }
 
 /**
+ * The jkai cell: the assistant and the things it does without being asked to
+ * chat — it notices (Daydreams), it plans (Trips) and it watches prices (Wish
+ * list). Neither /trips nor /home/wishlist has a strip of its own on a site
+ * page, so this menu is how they are reached from anywhere.
+ * Every nav bar renders it through `JkaiMenu.svelte`.
+ */
+export const JKAI_ITEM: NavItem = {
+  label: 'jkai',
+  href: '/jkai',
+  ownerOnly: true,
+  match: (p) => under('/jkai', p) || under('/trips', p),
+  children: [
+    { label: 'jkai', href: '/jkai', ownerOnly: true, meta: 'Ask, chat, run things', match: (p) => p === '/jkai' },
+    { label: 'Daydreams', href: '/jkai/daydreams', ownerOnly: true, meta: 'What it noticed while idle' },
+    { label: 'Trips', href: '/trips', ownerOnly: true, meta: 'Plan the days away' },
+    { label: 'Wish list', href: '/home/wishlist', ownerOnly: true, meta: 'Things to buy, watched for a price' },
+  ],
+};
+
+/**
  * The site strip — the destinations on offer from any page that is not inside a
  * section of its own. Home is NOT here: it is the icon cell, and offering it
- * twice was the old strip's tell.
+ * twice was the old strip's tell. Nor is jkai: it is `JKAI_ITEM`, which every
+ * bar renders on its own, strip or no strip.
  */
 export const SITE_ITEMS: NavItem[] = [
   { label: 'Projects', href: '/projects' },
   { label: 'Writing', href: '/blog' },
-  { label: 'Decks', href: '/decks' },
   { label: 'Health', href: '/health' },
   { label: 'Shipped', href: '/releases', ownerOnly: true },
   { label: 'Home', href: '/home', ownerOnly: true },
@@ -133,7 +153,6 @@ export const SITE_ITEMS: NavItem[] = [
   { label: 'News', href: '/news', ownerOnly: true },
   { label: 'Research', href: '/research', ownerOnly: true },
   { label: 'Drive', href: '/drive', ownerOnly: true },
-  { label: 'jkai', href: '/jkai', ownerOnly: true },
 ];
 
 /**
@@ -214,8 +233,19 @@ export const SECTIONS: NavSection[] = [
       // so the back link from the audit walks to the hub, not to the catalogue.
       { label: 'Sources', href: '/jkai/sources' },
       { label: 'Activity', href: '/jkai/activity' },
-      { label: 'Agent team', href: '/jkai/agents' },
+      { label: 'Prompts', href: '/jkai/prompts' },
     ],
+  },
+  {
+    // The trip planner is a jkai surface that lives at /trips, the way research
+    // lives at /research: its way up is jkai, not the home icon.
+    id: 'trips',
+    label: 'Trips',
+    rootHref: '/trips',
+    ownerOnly: true,
+    parent: '/jkai',
+    match: (p) => under('/trips', p),
+    items: [],
   },
   {
     id: 'health',
@@ -249,6 +279,7 @@ export const SECTIONS: NavSection[] = [
     items: [
       { label: 'Now', href: '/home', ownerOnly: true, match: (p) => p === '/home' },
       { label: 'People', href: '/home/people', ownerOnly: true },
+      { label: 'Backlog', href: '/home/backlog', ownerOnly: true },
       { label: 'Voice', href: '/home/voice', ownerOnly: true },
       { label: 'Echoes', href: '/home/echoes', ownerOnly: true },
       { label: 'Devices', href: '/home/devices', ownerOnly: true },
@@ -279,13 +310,6 @@ export const SECTIONS: NavSection[] = [
     label: 'Writing',
     rootHref: '/blog',
     match: (p) => under('/blog', p),
-    items: [],
-  },
-  {
-    id: 'decks',
-    label: 'Decks',
-    rootHref: '/decks',
-    match: (p) => under('/decks', p),
     items: [],
   },
   {
@@ -350,10 +374,10 @@ function isGrouping(path: string): boolean {
 /**
  * A parent you cannot leave is not a parent.
  *
- * `/decks/<slug>/edit` sits one level under the deck PLAYER, which is carved
- * out of shared chrome — a full-viewport `position: fixed; inset: 0` stage with
- * no bar on it. Walking "up" into it strands the reader with nothing but the
- * browser's own back button. So a step that lands on a chrome-less route is
+ * A page can sit one level under a route that is carved out of shared chrome —
+ * a full-viewport `position: fixed; inset: 0` stage with no bar on it. Walking
+ * "up" into it strands the reader with nothing but the browser's own back
+ * button. So a step that lands on a chrome-less route is
  * skipped, the same as a grouping directory: both are places the bar cannot
  * follow you to.
  */
@@ -381,11 +405,22 @@ export function visibleItems(items: NavItem[], isOwner: boolean, reach: readonly
   if (isOwner) return items;
   const out: NavItem[] = [];
   for (const i of items) {
-    if (!i.ownerOnly) out.push(i);
-    else if (reach.includes(i.href)) out.push(i);
+    // A menu offers a member only the rows they can open; with none, it is a plain cell.
+    // The menu's own root row ("jkai" → /jkai) is never rewritten to a page
+    // under it: everything is under it, so it would duplicate another row.
+    const kids = i.children
+      ? visibleItems(
+          i.children.filter((c) => c.href !== i.href || reach.includes(c.href)),
+          false,
+          reach,
+        )
+      : undefined;
+    const cell = { ...i, children: kids?.length ? kids : undefined };
+    if (!i.ownerOnly) out.push(cell);
+    else if (reach.includes(i.href)) out.push(cell);
     else {
       const inside = reach.find((r) => under(i.href, r));
-      if (inside) out.push({ ...i, href: inside });
+      if (inside) out.push({ ...cell, href: inside });
     }
   }
   return out;
@@ -438,8 +473,8 @@ export function subnavFor(path: string, isOwner = true, reach: readonly string[]
  * John pointed at on /jkai and /health. A section without children (or no
  * section at all, i.e. the landing page) shows the SITE strip instead, which is
  * the nav the main page has always had. Without this fallback the header
- * rendered an empty band on `/`, `/blog`, `/projects`, `/decks` and
- * `/releases` — every top-level page on the site.
+ * rendered an empty band on `/`, `/blog`, `/projects` and `/releases` —
+ * every top-level page on the site.
  */
 export function navCellsFor(path: string, isOwner = true, reach: readonly string[] = []): NavItem[] {
   const own = subnavFor(path, isOwner, reach);

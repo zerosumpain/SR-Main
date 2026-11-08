@@ -1,5 +1,5 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
-import { runScrape } from '$lib/workflows/scraper/runner';
+import { runScrape } from '$lib/scraper/runner';
 
 export const POST: RequestHandler = async ({ request }) => {
   const job = await request.json();

@@ -1,26 +1,50 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { PublicShare } from '$lib/projects/shares';
+  import type { SharedLink } from '$lib/projects/shares';
+  import type { ShareVisitor } from '$lib/projects/share-visitor';
+  import { sharePackLabel, type SharePack } from '$lib/projects/share-pack';
 
   interface Props {
     projectKey: string;
     href: string;        // the project's route path, e.g. /projects/policy-engine or /projects/terminal-descent/
+    shareBase?: string;  // the project's own domain, when it has one (https://data-spine.com/)
+    sharePassword?: boolean; // the project's app can ask a link's recipient for a password (the Spine)
+    sharePacks?: readonly SharePack[]; // the audience packs a link can open, default first (the Spine: DfE, schools)
     title?: string;
     onClose: () => void;
   }
-  let { projectKey, href, title = '', onClose }: Props = $props();
+  let { projectKey, href, shareBase, sharePassword = false, sharePacks = [], title = '', onClose }: Props = $props();
 
-  let shares = $state<PublicShare[]>([]);
+  let shares = $state<SharedLink[]>([]);
   let loading = $state(true);
   let creating = $state(false);
   let label = $state('');
   let expiresInDays = $state(0); // 0 = no expiry
   let freshUrl = $state<string | null>(null);
+  // Off by default: a link opens with no password unless the owner asks for one.
+  let askPassword = $state(false);
+  let password = $state('');
+  let showPassword = $state(false);
+  let freshHasPassword = $state(false);
+  // The default pack (the first) unless the owner picks another: an unchanged
+  // form makes the same link it always did.
+  // svelte-ignore state_referenced_locally
+  let pack = $state(sharePacks[0]?.id ?? '');
+  let freshPack = $state<string | null>(null);
+  const pwLen = $derived(password.trim().length);
+  const pwOk = $derived(!askPassword || (pwLen >= 4 && pwLen <= 128));
+  // Say the length rule only once something has been typed that breaks it
+  // (spaces too: they are trimmed away, so they alone are too short).
+  const pwHint = $derived(askPassword && password.length > 0 && !pwOk);
   let copied = $state(false);
   let err = $state<string | null>(null);
 
-  const origin = typeof location !== 'undefined' ? location.origin : 'https://strangeramblings.com';
-  const shareUrl = (token: string) => `${origin}${href}${href.includes('?') ? '&' : '?'}t=${token}`;
+  const LIVE = 'https://strangeramblings.com';
+  const origin = typeof location !== 'undefined' ? location.origin : LIVE;
+  // A project's own domain only knows links the live site minted, so a local
+  // preview (its own database) links to itself rather than to that domain.
+  const target = shareBase && origin === LIVE ? shareBase : `${origin}${href}`;
+  const shareUrl = (token: string) => `${target}${target.includes('?') ? '&' : '?'}t=${token}`;
 
   async function load() {
     loading = true;
@@ -38,20 +62,35 @@
   }
 
   async function create() {
+    if (!pwOk) return;
     creating = true;
     err = null;
     freshUrl = null;
+    const withPassword = sharePassword && askPassword;
     try {
       const res = await fetch('/api/projects/share', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: projectKey, label: label || undefined, expiresInDays: expiresInDays || undefined }),
+        body: JSON.stringify({
+          key: projectKey,
+          label: label || undefined,
+          expiresInDays: expiresInDays || undefined,
+          password: withPassword ? password : undefined,
+          pack: sharePacks.length && pack ? pack : undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.token) {
         freshUrl = shareUrl(data.token);
+        freshHasPassword = withPassword;
+        freshPack = sharePacks.length > 1 ? sharePackLabel(sharePacks, data.pack ?? null) : null;
         label = '';
-        copy(freshUrl);
+        // The next link starts as this one did: no password unless asked for, the default pack.
+        askPassword = false;
+        password = '';
+        showPassword = false;
+        pack = sharePacks[0]?.id ?? '';
+        void copy(freshUrl);
         await load();
       } else {
         err = data.error ?? 'Failed to create link';
@@ -74,18 +113,61 @@
     } catch { /* ignore */ }
   }
 
-  function copy(url: string) {
+  let copyFailed = $state(false);
+
+  /** Copy the link, saying "copied" only when it really was. The clipboard API
+   *  needs a secure page and a recent click, so a plain-http preview or the
+   *  copy straight after creating falls back to selecting the box and copying. */
+  async function copy(url: string) {
+    copyFailed = false;
+    let ok = false;
     try {
-      navigator.clipboard?.writeText(url);
-      copied = true;
-      setTimeout(() => (copied = false), 1600);
-    } catch { /* clipboard blocked */ }
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+        ok = true;
+      }
+    } catch { /* blocked, try the fallback */ }
+    if (!ok) ok = copyBySelection(url);
+    copied = ok;
+    copyFailed = !ok;
+    if (ok) setTimeout(() => (copied = false), 1600);
+  }
+
+  function copyBySelection(url: string): boolean {
+    const box = document.createElement('textarea');
+    box.value = url;
+    box.setAttribute('readonly', '');
+    box.style.position = 'fixed';
+    box.style.opacity = '0';
+    document.body.appendChild(box);
+    box.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    box.remove();
+    return ok;
   }
 
   const fmt = (d: string | Date | null) =>
     d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
-  const statusOf = (s: PublicShare): 'active' | 'revoked' | 'expired' =>
+  const statusOf = (s: SharedLink): 'active' | 'revoked' | 'expired' =>
     s.revokedAt ? 'revoked' : s.expiresAt && new Date(s.expiresAt).getTime() <= Date.now() ? 'expired' : 'active';
+  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  const day = (d: string | Date) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  /** "opened 4× (last 24 Oct 2026) · 2 browsers · 1 network": the link's own count, then the people once someone was counted. */
+  const usage = (s: SharedLink) =>
+    `opened ${s.opens}×` +
+    (s.lastUsedAt ? ` (last ${fmt(s.lastUsedAt)})` : '') +
+    (s.browsers > 0 ? ` · ${plural(s.browsers, 'browser')} · ${plural(s.networks, 'network')}` : '');
+  /** "Browser 1 · Chrome · Windows · GB · network A · 4 opens · first 22 Oct, last 24 Oct". */
+  const visitorLine = (v: ShareVisitor) =>
+    [
+      v.browser !== null ? `Browser ${v.browser}` : null,
+      v.agent ?? 'Unknown browser',
+      v.country,
+      v.network ? `network ${v.network}` : null,
+      plural(v.opens, 'open'),
+      day(v.firstSeen) === day(v.lastSeen) ? day(v.lastSeen) : `first ${day(v.firstSeen)}, last ${day(v.lastSeen)}`,
+    ].filter(Boolean).join(' · ');
 
   onMount(() => { load(); });
   function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
@@ -104,7 +186,9 @@
     </header>
     <p class="sh-blurb">Anyone with a link below can open this page — <b>even while it's private</b>, no sign-in needed. Each link is unguessable; revoke any one instantly.</p>
 
-    <div class="sh-create">
+    <!-- A form, so Enter in the label or password creates the link; the
+         password option sits before Create so the flow reads top to bottom. -->
+    <form class="sh-create" onsubmit={(e) => { e.preventDefault(); void create(); }}>
       <input class="sh-in" placeholder="Label (optional) — e.g. for Sam at DfE" bind:value={label} maxlength="80" />
       <select class="sh-sel" bind:value={expiresInDays}>
         <option value={0}>No expiry</option>
@@ -112,8 +196,53 @@
         <option value={30}>30 days</option>
         <option value={90}>90 days</option>
       </select>
-      <button class="sh-create-btn" onclick={create} disabled={creating}>{creating ? '…' : '+ Create link'}</button>
-    </div>
+      {#if sharePacks.length > 1}
+        <label class="sh-pack">
+          <span>Opens</span>
+          <select class="sh-sel" bind:value={pack} aria-label="Which pack the link opens">
+            {#each sharePacks as p (p.id)}
+              <option value={p.id}>{p.label}</option>
+            {/each}
+          </select>
+          <span class="sh-once">The recipient sees this pack only.</span>
+        </label>
+      {/if}
+      {#if sharePassword}
+        <div class="sh-pass">
+          <label class="sh-pass-tog">
+            <input type="checkbox" bind:checked={askPassword} />
+            Ask for a password
+          </label>
+          {#if askPassword}
+            <div class="sh-urlrow">
+              <input
+                class="sh-in"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password the recipient must give"
+                aria-label="Link password"
+                autocomplete="new-password"
+                required
+                minlength="4"
+                maxlength="128"
+                aria-invalid={pwHint}
+                aria-describedby={pwHint ? 'sh-pw-hint' : undefined}
+                bind:value={password}
+              />
+              <button
+                class="sh-show"
+                type="button"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onclick={() => (showPassword = !showPassword)}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {#if pwHint}<span class="sh-once" id="sh-pw-hint">4–128 characters.</span>{/if}
+          {/if}
+        </div>
+      {/if}
+      <button class="sh-create-btn" type="submit" disabled={creating || !pwOk}>{creating ? '…' : '+ Create link'}</button>
+    </form>
 
     {#if freshUrl}
       <div class="sh-fresh">
@@ -122,6 +251,9 @@
           <input class="sh-url" readonly value={freshUrl} onclick={(e) => e.currentTarget.select()} />
           <button class="sh-copy" onclick={() => copy(freshUrl ?? '')}>{copied ? '✓ Copied' : 'Copy'}</button>
         </div>
+        {#if copyFailed}<span class="sh-err">Couldn't copy automatically — select the link above and copy it.</span>{/if}
+        {#if freshPack}<span class="sh-once sh-fresh-pw">Opens the {freshPack}.</span>{/if}
+        {#if freshHasPassword}<span class="sh-once sh-fresh-pw">Asks for a password — send it separately, not with the link.</span>{/if}
         <span class="sh-once">Copy it now — the link itself is shown only once.</span>
       </div>
     {/if}
@@ -141,10 +273,25 @@
             <div class="sh-row-top">
               <span class="sh-row-label">{s.label || 'Untitled link'}</span>
               <span class="sh-badge sh-{st}">{st}</span>
+              {#if sharePacks.length > 1}<span class="sh-badge sh-pack-badge">{sharePackLabel(sharePacks, s.pack)}</span>{/if}
+              {#if s.hasPassword}<span class="sh-badge sh-pw">password</span>{/if}
+              {#if s.likelyForwarded}<span class="sh-badge sh-fwd">likely forwarded</span>{/if}
             </div>
             <div class="sh-row-meta">
-              created {fmt(s.createdAt)} · {s.expiresAt ? `expires ${fmt(s.expiresAt)}` : 'no expiry'} · opened {s.useCount}×{s.lastUsedAt ? ` (last ${fmt(s.lastUsedAt)})` : ''}
+              created {fmt(s.createdAt)} · {s.expiresAt ? `expires ${fmt(s.expiresAt)}` : 'no expiry'} · {usage(s)}
             </div>
+            {#if s.visitors.length > 0}
+              <details class="sh-vis">
+                <summary aria-label="{plural(s.visitors.length + s.hidden, 'visitor')} to {s.label || 'Untitled link'}">{plural(s.visitors.length + s.hidden, 'visitor')}</summary>
+                <p class="sh-vis-note">An estimate: one person on two devices or browsers counts twice. Link previews are listed but not counted{s.hasPassword ? '; the password page counts as an open too' : ''}.</p>
+                <ul>
+                  {#each s.visitors as v, i (i)}
+                    <li class:sh-vis-auto={v.browser === null}>{visitorLine(v)}</li>
+                  {/each}
+                </ul>
+                {#if s.hidden > 0}<p class="sh-vis-note">{plural(s.hidden, 'earlier row')} not shown.</p>{/if}
+              </details>
+            {/if}
             {#if st === 'active'}
               <button class="sh-revoke" onclick={() => revoke(s.id)}>Revoke</button>
             {/if}
@@ -175,6 +322,13 @@
   .sh-create-btn:hover { background: var(--accent-hover); }
   .sh-create-btn:disabled { opacity: 0.5; cursor: default; }
 
+  .sh-pack { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 2px 0; font-size: var(--fs-label); color: var(--text-primary); }
+  .sh-pass { flex: 1 0 100%; margin: 2px 0; }
+  .sh-pass-tog { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-label); color: var(--text-primary); cursor: pointer; }
+  .sh-pass-tog input { accent-color: var(--accent); margin: 0; }
+  .sh-show { flex-shrink: 0; background: none; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); padding: 0 11px; font-size: var(--fs-label-xs); color: var(--text-secondary); cursor: pointer; }
+  .sh-show:hover { color: var(--text-primary); }
+
   .sh-fresh { margin-top: 12px; padding: 11px 13px; border-radius: var(--radius-sharp); background: color-mix(in srgb, var(--accent) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
   .sh-fresh-lab { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
   .sh-urlrow { display: flex; gap: 6px; margin: 6px 0 5px; }
@@ -182,6 +336,7 @@
   .sh-copy { flex-shrink: 0; background: var(--accent); color: #fff; border: none; border-radius: var(--radius-sharp); padding: 0 12px; font-size: var(--fs-label-xs); font-weight: 600; cursor: pointer; transition: background var(--t-fast) var(--ease-out); }
   .sh-copy:hover { background: var(--accent-hover); }
   .sh-once { font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .sh-fresh-pw { display: block; margin-bottom: 2px; color: var(--text-primary); }
 
   .sh-err { margin: 10px 0 0; font-size: var(--fs-label-xs); color: var(--error); }
 
@@ -190,13 +345,23 @@
   .sh-muted { margin: 8px 0 0; font-size: var(--fs-label-xs); color: var(--text-secondary); }
   .sh-row { position: relative; margin-top: 8px; padding: 9px 11px; border: 1px solid var(--card-border); border-radius: var(--radius-sharp); background: var(--bg); }
   .sh-row.dead { opacity: 0.6; }
-  .sh-row-top { display: flex; align-items: center; gap: 8px; }
+  .sh-row-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding-right: 64px; }
   .sh-row-label { font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); }
   .sh-badge { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 6px; border-radius: var(--radius-sharp); }
   .sh-active { background: var(--success-bg); color: var(--success); }
   .sh-revoked { background: var(--surface-overlay); color: var(--text-secondary); }
   .sh-expired { background: var(--warn-bg); color: var(--warn); }
+  .sh-pw { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+  .sh-pack-badge { background: var(--surface-overlay); color: var(--text-primary); }
+  .sh-fwd { background: var(--warn-bg); color: var(--warn); }
   .sh-row-meta { margin-top: 3px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); padding-right: 64px; }
+  .sh-vis { margin-top: 5px; font-size: var(--fs-label-xs); color: var(--text-secondary); }
+  .sh-vis summary { font-family: var(--font-mono); cursor: pointer; width: fit-content; }
+  .sh-vis summary:hover { color: var(--text-primary); }
+  .sh-vis-note { margin: 5px 0 0; }
+  .sh-vis ul { margin: 5px 0 0; padding: 0; list-style: none; font-family: var(--font-mono); }
+  .sh-vis li { padding: 2px 0; color: var(--text-primary); overflow-wrap: anywhere; }
+  .sh-vis li.sh-vis-auto { color: var(--text-secondary); }
   .sh-revoke { position: absolute; top: 9px; right: 10px; background: none; border: 1px solid var(--error-border); color: var(--error); border-radius: var(--radius-sharp); padding: 3px 9px; font-size: var(--fs-label-xs); cursor: pointer; }
   .sh-revoke:hover { background: var(--error-bg); }
 </style>

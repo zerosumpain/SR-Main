@@ -1,8 +1,5 @@
-// Personalized Briefing Engine — a scheduled digest that gathers what you care
-// about (question intents, recent research, live vitals/signals), synthesises it
-// with the LLM, stores it, and delivers it over WhatsApp. Mirrors the proven
-// self-improvement harness (host/kill gates, datastore dogfooding), trimmed to a
-// single gather→synthesise→deliver flow.
+// Briefing types and settings. The `canvas:morning-briefing` workflow produces
+// the briefing; Main stores its collection, shows it and records feedback.
 
 import type { BriefingMemoryRow } from '$lib/constants/briefing';
 export {
@@ -13,9 +10,6 @@ export {
 
 // Re-exported so nothing that already imported them from here had to change.
 export { BRIEFINGS_COLLECTION, FEEDBACK_COLLECTION, briefingDateLabel } from '$lib/constants/briefing';
-
-export const CRON_EXPR = '30 6 * * *'; // 06:30 daily
-export const CRON_TZ = 'Europe/London';
 
 /**
  * The canvas workflow that actually produces the briefing. It gathers the
@@ -51,6 +45,22 @@ export interface BriefingFactRow {
   source: string;
   /** Where the fact can be checked — a room of the hub, a thought's drill. */
   href?: string | null;
+  /** 0–100, how strongly the composer put it forward (from 2026-10-03). */
+  salience?: number;
+  /** The composer's code-written judgement, e.g. "52m shorter than your average". */
+  assessment?: string;
+  /** Asks something of the reader today. */
+  action?: boolean;
+  /** Said word-for-word in the previous day's briefing. */
+  repeat?: boolean;
+}
+
+/** Whether the written summary survived the draft check (from 2026-10-03). */
+export interface BriefingVerification {
+  verified: boolean;
+  usedFallback: boolean;
+  violations: string[];
+  rejectedDraft?: string | null;
 }
 
 /**
@@ -75,8 +85,12 @@ export interface BriefingDetail {
   /** Memories learned inside the configured recency window, newest first. */
   memories?: BriefingMemoryRow[];
   facts: BriefingFactRow[];
-  gaps: Array<{ section: string; reason: string }>;
+  gaps: Array<{ section: string; reason: string; required?: boolean; chronic?: boolean; notify?: boolean }>;
   sources: BriefingSourceRow[];
+  /** weekday / monday / weekend / travel — what the composer led with. */
+  mode?: string | null;
+  ranking?: { mode: string; lead: number; repeats: number; feedbackApplied: string[]; comparedWith: string | null } | null;
+  verification?: BriefingVerification | null;
   /**
    * The Daydreams block exactly as the WhatsApp message carries it (≤ 8 lines).
    * Written by `briefing-compose` from 2026-09-03; absent on older records.
@@ -84,6 +98,61 @@ export interface BriefingDetail {
   daydreamsText?: string;
   /** The local day that block describes, `YYYY-MM-DD`. */
   daydreamsDay?: string | null;
+  /**
+   * The 19 factor cards, in display order (from 2026-10-27). Absent on older
+   * records — every reader treats a missing list as empty.
+   */
+  factors?: FactorCard[];
+  /** Cross-factor observations, most salient first (0–6). Absent on older records. */
+  connections?: BriefingConnection[];
+}
+
+export const FACTOR_GROUPS = ['Place', 'Body', 'Day', 'Home & family', 'Intelligence', 'Systems'] as const;
+export type FactorGroup = (typeof FACTOR_GROUPS)[number];
+
+export type FactorKey =
+  | 'location' | 'weather-here' | 'weather-home' | 'air' | 'daylight' | 'trip'
+  | 'sleep' | 'readiness' | 'activity'
+  | 'calendar' | 'email' | 'todos'
+  | 'family' | 'house'
+  | 'news' | 'policy' | 'local' | 'intel'
+  | 'systems';
+
+export type FactorStatus = 'ok' | 'stale' | 'empty' | 'failed' | 'off';
+
+export interface FactorFact {
+  label: string;
+  value: string;
+  assessment?: string;
+  /** Relative (`/jkai/...`) or absolute (a news story). */
+  href?: string | null;
+  action?: boolean;
+}
+
+/** One of the briefing's 19 factors, as SR-Workflows' composer writes it. */
+export interface FactorCard {
+  key: FactorKey;
+  /** 1..19, display order. */
+  n: number;
+  label: string;
+  group: FactorGroup;
+  /** An SF Symbol name; the web maps it to a glyph. */
+  icon: string;
+  status: FactorStatus;
+  /** One code-written line; '' when failed or off. */
+  headline: string;
+  /** 0–100, the max of its facts. */
+  salience: number;
+  facts: FactorFact[];
+  /** The source ledger's one-liner (the reason when not ok). */
+  detail: string;
+}
+
+export interface BriefingConnection {
+  text: string;
+  factors: FactorKey[];
+  salience: number;
+  action?: boolean;
 }
 
 export interface BriefingData {
@@ -106,11 +175,6 @@ export interface BriefingData {
 
 export function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
-}
-
-/** Cast a typed record to the datastore's generic data bag. */
-export function asData<T>(value: T): Record<string, unknown> {
-  return value as unknown as Record<string, unknown>;
 }
 
 /** e.g. "Fri 19 Jul" for a briefing title. */

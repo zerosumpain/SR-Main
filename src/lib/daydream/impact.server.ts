@@ -17,9 +17,15 @@ export interface RecentResult {
   href: string;
 }
 
-export async function loadImpact(now = new Date()): Promise<{ impact: Impact; results: RecentResult[] }> {
+/**
+ * The three reads. `detail` adds what only the Engine Room prints: each
+ * note's evidence (for the by-area breakdown) and each commission's and build
+ * idea's title and link key (for the recent results). Without it the reads
+ * select statuses and dates only.
+ */
+async function readImpact(now: Date, detail: boolean) {
   const since = new Date(now.getTime() - (IMPACT_WEEKS + 1) * 7 * 86_400_000);
-  const [rows, commissions, builds] = await Promise.all([
+  return Promise.all([
     db
       .select({
         kind: daydreamThoughts.kind,
@@ -29,20 +35,19 @@ export async function loadImpact(now = new Date()): Promise<{ impact: Impact; re
         feedbackAt: daydreamThoughts.feedbackAt,
         createdAt: daydreamThoughts.createdAt,
         deliveredAt: daydreamThoughts.deliveredAt,
-        evidence: daydreamThoughts.evidence,
+        evidence: detail ? daydreamThoughts.evidence : sql<unknown>`null`,
       })
       .from(daydreamThoughts)
       .where(and(eq(daydreamThoughts.subject, DEFAULT_SUBJECT), gte(daydreamThoughts.createdAt, since))),
     db.execute(
-      sql`SELECT id::text AS id, state, approved_at, created_at, updated_at, spec->>'title' AS title
+      sql`SELECT state, approved_at, created_at, updated_at${detail ? sql`, id::text AS id, spec->>'title' AS title` : sql``}
         FROM daydream_commissions WHERE principal_id = 'owner' ORDER BY updated_at DESC LIMIT 500`,
     ),
     // Build ideas the loop proposed: backlog items it filed or cited itself on
     // (intake MERGES a restated idea as a citation, keeping the item's source), less
     // the backlog groups a fact check files for itself.
     db.execute(
-      sql`SELECT r.key AS slug, r.data->>'title' AS title, r.data->>'status' AS status,
-          r.data->'grooming'->>'acceptedAt' AS accepted_at, r.created_at, r.updated_at
+      sql`SELECT r.data->>'status' AS status, r.data->'grooming'->>'acceptedAt' AS accepted_at, r.created_at, r.updated_at${detail ? sql`, r.key AS slug, r.data->>'title' AS title` : sql``}
         FROM datastore_records r
         JOIN datastore_collections col ON col.id = r.collection_id AND col.slug = 'improvement_backlog'
         WHERE r.data->>'commissionId' IS NULL
@@ -50,8 +55,13 @@ export async function loadImpact(now = new Date()): Promise<{ impact: Impact; re
         ORDER BY r.updated_at DESC LIMIT 500`,
     ),
   ]);
+}
 
-  const date = (v: unknown): Date | null => (v == null ? null : v instanceof Date ? v : new Date(String(v)));
+const date = (v: unknown): Date | null => (v == null ? null : v instanceof Date ? v : new Date(String(v)));
+
+export async function loadImpact(now = new Date()): Promise<{ impact: Impact; results: RecentResult[] }> {
+  const [rows, commissions, builds] = await readImpact(now, true);
+
   const cs: Array<ImpactCommission & { id: string; title: string }> = commissions.rows.map((r) => ({
     id: String(r.id),
     title: String(r.title ?? 'A fact check'),
@@ -82,4 +92,28 @@ export async function loadImpact(now = new Date()): Promise<{ impact: Impact; re
     .slice(0, 8);
 
   return { impact: computeImpact(rows, cs, bs, now), results };
+}
+
+/**
+ * Impact for a caller that prints counts and ratios only (the landing page's
+ * showcase): the same figures from reads that never select a title, a link
+ * key or a note's evidence. `byArea` therefore has every note under 'mixed';
+ * every other field matches loadImpact's.
+ */
+export async function loadImpactCounts(now = new Date()): Promise<Impact> {
+  const [rows, commissions, builds] = await readImpact(now, false);
+  const cs: ImpactCommission[] = commissions.rows.map((r) => ({
+    state: String(r.state),
+    approvedAt: date(r.approved_at),
+    createdAt: date(r.created_at)!,
+    updatedAt: date(r.updated_at)!,
+  }));
+  const bs: ImpactBuild[] = builds.rows.map((r) => ({
+    status: String(r.status ?? 'open'),
+    accepted: r.accepted_at != null,
+    acceptedAt: date(r.accepted_at),
+    createdAt: date(r.created_at)!,
+    updatedAt: date(r.updated_at)!,
+  }));
+  return computeImpact(rows, cs, bs, now);
 }

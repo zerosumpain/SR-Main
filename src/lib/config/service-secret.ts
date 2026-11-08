@@ -5,18 +5,12 @@
 // security panel, which shows homeserv and the VPS side by side.
 //
 // It was called `HERMES_BRIDGE_SECRET` because the gateway was its first user.
-// Hermes is gone and the secret is not: renaming it is the point of this
-// module. The old name is read SECOND rather than dropped, so a host whose
-// `.env` has not been updated yet keeps authenticating instead of 503-ing —
-// deploys and env edits do not land at the same instant, and the failure mode
-// of getting that wrong is every MCP tool call refused at once.
-//
-// Once both hosts carry `SERVICE_BRIDGE_SECRET`, delete the fallback here and
-// the matching one in `$lib/mcp/jsonrpc` (which reads `process.env` too, for
-// tests, and so cannot use this module).
+// The old name was read as a fallback until both hosts carried the new one
+// with the same value (checked 2026-10-01); `$lib/mcp/jsonrpc` reads the same
+// variable through `process.env`, for tests, and so cannot use this module.
 import { env } from '$env/dynamic/private';
 
-/** The configured secret, or '' when neither name is set on this host. */
+/** The configured secret, or '' when it is not set on this host. */
 export function serviceBridgeSecret(): string {
-  return env.SERVICE_BRIDGE_SECRET || env.HERMES_BRIDGE_SECRET || '';
+  return env.SERVICE_BRIDGE_SECRET || '';
 }

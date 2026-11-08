@@ -3,6 +3,11 @@ import { env } from '$env/dynamic/private';
 import { sessionCaller, browserSessionEmail } from '$lib/server/session-introspection';
 import { isOwnerEmail, isEmailAllowedToSignIn } from '$lib/server/access';
 import { verifyViewAs } from '$lib/server/view-as';
+import { DRIVE_AUDIENCE, driveClaimsFor } from '$lib/server/session-claims';
+import { projectAccessFor, projectKeyForAudience } from '$lib/projects/access-claim';
+import { readShareVisit } from '$lib/projects/share-visitor';
+import { appWebSessionCookie, verifyAppWebSession } from '$lib/server/app-web-session';
+import { isDeviceLive } from '$lib/server/native-auth';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -13,10 +18,54 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!env.AUTH_SECRET) return json({ error: 'Session authority unavailable' }, { status: 503, headers });
   const cookie = request.headers.get('cookie') ?? '';
   if (cookie.length > 32768) return json({ error: 'Cookie too large' }, { status: 400, headers });
-  const email = await browserSessionEmail(cookie, env.AUTH_SECRET);
-  if (!email || !(await isEmailAllowedToSignIn(email))) return json({ email: null, viewingAs: null }, { headers });
-  const value = cookie.split(';').map(x => x.trim()).find(x => x.startsWith('sr_view_as='))?.slice(11);
-  const candidate = isOwnerEmail(email) ? verifyViewAs(env.AUTH_SECRET, email, value) : null;
-  const viewingAs = candidate && await isEmailAllowedToSignIn(candidate.email) ? candidate.email : null;
-  return json({ email, viewingAs }, { headers });
+  const sessionEmail = (await browserSessionEmail(cookie, env.AUTH_SECRET)) ?? (await appSessionEmail(audience as string, cookie, env.AUTH_SECRET));
+  const email = sessionEmail && (await isEmailAllowedToSignIn(sessionEmail)) ? sessionEmail : null;
+  let viewingAs: string | null = null;
+  if (email) {
+    const value = cookie.split(';').map(x => x.trim()).find(x => x.startsWith('sr_view_as='))?.slice(11);
+    const candidate = isOwnerEmail(email) ? verifyViewAs(env.AUTH_SECRET, email, value) : null;
+    viewingAs = candidate && await isEmailAllowedToSignIn(candidate.email) ? candidate.email : null;
+  }
+
+  // Claims about the EFFECTIVE person, which the gateway signs alongside the
+  // email it signs ($lib/server/session-claims). Each goes only to the
+  // audience that serves it, decided from the authenticated audience.
+  const effective = viewingAs ?? email;
+  const claims: Record<string, unknown> = {};
+  const projectKey = projectKeyForAudience(audience as string);
+  if (projectKey) {
+    const fromUrl = request.headers.get('x-sr-session-share');
+    // Who is asking, hashed and labelled here; counted only if it is a share,
+    // and never when it is the owner, whoever they are viewing as.
+    const visit = readShareVisit(request.headers, env.AUTH_SECRET);
+    const count = !(email && isOwnerEmail(email));
+    try {
+      claims.project = await projectAccessFor(projectKey, effective, { fromUrl: fromUrl && fromUrl.length <= 512 ? fromUrl : null, cookie, visit, count });
+    } catch (err) {
+      // Not "none": a database outage must not read as "this project is private".
+      console.warn(`[session] project access for ${projectKey} failed: ${(err as Error).message}`);
+      return json({ error: 'Session authority unavailable' }, { status: 503, headers });
+    }
+  }
+  if (audience === DRIVE_AUDIENCE && effective) {
+    try {
+      Object.assign(claims, await driveClaimsFor(effective));
+    } catch (err) {
+      // Fail closed for members only: no claim is no member. The owner's drive
+      // is decided by Drive's own allow-list and is unaffected.
+      console.warn(`[session] drive claims failed: ${(err as Error).message}`);
+    }
+  }
+  return json({ email, viewingAs, claims }, { headers });
 };
+
+/**
+ * The owner behind the iPhone app's web-view cookie ($lib/server/app-web-session),
+ * when there is no browser session: signed for this audience, unexpired, from a
+ * phone still paired, and still an owner's. No view-as rides on it.
+ */
+async function appSessionEmail(audience: string, cookie: string, secret: string): Promise<string | null> {
+  const session = verifyAppWebSession(secret, audience, appWebSessionCookie(cookie));
+  if (!session || !isOwnerEmail(session.email)) return null;
+  return (await isDeviceLive(session.deviceId, session.email)) ? session.email : null;
+}

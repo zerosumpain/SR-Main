@@ -16,8 +16,9 @@
 
 import { getSetting, setSetting } from '$lib/server/models/settings';
 import { isPlausibleCoord, latestTsBySource, recordFix } from './observe';
+import type { DriveFix } from './drive';
 import type { HouseholdMember } from './members';
-import { errMsg, type IncomingFix } from './types';
+import { errMsg, type IncomingFix, type MovementMode } from './types';
 
 export const COMPANION_DEFAULT_URL = 'http://127.0.0.1:5295';
 export const COMPANION_CURSOR_KEY = 'home.presence.companionCursor';
@@ -71,6 +72,14 @@ export interface HouseholdFix {
   moving: boolean;
   /** Whole percent, from a phone new enough to send it; null otherwise. */
   battery?: number | null;
+  /**
+   * How Core Motion said the phone was moving at the fix — the app's
+   * MotionKind (`stationary`, `walking`, `running`, `cycling`, `automotive`,
+   * `unknown`) — or null. Absent from a pilot or a phone that predates it.
+   */
+  motion?: string | null;
+  /** The owner's e-bike was connected to the phone at the fix. */
+  bike?: boolean;
 }
 
 export interface HouseholdPage {
@@ -94,6 +103,8 @@ export interface CompanionResult {
   skipped: number;
   /** Fixes closer than TRAIL_MIN_SPACING_S to the last one kept. */
   thinned?: number;
+  /** Harsh braking or acceleration found in this run's raw fixes (`drive`). */
+  driveEvents?: number;
   /** True when the page cap stopped the run with more waiting. */
   more: boolean;
   /** Set when a fetch or a write failed; the cursor stays on the failed page. */
@@ -132,10 +143,11 @@ function asPage(body: unknown): HouseholdPage {
 export async function fetchHousehold(
   since: string,
   fetchImpl: typeof fetch = fetch,
+  limit = PAGE_LIMIT,
 ): Promise<HouseholdPage | null> {
   const token = companionToken();
   if (!token) return null;
-  const qs = new URLSearchParams({ since, limit: String(PAGE_LIMIT) });
+  const qs = new URLSearchParams({ since, limit: String(limit) });
   const res = await fetchImpl(`${companionUrl()}/api/apple/household?${qs}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -144,9 +156,18 @@ export async function fetchHousehold(
   return asPage(await res.json());
 }
 
+/** The phone's own motion classes, as the trail's coarser modes. */
+const MOTION_MODES: Record<string, MovementMode> = {
+  stationary: 'still', walking: 'walking', running: 'active', cycling: 'active', automotive: 'vehicle',
+};
+
 /** A pilot fix as the trail writer takes it. A negative or missing speed is
- *  unknown, and the writer then derives one from the previous fix. PURE. */
+ *  unknown, and the writer then derives one from the previous fix. How the
+ *  phone said it was moving becomes the mode — the e-bike mark first, since
+ *  Core Motion takes a fast e-bike for a car — and without either the writer
+ *  infers one from speed as before. PURE. */
 export function toIncomingFix(f: HouseholdFix): IncomingFix {
+  const mode: MovementMode | undefined = f.bike === true ? 'active' : f.motion ? MOTION_MODES[f.motion] : undefined;
   const speed = typeof f.speed === 'number' && Number.isFinite(f.speed) && f.speed >= 0 ? f.speed : null;
   return {
     ...(f.received ? { companionReceivedAt: f.received } : {}),
@@ -157,6 +178,7 @@ export function toIncomingFix(f: HouseholdFix): IncomingFix {
     speedKmh: speed == null ? null : Math.round(speed * 3.6 * 10) / 10,
     batteryPct:
       typeof f.battery === 'number' && Number.isInteger(f.battery) && f.battery >= 0 && f.battery <= 100 ? f.battery : null,
+    ...(mode ? { mode } : {}),
   };
 }
 
@@ -214,6 +236,9 @@ export async function ingestCompanion(
 
     await setSetting(COMPANION_USERS_KEY, page.users);
 
+    // Every raw fix, thinned or not, for harsh braking (`drive`): the trail
+    // keeps one every TRAIL_MIN_SPACING_S, and a stop takes about three.
+    const raw = new Map<string, DriveFix[]>();
     for (const f of page.fixes) {
       const subject = bySubject.get(String(f.email ?? '').toLowerCase());
       if (!subject) {
@@ -231,6 +256,9 @@ export async function ingestCompanion(
         result.skipped++;
         continue;
       }
+      const list = raw.get(subject) ?? [];
+      list.push({ ts: recordedMs, lat: f.lat, lon: f.lon, accuracyM: incoming.accuracyM ?? null, speedMs: incoming.speedKmh == null ? null : incoming.speedKmh / 3.6 });
+      raw.set(subject, list);
       if (newest && recordedMs - newest.getTime() < TRAIL_MIN_SPACING_S * 1000) {
         result.thinned = (result.thinned ?? 0) + 1;
         continue;
@@ -240,10 +268,17 @@ export async function ingestCompanion(
         latest.set(subject, new Date(recordedMs));
         result.written++;
       } catch (err) {
-        if (err instanceof Error && err.name === 'CompanionDeletionFloor') { result.skipped++; continue; }
+        // Before the deletion floor: not kept, so not read for braking either.
+        if (err instanceof Error && err.name === 'CompanionDeletionFloor') { result.skipped++; list.pop(); continue; }
         result.error = `write failed: ${errMsg(err)}`;
         return result;
       }
+    }
+
+    if (raw.size) {
+      const { recordDriveFixes } = await import('./drive.server');
+      const drive = await recordDriveFixes(raw);
+      result.driveEvents = (result.driveEvents ?? 0) + drive.events;
     }
 
     cursor = page.cursor;
@@ -288,7 +323,17 @@ export function notSharingSubjects(
   return out;
 }
 
+/**
+ * The pilot's users and consent revision, without its fixes: the household
+ * page carries both, and every caller of this wants only the people. One fix
+ * comes with them (the pilot's smallest page); asking with the default page
+ * shipped the 500 OLDEST fixes, read by nobody, on every roster build.
+ */
+export async function fetchHouseholdUsers(fetchImpl: typeof fetch = fetch): Promise<HouseholdPage | null> {
+  return fetchHousehold('', fetchImpl, 1);
+}
+
 /** The latest users list the pilot sent, for `notSharingSubjects`. */
 export async function loadCompanionUsers(): Promise<HouseholdUser[] | null> {
-  return (await fetchHousehold(''))?.users ?? null;
+  return (await fetchHouseholdUsers())?.users ?? null;
 }

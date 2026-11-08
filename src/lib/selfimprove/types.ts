@@ -70,7 +70,7 @@ export const SETTINGS_ENABLED_KEY = 'selfimprove.enabled';
  * retired (D3, 2026-09-26): it is a stored setting, and renaming it would
  * silently turn an explicit `true` back into the default off.
  *
- * With it on, `WORK_CAPS.maxChangeRequests` and `maxWatches` are the ceiling:
+ * With it on, `WORK_CAPS.maxDeliveries` and `maxWatches` are the ceiling:
  * one of each a night.
  */
 export const SETTINGS_AUTOBUILD_KEY = 'daydream.appetite.autobuild';
@@ -137,17 +137,19 @@ export const WORK_CAPS = {
   maxRepairRounds: 2,
   /** Existing broken tools re-authored per night. */
   maxToolsRepaired: 3,
-  /** Draft PRs opened per night (never merged). */
-  maxPullRequests: 2,
   /**
-   * Change requests handed to the autonomous builder per night.
+   * Development deliveries started from the backlog per night.
    *
-   * ONE. A change-request build runs up to 25 iterations against a £2 ceiling
-   * — roughly ten times what a whole self-improvement night costs — and it
-   * opens a PR a human then has to read. Two a night is a backlog of reviews
-   * by the weekend. Owner decision, 2026-09-04.
+   * ONE. A delivery's build runs against a £2 ceiling — roughly ten times what
+   * a whole self-improvement night costs — and ends in a PR a human then has to
+   * read. Two a night is a backlog of reviews by the weekend. Owner decision,
+   * 2026-09-04 (made for change requests, which deliveries replaced).
    */
-  maxChangeRequests: 1,
+  maxDeliveries: 1,
+  /** Tapped items examined per night for that one slot, so an item that is
+   *  already in development passes the slot to the next instead of ending the
+   *  night. */
+  deliveryCandidates: 2,
   /** Monitors generated per night. One workflow generation, and a watch that
    *  fires is a watch that can notify. */
   maxWatches: 1,
@@ -173,16 +175,6 @@ export const WORK_CAPS = {
   reserveWallMs: 60 * 1000,
 } as const;
 
-/**
- * New theme groupings proposed in one night.
- *
- * Six, not all of them. The first scan of production's queue found 113
- * groupings at once, and a room asking the owner to rule on 113 things is a
- * room he closes. Six a night drains that in under three weeks while leaving
- * the on-demand button in the room for anyone who wants the lot; the scan is
- * free either way, so this caps the ASKING, not the finding.
- */
-export const MAX_THEME_PROPOSALS = 6;
 
 export type PhaseName =
   | 'gather'
@@ -225,16 +217,17 @@ export type ActionKind =
   | 'tool_repaired'
   /** An idea was queued for a future night. */
   | 'backlog_added'
-  /** A draft PR was opened for review (never merged by the engine). */
+  /** HISTORICAL: a blind draft PR was opened (retired 2026-10-02). Kept so old
+   *  `improvement_runs` records still type and count. */
   | 'pr_opened'
-  /**
-   * A change request was handed to the autonomous builder: an issue opened, a
-   * branch cut from master, `npm run gate` per iteration, and a PR at the end.
-   * Distinct from `pr_opened` because the engine did not write the code — it
-   * wrote the ask, which is the difference between a patch nothing has run and
-   * one a gate has.
-   */
+  /** HISTORICAL: a change request was handed to the autonomous builder
+   *  (replaced by `delivery_started` 2026-10-02). Kept for old run records. */
   | 'change_requested'
+  /**
+   * An accepted backlog item became a `/jkai/develop` development delivery:
+   * groomed brief, criteria, autopilot, preview, review and a PR at the end.
+   */
+  | 'delivery_started'
   /** A recurring monitor was generated and scheduled. */
   | 'watch_created'
   /**
@@ -406,99 +399,16 @@ export interface ToolAttemptData {
 /** Lifecycle of a queued idea. */
 export type BacklogStatus = 'open' | 'shipped' | 'abandoned';
 
-/** How much implementation work a groomed item is expected to contain. */
-export type BacklogEffort = 'small' | 'medium' | 'large';
-
-/** Delivery risk recorded by the grooming pass. */
-export type BacklogRisk = 'low' | 'medium' | 'high';
-
-/** Whether the brief can be handed to an automated builder without guessing. */
-export type BacklogReadinessStatus = 'draft' | 'needs_input' | 'ready';
-
-export type BacklogRelationKind = 'duplicate' | 'related' | 'blocks' | 'blocked_by';
-
-/** A relationship may only point at another durable backlog slug. */
-export interface BacklogRelation {
-  slug: string;
-  title: string;
-  kind: BacklogItemData['kind'];
-  relation: BacklogRelationKind;
-  reason: string;
-}
-
-/** One turn of the grooming conversation, as stored. */
-export interface BacklogGroomingTurn {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
 /**
- * The structured contract between backlog grooming and every build lane.
- *
- * The accepted brief, its remaining uncertainty and its model provenance are
- * the audit trail a build lane reads; `conversation` is kept alongside it but
- * is never fed to a builder, for the reason this comment used to give for
- * dropping it entirely — a lane must not reconstruct decisions out of chat.
- *
- * It is persisted because the alternative was worse: the editor held the
- * thread in component state, so closing the panel threw away every question
- * the model had asked and every answer given to it, and grooming one item
- * across two sittings was impossible. Bounded at
- * `MAX_GROOMING_CONVERSATION` (in `./grooming`, which is the PURE module a
- * `.svelte` may value-import — see `IDEA_SOURCES` in `./board` for why a
- * constant may not live in this file) so a long argument cannot grow a
- * datastore record without limit.
+ * The groomed brief is the development brief (2026-10-02): its types live with
+ * it in `$lib/jkai/development-brief`, and the backlog's names are kept as
+ * aliases so stored records and their readers did not have to change.
  */
-export interface BacklogGroomingData {
-  problem: string;
-  outcome: string;
-  acceptanceCriteria: string[];
-  constraints: string[];
-  nonGoals: string[];
-  dependencies: string[];
-  implementationNotes: string[];
-  validation: string[];
-  assumptions: string[];
-  openQuestions: string[];
-  decisions: string[];
-  relatedItems: BacklogRelation[];
-  effort: BacklogEffort;
-  risk: BacklogRisk;
-  readiness: {
-    score: number;
-    status: BacklogReadinessStatus;
-    reason: string;
-  };
-  assistantSummary: string;
-  /** The resolved model actually called, not merely the configured setting. */
-  modelId: string;
-  groomedAt: string;
-  /** Set when a person saves the model draft into the backlog record. */
-  acceptedAt?: string;
-  revision: number;
-  /** The thread that produced this brief. Display and continuation only. */
-  conversation?: BacklogGroomingTurn[];
-}
-
-/**
- * A note the owner (or the model, at the owner's request) left on one item.
- *
- * The engine writes receipts — attempts, errors, PR links — and a person
- * could add nothing to a queue row at all. This is the one field on a backlog
- * record that is neither a measurement nor a model output: it is what somebody
- * said about the work.
- *
- * `author` is stamped by the route, never read out of the request body, for
- * the same reason `source` is: a caller must not be able to sign a note as
- * something it is not.
- */
-export interface BacklogNote {
-  /** Unique within the item. Used to delete one without matching on text. */
-  id: string;
-  at: string;
-  author: 'owner' | 'model';
-  text: string;
-}
+export type {
+  BacklogEffort, BacklogRisk, BacklogReadinessStatus, BacklogRelationKind, BacklogRelation,
+  BacklogGroomingTurn, BacklogNote, GroomedBrief as BacklogGroomingData,
+} from '$lib/jkai/development-brief';
+import type { BacklogNote, GroomedBrief as BacklogGroomingData, DeliveryBriefFields } from '$lib/jkai/development-brief';
 
 
 
@@ -540,7 +450,7 @@ export interface BacklogItemData {
   title: string;
   detail: string;
   /** 'tool'    = buildable as a runtime custom tool;
-   *  'feature' = needs repo code — a change request to the autonomous builder;
+   *  'feature' = needs repo code — a /jkai/develop development delivery;
    *  'source'  = a data source to find, register and then sample daily;
    *  'watch'   = a recurring monitor, i.e. a scheduled workflow;
    *  'engine'  = a proposal about the daydream engine itself — never picked by
@@ -674,7 +584,7 @@ export type EpicStatus = 'proposed' | 'accepted' | 'declined';
  */
 export interface EpicData {
   groomingOverrides?: string[];
-  groomingHistory?: import('./backlog-grooming').GroomingAction[];
+  groomingHistory?: import('./backlog-room').GroomingAction[];
   groomingKept?: string[];
   automatic?: boolean;
   deliverableIds?: string[];
@@ -711,26 +621,41 @@ export interface EpicData {
  *
  * Declared here and IMPLEMENTED in `$lib/heartbeat/build-lanes.ts`, which is
  * the only direction the module boundaries allow: `$lib/jkai` already imports
- * `$lib/selfimprove`, so importing `$lib/jkai/change-request` from this module
- * would open a `jkai <-> selfimprove` cycle, and importing `$lib/heartbeat`
- * would open a `heartbeat <-> selfimprove` one. Injection also means a test can
- * hand the run fakes and assert what it dispatched without a GitHub token.
+ * `$lib/selfimprove`, so importing `$lib/jkai/development-create.server` from
+ * this module would open a `jkai <-> selfimprove` cycle, and importing
+ * `$lib/heartbeat` would open a `heartbeat <-> selfimprove` one. Injection also
+ * means a test can hand the run fakes and assert what it dispatched.
  */
 export interface LaneResult {
-  /** Stable reference to what the lane made — `build:<id>` or
-   *  `monitor:<workflowId>`. Stored on the item as `buildRef`. */
+  /** Stable reference to what the lane made — `delivery:<buildId>` or
+   *  `monitor:<workflowId>` (older items carry `build:<id>` from change
+   *  requests). Stored on the item as `buildRef`. */
   ref: string;
   /** What to show the owner. */
   label: string;
-  /** The lane handed back work that already existed for this idea (an open
-   *  change request) instead of starting more. Nothing new was spent. */
+  /** The lane handed back work that already existed for this idea (a live
+   *  delivery) instead of starting more. Nothing new was spent. */
   reused?: boolean;
 }
 
+/** An accepted backlog brief, shaped as a development delivery's fields. */
+export interface DeliveryRequest {
+  title: string;
+  /** The intended outcome; the delivery's brief and the build's prompt. */
+  outcome: string;
+  criteria: string[];
+  brief: DeliveryBriefFields['brief'];
+  /** Present when the brief was groomed by the one groomer: the delivery
+   *  starts groomed, and autopilot checks and accepts it rather than
+   *  grooming it again. */
+  grooming?: DeliveryBriefFields['grooming'];
+  /** The backlog item's identity, so a second ask for it finds this delivery. */
+  backlogSlug: string;
+}
+
 export interface BuildLanes {
-  /** Open an issue and start a gated repo build. Absent when GitHub is not
-   *  configured; the propose phase then falls back to a draft PR. */
-  changeRequest?: (input: { title: string; request: string; backlogSlug?: string }) => Promise<LaneResult>;
+  /** Start a `/jkai/develop` development delivery from an accepted brief. */
+  startDelivery?: (input: DeliveryRequest) => Promise<LaneResult>;
   /** Turn a description into a recurring, scheduled monitor. */
   createWatch?: (input: { description: string }) => Promise<LaneResult>;
 }
@@ -748,7 +673,7 @@ export type ApiAuth =
    * allowlisted env var on the server; this needs no code change per credential.
    *
    * This union is NOT the one `resolveApiAuth` in
-   * `$lib/workflows/site-tools/tools/apis.ts` switches on — that is a separate
+   * `$lib/tools/tools/apis.ts` switches on — that is a separate
    * declaration of the same shape. Adding a kind here that it does not
    * implement produces an entry whose credential is silently never attached, so
    * anything new must be added in BOTH places.

@@ -88,14 +88,14 @@
   ]);
 </script>
 
-<svelte:head><title>Build backlog — JKAI</title></svelte:head>
+<svelte:head><title>Build backlog — jkai</title></svelte:head>
 
 <!-- The board takes the whole width: a kanban squeezed into a reading measure
      was the reason it scrolled sideways. `.wide` lifts the vocabulary's 1500px
      cap for this page only. -->
 <DaydreamShell
   path="/jkai/develop/backlog"
-  kicker="JKAI · Build process · Backlog"
+  kicker="jkai · Build process · Backlog"
   title={['Everything queued', 'to build next']}
   standfirst="One queue for every idea the site has about itself — the think loop's build notes, the workflow doctor's escalations, the questions you ask and what you add yourself — deduped as it arrives. Nothing costly is built until you accept its brief."
   readout={[

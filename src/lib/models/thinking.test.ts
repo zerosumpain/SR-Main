@@ -137,3 +137,20 @@ describe('thinkingRequestParams', () => {
     expect(thinkingRequestParams('codex', 'max')).toEqual({ reasoning_effort: 'xhigh' });
   });
 });
+
+describe('models that must reason', () => {
+  it('recognises the refusal, and sends the lowest effort for "off" once the model is noted', async () => {
+    const { isReasoningMandatoryError, noteReasoningMandatory, reasoningIsMandatory, clearReasoningMandatoryForTest, thinkingRequestParams } = await import('./thinking');
+    clearReasoningMandatoryForTest();
+    expect(isReasoningMandatoryError({ status: 400, message: '400 Reasoning is mandatory for this endpoint and cannot be disabled.' })).toBe(true);
+    expect(isReasoningMandatoryError({ status: 400, message: 'max_tokens too large' })).toBe(false);
+    expect(thinkingRequestParams('openrouter', 'off', 'openai/gpt-oss-120b')).toEqual({ reasoning: { enabled: false } });
+    noteReasoningMandatory('openai/gpt-oss-120b');
+    expect(reasoningIsMandatory('openai/gpt-oss-120b')).toBe(true);
+    expect(thinkingRequestParams('openrouter', 'off', 'openai/gpt-oss-120b')).toEqual({ reasoning: { effort: 'low' } });
+    // Only that model, and only "off".
+    expect(thinkingRequestParams('openrouter', 'off', 'z-ai/glm-5.1')).toEqual({ reasoning: { enabled: false } });
+    expect(thinkingRequestParams('openrouter', 'high', 'openai/gpt-oss-120b')).toEqual({ reasoning: { effort: 'high' } });
+    clearReasoningMandatoryForTest();
+  });
+});

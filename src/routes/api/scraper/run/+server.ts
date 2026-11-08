@@ -1,7 +1,7 @@
 import { json, error, type RequestHandler } from '@sveltejs/kit';
-import { runScrape } from '$lib/workflows/scraper/runner';
-import { assertScraperServiceRequest } from '$lib/workflows/scraper/service-auth';
-import type { ScrapeJob } from '$lib/workflows/scraper/types';
+import { runScrape } from '$lib/scraper/runner';
+import { assertScraperServiceRequest } from '$lib/scraper/service-auth';
+import type { ScrapeJob } from '$lib/scraper/types';
 
 /**
  * Remote scrape execution endpoint — the other side of the

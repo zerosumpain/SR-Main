@@ -1,4 +1,5 @@
-// chartkit — library-free scale/tick geometry for the deck Chart block.
+// chartkit — library-free scale/tick geometry for bespoke SVG charts (the
+// backlog burndown; it was written for the deck Chart block, retired 2026-10-02).
 // Copied from src/routes/projects/policy-engine/lib/chartkit.ts (the house
 // bespoke-SVG chart helper); policy-engine's copy stays route-scoped and
 // untouched. Pure functions only — no Svelte, no DOM.

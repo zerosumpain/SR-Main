@@ -4,6 +4,7 @@
 //
 // Spec: docs/superpowers/specs/2026-09-28-family-steps-and-tasks.md
 
+import type { PushMessage } from '$lib/server/apns';
 import { localDayStart } from '$lib/home/presence/types';
 
 export const FAMILY_TZ = 'Europe/London';
@@ -40,11 +41,24 @@ export function previousDay(day: string): string {
   return new Date(Date.parse(`${day}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
 }
 
+/** A phone's local day may begin this long before London's: UTC+14 is the
+ *  furthest any clock runs ahead. */
+export const AHEAD_OF_LONDON_S = 14 * 3600;
+
 /**
  * Today's count from the pilot's step records. The pilot keeps ONE cumulative
  * record per local day, so this picks, never sums: the largest value among the
  * records that START inside today's window. Null when there is none — no
  * steps today is not the same as zero steps recorded.
+ *
+ * "Inside" reaches back `AHEAD_OF_LONDON_S` before London's midnight, because a
+ * record starts at the PHONE's midnight. On the family's Rome trip (from 26 Oct
+ * 2026, with the clocks just gone back) Rome's midnight was 23:00 London time,
+ * every phone's day began before the window, and the board counted nobody — the
+ * counts dropped out one by one as each phone landed and took Rome time. The
+ * pilot already answers with every record that overlaps the window; the
+ * yesterday of a phone behind London ends inside it but STARTS before this
+ * reach (UTC-1 or later begins after London's midnight), so it is never taken.
  */
 export function todaysSteps(
   records: ReadonlyArray<{ value: number; start: string; end: string }>,
@@ -53,7 +67,7 @@ export function todaysSteps(
   let best: number | null = null;
   for (const r of records) {
     const at = Date.parse(r.start) / 1000;
-    if (!Number.isFinite(at) || at < window.from || at >= window.to) continue;
+    if (!Number.isFinite(at) || at < window.from - AHEAD_OF_LONDON_S || at >= window.to) continue;
     if (!Number.isFinite(r.value) || r.value < 0) continue;
     const v = Math.round(r.value);
     if (best === null || v > best) best = v;
@@ -170,4 +184,49 @@ export function standingsText(board: ReadonlyArray<Ranked<BoardRow & { name: str
   const leader = board[0];
   const place = `${level.length ? 'joint ' : ''}${ordinal(me.rank)}`;
   return `You're ${place} of ${n} with ${formatSteps(me.steps)} steps — ${formatSteps(leader.steps - me.steps)} behind ${leader.name}.`;
+}
+
+// ── "Ask everyone's phone" (opening the steps screen) ─────────────────────
+
+/** The silent push's category: the app reports what it was asked for. */
+export const REPORT_CATEGORY = 'family-report';
+/** At most one round of silent pushes per this long, across the whole family. */
+export const ASK_GAP_MS = 60_000;
+/** When the pilot is read again after a round: woken phones upload in seconds, slow ones in a minute. */
+export const ASK_REREAD_MS = [25_000, 60_000] as const;
+
+/** Whether a round asked at `lastAt` (or never) still covers `now`. */
+export function askThrottled(lastAt: number | null, now: number): boolean {
+  return lastAt !== null && now - lastAt >= 0 && now - lastAt < ASK_GAP_MS;
+}
+
+/**
+ * The silent push that wakes a family phone to upload today's steps (and a
+ * fresh fix) to the pilot. Nothing on the lock screen. Apple holds it two
+ * minutes for a phone that is off: after that the board has moved on.
+ */
+export function stepsAskPush(): PushMessage {
+  return {
+    title: '',
+    body: '',
+    background: true,
+    category: REPORT_CATEGORY,
+    ttlSeconds: 120,
+    userInfo: { category: REPORT_CATEGORY, reason: 'steps' },
+  };
+}
+
+/**
+ * The leader the heartbeat's poll compares against. A re-read after an ask
+ * stores fresh counts WITHOUT pushing; it remembers who led before it, so the
+ * next poll still sees a change at the top the re-read stored, and the
+ * dethroned person still hears. A remembered leader from another day is
+ * ignored.
+ */
+export function dethroneBaseline(
+  remembered: { day: string; leader: string | null } | null,
+  day: string,
+  stored: string | null,
+): string | null {
+  return remembered && remembered.day === day ? remembered.leader : stored;
 }

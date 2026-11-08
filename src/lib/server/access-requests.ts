@@ -15,8 +15,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { accessRequest } from '$lib/db/schema';
 import { isEmailAllowedToSignIn } from './access';
-import { addToAllowList } from './allow-list';
-import { joinGroups } from './invites';
+import { admitToAllowList } from './admission';
 import { notifyOwner } from './notify';
 import { rateLimit } from './public-request-rate-limit';
 
@@ -194,8 +193,10 @@ export async function decideRequest(
     .returning();
   if (!row) return null;
   if (decision === 'approve') {
-    await addToAllowList({ email: row.email, note: row.name, addedBy: opts.decidedBy });
-    await joinGroups(row.email, opts.groups);
+    // Keeps the phone that asked: for someone who signed up from the app, the
+    // registrant credential is what approval turns into a member's
+    // (`admitToAllowList` carries it past the security trigger).
+    await admitToAllowList({ email: row.email, name: row.name, groups: opts.groups, addedBy: opts.decidedBy });
   }
   return row;
 }

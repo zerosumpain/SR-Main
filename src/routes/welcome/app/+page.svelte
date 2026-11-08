@@ -5,6 +5,9 @@
   import { signIn } from '@auth/sveltekit/client';
   import WelcomeFrame from '$lib/components/welcome/WelcomeFrame.svelte';
   import GoogleButton from '$lib/components/welcome/GoogleButton.svelte';
+  import type { PageData } from './$types';
+
+  let { data }: { data: PageData } = $props();
 
   const callbackUrl = '/welcome/app/finish';
   // Google's account chooser, always: a registration never completes silently
@@ -20,10 +23,14 @@
 <WelcomeFrame isOwner={false}>
   <header class="w-hero">
     <p class="w-kicker">From the app</p>
-    <h1 class="w-title">Ask for an account</h1>
+    <h1 class="w-title">{data.confirm ? 'Confirm it’s you' : 'Ask for an account'}</h1>
   </header>
   <section class="w-card" data-card="signin">
-    <p>Sign in with Google so John knows who you are. You go straight back to the app afterwards.</p>
+    {#if data.confirm}
+      <p>Sign in with Google as the person this phone is for. The pairing code only connects if it is theirs.</p>
+    {:else}
+      <p>Sign in with Google so John knows who you are. You go straight back to the app afterwards.</p>
+    {/if}
     <GoogleButton {callbackUrl} authorizationParams={chooser} />
   </section>
 </WelcomeFrame>

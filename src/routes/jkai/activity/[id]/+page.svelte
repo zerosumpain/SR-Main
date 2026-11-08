@@ -22,7 +22,7 @@
   }
 </script>
 
-<svelte:head><title>Activity evidence — JKAI</title></svelte:head>
+<svelte:head><title>Activity evidence — jkai</title></svelte:head>
 
 <main class="event-shell source-surface">
   <a class="back" href="/jkai/activity">← Activity</a>
@@ -34,7 +34,7 @@
 
   <section class="time-grid">
     <div><span>Occurred</span><strong>{stamp(data.event.occurredAt)}</strong><small>{data.event.occurredAt ? 'Supplied by the evidence source.' : 'The source did not provide an occurrence time.'}</small></div>
-    <div><span>Observed</span><strong>{stamp(data.event.observedAt)}</strong><small>When JKAI received or observed this record.</small></div>
+    <div><span>Observed</span><strong>{stamp(data.event.observedAt)}</strong><small>When jkai received or observed this record.</small></div>
     <div><span>Evidence</span><strong>{data.event.evidenceMode.replaceAll('_', ' ')}</strong><small>This quality follows the event into every projection.</small></div>
   </section>
 

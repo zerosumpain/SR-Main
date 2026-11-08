@@ -1,4 +1,5 @@
 import type { CredentialKind } from './types';
+import { isMapboxPublicToken } from '$lib/maps/public-token';
 
 export type ManualCredentialField = {
   key: string;
@@ -39,8 +40,57 @@ export const MANUAL_CREDENTIAL_SPECS: Record<string, ManualCredentialSpec> = {
       'iCloud needs an app-specific password (not your normal Apple ID password). Create one at appleid.apple.com → Sign-In and Security → App-Specific Passwords.',
     helpUrl: 'https://support.apple.com/en-us/102654',
   },
+  mapbox: {
+    kind: 'apikey',
+    fields: [{ key: 'key', label: 'Mapbox public access token', type: 'password', placeholder: 'pk.…' }],
+    helpText:
+      'Use a public (pk.) token with styles:read and fonts:read, restricted to this site’s URLs (and the local preview’s). Stored encrypted here, then sent to browsers to draw every map on /health. Secret (sk.) tokens are refused. The newest Mapbox credential is used sitewide.',
+    helpUrl: 'https://docs.mapbox.com/help/dive-deeper/access-tokens/',
+  },
 };
 
 export function getManualCredentialSpec(integrationType: string): ManualCredentialSpec | undefined {
   return MANUAL_CREDENTIAL_SPECS[integrationType];
+}
+
+/**
+ * The kind-specific payload for a spec, from submitted field values.
+ *
+ * Creating needs every field. Replacing passes the stored payload as `existing`:
+ * a blank field keeps its stored value, so renewing an app-specific password is
+ * one field, and the credential keeps its id — workflows that name it carry on.
+ * At least one field must still be given, or there is nothing to replace.
+ */
+export function buildManualPayload(
+  spec: ManualCredentialSpec,
+  input: Record<string, unknown>,
+  existing?: Record<string, unknown>,
+): { payload: Record<string, string> } | { error: string } {
+  const values: Record<string, string> = {};
+  let given = 0;
+  for (const f of spec.fields) {
+    const v = typeof input[f.key] === 'string' ? (input[f.key] as string).trim() : '';
+    if (v) given++;
+    const kept = typeof existing?.[f.key] === 'string' ? (existing[f.key] as string) : '';
+    if (!v && !kept) return { error: `${f.label} is required` };
+    values[f.key] = v || kept;
+  }
+  if (existing && !given) return { error: 'Enter the new value to replace' };
+  return spec.kind === 'basic'
+    ? { payload: { username: values.username, password: values.password } }
+    : { payload: { key: values.key } };
+}
+
+/**
+ * Integration-specific rules a built payload must pass, for create AND replace.
+ *
+ * Kept as a server-side function beside the specs rather than on them: the
+ * specs are serialised into the connections page's data, and a function there
+ * would not survive that.
+ */
+export function checkManualPayload(integrationType: string, payload: Record<string, string>): string | null {
+  if (integrationType === 'mapbox' && !isMapboxPublicToken(payload.key)) {
+    return 'Mapbox needs a public token beginning with pk. — a secret (sk.) token would be sent to every browser.';
+  }
+  return null;
 }

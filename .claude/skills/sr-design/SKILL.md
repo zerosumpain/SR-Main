@@ -11,7 +11,7 @@ Warm-brutalist system. Source of truth: tokens in `src/app.css` (`:root`) + `src
 
 | Token | Font | Role |
 |---|---|---|
-| `--font-display` | Archivo Black | headlines — the live site DELIBERATELY keeps this (design repo says Zilla Slab; do NOT "fix" it) |
+| `--font-display` | Inter ExtraBold (800) | headlines, titles, tile figures — replaced Archivo Black on 2026-10-03 (John), matching the iOS app. Only weight 800 is loaded |
 | `--font-brand` | DM Mono | 'sr.' brand mark, lowercase wordmark |
 | `--font-body` / `--font-sans` | DM Sans | body copy |
 | `--font-mono` | JetBrains Mono | labels, nav, `.sr-label-tight` |

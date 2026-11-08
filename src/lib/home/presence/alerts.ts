@@ -38,7 +38,7 @@ import {
   type InsideState,
   type TrailFix,
 } from './crossings';
-import { COMPANION_DEFAULT_URL, loadCompanionUsers, fetchHousehold, notSharingSubjects } from './companion';
+import { COMPANION_DEFAULT_URL, loadCompanionUsers, fetchHouseholdUsers, notSharingSubjects } from './companion';
 import { createHash } from 'node:crypto';
 import { pushToEmails, type PushOutcome } from '$lib/server/push-devices';
 import type { PushMessage } from '$lib/server/apns';
@@ -762,7 +762,7 @@ export function attemptStoreFor(exec: DbExecutor): AttemptStore {
 
 /** The site's WhatsApp service, the way followup-queue reaches it. */
 async function defaultWhatsApp(to: string, text: string) {
-  const { getWhatsAppService } = await import('$lib/workflows/whatsapp/service');
+  const { getWhatsAppService } = await import('$lib/integrations/whatsapp/service');
   return getWhatsAppService().sendMessage(to, text);
 }
 
@@ -846,7 +846,7 @@ export async function deliverAlerts(
   let users: Awaited<ReturnType<typeof loadCompanionUsers>> = null;
   let revision: string | undefined;
   try {
-    const snapshot = await fetchHousehold('');
+    const snapshot = await fetchHouseholdUsers();
     users = snapshot?.users ?? null;
     revision = snapshot?.revision;
   } catch {

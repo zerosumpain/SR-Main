@@ -4,6 +4,7 @@ export type DeskSessionRow = {
   status: string;
   goals: unknown;
   shareToken: string | null;
+  shareTokenHash: string | null;
   createdAt: Date;
   completedAt: Date | null;
 };
@@ -14,7 +15,8 @@ export type DeskLoad = {
     topic: string;
     status: string;
     goals: string[];
-    shareToken: string | null;
+    /** Whether a share link is live. The token itself is never sent to the page. */
+    shared: boolean;
     createdAt: string;
     completedAt: string | null;
   };
@@ -28,7 +30,7 @@ export function buildDeskLoad(row: DeskSessionRow): DeskLoad {
       topic: row.topic,
       status: row.status,
       goals: Array.isArray(row.goals) ? (row.goals as string[]) : [],
-      shareToken: row.shareToken ?? null,
+      shared: !!(row.shareTokenHash || row.shareToken),
       createdAt: row.createdAt.toISOString(),
       completedAt: row.completedAt ? row.completedAt.toISOString() : null,
     },

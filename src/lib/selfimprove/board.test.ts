@@ -436,6 +436,10 @@ describe('artifactHref', () => {
     expect(artifactHref('https://github.com/x/y/pull/9')).toBe('https://github.com/x/y/pull/9');
   });
 
+  it('points a development delivery at its /jkai/develop page', () => {
+    expect(artifactHref('delivery:3f2a91c4')).toBe('/jkai/develop/3f2a91c4');
+  });
+
   it('returns null for a shape it does not recognise rather than a broken link', () => {
     expect(artifactHref('some_tool_name')).toBeNull();
     expect(artifactHref(null)).toBeNull();
@@ -546,7 +550,7 @@ describe('intake channels', () => {
   });
 
   it('names every channel in the closed set', () => {
-    for (const s of ['owner', 'question', 'think', 'fault', 'doctor', 'starved', 'health', 'appetite', 'engine', 'toolsmith', 'trace', 'unattributed'] as const) {
+    for (const s of ['owner', 'question', 'think', 'fault', 'doctor', 'starved', 'health', 'appetite', 'engine', 'toolsmith', 'trace', 'chat', 'phone', 'capability-gap', 'unattributed'] as const) {
       expect(SOURCE_LABEL[s].label.length).toBeGreaterThan(0);
       expect(SOURCE_LABEL[s].from.length).toBeGreaterThan(0);
     }
@@ -593,6 +597,23 @@ describe('summariseInflow', () => {
     });
     const flow = summariseInflow(board.items, 30, NOW);
     expect(flow.channels.map((c) => c.source)).toEqual(['question']);
+  });
+
+  // Slice 6b: a build commissioned from web chat is its own channel, with
+  // 'phone' reserved beside it, and both tally like any other.
+  it('counts commissioned-in-chat asks as their own channel', () => {
+    const board = buildBoard({
+      backlog: [
+        item({ slug: 'c1', title: 'C1', source: 'chat', createdAt: daysAgo(1) }),
+        item({ slug: 'c2', title: 'C2', source: 'chat', createdAt: daysAgo(2) }),
+        item({ slug: 'q', title: 'Q', source: 'question', createdAt: daysAgo(1) }),
+      ], tools: [], attemptCeiling: CEILING,
+    });
+    const flow = summariseInflow(board.items, 30, NOW);
+    const chat = flow.channels.find((c) => c.source === 'chat');
+    expect(chat).toMatchObject({ label: 'Commissioned in chat', total: 2, open: 2, recent: 2 });
+    expect(flow.channels.find((c) => c.source === 'phone')).toBeUndefined();
+    expect(flow.intake).toBe(3);
   });
 
   // A gap in the record is not a source, however big it is.
@@ -657,7 +678,9 @@ describe('inflow is computed over the whole population', () => {
       ),
       item({ slug: 'open1', title: 'Open one', source: 'question', createdAt: daysAgo(1) }),
     ];
-    const board = buildBoard({ backlog, tools: [], attemptCeiling: CEILING, settledLimit: 2 });
+    // Pin the clock: the rows are dated relative to NOW, and on the real clock
+    // they age out of the 30-day inflow window (failed from 2026-10-02 onwards).
+    const board = buildBoard({ backlog, tools: [], attemptCeiling: CEILING, settledLimit: 2, now: NOW });
     // The board itself is trimmed…
     expect(board.items.filter((i) => i.backlogStatus === 'shipped')).toHaveLength(2);
     // …and the inflow is not.

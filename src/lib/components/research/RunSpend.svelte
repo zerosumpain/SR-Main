@@ -174,6 +174,7 @@
         {:else}
           <p class="plan-why">This plan has no published ceiling, so there is no share to show.</p>
         {/if}
+        <a class="plan-link" href="/admin/ops/tavily">What is using it →</a>
       </div>
     {/if}
 
@@ -213,6 +214,7 @@
   .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 0 4px 4px 0; }
   .fill.tight { background: var(--warn); }
   .plan-why { margin: 0.35rem 0 0; font-size: 0.8rem; line-height: 1.4; color: var(--text-muted); }
+  .plan-link { display: inline-block; margin-top: 0.35rem; font-size: 0.8rem; color: var(--accent-ink); }
   .plan-why.tight { color: var(--text-primary); }
 
   .models { margin-top: 1rem; padding-top: 0.7rem; border-top: 1px solid var(--line-hair); }

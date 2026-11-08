@@ -23,6 +23,8 @@ export interface CapturedSearch {
   kind: 'search' | 'fetch';
   /** The query, or the URL when `kind` is 'fetch'. */
   value: string;
+  /** The page title, when the provider cited it with one. */
+  title?: string;
 }
 
 /** Read a `web_search` item off the event stream, or null if it is not one. */
@@ -49,8 +51,8 @@ export function toCapturedSearch(item: unknown): CapturedSearch | null {
  */
 export function toAnnotations(
   searches: CapturedSearch[] | undefined,
-): Array<{ type: 'url_citation'; url_citation: { url: string } }> {
+): Array<{ type: 'url_citation'; url_citation: { url: string; title?: string } }> {
   return (searches ?? [])
     .filter((s) => s.kind === 'fetch')
-    .map((s) => ({ type: 'url_citation' as const, url_citation: { url: s.value } }));
+    .map((s) => ({ type: 'url_citation' as const, url_citation: { url: s.value, ...(s.title ? { title: s.title } : {}) } }));
 }

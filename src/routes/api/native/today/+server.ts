@@ -1,13 +1,7 @@
 import type { RequestHandler } from './$types';
-import { desc, eq } from 'drizzle-orm';
-import { db } from '$lib/db';
-import { conversations } from '$lib/db/schema';
 import { withDevice } from '$lib/server/native-handler';
-import { getNativeHealthSummary } from '$lib/server/native-health';
-import { pendingForDevice, recentEvents } from '$lib/server/notify';
-import { loadNewsDesk } from '$lib/news/desk';
-import { connectorAttention } from '$lib/connectors/watch-store';
-import { loadTodayNotes } from '$lib/daydream/think/notes.server';
+import { loadToday } from '$lib/today/today.server';
+import { NATIVE_TODAY_SECTIONS } from '$lib/today/today';
 
 /**
  * GET /api/native/today — the first screen, in one request.
@@ -21,95 +15,11 @@ import { loadTodayNotes } from '$lib/daydream/think/notes.server';
  * Everything here is a SUMMARY. The figure, the count, the headline. Tapping
  * any of it goes to the tab that owns it, which fetches properly. A first
  * screen that tried to be every screen would be slower than all of them.
+ *
+ * The loader is shared (`$lib/today`) with the jkai desk and the chat tools;
+ * this route asks for exactly the six sections the app has always decoded,
+ * and `today-route.test.ts` pins the shape.
  */
-export const GET: RequestHandler = withDevice(async ({ url }, identity) => {
-  const fresh = url.searchParams.get('fresh') === '1';
-
-  const [healthResult, alertsResult, newsResult, threadResult, connectionsResult, daydreamResult] = await Promise.allSettled([
-    getNativeHealthSummary({ fresh }),
-    Promise.all([pendingForDevice(5), recentEvents(8)]),
-    // `force: false` — the Today card takes whatever the desk last fetched.
-    // Pulling four wires to draw three headlines on a screen somebody is about
-    // to scroll past is the opposite of what this endpoint is for.
-    loadNewsDesk({ view: 'top', sort: 'heat', limit: 3, force: false, ownerKey: identity.ownerEmail }),
-    db
-      .select({
-        id: conversations.id,
-        title: conversations.title,
-        updatedAt: conversations.updatedAt,
-      })
-      .from(conversations)
-      // The owner's latest thread — never a member's.
-      .where(eq(conversations.principalId, 'owner'))
-      .orderBy(desc(conversations.updatedAt))
-      .limit(1),
-    // The watcher's stored answer — the same set /api/native/connections lists.
-    connectorAttention(),
-    // The Noticed card: the daydream loop's two newest notes from the last
-    // 48 hours that he has not turned down (`think/notes.ts`).
-    loadTodayNotes(),
-  ]);
-
-  const health = healthResult.status === 'fulfilled' ? healthResult.value : null;
-  const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : null;
-  const news = newsResult.status === 'fulfilled' ? newsResult.value : null;
-  const thread = threadResult.status === 'fulfilled' ? threadResult.value[0] : undefined;
-  const connections = connectionsResult.status === 'fulfilled' ? connectionsResult.value : null;
-  const daydream = daydreamResult.status === 'fulfilled' ? { notes: daydreamResult.value } : null;
-
-  if (healthResult.status === 'rejected') {
-    console.error('[native] today: health unavailable', healthResult.reason);
-  }
-  if (daydreamResult.status === 'rejected') {
-    console.error('[native] today: daydream notes unavailable', daydreamResult.reason);
-  }
-
-  return {
-    generatedAt: new Date().toISOString(),
-    health: health
-      ? {
-          isMock: health.isMock,
-          strap: health.strap,
-          readiness: health.readiness,
-          // Four figures without their thirty-day series — the Today card draws
-          // tiles, and a sparkline per tile on a card this small is decoration
-          // carrying 120 numbers.
-          figures: health.figures.map(({ series, ...rest }) => rest),
-          generatedAt: health.generatedAt,
-        }
-      : null,
-    alerts: alerts
-      ? {
-          pending: alerts[0].length,
-          unread: alerts[1].filter((row) => !row.readAt).length,
-          latest: alerts[1].slice(0, 3).map((row) => ({
-            id: row.id,
-            category: row.category,
-            title: row.title,
-            severity: row.severity,
-            createdAt: row.createdAt.toISOString(),
-          })),
-        }
-      : null,
-    news: news
-      ? {
-          updatedAt: news.feed.updatedAt,
-          unseen: news.feed.newSinceLast,
-          stories: news.feed.stories.slice(0, 3).map((story) => ({
-            key: story.key,
-            title: story.title,
-            sourceLabel: story.sourceLabel,
-            url: story.url,
-            heat: story.heat,
-          })),
-        }
-      : null,
-    connections: connections
-      ? { needsAttention: connections.items.length, items: connections.items.slice(0, 3) }
-      : null,
-    daydream,
-    lastThread: thread
-      ? { id: thread.id, title: thread.title, updatedAt: thread.updatedAt.toISOString() }
-      : null,
-  };
-});
+export const GET: RequestHandler = withDevice(async ({ url }, identity) =>
+  loadToday({ ownerKey: identity.ownerEmail, fresh: url.searchParams.get('fresh') === '1', sections: NATIVE_TODAY_SECTIONS }),
+);

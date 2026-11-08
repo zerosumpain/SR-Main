@@ -281,7 +281,7 @@
         <p class="note">Only the most recent fixes are shown — this account has more than the app keeps in one view.</p>
       {/if}
       <p class="note">
-        Location is kept for {track.retentionDays ?? 30} days on the app server, then deleted. A dashed line is time the phone
+        {track.retentionDays ? `This view shows the last ${track.retentionDays} days; location is kept until you delete it.` : 'Location is kept until you delete it.'} A dashed line is time the phone
         was asleep: where you went in between is not known.
       </p>
     {/if}

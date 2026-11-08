@@ -1,64 +1,44 @@
-// Model-routing scheduler. Mirrors the briefing/self-improve engines: ensure the
-// collections on boot (host-agnostic), schedule the nightly cron only in
-// production (hostname !== 'homeserv' unless ROUTING_ALLOW_DEV=1), re-check the
-// kill switch in the cron callback. Never throws into croner.
-import { Cron } from 'croner';
+// Model-routing boot hook and nightly selection.
+//
+// The nightly selection runs on the heartbeat since 2026-10-02 (the
+// `model-routing` activity, 04:00–04:55 Europe/London), not on its own croner:
+// one scheduler for the site's idle-cycle work, with pulses and a pause
+// switch. What stays here is what boot needs on every host — the collections
+// and the discovered Codex models' reasoning ceilings — and the run itself,
+// with the kill switch it always re-checked at fire time.
 import os from 'os';
 import { getSetting } from '$lib/server/models/settings';
 import { runSelectionNow } from './run';
 import { ensureRoutingCollections } from './events';
 import { loadDiscoveredCodexModels } from '$lib/server/models/codex-discovery';
-import { CRON_EXPR, CRON_TZ, SETTINGS_ENABLED_KEY, errMsg } from './types';
+import { SETTINGS_ENABLED_KEY, errMsg } from './types';
 
-let cronJob: Cron | null = null;
 let started = false;
 
-export function isRoutingScheduled(): boolean {
-  return cronJob !== null;
-}
-
+/** Boot only. Idempotent; called from hooks.server.ts. */
 export function startModelRouting(): void {
   if (started) return;
   started = true;
-
   void ensureRoutingCollections().catch((err) =>
     console.error('[routing] ensure collections failed:', errMsg(err)),
   );
   // Registers discovered Codex models' reasoning ceilings before the first chat
   // turn, so a request clamps to what the model took rather than to `xhigh`.
   void loadDiscoveredCodexModels();
-
-  const host = os.hostname();
-  if (host === 'homeserv' && process.env.ROUTING_ALLOW_DEV !== '1') {
-    console.log('[routing] host is homeserv — nightly cron disabled. Set ROUTING_ALLOW_DEV=1 to enable locally.');
-    return;
-  }
-
-  try {
-    cronJob = new Cron(CRON_EXPR, { timezone: CRON_TZ }, () => {
-      void fireCron();
-    });
-    console.log(`[routing] nightly model selection scheduled (${CRON_EXPR} ${CRON_TZ})`);
-  } catch (err) {
-    console.error('[routing] failed to schedule cron:', errMsg(err));
-  }
-}
-
-async function fireCron(): Promise<void> {
-  try {
-    const enabled = await getSetting<boolean>(SETTINGS_ENABLED_KEY);
-    if (enabled === false) {
-      console.log('[routing] kill switch is off — skipping nightly selection');
-      return;
-    }
-    await runSelectionNow({ trigger: 'cron' });
-  } catch (err) {
-    console.error('[routing] cron fire skipped/failed:', errMsg(err));
-  }
 }
 
 export function stopModelRouting(): void {
-  if (cronJob) cronJob.stop();
-  cronJob = null;
   started = false;
+}
+
+/**
+ * The nightly selection, as the heartbeat runs it. Production only — homeserv
+ * shares a dev database (`ROUTING_ALLOW_DEV=1` overrides) — and only while the
+ * kill switch is on. Returns why it did not run, or the run's id.
+ */
+export async function runNightlyRouting(): Promise<{ ran: false; reason: string } | { ran: true; runId: string; status: string }> {
+  if (os.hostname() === 'homeserv' && process.env.ROUTING_ALLOW_DEV !== '1') return { ran: false, reason: 'host is homeserv — nightly selection runs on prod only' };
+  if ((await getSetting<boolean>(SETTINGS_ENABLED_KEY)) === false) return { ran: false, reason: 'kill switch is off' };
+  const { id, run } = await runSelectionNow({ trigger: 'cron' });
+  return { ran: true, runId: id, status: run.status };
 }

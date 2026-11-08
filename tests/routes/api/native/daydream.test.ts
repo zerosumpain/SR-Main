@@ -25,9 +25,10 @@ const note = {
 };
 const loadNativeNotes = vi.fn(async (_opts: { scope: string; limit: number }) => [note]);
 let knownKind: string | null = 'think_health_plan';
-const loadNativeDetail = vi.fn(async (_opts: { limit: number }) => ({
+const loadNativeDetail = vi.fn(async (_opts: { limit: number; staleOnly?: boolean }) => ({
   notes: [{ ...note, summary: 'Three nights under six hours.', next: null, sources: [], stage: 'spotted', bucket: 'decide', checkable: false, commissionId: null, commissionState: null }],
   pipeline: { decide: 1, motion: 0, done: 0 },
+  stale: 4,
 }));
 let impactFails = false;
 vi.mock('$lib/daydream/impact.server', () => ({
@@ -39,13 +40,31 @@ vi.mock('$lib/daydream/impact.server', () => ({
 }));
 vi.mock('$lib/daydream/think/notes.server', () => ({
   loadNativeNotes: (opts: { scope: string; limit: number }) => loadNativeNotes(opts),
-  loadNativeDetail: (opts: { limit: number }) => loadNativeDetail(opts),
+  loadNativeDetail: (opts: { limit: number; staleOnly?: boolean }) => loadNativeDetail(opts),
   thinkNoteKind: async () => knownKind,
 }));
 const recordFeedback = vi.fn(async () => ({ kind: 'think_health_plan', muted: false }));
 vi.mock('$lib/daydream/thought-store', () => ({
   recordFeedback: (...a: unknown[]) => recordFeedback(...(a as [])),
 }));
+
+const runFollow = vi.fn(async (..._a: unknown[]) => ({ ok: true, message: 'Research started', href: '/research/r-1' }));
+vi.mock('$lib/daydream/act/follow.server', () => ({
+  FOLLOW_OPS: ['research', 'watch', 'home_refresh'],
+  isFollowOp: (op: unknown) => typeof op === 'string' && ['research', 'watch', 'home_refresh'].includes(op),
+  runFollow: (...a: unknown[]) => runFollow(...a),
+}));
+vi.mock('$lib/selfimprove/follow-ports.server', () => ({ backlogPorts: () => ({}) }));
+
+async function follow(body: unknown) {
+  const mod = await import('../../../../src/routes/api/native/daydream/follow/+server');
+  const request = new Request('http://x/api/native/daydream/follow', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer t', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return (mod.POST as (e: unknown) => Promise<Response>)({ locals: {}, request, url: new URL(request.url), params: {} });
+}
 
 async function list(query = '') {
   const mod = await import('../../../../src/routes/api/native/daydream/+server');
@@ -77,9 +96,10 @@ describe('GET /api/native/daydream?detail=1', () => {
     const res = await list('?detail=1');
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(loadNativeDetail).toHaveBeenCalledWith({ limit: 40 });
+    expect(loadNativeDetail).toHaveBeenCalledWith({ limit: 40, staleOnly: false });
     expect(loadNativeNotes).not.toHaveBeenCalled();
     expect(body.pipeline).toEqual({ decide: 1, motion: 0, done: 0 });
+    expect(body.stale).toBe(4);
     expect(body.notes[0]).toMatchObject({ id: 't-1', bucket: 'decide', stage: 'spotted' });
     expect(body.impact).toMatchObject({ windowDays: 28, hitRate: null });
     expect(body.impact.weeks).toHaveLength(12);
@@ -89,6 +109,10 @@ describe('GET /api/native/daydream?detail=1', () => {
     const body = await (await list('?detail=1')).json();
     expect(body.impact).toBeNull();
     expect(body.notes).toHaveLength(1);
+  });
+  it('asks for only the notes past their date with stale=1', async () => {
+    await list('?detail=1&stale=1&limit=80');
+    expect(loadNativeDetail).toHaveBeenCalledWith({ limit: 80, staleOnly: true });
   });
   it('ignores detail on a scoped read', async () => {
     await list('?detail=1&scope=health');
@@ -144,5 +168,29 @@ describe('POST /api/native/daydream/feedback', () => {
     knownKind = null;
     expect((await feedback({ id: 'nope', verdict: 'useful' })).status).toBe(404);
     expect(recordFeedback).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/native/daydream/follow', () => {
+  beforeEach(() => runFollow.mockClear());
+
+  it('runs the tap through the shared service, with the watch wording and picked devices', async () => {
+    const res = await follow({ id: 't-1', op: 'watch', description: 'Tell me when the hall heating drops out', entities: ['climate.hall'] });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, message: 'Research started', href: '/research/r-1' });
+    expect(runFollow.mock.calls[0].slice(0, 3)).toEqual(['t-1', 'watch', { description: 'Tell me when the hall heating drops out', entities: ['climate.hall'] }]);
+  });
+
+  it('401s without a paired device, before anything runs', async () => {
+    device = null;
+    expect((await follow({ id: 't-1', op: 'research' })).status).toBe(401);
+    expect(runFollow).not.toHaveBeenCalled();
+  });
+
+  it('400s an unknown op and 404s a note that is not a think note', async () => {
+    expect((await follow({ id: 't-1', op: 'pay' })).status).toBe(400);
+    knownKind = null;
+    expect((await follow({ id: 'nope', op: 'research' })).status).toBe(404);
+    expect(runFollow).not.toHaveBeenCalled();
   });
 });

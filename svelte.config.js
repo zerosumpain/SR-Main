@@ -16,7 +16,9 @@ const config = {
 				'object-src': ['none'],
 				'frame-ancestors': ['self'],
 				'form-action': ['self'],
-				'script-src': ['self', 'https://unpkg.com', 'https://static.cloudflareinsights.com', 'https://js-cdn.music.apple.com', 'https://analytics.strangeramblings.com'],
+				// 'wasm-unsafe-eval' lets a page compile WebAssembly (Biscuit Tower's
+				// physics on the TV, Rapier 2D) and nothing else — JavaScript eval stays shut.
+				'script-src': ['self', 'wasm-unsafe-eval', 'https://unpkg.com', 'https://static.cloudflareinsights.com', 'https://js-cdn.music.apple.com', 'https://analytics.strangeramblings.com'],
 				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com', 'https://unpkg.com'],
 				'font-src': ['self', 'data:', 'https://fonts.gstatic.com'],
 				'img-src': ['self', 'data:', 'blob:', 'https:'],

@@ -17,16 +17,8 @@
 
 import type { ProjectCard } from './cards';
 
-export const OWNER_ONLY_CARDS: ProjectCard[] = [
-  {
-    key: 'local-plan-navigator',
-    href: '/projects/local-plan-navigator',
-    label: 'Open the Local Plan Navigator',
-    kind: 'Prototype',
-    tag: 'Owner only · Planning',
-    title: 'Local Plan Navigator — Thirty Months, Three Gateways, One Map',
-    blurb: 'A GOV.UK-style prototype for navigating England\'s local plan process, with stage maps, a timeline planner, checklists, cited search and model-assisted answers.',
-    chips: 'GOV.UK Frontend · 2026 Regulations · NPPF · in-browser model',
-    ownerOnly: true,
-  },
-];
+// The Local Plan Navigator left this list on 2026-10-07, and Wildmind on
+// 2026-10-17, for PROJECT_CARDS as private-by-default cards (PRIVATE_BY_DEFAULT
+// in $lib/projects/visibility), so the owner can hand them out with a /projects
+// share link.
+export const OWNER_ONLY_CARDS: ProjectCard[] = [];

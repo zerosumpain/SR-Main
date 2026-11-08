@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { viewerOf } from '$lib/server/viewer';
-import { invokeWorkflowRuntime } from '$lib/workflows/runtime-client';
+import { invokeWorkflowRuntime } from '$lib/workflows-client/runtime-client';
 import { commissioningEnabled, decideCommission, prepareCommission } from './commission-service.server';
 import { CommissionError, listCommissions, loadCommission } from './commission-store.server';
 import { flushCommissionOutbox } from './commission-executor.server';

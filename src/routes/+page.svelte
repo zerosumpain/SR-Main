@@ -1,97 +1,142 @@
 <svelte:head>
   <title>Strange Ramblings</title>
-  <meta name="description" content="Building things with code in London. A living canvas." />
+  <meta name="description" content="A personal site that thinks, builds and ships on its own, wired to the heartbeat of the person who runs it." />
   <meta property="og:title" content="Strange Ramblings" />
-  <meta property="og:description" content="Building things with code in London. A living canvas." />
+  <meta property="og:description" content="A personal site that thinks, builds and ships on its own, wired to the heartbeat of the person who runs it." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://strangeramblings.com" />
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Strange Ramblings" />
-  <meta name="twitter:description" content="Building things with code in London. A living canvas." />
+  <meta name="twitter:description" content="A personal site that thinks, builds and ships on its own, wired to the heartbeat of the person who runs it." />
 </svelte:head>
 
 <script lang="ts">
   import { getContext, onMount } from 'svelte';
   import AccountSyncBanner from '$lib/components/landing/AccountSyncBanner.svelte';
-  import LandingHero from '$lib/components/landing/LandingHero.svelte';
-  import HeroBackground from '$lib/components/landing/HeroBackground.svelte';
-  import VitalSigns from '$lib/components/landing/VitalSigns.svelte';
-  import FeatureIndex from '$lib/components/landing/FeatureIndex.svelte';
-  import ShippedSeam from '$lib/components/landing/ShippedSeam.svelte';
-  import Ecg from '$lib/components/shared/Ecg.svelte';
+  import HeroViews from '$lib/components/landing/HeroViews.svelte';
+  import ShowcaseViews from '$lib/components/landing/ShowcaseViews.svelte';
+  import { PageView, setPageView } from '$lib/components/landing/page-view.svelte';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import { roundPulse } from '$lib/vitals/state';
+  import Rambler from '$lib/components/landing/Rambler.svelte';
+  import { scenery } from '$lib/landing/ramblers/scenery';
+  import { valleyFrom, type ExhibitFacts } from '$lib/landing/ramblers/exhibits';
+  import { rambler, toggleRambler } from '$lib/landing/ramblers/visibility.svelte';
+  import { LiveVitals } from '$lib/landing/live-vitals.svelte';
+  import { londonHour, readPulse } from '$lib/landing/sentence';
+  import { groundAt } from '$lib/landing/sky-ground';
+  import { skyLight } from '$lib/landing/sun';
+  import { localToday } from '$lib/constants/health-day';
   import type { VitalsStore } from '$lib/vitals/store.svelte';
+  import type { BuildShowcase } from '$lib/landing/showcase';
 
   const store = getContext<VitalsStore>('vitals');
 
   let { data } = $props();
 
+  const live = new LiveVitals();
+
+  // The visitor's view (sentence, place or notes), lifted out of the hero so
+  // the whole page follows it. It tracks the route's data (the server's
+  // choice and that view's loaded hero and showcase) until the visitor picks.
+  const page = setPageView(
+    new PageView(() => ({ choice: data.heroView, hero: data.heroComponent, showcase: data.showcaseComponent })),
+  );
   let mounted = $state(false);
 
-  // initialVitals is streamed, so it isn't in the SSR HTML — pre-mount uses
-  // sensible defaults and the live store takes over once mounted (onMount seeds
-  // it from the resolved stream, then its own polling keeps it current).
-  let pulse = $derived(mounted ? store.state.pulse : 60);
+  // initialVitals is streamed, so it isn't in the SSR HTML. Until the store is
+  // seeded AND a real heart-rate reading is in, the page says so in words
+  // rather than printing the store's placeholder 60 as if it were live.
+  // Read the target, not the eased state: the eased one counts up from that
+  // placeholder for five seconds, so the first numbers shown are never real.
+  // A reading over six hours old is not a pulse either (readPulse), and its
+  // age is the heart-rate reading's own, never a WHOOP recovery row's.
+  let reading = $derived(mounted ? store?.targetState : undefined);
+  let pulse = $derived(readPulse(reading, live.now));
   let town = $derived(mounted ? store.state.town : undefined);
-  let lastSyncedAt = $derived(mounted ? store.state.lastSyncedAt : undefined);
-
-  // Deterministic copy shown until the snapped heroTitle streams in. Mirrors the
-  // resting-state fallback the title service uses, so it rarely visibly swaps.
-  const FALLBACK_HERO = {
-    primary: 'STILL.',
-    ghost: 'FOR NOW.',
-    strapTemplate:
-      '{bpm} beats, {steps} steps, {temp} of {sky}. The day has not been agreed to yet.',
-  };
-
-  let heroTag = $derived(
-    `RIGHT NOW · ${data.dateStr}` + (town ? ` · ${town.toUpperCase()}` : ''),
+  let temp = $derived(reading?.sources?.weather ? reading.weather.temp : null);
+  // The sun where he is, for the place view's sky: the newest of the vitals
+  // poll and the page's own load, each only an altitude and whether it climbs.
+  // A dev ?sun= pin (sunPinned) wins over the poll so screenshots hold still.
+  let sun = $derived(data.sunPinned ? data.sun : (reading?.sun ?? data.sun ?? null));
+  // The place view carries that light's ground on down the page: the sky's
+  // own ground (sky.ts), read from sky-ground.ts so this eager chunk never
+  // carries the whole sky, which stays in the place view's lazy chunks.
+  let placeGround = $derived.by(() => {
+    if (page.view !== 'place') return undefined;
+    return groundAt(skyLight(sun, live.now, londonHour(live.now) < 12).alt);
+  });
+  // Shipping, read off the release showcase — one loader, several readings.
+  // Days are London days (localCadence), the same day as the dateline and the
+  // steps, so "today" never means yesterday in the hour after midnight BST.
+  let days = $derived(data.releases?.localCadence ?? []);
+  let dayKey = (offset: number) => localToday(new Date(live.now - offset * 86_400_000));
+  let deploysToday = $derived(days.length ? (days.find((d) => d.date === dayKey(0))?.count ?? 0) : null);
+  let totals = $derived(data.releases?.totals ?? null);
+  let deploysPerDay = $derived(
+    totals && totals.days > 0 && totals.releases > 0 ? Math.round((totals.releases / totals.days) * 10) / 10 : null,
   );
 
-  let now = $state(Date.now());
-
-  function formatSynced(iso: string | undefined, ref: number): string {
-    if (!iso) return '';
-    const secs = Math.round((ref - Date.parse(iso)) / 1000);
-    if (!Number.isFinite(secs) || secs < 90) return 'just now';
-    const mins = Math.round(secs / 60);
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.round(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.round(hrs / 24)}d ago`;
-  }
-
-  let syncedText = $derived(formatSynced(lastSyncedAt, now));
-
-  // Today's shipping for the vitals rail, read off the same release showcase the
-  // Shipped section below renders — one loader, two readings of it. `peak` is
-  // the busiest day in the window, so the bar is scaled against what a heavy day
-  // actually looks like rather than an invented ceiling.
-  let deploysToday = $derived.by(() => {
-    const cadence = data.releases?.cadence ?? [];
-    if (cadence.length === 0) return null;
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const today = cadence.find((d) => d.date === todayKey)?.count ?? 0;
-    const peak = Math.max(1, ...cadence.map((d) => d.count));
-    const last = data.releases?.totals?.lastDeploy ?? null;
-    const latestAt = last
-      ? new Date(last).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-      : null;
-    return { today, peak, latestAt: today > 0 ? latestAt : null };
+  // How it ships itself, for the showcase's build chapter: the same release
+  // record the hero reads, so the two never disagree.
+  let build = $derived<BuildShowcase>({
+    releases: totals && totals.releases > 0 ? totals.releases : null,
+    linesWritten: totals?.insertions || null,
+    days: totals?.days || null,
+    firstDeploy: totals?.firstDeploy ?? null,
+    deploysPerDay,
+    deploysToday,
+    fromDaydream: data.showcase.daydream.impact?.shipped ?? null,
   });
 
+  // What the sections are showing, for the rambler to talk about when he
+  // visits one: the same figures the page prints, read as he speaks.
+  const ramblerFacts = (): ExhibitFacts => {
+    const s = data.showcase;
+    return {
+      bpm: pulse.state === 'fresh' ? pulse.bpm : null,
+      stepsToday: data.steps?.total ?? null,
+      deploysToday,
+      daydream: {
+        questions: s.daydream.week?.questions,
+        hours: s.daydream.week?.hours,
+        struckOut: s.daydream.week?.struckOut,
+        hitRate: s.daydream.impact?.hitRate,
+        shipped: s.daydream.impact?.shipped,
+      },
+      health: {
+        stepsYear: s.health.stepsYear,
+        kmYear: s.health.kmYear,
+        daysOver10k: s.health.daysOver10k,
+        sleep: s.health.bands.sleep,
+        recovery: s.health.bands.recovery,
+      },
+      app: { tabs: s.app.tabs, watchPages: s.app.watchPages, widgets: s.app.widgets.length, games: s.app.games },
+      build: { releases: build.releases, linesWritten: build.linesWritten, deploysPerDay: build.deploysPerDay, fromDaydream: build.fromDaydream },
+      valley: valleyFrom(s.wildmind),
+      posts: data.posts.map((p) => p.title),
+    };
+  };
+
+  const fmtDate = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+
   onMount(() => {
-    // initialVitals is streamed from the server load, so seed the store once it
-    // resolves; the store's own polling takes over from there.
     Promise.resolve(data.initialVitals).then((b) => {
       if (b) store.setState(b);
     });
     mounted = true;
-
-    const tick = setInterval(() => (now = Date.now()), 30_000);
-
-    return () => clearInterval(tick);
+    // The layout's store re-reads every fifteen minutes, sized for a header
+    // cell. The landing hero is the one place a pulse is the subject, so it
+    // asks again every two minutes while the tab is visible; the endpoint
+    // serves a sixty-second cache, so this is one cheap read per visitor.
+    const pulse = setInterval(() => {
+      if (!document.hidden) void store.fetchState();
+    }, 120_000);
+    const stop = live.start();
+    return () => {
+      clearInterval(pulse);
+      stop();
+    };
   });
 </script>
 
@@ -102,156 +147,349 @@
      nothing at all. -->
 <AccountSyncBanner summary={data.syncAttention} prs={data.mergeablePrs} />
 
-<!-- HERO — viewport minus nav. Two columns: display type on the page ground,
-     the live rail flush against the right edge on the rail surface. -->
-<section
-  class="hero-sec relative flex flex-col justify-between overflow-hidden"
-  style="min-height: calc(100vh - var(--site-nav-height));"
->
-  <!-- Center — hero copy (left) + live "Vital Signs" tiles (right). heroTitle is
-       streamed; render fallback copy until it lands so the hero paints without
-       waiting on the external weather fetch. The tiles sit at z-10 over the background
-       and stack below the copy on narrow viewports. -->
-  <div class="relative z-10 flex-1 flex items-stretch">
-    <div class="hero-grid">
-      <div class="hero-copy">
-        {#if data.backgroundSettings.enabled && data.backgroundAsset}
-          <HeroBackground settings={data.backgroundSettings} asset={data.backgroundAsset} />
-        {/if}
-        <div class="hero-title"><LandingHero tag={heroTag} /></div>
-      </div>
-      <div class="hero-divider" aria-hidden="true"></div>
-      <aside class="hero-aside">
-        <VitalSigns
-          deploys={deploysToday}
-          heroTitle={data.heroTitle}
-          fallbackHero={FALLBACK_HERO}
-          steps={data.steps}
-        >
-          {#snippet statusBackground()}
-            <Ecg rhr={roundPulse(pulse)} showGrid={false} />
-          {/snippet}
-        </VitalSigns>
-      </aside>
-    </div>
-  </div>
-
-  <!-- Signature bar: what the background is, and when the readings last landed. -->
-  <div class="relative z-10 flex justify-between items-center gap-4 hero-pad hero-sig">
-    <span class="truncate">Signature · Pulse · Live</span>
-    {#if syncedText}<span class="flex-none">Synced {syncedText}</span>{/if}
-  </div>
+<!-- HERO — the title and the site's live numbers, read as a sentence, a place
+     or notes. Its lower edge is also the rambler's ground. -->
+<section class="hero" aria-label="Live" data-rambler="hero" use:scenery={{ edge: 'bottom' }}>
+  <!-- One hero, three readings of the same numbers. The server picked which
+       (a ?view= link, the visitor's own choice, or the notes); HeroViews owns
+       the switch between them. -->
+  <HeroViews
+    {page}
+    date={data.dateline}
+    {town}
+    {temp}
+    {pulse}
+    {sun}
+    v={live.v}
+    now={live.now}
+    facts={data.capabilities}
+    steps={data.steps}
+    cadence={days}
+    tagline={data.tagline}
+    releases={totals && totals.releases > 0
+      ? { total: totals.releases, firstDeploy: totals.firstDeploy, days: totals.days }
+      : null}
+  />
 </section>
 
-<!-- SHIPPED — the record of every deploy, as one continuous mark. Sits directly
-     under the hero: it is the substance, and "More" is the closer. -->
-<ShippedSeam data={data.releases} />
+<!-- Everything below the hero follows its view: the showcase is told in the
+     same style (each view's own chunk, swapped with the hero), and the
+     writing strip and footer take a light coat of it. -->
+<div class="below" data-view={page.view} style:--sky-ground={placeGround}>
+  <ShowcaseViews
+    {page}
+    data={data.showcase}
+    {build}
+    v={live.v}
+    now={live.now}
+    {pulse}
+    {sun}
+    steps={data.steps}
+    cadence={days}
+    facts={data.capabilities}
+  />
 
-<!-- MORE — terminal-index of the non-live field studies, tools and writing -->
-<FeatureIndex isOwner={data.isOwner} />
+  {#if data.posts.length}
+    <section class="writing" aria-labelledby="writing-h" data-rambler="writing" use:scenery={{ spot: 'bed', at: 0.1 }}>
+      <h2 id="writing-h" class="writing-k">Also written down</h2>
+      {#each data.posts as p (p.slug)}
+        <a class="writing-post" href="/blog/{p.slug}">
+          <span class="writing-title">{p.title}</span>
+          {#if p.publishedAt}<span class="writing-date">{fmtDate(p.publishedAt)}</span>{/if}
+        </a>
+      {/each}
+      <a class="writing-all" href="/blog">All writing <span aria-hidden="true">→</span></a>
+    </section>
+  {/if}
 
-<!-- FOOTER — dense, utilitarian -->
-<footer class="site-foot flex flex-wrap justify-between items-center gap-4">
-  <p class="brand text-[14px]" style="color: var(--text-muted);">strange ramblings</p>
-  <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
-    <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
-    <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>
-    <a href="/health" class="nav-link">Health</a>
-    <a href="https://library.strangeramblings.com" class="nav-link">Library</a>
-    <a href="/admin" class="nav-link">Admin</a>
-    <a href="/privacy" class="nav-link">Privacy</a>
-    <a href="/tos" class="nav-link">Terms</a>
-  </div>
-</footer>
+  <footer class="site-foot" data-rambler="footer" use:scenery={{ spot: 'garage', at: 0.88 }}>
+    <p class="brand foot-brand">strange ramblings</p>
+    <nav class="foot-links" aria-label="Footer">
+      <a href="https://github.com/jkrup" target="_blank" rel="noopener" class="nav-link">GitHub</a>
+      <a href="mailto:john@strangeramblings.com" class="nav-link">Email</a>
+      <a href="/rss.xml" class="nav-link">RSS</a>
+      <a href="https://library.strangeramblings.com" class="nav-link">Library</a>
+      {#if data.isOwner}<a href="/admin" class="nav-link">Admin</a>{/if}
+      <a href="/privacy" class="nav-link">Privacy</a>
+      <a href="/tos" class="nav-link">Terms</a>
+      <button type="button" class="nav-link rambler-toggle" data-rambler-hover="tuck" onclick={toggleRambler}>
+        {rambler.hidden ? 'Bring back the rambler' : 'Tuck in the rambler'}
+      </button>
+      <a href="/rambler" class="nav-link" data-rambler-hover="explain">How he works</a>
+    </nav>
+  </footer>
+</div>
+
+<Rambler day={data.day} facts={ramblerFacts} valleyVersion={data.showcase.wildmind?.mapVersion ?? null} />
 
 <style>
-  /* The footer is a rail band, like the nav strip that opens the page — the
-     document closes on the same surface it started on. */
+  .hero {
+    background: var(--text-primary);
+    color: var(--bg);
+  }
+  /* Browsers drop the ink band in print; the hero then prints ink on paper. */
+  @media print {
+    .hero {
+      background: none;
+      color: var(--text-primary);
+    }
+  }
+  /* Everything below the hero, in the hero's view. The default (and the
+     sentence) is the paper page; the place carries the night on down; the
+     notes turn the paper into a ruled notebook. Backgrounds run full-bleed,
+     content keeps the 1312px measure. */
+  .below {
+    --gut: clamp(16px, 4vw, 64px);
+    background: var(--bg);
+    color: var(--text-primary);
+  }
+  .below[data-view='place'] {
+    /* --sky-ground is the live sky's ground (registered as a colour by the
+       place hero's PlaceSkyProps, so a change of light eases); --place-night
+       is its night. */
+    background: var(--sky-ground, var(--place-night));
+    color: var(--bg);
+    transition: --sky-ground 2s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .below[data-view='place'] {
+      transition: none;
+    }
+  }
+  .below[data-view='notes'] {
+    background: var(--bg) repeating-linear-gradient(transparent 0 31px, var(--line-hair) 31px 32px);
+  }
+
+  .writing {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 20px 48px;
+    max-width: 1312px;
+    margin: 72px auto 88px;
+    padding: 28px 32px;
+    box-sizing: border-box;
+    width: calc(100% - 2 * var(--gut));
+    background: var(--text-primary);
+    color: var(--bg);
+  }
+  .writing-k,
+  .writing-date,
+  .writing-all {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .writing-k {
+    font-weight: 400;
+    color: var(--accent-on-dark);
+  }
+  .writing-post {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-height: 44px;
+    color: var(--bg);
+    text-decoration: none;
+  }
+  .writing-post:hover .writing-title {
+    color: var(--accent-on-dark);
+  }
+  .writing-title {
+    font-family: var(--font-display);
+    font-size: var(--fs-display-xs);
+    text-transform: uppercase;
+    letter-spacing: -0.02em;
+  }
+  .writing-date {
+    color: rgba(237, 228, 212, 0.6);
+  }
+  .writing-all {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-left: auto;
+    color: var(--accent-on-dark);
+    text-decoration: none;
+  }
+  .writing-post:focus-visible,
+  .writing-all:focus-visible {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 4px;
+  }
+
+  /* The sentence: an editorial page. The strip is set on the paper between
+     two rules, the titles in the hero's serif. */
+  .below[data-view='sentence'] .writing {
+    padding: 24px 0;
+    background: none;
+    color: var(--text-primary);
+    border-top: 2px solid var(--text-primary);
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .below[data-view='sentence'] .writing-k,
+  .below[data-view='sentence'] .writing-all {
+    color: var(--accent-hover);
+  }
+  .below[data-view='sentence'] .writing-post {
+    color: var(--text-primary);
+  }
+  .below[data-view='sentence'] .writing-title {
+    font-family: var(--fs-serif);
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .below[data-view='sentence'] .writing-post:hover .writing-title {
+    color: var(--accent-hover);
+  }
+  .below[data-view='sentence'] .writing-date {
+    color: var(--text-muted);
+  }
+  .below[data-view='sentence'] .writing-post:focus-visible,
+  .below[data-view='sentence'] .writing-all:focus-visible {
+    outline-color: var(--accent-hover);
+  }
+
+  /* The place: the strip is a lit sign on the night shore, petrol-edged like
+     the ridge's crest. */
+  .below[data-view='place'] .writing {
+    background: none;
+    border: 1px solid rgba(127, 184, 192, 0.45);
+  }
+  .below[data-view='place'] .writing-k {
+    color: var(--accent-ink-on-dark);
+  }
+  .below[data-view='place'] .writing-date {
+    color: var(--on-ink-70);
+  }
+
+  /* The notes: an index card pinned to the notebook. */
+  .below[data-view='notes'] .writing {
+    background: var(--surface-card);
+    color: var(--text-primary);
+    border: 1px solid var(--line-strong);
+    border-left: 3px solid var(--accent-ink);
+  }
+  .below[data-view='notes'] .writing-k,
+  .below[data-view='notes'] .writing-all {
+    color: var(--accent-ink);
+  }
+  .below[data-view='notes'] .writing-post {
+    color: var(--text-primary);
+  }
+  .below[data-view='notes'] .writing-title {
+    font-family: var(--fs-serif);
+    font-style: italic;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .below[data-view='notes'] .writing-post:hover .writing-title {
+    color: var(--accent-ink);
+  }
+  .below[data-view='notes'] .writing-date {
+    color: var(--text-muted);
+  }
+  .below[data-view='notes'] .writing-post:focus-visible,
+  .below[data-view='notes'] .writing-all:focus-visible {
+    outline-color: var(--accent-ink);
+  }
+
+  /* The footer is a rail band, like the nav strip that opens the page. */
   .site-foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
     padding: 18px clamp(24px, 5vw, 64px);
     border-top: 1px solid var(--line-strong);
     background: var(--surface-rail);
   }
-
-
-  /* The section owns no horizontal padding of its own: the rail has to reach the
-     right edge, so the padding lives on the columns that need it. */
-  .hero-sec {
-    padding: 0 0 24px;
-  }
-  .hero-pad {
-    padding-inline: clamp(24px, 5vw, 64px);
-  }
-  .hero-sig {
-    font-family: var(--font-mono);
-    font-size: var(--fs-label-xs);
-    letter-spacing: var(--tracking-label-wide);
-    text-transform: uppercase;
+  .foot-brand {
+    margin: 0;
+    font-size: var(--fs-nav);
     color: var(--text-muted);
   }
-
-  /* Hero splits into copy (left) + the live vitals rail (right) on wide
-     viewports, divided by a hairline, and stacks under 1024px. */
-  .hero-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 1px minmax(280px, 340px);
-    width: 100%;
-    align-items: stretch;
+  /* A button dressed as the footer links around it. */
+  .rambler-toggle {
+    background: none;
+    cursor: pointer;
   }
-  .hero-copy {
-    isolation: isolate;
-    overflow: hidden;
-    min-width: 0;
+  .foot-links {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    padding: clamp(36px, 6vh, 72px) clamp(24px, 4vw, 56px) clamp(28px, 5vh, 56px);
-    position: relative;
+    gap: 12px 24px;
   }
-  /* A warm bloom behind the type — accent from the top left, petrol from the
-     bottom right. */
-  .hero-copy::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(80% 70% at 20% 30%, rgba(196, 87, 10, 0.16), transparent 62%),
-      radial-gradient(70% 60% at 85% 85%, rgba(14, 91, 102, 0.14), transparent 60%);
-  }
-  .hero-title {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-  }
-  /* The rail has no ground of its own any more, so there is no value change to
-     divide the columns — the hairline does it again. */
-  .hero-divider {
-    background: var(--line-strong);
-  }
-  .hero-aside {
-    display: flex;
-    min-width: 0;
-  }
-  .hero-aside :global(.vitals) {
-    border-width: 0;
+  .foot-links > :global(.nav-link) {
+    min-height: 44px;
+    align-items: center;
   }
 
-  @media (max-width: 1024px) {
-    .hero-grid {
-      grid-template-columns: minmax(0, 1fr);
+  /* The sentence ends on a hairline, like the foot of a printed page. */
+  .below[data-view='sentence'] .site-foot {
+    background: none;
+    border-top: 2px solid var(--text-primary);
+  }
+  /* The place: the shore at night, the links lit like the town's windows. */
+  .below[data-view='place'] .site-foot {
+    background: none;
+    border-top-color: var(--on-ink-16);
+  }
+  .below[data-view='place'] .foot-brand {
+    color: var(--on-ink-70);
+  }
+  .below[data-view='place'] .foot-brand::before {
+    color: var(--accent-on-dark);
+  }
+  .below[data-view='place'] .foot-links > :global(.nav-link) {
+    color: var(--on-ink-80);
+  }
+  .below[data-view='place'] .foot-links > :global(.nav-link:hover) {
+    color: var(--accent-on-dark);
+    border-color: var(--on-ink-30);
+  }
+  .below[data-view='place'] .foot-links > :global(.nav-link:focus-visible) {
+    outline: 2px solid var(--accent-on-dark);
+    outline-offset: 4px;
+  }
+  /* The notes: the last ruled line, torn off with a dashed edge. */
+  .below[data-view='notes'] .site-foot {
+    border-top: 1px dashed var(--text-secondary);
+  }
+
+  @media (max-width: 900px) {
+    .writing-all {
+      margin-left: 0;
     }
-    .hero-divider {
-      display: none;
+  }
+
+  @media print {
+    .below,
+    .below[data-view] {
+      background: none;
+      color: #1a1008;
     }
-    .hero-copy {
-      padding-bottom: clamp(20px, 4vw, 32px);
+    .below[data-view] .writing {
+      background: none;
+      color: #1a1008;
+      border: 1px solid #1a1008;
     }
-    .hero-aside {
-      padding: 0 clamp(24px, 5vw, 64px) 24px;
-      max-width: 520px;
+    .below[data-view] .writing-k,
+    .below[data-view] .writing-post,
+    .below[data-view] .writing-date,
+    .below[data-view] .writing-all,
+    .below[data-view] .foot-brand,
+    .below[data-view] .foot-links > :global(.nav-link) {
+      color: #1a1008;
     }
-    .hero-aside :global(.vitals) {
-      border-width: 1px;
+    .below[data-view] .site-foot {
+      background: none;
+      border-top: 1px solid #1a1008;
     }
   }
 </style>

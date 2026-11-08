@@ -1,4 +1,5 @@
-import { isArtifact, type Artifact } from '$lib/workflows/site-tools/artifact-types';
+import { parsePage, type PanelBlock, type PanelPage } from '$lib/jkai/panel/schema';
+import { isArtifact, type Artifact } from '$lib/tools/artifact-types';
 
 /**
  * The rich parts of a jkai turn, reduced to what the iPhone app can draw
@@ -35,7 +36,16 @@ export type NativeArtifact =
       totalRows: number;
       caption: string | null;
     }
-  | { type: 'diagram'; code: string; caption: string | null };
+  | { type: 'diagram'; code: string; caption: string | null }
+  | {
+      type: 'map';
+      simple: true;
+      points: Array<{ lat: number; lon: number; label: string | null }>;
+      tracks: Array<Array<{ lat: number; lon: number }>>;
+      bounds: { south: number; west: number; north: number; east: number };
+      caption: string | null;
+    }
+  | { type: 'map'; simple: false; caption: string | null };
 
 export type NativeSource = {
   kind: 'file' | 'research';
@@ -139,6 +149,53 @@ function table(artifact: Extract<Artifact, { type: 'table' }>): NativeArtifact {
   return { type: 'table', columns, rows, totalRows: artifact.rows?.length ?? 0, caption: str(artifact.caption) };
 }
 
+/** A phone map past this many markers is a smear; the web draws the rest. */
+export const MAP_POINT_CAP = 200;
+/** Points across all of one map's tracks. */
+export const MAP_TRACK_POINT_CAP = 2000;
+
+const coord = (lat: unknown, lng: unknown): { lat: number; lon: number } | null =>
+  typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng) &&
+  Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+    ? { lat, lon: lng }
+    : null;
+
+/**
+ * A `render_map` artifact, as the phone can draw it with MapKit: markers and
+ * lines only. A heatmap (or a map with nothing plottable) is `simple: false`,
+ * and the phone offers the web — an app that predates maps reads any unknown
+ * kind as that same web card, so this is safe to send to every build.
+ */
+function map(artifact: Extract<Artifact, { type: 'map' }>): NativeArtifact {
+  const caption = str(artifact.caption);
+  const layers = Array.isArray(artifact.layers) ? artifact.layers : [];
+  if (layers.some((l) => l?.kind === 'heatmap')) return { type: 'map', simple: false, caption };
+  const points: Array<{ lat: number; lon: number; label: string | null }> = [];
+  const tracks: Array<Array<{ lat: number; lon: number }>> = [];
+  let trackPoints = 0;
+  for (const layer of layers) {
+    if (layer?.kind === 'points') {
+      for (const p of layer.points ?? []) {
+        const c = coord(p?.lat, p?.lng);
+        if (c && points.length < MAP_POINT_CAP) points.push({ ...c, label: str(p.label) });
+      }
+    } else if (layer?.kind === 'track') {
+      const line: Array<{ lat: number; lon: number }> = [];
+      for (const p of layer.points ?? []) {
+        const c = coord(p?.lat, p?.lng);
+        if (c && trackPoints < MAP_TRACK_POINT_CAP) { line.push(c); trackPoints++; }
+      }
+      if (line.length >= 2) tracks.push(line);
+    }
+  }
+  const all = [...points, ...tracks.flat()];
+  if (all.length === 0) return { type: 'map', simple: false, caption };
+  const lats = all.map((c) => c.lat);
+  const lons = all.map((c) => c.lon);
+  const bounds = { south: Math.min(...lats), west: Math.min(...lons), north: Math.max(...lats), east: Math.max(...lons) };
+  return { type: 'map', simple: true, points, tracks, bounds, caption };
+}
+
 /** Every artifact a turn's tool steps produced, in the order they ran. */
 export function nativeArtifacts(toolSteps: unknown): NativeArtifact[] {
   if (!Array.isArray(toolSteps)) return [];
@@ -149,7 +206,8 @@ export function nativeArtifacts(toolSteps: unknown): NativeArtifact[] {
     if (!isArtifact(artifact)) continue;
     if (artifact.type === 'chart') out.push(chart(artifact));
     else if (artifact.type === 'table') out.push(table(artifact));
-    else out.push({ type: 'diagram', code: artifact.code, caption: str(artifact.caption) });
+    else if (artifact.type === 'diagram') out.push({ type: 'diagram', code: artifact.code, caption: str(artifact.caption) });
+    else if (artifact.type === 'map') out.push(map(artifact));
   }
   return out;
 }
@@ -161,6 +219,33 @@ function clip(text: unknown): string {
 
 function basename(path: string): string {
   return path.split('/').filter(Boolean).pop() ?? path;
+}
+
+/** The schema's ceilings (`panel/schema.ts`, byte-shared with Core). */
+export const PANEL_SECTION_CAP = 12;
+export const PANEL_SECTION_BLOCK_CAP = 24;
+
+/**
+ * Trim a stored page to the schema's ceilings BEFORE the strict parse.
+ *
+ * Core's reducer used to cap only the page (40 blocks), while the schema caps a
+ * section at 24 blocks and a page at 12 sections, so a long turn could store a
+ * page the parse rejects — and the phone then showed no desk at all. Core's
+ * reducer now refuses the overflow; this keeps the pages already stored (and
+ * any written by an older Core) drawable, losing only the overflow. Leaves the
+ * byte-shared schema untouched, so no hash moves.
+ */
+export function clampPage(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { sections?: unknown }).sections)) return raw;
+  const page = raw as { sections: unknown[] };
+  return {
+    ...page,
+    sections: page.sections.slice(0, PANEL_SECTION_CAP).map((s) =>
+      s && typeof s === 'object' && Array.isArray((s as { blocks?: unknown }).blocks)
+        ? { ...(s as object), blocks: (s as { blocks: unknown[] }).blocks.slice(0, PANEL_SECTION_BLOCK_CAP) }
+        : s,
+    ),
+  };
 }
 
 /**
@@ -204,3 +289,40 @@ export function nativeSources(metadata: Record<string, unknown>): NativeSource[]
   }
   return out;
 }
+
+/**
+ * The turn's desk page (SR-Jkai-Core's right-hand panel), for the app's drawer.
+ *
+ * Read with the schema the desk itself draws with (`$lib/jkai/panel/schema`,
+ * shared byte for byte with Core), so a row written by an older or newer Core
+ * that no longer validates reaches the phone as nothing rather than as a shape
+ * it would mis-draw. Two things are taken out for the phone:
+ *
+ * - `artifact` blocks — the raw Vega/Mermaid spec. The app already gets those
+ *   reduced in `artifacts`; a second, unreduced copy is weight it cannot draw.
+ * - action buttons other than `ask` and `link` — the phone has no confirm
+ *   flow, and a desk button that posts is not something to tap on a lock screen.
+ *
+ * A section left empty is dropped; a page left empty is null.
+ */
+export function nativePanel(metadata: Record<string, unknown>): PanelPage | null {
+  const page = parsePage(clampPage(metadata.panel));
+  if (!page) return null;
+  const keep = (b: PanelBlock): PanelBlock | null => {
+    if (b.type === 'artifact') return null;
+    if (b.type === 'actions') {
+      const items = b.items.filter((a) => a.kind === 'ask' || a.kind === 'link');
+      return items.length ? { ...b, items } : null;
+    }
+    if (b.type === 'group') {
+      const blocks = b.blocks.map(keep).filter((x): x is Exclude<PanelBlock, { type: 'group' }> => !!x && x.type !== 'group');
+      return blocks.length ? { ...b, blocks } : null;
+    }
+    return b;
+  };
+  const sections = page.sections
+    .map((s) => ({ ...s, blocks: s.blocks.map(keep).filter((b): b is PanelBlock => b !== null) }))
+    .filter((s) => s.blocks.length > 0);
+  return sections.length ? { ...page, sections } : null;
+}
+

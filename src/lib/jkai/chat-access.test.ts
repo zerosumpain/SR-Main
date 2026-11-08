@@ -11,7 +11,7 @@ vi.mock('$lib/server/viewer', () => ({ viewerOf: async () => viewer }));
 
 import { CHAT_DAILY_TURNS, chatTurnDecision, requireOwnJob } from './chat-access.server';
 import { OWNER_ACCESS } from '$lib/server/area-scope';
-import { createJob, cancelJob, cleanOldJobs } from '$lib/workflows/chat/job-store';
+import { createJob, cancelJob, cleanOldJobs } from '$lib/jkai/chat/job-store';
 
 const SELF = { level: 'self' as const, own: 'u_a' };
 const member = (principalId: string) => ({

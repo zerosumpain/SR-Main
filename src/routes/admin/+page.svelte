@@ -151,7 +151,7 @@
         <a class="nm-tile" href={`/admin/ai/keys`}>
           <div class="nm-tile-eyebrow">Keys</div>
           <div class="nm-tile-title">API Providers</div>
-          <div class="nm-tile-sub">OpenRouter, ElevenLabs, Tavily — one place to update them all.</div>
+          <div class="nm-tile-sub">OpenRouter, ElevenLabs, Tavily, Brave — one place to update them all.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
         <a class="nm-tile" href={`/admin/ai/models`}>
@@ -189,6 +189,12 @@
           <div class="nm-tile-eyebrow">Tools</div>
           <div class="nm-tile-title">Tool Usage</div>
           <div class="nm-tile-sub">What gets called, what never does, what fails.</div>
+          <div class="nm-tile-foot"><span>open</span><span>→</span></div>
+        </a>
+        <a class="nm-tile" href={`/admin/ops/tavily`}>
+          <div class="nm-tile-eyebrow">Tavily · Brave</div>
+          <div class="nm-tile-title">Web Search</div>
+          <div class="nm-tile-sub">The search balancer: both allowances, which process searched, for what, and when.</div>
           <div class="nm-tile-foot"><span>open</span><span>→</span></div>
         </a>
         <a class="nm-tile" href={`/admin/ops/live`}>

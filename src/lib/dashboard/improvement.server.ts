@@ -11,7 +11,11 @@ import { buildStories, summariseStories } from '$lib/selfimprove/narrative';
 import { buildDeployedCapabilities } from '$lib/selfimprove/deployment';
 import { listPolicyVersions, type ToolPolicyVersion } from '$lib/toolpolicy/policy';
 import type { CallEfficiency } from '$lib/selfimprove/call-efficiency';
-import { COLLECTIONS } from '$lib/selfimprove/types';
+import { COLLECTIONS, SETTINGS_ENABLED_KEY } from '$lib/selfimprove/types';
+import { getSetting } from '$lib/server/models/settings';
+import { db } from '$lib/db';
+import { customTools } from '$lib/db/schema';
+import { desc, eq } from 'drizzle-orm';
 import { improvementSchedule } from '$lib/heartbeat/activity-schedule';
 import type { ImprovementRunData, QuestionInsights, ToolAttemptData } from '$lib/selfimprove/types';
 
@@ -222,3 +226,45 @@ export async function loadImprovementDashboard() {
 
 
 export type ImprovementDashboardData = Awaited<ReturnType<typeof loadImprovementDashboard>>;
+
+// ── Owner controls ─────────────────────────────────────────────────────────
+// What the switches on /jkai/develop/improvement need, moved here from the
+// retired /admin/ai/improvement page (2026-10-02). Owner only: the page never
+// calls this for a member.
+
+async function loadApis() {
+  if (!(await getCollectionBySlug(COLLECTIONS.apiCatalog))) return [];
+  const { records } = await queryRecords(COLLECTIONS.apiCatalog, { sort: { field: 'key', dir: 'asc' }, limit: 500 }, OWNER);
+  return records.map((r) => {
+    const d = r.data as { name?: string; baseUrl?: string; status?: string; lastVerifiedAt?: string; auth?: { kind?: string } };
+    return { key: r.key, data: { name: d.name, baseUrl: d.baseUrl, status: d.status, lastVerifiedAt: d.lastVerifiedAt, auth: { kind: d.auth?.kind } } };
+  });
+}
+
+async function loadSelfBuiltTools() {
+  const rows = await db.select().from(customTools).where(eq(customTools.createdBy, 'self-improvement')).orderBy(desc(customTools.createdAt));
+  return rows.map((t) => ({
+    name: t.name, description: t.description, toolset: t.toolset, enabled: t.enabled,
+    runCount: t.runCount, errorCount: t.errorCount,
+  }));
+}
+
+export async function loadImprovementControls() {
+  const [apis, tools, enabledSetting, schedule] = await Promise.all([
+    loadApis().catch(() => []),
+    loadSelfBuiltTools().catch(() => []),
+    getSetting(SETTINGS_ENABLED_KEY),
+    improvementSchedule(),
+  ]);
+  return {
+    // Kill-switch: unset (null) is treated as enabled by the engine; only an
+    // explicit `false` pauses it.
+    enabled: enabledSetting !== false,
+    schedule: { display: schedule.display },
+    running: getImprovementStatus().running,
+    apis,
+    tools,
+  };
+}
+
+export type ImprovementControlsData = Awaited<ReturnType<typeof loadImprovementControls>>;

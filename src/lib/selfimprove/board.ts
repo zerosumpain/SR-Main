@@ -84,6 +84,14 @@ export const IDEA_SOURCES = [
   'toolsmith',
   /** A chat turn the owner analysed and sent to the engine. */
   'trace',
+  /** A build the owner commissioned from web chat (`develop_commission`). */
+  'chat',
+  /** RESERVED: a build commissioned from the iPhone app, once the server can
+   *  prove the request came from him. Nothing writes it yet. */
+  'phone',
+  /** An ask jkai could not meet: a planned capability, or one nothing on the
+   *  site does (slice 7b). Queued from chat, never autobuilt (`propose.ts`). */
+  'capability-gap',
   /** Queued before this field existed. Never a guess. */
   'unattributed',
 ] as const;
@@ -167,7 +175,7 @@ export type WorkLane = (typeof WORK_LANES)[number];
 /**
  * Which builder takes a backlog item.
  *
- * Since D3 (2026-09-26) there are two builders: the repo change-request lane,
+ * Since D3 (2026-09-26) there are two builders: the repo lane (a development delivery since 2026-10-02),
  * which takes anything needing code once the owner has accepted its brief, and
  * the monitor generator for watches. The toolsmith and catalogue lanes were
  * retired with the toolsmith; `tool` and `source` items now go to `build`.
@@ -219,6 +227,9 @@ export const SOURCE_LABEL: Readonly<Record<IdeaSource, { label: string; from: st
   engine: { label: 'About the engine', from: 'its own proposals, never built by a lane' },
   toolsmith: { label: 'The toolsmith', from: 'the retired toolsmith — asides had while authoring' },
   trace: { label: 'A turn you sent', from: 'a chat trace analysed by hand' },
+  chat: { label: 'Commissioned in chat', from: 'a build you commissioned from web chat' },
+  phone: { label: 'Commissioned on the phone', from: 'a build you commissioned from the iPhone app' },
+  'capability-gap': { label: 'Capability gap', from: 'something you asked jkai for that is not built yet' },
   unattributed: { label: 'Before this was recorded', from: 'queued before the channel was stamped' },
 };
 
@@ -511,6 +522,9 @@ export function isTapped(item: { grooming?: { acceptedAt?: string | null } | nul
 export function artifactHref(ref: string | null): string | null {
   if (!ref) return null;
   if (/^https?:\/\//i.test(ref)) return ref;
+  // A delivery is read on its development page; a bare build (a change
+  // request from before 2026-10-02) has only the build console.
+  if (ref.startsWith('delivery:')) return `/jkai/develop/${ref.slice('delivery:'.length)}`;
   if (ref.startsWith('build:')) return `/jkai/builds/${ref.slice('build:'.length)}`;
   if (ref.startsWith('monitor:')) return '/jkai/daydreams/watches';
   return null;

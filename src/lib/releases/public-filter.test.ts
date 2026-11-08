@@ -67,6 +67,17 @@ describe('isSurfacePublic', () => {
   });
 });
 
+describe('the card-less Hometowns map page', () => {
+  // `hometowns` defaults public so its versioned files are served, but there
+  // is no page at /projects/hometowns/ to advertise.
+  it('is never a public surface, and condemns an item that names it', () => {
+    expect(isSurfacePublic('/projects/hometowns', VIS)).toBe(false);
+    expect(isSurfacePublic('/projects/hometowns/0123456789abcdef/mobile.html', VIS)).toBe(false);
+    expect(isItemPublic(item({ surfaces: ['/projects/hometowns'] }), VIS)).toBe(false);
+    expect(isItemPublic(item({ surfaces: ['/projects/hometowns'] }), { hometowns: true })).toBe(false);
+  });
+});
+
 describe('isItemPublic', () => {
   it('accepts a clean user-facing item', () => {
     expect(isItemPublic(item(), VIS)).toBe(true);

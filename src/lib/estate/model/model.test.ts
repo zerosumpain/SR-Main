@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { assembleEstateModel } from './assemble.server';
 import registry from '../registry/apps.generated.json';
-import { EXTRACTED_TRIGGERS } from '$lib/workflows/trigger-ownership';
+import { EXTRACTED_TRIGGERS } from '$lib/workflows-client/trigger-ownership';
 
 const model = await assembleEstateModel();
 
@@ -57,7 +57,7 @@ describe('estate model', () => {
       ).toBe(true);
     }
     // And the constant itself is untouched by the model.
-    expect([...EXTRACTED_TRIGGERS]).toEqual(['policy-analysis']);
+    expect([...EXTRACTED_TRIGGERS]).toEqual([]);
   });
 
   it('gives every feed a ledger row, and every node a feed that produced it', () => {

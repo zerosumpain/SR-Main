@@ -1,26 +1,28 @@
 <script lang="ts">
-  // Steps — a horizontal track of stages you can select, with per-stage state.
-  // Used for anything that is a sequence with a current position: the deploy pipeline, the
-  // night build, a frame stream. Selection is a callback prop, not an event.
+  // Steps — a track of stages you can select, with per-stage state.
+  //
+  // Drawn as stations on a rail: a numbered node per stage, joined by a line that fills up to
+  // the selected stage, so "where it has got to" reads before any label does. Wraps on a narrow
+  // screen into a vertical rail. Selection is a callback prop, not an event.
   export type StepState = 'idle' | 'running' | 'done' | 'failed' | 'skipped';
   interface Item { id: string; label: string; sub?: string; state?: StepState }
   interface Props {
     items: Item[];
     selected?: string | null;
     onselect?: (id: string) => void;
+    /** A colour override. Normally the page's part colour is right. */
     tone?: string;
     /** Show the connecting rail. Off for unordered sets. */
     railed?: boolean;
   }
-  let { items, selected = null, onselect, tone = 'var(--accent-ink)', railed = true }: Props = $props();
+  let { items, selected = null, onselect, tone, railed = true }: Props = $props();
+  const at = $derived(items.findIndex((i) => i.id === selected));
 </script>
 
-<div class="steps" class:railed style="--tone:{tone}">
-  {#each items as it, i}
-    <div class="step" data-state={it.state ?? 'idle'}>
-      {#if railed && i > 0}<span class="rail" aria-hidden="true"></span>{/if}
-      <button class="s-btn" class:on={selected === it.id} disabled={!onselect}
-              onclick={() => onselect?.(it.id)}
+<ol class="steps" class:railed style="--n:{items.length};{tone ? `--tone:${tone};--tone-text:${tone}` : ''}">
+  {#each items as it, i (it.id)}
+    <li class="step" data-state={it.state ?? 'idle'} class:past={railed && at >= 0 && i < at} class:on={selected === it.id}>
+      <button class="s-btn" disabled={!onselect} onclick={() => onselect?.(it.id)}
               aria-pressed={onselect ? selected === it.id : undefined}>
         <span class="s-dot" aria-hidden="true">
           {#if it.state === 'done'}✓{:else if it.state === 'failed'}✕{:else if it.state === 'skipped'}–{:else}{i + 1}{/if}
@@ -30,36 +32,45 @@
           {#if it.sub}<em>{it.sub}</em>{/if}
         </span>
       </button>
-    </div>
+    </li>
   {/each}
-</div>
+</ol>
 
 <style>
-  .steps { display: flex; gap: 4px; flex-wrap: wrap; align-items: stretch; }
-  .step { position: relative; display: flex; align-items: stretch; flex: 1 1 140px; min-width: 0; }
-  .rail { position: absolute; left: -4px; top: 50%; width: 4px; border-top: 1px solid rgba(28,22,17,0.22); }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 0; }
+  .step { position: relative; min-width: 0; }
+  .railed .step::before { content: ''; position: absolute; top: 19px; left: 0; right: 0; height: 2px; background: var(--rule); }
+  .railed .step:first-child::before { left: 50%; }
+  .railed .step:last-child::before { right: 50%; }
+  .railed .step.past::before, .railed .step.on::before { background: var(--tone-text); }
+  .railed .step.on::before { right: 50%; }
+  .railed .step.on:first-child::before { display: none; }
 
-  .s-btn { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; text-align: left;
-    padding: 8px 10px; border: 1px solid rgba(28,22,17,0.18); border-radius: var(--radius-sharp);
-    background: rgba(255,255,255,0.55); cursor: pointer; font-family: inherit;
-    transition: background 0.13s, border-color 0.13s; }
+  .s-btn { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+    padding: 0 6px 6px; border: none; background: none; cursor: pointer; font-family: inherit; color: inherit; }
   .s-btn:disabled { cursor: default; }
-  .s-btn:not(:disabled):hover { background: rgba(255,255,255,0.85); border-color: rgba(28,22,17,0.36); }
-  .s-btn.on { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 10%, transparent); }
+  .s-dot { position: relative; z-index: 1; width: 40px; height: 40px; border-radius: var(--radius-pill); display: grid; place-items: center;
+    font-family: var(--er-mono); font-size: var(--fs-label); font-weight: 600; background: var(--ground); color: var(--fg-2);
+    border: 2px solid var(--rule-strong); transition: background 0.3s, color 0.3s, border-color 0.3s, transform 0.4s var(--er-ease); }
+  .s-btn:not(:disabled):hover .s-dot { border-color: var(--tone-text); transform: scale(1.06); }
+  .past .s-dot { border-color: var(--tone-text); color: var(--tone-text); }
+  .on .s-dot { background: var(--tone); border-color: var(--tone); color: #fff; transform: scale(1.12); }
+  .s-txt { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .s-txt b { font-size: var(--fs-label); font-weight: 600; color: var(--fg); line-height: 1.25; }
+  .on .s-txt b { color: var(--tone-text); }
+  .s-txt em { font-style: normal; font-family: var(--er-mono); font-size: var(--fs-label-xs); color: var(--fg-3); }
 
-  .s-dot { flex-shrink: 0; width: 20px; height: 20px; border-radius: var(--radius-pill);
-    display: grid; place-items: center; font-family: var(--font-mono); font-size: var(--fs-label-xs);
-    font-weight: 600; background: rgba(28,22,17,0.1); color: rgba(28,22,17,0.65); }
-  .s-txt { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-  .s-txt b { font-size: var(--fs-label); font-weight: 600; color: var(--text-primary); line-height: 1.25;
-    overflow: hidden; text-overflow: ellipsis; }
-  .s-txt em { font-style: normal; font-family: var(--font-mono); font-size: var(--fs-label-xs);
-    color: rgba(28,22,17,0.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .step[data-state='done'] .s-dot { border-color: var(--tone-text); color: var(--tone-text); }
+  .step[data-state='failed'] .s-dot { background: var(--fail); border-color: var(--fail); color: #fff; }
+  .step[data-state='failed'] .s-txt b { color: var(--fail); }
+  .step[data-state='skipped'] { opacity: 0.4; }
+  .step[data-state='skipped']::before { background: repeating-linear-gradient(90deg, var(--rule-strong) 0 4px, transparent 4px 8px) !important; }
 
-  .step[data-state='running'] .s-dot { background: var(--tone); color: #fff; }
-  .step[data-state='running'] .s-btn { border-color: var(--tone); }
-  .step[data-state='done'] .s-dot { background: rgba(45,122,58,0.9); color: #fff; }
-  .step[data-state='failed'] .s-dot { background: #c44; color: #fff; }
-  .step[data-state='failed'] .s-btn { border-color: rgba(196,68,68,0.6); background: rgba(196,68,68,0.07); }
-  .step[data-state='skipped'] { opacity: 0.5; }
+  @media (max-width: 560px) {
+    .steps { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    .railed .step::before { top: 0; bottom: 0; left: 19px !important; right: auto !important; width: 2px; height: auto; }
+    .railed .step:first-child::before { top: 20px; }
+    .railed .step:last-child::before { bottom: calc(100% - 20px); }
+    .s-btn { flex-direction: row; text-align: left; padding: 4px 0; }
+  }
 </style>

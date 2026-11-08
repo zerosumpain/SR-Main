@@ -4,7 +4,7 @@
 # WHERE, or an empty string when no lane is externally owned.
 #
 # EXTERNAL_QUEUE_TRIGGERS overrides the file, exactly as it overrides the list in
-# src/lib/workflows/trigger-ownership.ts — empty string means "no lane is
+# src/lib/workflows-client/trigger-ownership.ts — empty string means "no lane is
 # external", which is the documented rollback. The two MUST agree: if the env var
 # moved only the TypeScript queue, a rollback would return a lane to Main's worker
 # while this drain still refused to pause it, and Main's own in-flight runs would

@@ -1,28 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getTavilyKey } from '$lib/llm/keys';
+import { tavilySearch } from '$lib/deepdive/tavily';
 
+// Tests the Tavily key itself, so it asks Tavily directly rather than letting
+// the search balancer pick a provider. Spends one basic credit and lands on
+// /admin/ops/tavily as `admin.key-test`.
 export const POST: RequestHandler = async () => {
   try {
-    const apiKey = getTavilyKey();
-
-    const res = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query: 'test connection',
-        max_results: 1,
-        search_depth: 'basic',
-      }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      return json({ success: false, error: `HTTP ${res.status}: ${text}` });
-    }
-
-    const data = await res.json();
+    const data = await tavilySearch('test connection', { purpose: 'admin.key-test', maxResults: 1, searchDepth: 'basic' });
     return json({ success: true, resultCount: data.results?.length ?? 0 });
   } catch (err: any) {
     return json({ success: false, error: err.message ?? 'Connection failed' });

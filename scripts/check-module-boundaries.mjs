@@ -149,14 +149,8 @@ const rank = (layer) => LAYERS.indexOf(layer);
 // Each line is the debt, not the design. Fix one and delete the line.
 // ---------------------------------------------------------------------------
 const BASELINE_LAYER = [
-  // Both of these are $lib/workflows/site-tools — the tool registry and the
-  // keyword classifier — which the platform layer reaches up for. site-tools is
-  // a registry of DOMAIN capabilities, so the fix is to invert it: let the
-  // domain register its tools with the platform rather than the platform
-  // importing the catalogue.
-  'llm -> workflows',
-  'routing -> workflows',
-
+  // Empty since 2026-10-28: 'routing -> tools' went when the routing alert
+  // stopped sending through `whatsapp_send` and used the notification ledger.
 ];
 
 // R4 exceptions: API routes reusing a project page's lib. Each of these four is
@@ -171,26 +165,29 @@ const BASELINE_ROUTE_CROSS = [];
 // Mutual imports between two lib modules, alphabetical, ' <-> ' separated.
 // Twenty pairs is the tangle this linter exists to stop growing.
 const BASELINE_CYCLES = [
-  'agents <-> workflows',
-  'apis <-> workflows',
+  // 2026-10-02: the workflows folder was sorted into $lib/tools (the site tool
+  // registry), $lib/integrations, $lib/jkai/chat, $lib/scraper and the thin
+  // $lib/workflows-client. Ten '<x> <-> workflows' pairs went; the four tool
+  // pairs below are the same debt under the registry's new name, and the
+  // rest disappeared with the deleted engine leftovers.
+  'apis <-> tools',
   'blog <-> voice',
-  'canvas <-> workflows',
   'codegraph <-> jkai',
-  'daydream <-> workflows',
-  'deepdive <-> workflows',
-  'heartbeat <-> workflows',
-  'jkai <-> workflows',
+  // 2026-10-02: master's daydream "Do it for me" (#1122) reads Gmail, and the
+  // WhatsApp inbound intercept hands feedback replies to daydream. Master already
+  // carried this as 'daydream <-> workflows'; the sort renamed it. Invert by
+  // having daydream register its intercept with integrations at boot.
+  'daydream <-> integrations',
+  'heartbeat <-> tools',
+  'jkai <-> tools',
   // Was 'jkai <-> server' before the gateway moved down — the same knot, now
   // between two platform modules. $lib/llm/client asks server/models which
   // model to use; server/models/codex-catalogue asks $lib/llm what it cost.
   'llm <-> server',
-  'llm <-> workflows',
   'mcp <-> toolpolicy',
   'models <-> server',
-  'monitors <-> workflows',
-  'node-builder <-> workflows',
   'routing <-> server',
-  'selfimprove <-> workflows',
+  'selfimprove <-> tools',
 ];
 
 // Sanity floor. If the extraction stops matching — a syntax change, a bad
@@ -208,7 +205,26 @@ const BASELINE_CYCLES = [
 // src/lib/jkai/intel (~70 files, ~12k lines, SR-Jkai-Core owns it) for a thin
 // $lib/intel-client: 6,369 → 6,175. The floor keeps ~175 of headroom under
 // that. A drop to near zero is still what this exists to catch.
-const MIN_EDGES = 6000;
+//
+// Lowered again on 2026-10-02 by the Main slimdown (6000 → 5800). Removing the
+// dead workflow engine (93 files, ~14.7k lines) took it 6,578 → 6,028; the web
+// games lobby, Quick Answer and the dormant briefing producer took it to 5,949
+// across 1,976 files. ~150 of headroom again.
+//
+// Lowered on 2026-10-02 by the Decks retirement (5800 → 5500). Deleting the
+// deck routes, $lib/decks, $lib/presentation, the presentation components and
+// the deck site tools (67 files, ~13.8k lines) took it 5,847 → 5,664 across
+// 1,892 files. ~160 of headroom.
+//
+// Lowered on 2026-10-02 by the workflows-folder sort (5800 → 5400). Deleting
+// Main's copies of the node registry, node executors, graph verifier, mapping,
+// expression engine, the stealth-scrape/script chain and the Canvas server
+// leftovers (~130 files) took it 5,847 → 5,564 across 1,866 files. ~160 of
+// headroom.
+//
+// Both landed together on the slimdown branch: 5,380 imports across 1,800
+// files once merged, so the combined floor is 5200 (~180 of headroom).
+const MIN_EDGES = 5200;
 
 // ---------------------------------------------------------------------------
 
@@ -283,6 +299,18 @@ function resolveSpecifier(spec, fromFile) {
   return null; // $app/*, $env/*, node:*, bare packages
 }
 
+// R6: the build orchestrator runs only inside the jkai-builder sidecar
+// (packages/jkai-builder, which is outside src/ and so never scanned here).
+// Everything in src/ reaches builds through $lib/jkai/builder-client. The web
+// app runs as `sr-main` and cannot write the build workspace, so an in-process
+// orchestrator fails every iteration in milliseconds and retries past its cap:
+// that is what a chat build_create did on 2026-10-03 (build 915fae11, 36
+// zero-token iterations). This applies inside $lib/jkai too, which the layer
+// rules never look at, and it has no baseline.
+const ORCHESTRATOR_RE = /^src\/lib\/jkai\/orchestrator(\.(ts|js))?$/;
+const ORCHESTRATOR_SELF = 'src/lib/jkai/orchestrator.ts';
+const orchestratorImports = [];
+
 const edges = new Map(); // "a|b" -> { count, examples: [] }
 let scanned = 0;
 
@@ -299,6 +327,7 @@ for (const file of files) {
     const spec = m[1] ?? m[2] ?? m[3];
     const target = resolveSpecifier(spec, file);
     if (!target) continue;
+    if (ORCHESTRATOR_RE.test(target) && file !== ORCHESTRATOR_SELF) orchestratorImports.push(`${file}  →  ${spec}`);
     const to = ownerOf(target) ?? (target === 'src/lib' ? { kind: 'lib-root', name: ':lib-root' } : null);
     if (!to) continue;
     scanned++;
@@ -387,6 +416,15 @@ for (const [key, info] of edges) {
         info,
       });
   }
+}
+
+if (orchestratorImports.length) {
+  violations.push({
+    rule:
+      'only the jkai-builder sidecar may import the build orchestrator — use builderClient from $lib/jkai/builder-client',
+    label: 'src -> $lib/jkai/orchestrator',
+    info: { examples: orchestratorImports },
+  });
 }
 
 // R5: no NEW mutual imports between lib modules.

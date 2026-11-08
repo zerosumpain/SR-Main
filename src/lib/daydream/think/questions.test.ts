@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CHANNELS,
   OUTCOMES,
+  OUTCOME_SHARE,
   SCHEDULE,
   SKIP,
   THINK_CADENCE_MS,
@@ -38,11 +39,19 @@ describe('the schedule', () => {
     for (const c of CHANNELS) expect(SCHEDULE[c]).toHaveLength(VISITS_PER_PERIOD);
   });
 
-  it('gives every outcome the same share of a period', () => {
+  it('gives every outcome its pinned share of a period', () => {
     const counts = new Map<Outcome, number>();
     for (const c of CHANNELS) for (const o of SCHEDULE[c]) counts.set(o, (counts.get(o) ?? 0) + 1);
-    const per = (CHANNELS.length * VISITS_PER_PERIOD) / OUTCOMES.length;
-    for (const o of OUTCOMES) expect(counts.get(o), o).toBe(per);
+    for (const o of OUTCOMES) expect(counts.get(o), o).toBe(OUTCOME_SHARE[o]);
+    const total = Object.values(OUTCOME_SHARE).reduce((a, b) => a + b, 0);
+    expect(total).toBe(CHANNELS.length * VISITS_PER_PERIOD);
+  });
+
+  it('looks at the week plan about once a day, not four times', () => {
+    // One living plan (`subjects.ts`); the home and diary visits that wrote
+    // a fresh copy of the same week every few hours were cut.
+    expect(OUTCOME_SHARE.health_plan).toBe(3);
+    expect(SCHEDULE.home).not.toContain('health_plan');
   });
 
   it('never schedules a pair the skip table forbids', () => {
@@ -87,7 +96,8 @@ describe('the rotation', () => {
     const slots = Array.from({ length: WEEK_SLOTS }, (_, i) => base + i);
     const { channels, outcomes } = tally(slots);
     for (const c of CHANNELS) expect(channels.get(c), c).toBe(WEEK_SLOTS / CHANNELS.length);
-    for (const o of OUTCOMES) expect(outcomes.get(o), o).toBe(WEEK_SLOTS / OUTCOMES.length);
+    const periods = WEEK_SLOTS / (CHANNELS.length * VISITS_PER_PERIOD);
+    for (const o of OUTCOMES) expect(outcomes.get(o), o).toBe(OUTCOME_SHARE[o] * periods);
   });
 
   it('is even over a week of the 07:00–23:00 window it actually runs in', () => {
@@ -102,8 +112,8 @@ describe('the rotation', () => {
     const { channels, outcomes } = tally(slots);
     const perChannel = slots.length / CHANNELS.length;
     for (const c of CHANNELS) expect(Math.abs((channels.get(c) ?? 0) - perChannel), c).toBeLessThanOrEqual(1);
-    const perOutcome = slots.length / OUTCOMES.length;
     for (const o of OUTCOMES) {
+      const perOutcome = (slots.length * OUTCOME_SHARE[o]) / (CHANNELS.length * VISITS_PER_PERIOD);
       // Outcomes ride on each channel's visit counter, so the window cuts them
       // less cleanly than channels — within a fifth of an even share.
       expect(Math.abs((outcomes.get(o) ?? 0) - perOutcome) / perOutcome, o).toBeLessThanOrEqual(0.2);

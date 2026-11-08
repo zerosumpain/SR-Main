@@ -107,17 +107,74 @@ export async function deliver(
     console.warn(`[push] device ${t.id.slice(0, 8)} refused: ${result.status} ${result.reason ?? ''}`);
     if (isDeadToken(result)) await forget(t.id).catch(() => {});
   }
+  // One line per push, so "did it go?" is answerable from the journal.
+  if (list.length) {
+    const what = message.category ?? message.userInfo?.category ?? (message.background ? 'background' : 'alert');
+    console.log(`[push] ${what}: ${outcome.sent} sent, ${outcome.failed} refused, ${list.length} phone${list.length === 1 ? '' : 's'}`);
+  }
   return outcome;
 }
 
+/**
+ * The family alarm's private preview. A phone that hides details still has to
+ * RING: the sound, its loudness and how long Apple keeps trying survive, and so
+ * do the ids the app needs to fetch the rest. The name, message and position do
+ * not — the app reads those from `GET /api/native/family/alarm` once opened.
+ */
+const ALARM_PRIVATE: Record<string, { title: string; body: string }> = {
+  'family-alarm': { title: 'Family alarm', body: 'Someone in the family raised the alarm. Open the app to see who and where.' },
+  'family-alarm-cancel': { title: 'Family alarm stood down', body: 'Open the app for details.' },
+  // "msg family": the reply buttons still work on a private preview, so the
+  // message's id survives; who wrote it and what it says do not.
+  'family-msg': { title: 'Family message', body: 'Someone in the family sent a message. Open the app to read it.' },
+  'family-msg-reply': { title: 'Family message', body: 'Someone replied to your message. Open the app to read it.' },
+  // A build the owner sent this phone: nothing private in it, and the app asks
+  // the site which build when it opens.
+  'app-update': { title: 'A new version of SR', body: 'Open SR to install it.' },
+};
+/**
+ * The Bat phone: a `family-msg` of kind `bat-phone` since 2026-10-27, a
+ * `family-alarm` of kind `quiet` before. Discreet, and still says it is urgent.
+ */
+const BAT_PHONE_PRIVATE = { title: 'Bat phone', body: 'Someone in the family needs you. Open the app to see who and where.' };
+/**
+ * Game pushes: the invite must still arrive time-sensitive and for as long as
+ * its lobby is open, or a phone hiding details never hears it. The room id
+ * survives so a tap opens the lobby; who is playing does not.
+ */
+const GAME_PRIVATE: Record<string, { title: string; body: string }> = {
+  invite: { title: 'Game invite', body: 'Someone in the family invited you to a game. Tap to join.' },
+  turn: { title: 'Your move', body: 'It is your turn in a game. Open the app to play.' },
+  finished: { title: 'A game is over', body: 'Open the app to see who won.' },
+};
+const ALARM_KEYS = ['alarmId', 'kind', 'at', 'messageId', 'roomId', 'game'] as const;
+
 /** Keep names, counts, locations and arbitrary metadata off private previews. */
 export function privatePush(message: PushMessage): PushMessage {
-  const userInfo: Record<string,string> = {};
+  // A silent background push shows nothing on the lock screen, so there is no
+  // preview to keep private — and turning it into an alert would make it ring.
+  if (message.background) return message;
+  const userInfo: Record<string, string | number | null> = {};
   if (message.userInfo?.category) userInfo.category = message.userInfo.category;
   if (message.userInfo?.url) userInfo.url = message.userInfo.url;
+  const kind = message.userInfo?.kind;
+  const batPhone =
+    (message.category === 'family-alarm' && kind === 'quiet') || (message.category === 'family-msg' && kind === 'bat-phone');
+  const alarm = batPhone
+    ? BAT_PHONE_PRIVATE
+    : message.category === 'game'
+      ? GAME_PRIVATE[typeof kind === 'string' ? kind : 'invite'] ?? GAME_PRIVATE.invite
+      : message.category ? ALARM_PRIVATE[message.category] : undefined;
+  if (alarm) {
+    for (const key of ALARM_KEYS) if (message.userInfo?.[key] != null) userInfo[key] = message.userInfo[key];
+    return { ...alarm, category: message.category, threadId: message.threadId, collapseId: message.collapseId,
+      level: message.level, sound: message.sound, relevance: message.relevance, ttlSeconds: message.ttlSeconds, userInfo };
+  }
   return { title: 'Strange Ramblings', body: 'You have an update. Open the app to view it.',
     category: message.category, threadId: message.threadId, collapseId: message.collapseId,
-    level: 'active', ttlSeconds: 0, userInfo };
+    // Only the words are private. How urgent it is and how long Apple keeps
+    // trying are not, and dropping them lost pushes to a sleeping phone.
+    level: message.level, sound: message.sound, relevance: message.relevance, ttlSeconds: message.ttlSeconds, userInfo };
 }
 
 export async function devicePushPrivacy(deviceId: string, update?: { notificationDetails: boolean; liveActivityEnabled: boolean }) {
@@ -162,6 +219,41 @@ export async function pushToOwner(message: PushMessage, send: PushSender = sendP
     console.error('[push] could not push to the owner:', (error as Error).message);
     return { reached: new Set(), sent: 0, failed: 0 };
   }
+}
+
+/**
+ * Push to ONE phone, by its site credential: a build the owner sent it from
+ * /admin/access/app. Null when the phone is not live or holds no token. The
+ * phone's own preview setting applies, as for any other push.
+ */
+export async function pushToDevice(deviceId: string, message: PushMessage, send: PushSender = sendPush): Promise<ApnsResult | null> {
+  const [row] = await db
+    .select({
+      id: nativeCredentials.id,
+      ownerEmail: nativeCredentials.ownerEmail,
+      apnsToken: nativeCredentials.apnsToken,
+      apnsEnv: nativeCredentials.apnsEnv,
+      notificationDetails: nativeCredentials.notificationDetails,
+    })
+    .from(nativeCredentials)
+    .where(
+      and(
+        eq(nativeCredentials.id, deviceId),
+        eq(nativeCredentials.kind, 'device'),
+        isNull(nativeCredentials.revokedAt),
+        gt(nativeCredentials.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  if (!row?.apnsToken) return null;
+  let result: ApnsResult | null = null;
+  await deliver(
+    [{ ...row, apnsToken: row.apnsToken }],
+    message,
+    async (token, m, env) => (result = await send(token, m, env)),
+    clearPushToken,
+  );
+  return result;
 }
 
 /** One "it works" notification to this phone. Null when it holds no token. */

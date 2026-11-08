@@ -127,10 +127,6 @@ export const DEFAULT_EMBEDDING_MODEL_ID = 'openai/text-embedding-3-large';
  *  model instead. */
 export const DEFAULT_AUDIO_MODEL_ID = 'google/gemini-2.0-flash-001';
 
-/** Deck slide art direction. A one-shot composition rather than an agentic
- *  loop, so quality is worth the latency here. */
-export const DEFAULT_ART_DIRECTOR_MODEL_ID = 'z-ai/glm-5.2';
-
 /**
  * The studio build's visual design review — the one stage in the builder that
  * looks at a rendered screenshot rather than at source.

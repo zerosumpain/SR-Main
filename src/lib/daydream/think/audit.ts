@@ -9,14 +9,19 @@
 // audit here shares, so a model that echoes "[C3]" as rendered has cited C3.
 
 import { resolveCites } from '../cites';
+import { checkPlan, storeAction, type StoredAction } from '../act/plan';
+import { checkSolve, storeSolve } from '../act/solution';
 import type { Candidate } from '../snapshot-types';
 import { OUTCOMES, type Channel, type Outcome } from './questions';
+import { parseUntil } from './shelf';
+import { SUBJECT_EVIDENCE_KIND, subjectFor } from './subjects';
 import type { Card } from './tools';
 
 export const MAX_NOTES = 2;
 export const MAX_TITLE_CHARS = 90;
 export const MAX_BODY_CHARS = 700;
 export const MAX_ACTION_CHARS = 200;
+export const MAX_CHANGED_CHARS = 200;
 
 /**
  * The evidence kind that records which QUESTION a note answered.
@@ -31,12 +36,24 @@ export const MAX_ACTION_CHARS = 200;
  */
 export const QUESTION_EVIDENCE_KIND = 'think-question';
 
+/** A note that cited "Right now" (`situation.ts`). Identifies nothing. */
+export const SITUATION_EVIDENCE_KIND = 'think-situation';
+
 export interface ThinkNote {
   outcome: Outcome;
   title: string;
   body: string;
   action: string | null;
+  /** The last day it is likely to matter, by the model's own estimate
+   *  (`YYYY-MM-DD`), or null. A bad date is dropped, never repaired. */
+  until: string | null;
   citedCardIds: string[];
+  /** What it is about (`subjects.ts`), or null when nothing checkable names it. */
+  subject: string | null;
+  /** The model's "what changed since the earlier note", verbatim, or null. */
+  changed: string | null;
+  /** The cited cards' text, joined — what a changed figure must appear in. */
+  citedText: string;
   candidate: Candidate;
 }
 
@@ -62,7 +79,20 @@ export function slugOf(title: string): string {
 export function validateThinkOutput(
   parsed: unknown,
   cards: ReadonlyMap<string, Card>,
-  opts: { maxNotes?: number; allowedOutcomes?: readonly Outcome[]; channel?: Channel } = {},
+  opts: {
+    maxNotes?: number;
+    allowedOutcomes?: readonly Outcome[];
+    channel?: Channel;
+    today?: string;
+    /** Cards of pairs tested recently with nothing new (`ledger.ts`). */
+    staleCards?: ReadonlySet<string>;
+    /** A research cycle's one interest, set by code (`interests.ts`). */
+    researchTopic?: string | null;
+    /** The monthly correlation summary's subject, set by code (`ledger.ts`). */
+    summaryKey?: string | null;
+    /** Site pages an "open" solution may point at (`capability-lines.ts`). */
+    sitePages?: ReadonlySet<string>;
+  } = {},
 ): ThinkAudit {
   const out: ThinkAudit = { notes: [], rejected: [], citationDrops: 0 };
   const maxNotes = opts.maxNotes ?? MAX_NOTES;
@@ -84,12 +114,16 @@ export function validateThinkOutput(
     const title = typeof n.title === 'string' ? n.title.trim() : '';
     const body = typeof n.body === 'string' ? n.body.trim() : '';
     const action = typeof n.action === 'string' && n.action.trim() ? n.action.trim() : null;
+    const changed = typeof n.changed === 'string' && n.changed.trim() ? n.changed.trim().slice(0, MAX_CHANGED_CHARS) : null;
     const label = title.slice(0, 40) || '(untitled)';
 
     if (!allowed.has(outcome)) { out.rejected.push(`note "${label}": outcome "${outcome}" not allowed this cycle`); continue; }
     if (title.length < 3 || title.length > MAX_TITLE_CHARS) { out.rejected.push(`note "${label}": bad title`); continue; }
     if (body.length < 20 || body.length > MAX_BODY_CHARS) { out.rejected.push(`note "${label}": body length ${body.length}`); continue; }
     if (action && action.length > MAX_ACTION_CHARS) { out.rejected.push(`note "${label}": action too long`); continue; }
+    // The "so what" gate: a research find he could do nothing with this
+    // fortnight is reading for its own sake — 2 of 71 were rated useful.
+    if (opts.researchTopic && !action) { out.rejected.push(`note "${label}": research with no use for him — dropped`); continue; }
 
     const resolved = resolveCites(n.cites, cards);
     if (resolved.misses.length) {
@@ -106,15 +140,56 @@ export function validateThinkOutput(
     }
 
     const cited = resolved.hits.map((id) => cards.get(id)!);
+    // A correlate note resting only on pairs already tested with nothing new
+    // since repeats the earlier note (`ledger.ts`). The summary is exempt: the
+    // ledger is its material.
+    if (outcome === 'correlate' && !opts.summaryKey && opts.staleCards?.size) {
+      const tests = cited.filter((c) => c.tool === 'correlate');
+      if (tests.length && tests.every((c) => opts.staleCards!.has(c.id))) {
+        out.rejected.push(`note "${label}": every pair it cites was already tested with nothing new — dropped`);
+        continue;
+      }
+    }
+    // "Do it for me", ready before he taps (`act/plan.ts`). A plan that fails
+    // its checks is dropped — the note still stands.
+    let proposedActions: StoredAction[] = [];
+    if (n.do && opts.today) {
+      const checked = checkPlan(n.do, {
+        noteText: `${title}\n${body}\n${action ?? ''}`,
+        today: opts.today,
+        evidenceText: cited.map((c) => c.text).join('\n'),
+      });
+      if (checked.ok) proposedActions = [storeAction(checked.plan, null)];
+      else out.rejected.push(`note "${label}": do-it plan dropped — ${checked.reason}`);
+    }
+    // The solution (`act/solution.ts`): checked against the cited cards like
+    // the plan. A bad one is dropped; the note still stands.
+    if (n.solve && typeof n.solve === 'object') {
+      const checked = checkSolve(n.solve, { citedText: cited.map((c) => c.text).join('\n'), sitePages: opts.sitePages ?? new Set() });
+      if (checked.ok) proposedActions = [...proposedActions, storeSolve(checked.plan) as unknown as StoredAction];
+      else out.rejected.push(`note "${label}": solution dropped — ${checked.reason}`);
+    }
     const slug = slugOf(title);
     if (slug.length < 3) { out.rejected.push(`note "${label}": title has no usable words`); continue; }
+
+    const subject = subjectFor({
+      outcome,
+      modelSubject: n.subject,
+      cited,
+      researchTopic: opts.researchTopic,
+      summaryKey: opts.summaryKey,
+    });
 
     out.notes.push({
       outcome: outcome as Outcome,
       title,
       body,
       action,
+      until: opts.today ? parseUntil(n.until, opts.today) : null,
       citedCardIds: resolved.hits,
+      subject,
+      changed,
+      citedText: cited.map((c) => c.text).join('\n'),
       candidate: {
         kind: `think_${outcome}`,
         title,
@@ -127,13 +202,16 @@ export function validateThinkOutput(
         rawScore: 1,
         components: { audited: 1 },
         evidence: [
-          ...cited.map((c) => ({ kind: 'think-card', id: c.ref, note: c.text.slice(0, 300) })),
+          // The situation card is the same for every note that day: kept as
+          // its own kind, which the echo guard ignores (`refutations.ts`).
+          ...cited.map((c) => ({ kind: c.tool === 'situation' ? SITUATION_EVIDENCE_KIND : 'think-card', id: c.ref, note: c.text.slice(0, 300) })),
           ...(opts.channel
             ? [{ kind: QUESTION_EVIDENCE_KIND, id: opts.channel, note: `${opts.channel} × ${outcome}` }]
             : []),
+          ...(subject ? [{ kind: SUBJECT_EVIDENCE_KIND, id: subject, note: changed ? `changed: ${changed}` : 'subject' }] : []),
         ],
         dedupeKey: `think:${outcome}:${slug}`,
-        proposedActions: [],
+        proposedActions,
       },
     });
   }

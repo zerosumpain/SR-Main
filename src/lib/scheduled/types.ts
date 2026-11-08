@@ -1,6 +1,3 @@
-export type CallbackKind = 'reply' | 'tool' | 'orchestrator-turn';
-export type CallbackStatus = 'pending' | 'fired' | 'failed' | 'cancelled';
-
 export interface ReplyPayload {
   text: string;
   /** Optional: also push via WhatsApp using the conversation's phone number. */
@@ -17,11 +14,14 @@ export interface OrchestratorTurnPayload {
   message: string;
 }
 
-export type CallbackPayload = ReplyPayload | ToolPayload | OrchestratorTurnPayload;
-
 export interface FireResult {
   ok: boolean;
   summary: string;
   costUsd?: number;
   error?: string;
+  /**
+   * Not fired: something it needs (jkai core) is down. The row stays pending
+   * and the next tick tries again, until DEFER_GRACE_MS past its fire time.
+   */
+  deferred?: boolean;
 }

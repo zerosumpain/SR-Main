@@ -11,7 +11,8 @@ import {
   type VitalsState,
   type WeatherCondition,
 } from '$lib/vitals/state';
-import { getVitalsLocation } from '$lib/vitals/location';
+import { getVitalsLocation, peekVitalsLocation } from '$lib/vitals/location';
+import { sunAt } from '$lib/landing/sun.server';
 import { fromStoredMetric } from '$lib/constants/apple-health-scale';
 import type { RequestHandler } from './$types';
 
@@ -61,6 +62,11 @@ async function computeVitalsState(): Promise<VitalsState> {
     if (latestHR?.value) {
       state.pulse = roundPulse(fromStoredMetric(latestHR.value));
       latestDataTime = latestHR.date;
+      // Only a fresh reading's time is published: an old one would tell any
+      // caller exactly how long the watch has been off.
+      if (!isStale(Date.now() / 1000 - latestHR.date)) {
+        state.pulseAt = new Date(latestHR.date * 1000).toISOString();
+      }
       state.sources.heartRate = true;
     }
 
@@ -93,6 +99,11 @@ async function computeVitalsState(): Promise<VitalsState> {
 
   const loc = await getVitalsLocation();
   state.town = loc.town ?? undefined;
+  // The landing sky's sun where he is: whole degrees and rising or not, from
+  // the position rounded to half a degree. The coordinates never leave here.
+  // Worked out again on every GET below, so the cached state never hands out
+  // a sun up to a minute older than the page's own.
+  state.sun = sunAt(loc, Date.now());
 
   try {
     const params = new URLSearchParams({
@@ -145,7 +156,15 @@ export const GET: RequestHandler = async () => {
     await pending;
   }
 
-  return json(cached?.state ?? VITALS_DEFAULTS, {
+  // The sun is cheap, so it is the one part never served from the cache: it
+  // is worked out for this moment from the location already known (no wait,
+  // no extra Home Assistant read), so a poll agrees with a page loaded at the
+  // same moment, and the sky never steps back across the tone change.
+  const body = cached?.state ?? VITALS_DEFAULTS;
+  const known = peekVitalsLocation();
+  const fresh: VitalsState = known && cached ? { ...body, sun: sunAt(known, Date.now()) } : body;
+
+  return json(fresh, {
     headers: {
       'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
     },

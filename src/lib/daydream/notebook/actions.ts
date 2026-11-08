@@ -31,6 +31,7 @@
 // messages, no edits to John's text. A note is a thinking surface, and a model
 // reading one to be helpful is not a reason to hand it the diary.
 
+import { unattendedPrincipal } from '$lib/tools/in-process-principal';
 import type { ResearchDepth } from '$lib/deepdive/depth';
 
 export const NOTE_ACTION_KINDS = ['research', 'link', 'context'] as const;
@@ -183,11 +184,14 @@ export async function executeNoteAction(
   try {
     if (action.kind === 'research') {
       const { topic, depth, goals } = action.params as ResearchParams;
-      const { executeTool } = await import('$lib/workflows/site-tools/registry');
+      const { executeTool } = await import('$lib/tools/registry');
       // A budgeted depth runs SYNCHRONOUSLY inside research_start and returns
       // the answer, which is the whole reason only the short tiers are allowed:
       // there is no polling, no background task and no unbounded crawl.
-      const res = await executeTool('research_start', { topic, depth, goals });
+      const res = await executeTool('research_start', { topic, depth, goals }, {
+        emit: () => {},
+        principal: unattendedPrincipal('daydream-notebook', ['research_start']),
+      });
       if (!res?.success) return { ok: false, result: String(res?.error ?? 'research failed') };
       const d = (res.data ?? {}) as { id?: string; answer?: string; status?: string };
       return {

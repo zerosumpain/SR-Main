@@ -4,8 +4,9 @@
  * Two things were quietly untrue:
  *
  *   - nightly.yml said it runs "the eight *.integration.test.ts files the merge
- *     gate has never once executed". There are 42 after JKAI Chat, Intel,
- *     Canvas and workflow tests moved with their applications. The earlier
+ *     gate has never once executed". There were 42 after JKAI Chat, Intel,
+ *     Canvas and workflow tests moved with their applications, and 43 with
+ *     daydream's subject test (2026-10-16). The earlier
  *     count was right when it was written and nothing had re-counted since.
  *     Intel spaces had added,
  *     src/lib/jkai/intel/spaces.integration.test.ts and
@@ -61,7 +62,34 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // enables them explicitly against its disposable loopback PostgreSQL service.
 // Commissioning uses the isolated local database and the explicitly enabled
 // disposable nightly database; its transactional cases also ran before release.
-const INTEGRATION_FILES = 40;
+// Decks retired 2026-10-02 took src/lib/decks/creation.integration.test.ts with them.
+// Daydream "Do it for me" (act.integration) rides the same gate: the calendar,
+// scheduler and Gmail are stubbed, every row it writes is real.
+// Its follow-ups (follow.integration, 2026-10-05) ride it too: research worker,
+// builder sidecar, watch generator, model and Home Assistant stubbed.
+// The Tavily ledger (tavily-ledger.integration, 2026-10-08) writes through the
+// real client with Tavily stubbed and reads back through /admin/ops/tavily's
+// queries; it seeds and removes its own rows, so the empty nightly DB suits it.
+// The trip store (trips/store.integration, 2026-10-13) checks plan versions are
+// numbered without clashes under concurrent appends and that phone events are
+// idempotent; it creates and removes its own rows under a throwaway owner.
+// Approving from the app (access-requests.integration, 2026-10-19) runs the
+// real allow-list trigger — installing the release's idempotent security SQL
+// when the database lacks it — and creates and removes its own rows.
+// Durable game rooms (games/room-store.integration, 2026-10-22) check the
+// compare-and-set write, the lobby and deadline lookups and the retention
+// delete against game_rooms; rows carry an id prefix and are removed each case.
+// Share-link visitors (projects/share-visits.integration, 2026-10-24) check the
+// upsert, the row cap and the ranked stats query against project_share_visit;
+// rows hang off throwaway links under one project key, removed each case.
+// Erasing a seat (games/erase-seat.integration, 2026-10-25) runs the account
+// erasure's room delete beside keepErasedSeats in one transaction against
+// game_rooms; rows carry an id prefix and are removed each case.
+// Releases from every repository (releases/cross-repo.integration, 2026-11-08)
+// prove a session links only to its own repository's release when two repos
+// share a PR number, and that the owner console filters by repository; rows
+// carry an id prefix and are removed each run. The nightly runs it, not merges.
+const INTEGRATION_FILES = 49;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

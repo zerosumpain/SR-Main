@@ -54,7 +54,7 @@
   );
 
   // Hour labels for the sparkline tooltip, on the house's clock.
-  const HOUR = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+  const HOUR = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 
   const windowFacets = $derived<Facet[]>(data.windows.map((d) => ({ id: String(d), label: d === 365 ? '1 year' : `${d} days` })));
   function pickWindow(id: string) {
@@ -108,7 +108,8 @@
             <Sparkline
               points={t.points.map((p) => ({ label: HOUR.format(new Date(p.at)), value: p.value }))}
               format={(v) => `${v.toFixed(1)} °C`}
-              height={64}
+              height={200}
+              fit
             />
           </div>
         {/if}

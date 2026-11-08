@@ -132,7 +132,7 @@ describe('site surface', () => {
     // nothing", not against the route count changing.
     expect(surface.routes.length).toBeGreaterThan(350);
     expect(surface.counts.api).toBeGreaterThan(250);
-    expect(surface.counts.page).toBeGreaterThan(100);
+    expect(surface.counts.page).toBeGreaterThan(60);
 
     const paths = surface.routes.map((r) => r.path);
     // The page must appear in its own inventory. It did not, when the root

@@ -5,8 +5,17 @@
   import HubHeader from '$lib/components/jkai/HubHeader.svelte';
   import JkaiTabBar from '$lib/components/jkai/JkaiTabBar.svelte';
   import { launcher, closeLauncher, toggleLauncher } from '$lib/jkai/launcher-bus.svelte';
+  import { provideJkaiTheme, stamp } from '$lib/jkai/jkai-theme.svelte';
 
   let { children, data } = $props();
+
+  // The hub's theme, shared with SR-Jkai-Core's /jkai: night unless paper was
+  // chosen there (the `sr_jkai_theme` cookie, path /jkai, read server-side).
+  // `.jkai-night` paints the first render; the <html> stamp reaches modals
+  // that portal out of the root. Context, never module state — see
+  // jkai-theme.svelte.ts (byte-shared with Core).
+  // svelte-ignore state_referenced_locally
+  const theme = provideJkaiTheme(data.jkaiTheme);
 
   // Global JKAI hub navigation — a command-palette launcher reachable from every
   // /jkai page via ⌘/Ctrl-K or the header's ⌘K chip. The floating fallback
@@ -16,6 +25,12 @@
   // so the shell drops everything that is the owner's: the activity strip polls
   // the owner's hub status, the launcher and tab bar list owner surfaces.
   const member = $derived(data.member === true);
+
+  onMount(() => {
+    stamp(theme.value);
+    // Off again on the way out of /jkai, so the rest of the site keeps its paper.
+    return () => stamp(null);
+  });
 
   onMount(() => {
     if (data.member) return;
@@ -46,10 +61,10 @@
     href="/fonts/selawik/selawik-regular.woff2"
     crossorigin="anonymous"
   />
-  <meta name="theme-color" content="#1a1008" />
+  <meta name="theme-color" content={theme.value === 'night' ? '#0b0806' : '#1a1008'} />
 </svelte:head>
 
-<div class="jkai-root">
+<div class="jkai-root" class:jkai-night={theme.value === 'night'}>
   {#if !member}<ActivityStrip />{/if}
 
   <HubHeader

@@ -19,6 +19,16 @@ npm run validate:change
 [deployment runbook](docs/deployment-runbook.md) for release checks and
 `npm run deploy:status` for the revision currently served by the site.
 
+### Release hold: the heartbeat on jkai core
+
+The JKai overhaul's slice 9 moves heartbeat turns (paused-thread continuations
+and scheduled "orchestrator-turn" callbacks, including scheduled light and
+scene actions) onto jkai core's chat turn (`src/lib/heartbeat/llm.ts`).
+**Do not release it while John is travelling** (he is away until 30 October
+2026). A misbehaving heartbeat acts in his threads and his home with nobody
+watching. Once released, check the heartbeat activity cost on
+`/admin/ops/costs` daily for a week.
+
 ## Documentation and ownership
 
 - [Current documentation](docs/README.md): operational guides, active contracts,
@@ -26,8 +36,6 @@ npm run validate:change
 - [Extracted application ownership](docs/extracted-app-ownership.md): schema and
   cross-repository responsibilities.
 - [Agent guidance](CLAUDE.md): development constraints and domain conventions.
-- [Field Study System](field-study-system/INSTRUCTIONS.md): the page-authoring
-  procedure for research projects.
 
 Before changing an extracted feature, consult `docs/module-ownership.json` and
 SR-Infra's application registry. Removing Main's old routes does not remove

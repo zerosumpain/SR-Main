@@ -1,11 +1,17 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { redeemPairingCode } from '$lib/server/native-auth';
+import { env } from '$env/dynamic/private';
+import { identifyDevice, issueDevice, peekPairingCode, redeemPairingCode, revokeDevice } from '$lib/server/native-auth';
 import { isOwnerEmail } from '$lib/server/native-handler';
 import { loadMember } from '$lib/server/grants';
 import { satisfies } from '$lib/access/catalogue';
 import { rateLimit } from '$lib/server/rate-limit';
-import { isRegistrant } from '$lib/server/registration';
+import { canonicalEmail, isRegistrant } from '$lib/server/registration';
+import { verifyPairIdentity } from '$lib/server/pair-identity';
+import { isJoinCode, verifyJoinCode } from '$lib/server/adhoc-install';
+import { joinCandidates } from '$lib/server/app-devices';
+import { notifyOwner } from '$lib/server/notify';
+import { memberByEmail } from '$lib/home/presence/members';
 
 /**
  * POST /api/native/pair — exchange a one-time code for a device token.
@@ -26,6 +32,23 @@ import { isRegistrant } from '$lib/server/registration';
  * Every rejection is the same sentence and the same status. "Expired" and
  * "wrong" are different facts, and telling them apart tells a guesser whether
  * to keep going.
+ *
+ * A SCANNED code (the QR at /welcome) is the exception that must say more. It
+ * was minted for whoever was signed in to the browser showing it, so the phone
+ * must prove who IT is signed in as — its own site credential as a Bearer, or
+ * an `identity` from a fresh sign-in in the app ($lib/server/pair-identity) —
+ * and be that same person. Otherwise the code stays live and the phone is told
+ * whose code it is. Only someone holding a real, live code ever reaches those
+ * answers, so they tell a guesser nothing.
+ *
+ * An INSTALL LINK (`join`, 2026-10-20: `/app/<slug>-<tag>`, the one link a
+ * phone that cannot use TestFlight installs from) pairs the phone too, once
+ * the app is on it. It is signed over its person and lasts a week for any of
+ * their phones, so it is not consumed; what it demands is signed into it
+ * (`$lib/server/adhoc-install` JoinMode): a sign-in as them, exactly as a
+ * scanned code, or — for a child who cannot sign in on the phone — the
+ * owner's word alone, as a vouched code. The owner is told each time one
+ * connects a phone.
  */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   let clientAddr = '';
@@ -42,16 +65,28 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
     );
   }
 
-  let body: { code?: unknown; label?: unknown };
+  let body: { code?: unknown; join?: unknown; label?: unknown; identity?: unknown };
   try {
     body = await request.json();
   } catch {
     return json({ error: 'That pairing code is not valid.' }, { status: 400 });
   }
 
-  const code = typeof body.code === 'string' ? body.code : '';
   const label = typeof body.label === 'string' ? body.label : null;
+  if (isJoinCode(body.join) && body.code === undefined) return pairFromJoinLink(request, body.join, label, body.identity);
+
+  const code = typeof body.code === 'string' ? body.code : '';
   if (!code) return json({ error: 'That pairing code is not valid.' }, { status: 400 });
+
+  const found = await peekPairingCode(code);
+  if (!found) return json({ error: 'That pairing code is not valid.' }, { status: 401 });
+  // The credential this phone already held, replaced once the new one exists.
+  let previousDevice: string | null = null;
+  if (found.kind === 'scan') {
+    const proof = await provenHolder(request, body.identity, code, found.ownerEmail);
+    if (proof instanceof Response) return proof;
+    previousDevice = proof.heldId;
+  }
 
   const redeemed = await redeemPairingCode(code, label);
   if (!redeemed) {
@@ -60,6 +95,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   if (!(await mayHoldDevice(redeemed.ownerEmail))) {
     return json({ error: 'That pairing code is not valid.' }, { status: 401 });
   }
+  // Same person, new credential: the old one would only linger in the device list.
+  if (previousDevice) await revokeDevice(redeemed.ownerEmail, previousDevice).catch(() => false);
 
   return json({
     token: redeemed.token,
@@ -68,9 +105,73 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 };
 
 /**
+ * Who this phone is signed in as — its own credential, or a fresh sign-in
+ * for this very code — and that it is the code's person. The refusal
+ * otherwise: 428 sign in first, 409 somebody else's code.
+ */
+async function provenHolder(
+  request: Request,
+  identity: unknown,
+  code: string,
+  codeFor: string,
+): Promise<{ heldId: string | null } | Response> {
+  const held = await identifyDevice(request);
+  const asserted = held ? null : verifyPairIdentity(identity, code, env.AUTH_SECRET);
+  const signedInAs = held?.ownerEmail ?? asserted;
+  if (!signedInAs) {
+    return json(
+      { error: 'Sign in on this phone first, so the code can check it is yours.', signIn: true },
+      { status: 428 },
+    );
+  }
+  if ((await canonicalEmail(signedInAs)) !== codeFor) {
+    const [whose, phoneIs] = await Promise.all([firstName(codeFor), firstName(signedInAs)]);
+    return json(
+      {
+        error: `This code is ${whose}’s, and this phone is signed in as ${phoneIs}, so it was not connected. ${phoneIs}: sign in at strangeramblings.com/welcome as yourself to get your own code.`,
+        wrongPerson: true,
+      },
+      { status: 409 },
+    );
+  }
+  return { heldId: held?.id ?? null };
+}
+
+async function pairFromJoinLink(request: Request, join: string, label: string | null, identity: unknown): Promise<Response> {
+  const link = verifyJoinCode(join, env.AUTH_SECRET, await joinCandidates());
+  if (!link) return json({ error: 'That pairing code is not valid.' }, { status: 401 });
+  let previousDevice: string | null = null;
+  if (link.mode === 'identity') {
+    const proof = await provenHolder(request, identity, join, link.email);
+    if (proof instanceof Response) return proof;
+    previousDevice = proof.heldId;
+  }
+  if (!(await mayHoldDevice(link.email))) return json({ error: 'That pairing code is not valid.' }, { status: 401 });
+
+  const issued = await issueDevice(link.email, label);
+  if (previousDevice) await revokeDevice(issued.ownerEmail, previousDevice).catch(() => false);
+  const name = await firstName(link.email);
+  await notifyOwner({
+    category: 'access',
+    title: `${name}’s phone connected from the install link`,
+    body: link.mode === 'vouch' ? 'On your word: no sign-in on the phone.' : `Signed in as ${name}.`,
+    url: '/admin/access/app',
+    severity: 'info',
+  }).catch((err) => console.error('[native] pair: notify failed:', err));
+  return json({ token: issued.token, expiresAt: issued.expiresAt.toISOString() });
+}
+
+/** What the mismatch sentence calls someone: their household name, else their address's first part. */
+async function firstName(email: string): Promise<string> {
+  const member = await memberByEmail(email).catch(() => null);
+  const name = member?.displayName?.trim().split(/\s+/)[0];
+  return name || email.split('@')[0];
+}
+
+/**
  * Who a redeemed code may become a device for: the owner, a member who holds
- * news, chat or games right now — the areas the app opens to members — or a
- * registrant waiting on the owner ($lib/server/registration).
+ * news, chat, games or the family circle right now — the areas the app opens
+ * to members — or a registrant waiting on the owner ($lib/server/registration).
  *
  * A member's code is only ever minted by the household push, for a member who
  * held one of those when it was minted; this asks again at redemption because
@@ -88,7 +189,11 @@ async function mayHoldDevice(email: string): Promise<boolean> {
       member &&
       (satisfies(member.grants, 'news:self') ||
         satisfies(member.grants, 'jkai.chat:self') ||
-        satisfies(member.grants, 'games:self'))
+        satisfies(member.grants, 'games:self') ||
+        satisfies(member.grants, 'drive:self') ||
+        // The family circle pairs from the one code too: the site credential
+        // is how the phone then fetches its health & location pairing.
+        satisfies(member.grants, 'family:circle'))
     ) {
       return true;
     }

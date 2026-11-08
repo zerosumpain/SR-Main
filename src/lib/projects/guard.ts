@@ -59,7 +59,10 @@ export async function resolveShareToken(key: string, ctx: ProjectGuardCtx): Prom
   const cookieName = shareCookieName(key);
   const fromUrl = ctx.url.searchParams.get('t');
   const token = fromUrl || ctx.cookies.get(cookieName) || '';
-  if (!token || !(await validateProjectShare(key, token))) return false;
+  const live = token ? await validateProjectShare(key, token) : null;
+  // A link that asks for a password is answered by its own app, never here:
+  // Main has no prompt to put the question, so it must not open without one.
+  if (!live || live.passwordHash) return false;
   if (fromUrl) {
     // Scope to /projects so it is never sent to other parts of the site; the
     // cookie NAME is per-project and the token is validated against this key.

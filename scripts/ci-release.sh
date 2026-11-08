@@ -143,6 +143,24 @@ if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
   sudo apt-get install -y --no-install-recommends ffmpeg
 fi
 
+# Family backlog "Play on TV" fetches TikTok/YouTube clips with yt-dlp
+# ($lib/family/backlog-cast.server). The standalone binary, pinned and checked:
+# Debian's package lags months behind the sites it reads. Bump both lines
+# together when TikTok changes and fetches start falling back to mirroring.
+YT_DLP_VERSION=2026.08.19
+YT_DLP_SHA256=58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a
+if [ "$(yt-dlp --version 2>/dev/null || true)" != "$YT_DLP_VERSION" ]; then
+  yt_tmp="$(mktemp)"
+  if curl -fsSL -o "$yt_tmp" "https://github.com/yt-dlp/yt-dlp/releases/download/$YT_DLP_VERSION/yt-dlp_linux" &&
+    echo "$YT_DLP_SHA256  $yt_tmp" | sha256sum -c --quiet; then
+    sudo install -m 0755 "$yt_tmp" /usr/local/bin/yt-dlp
+  else
+    # Not fatal: without it every cast falls back to the phone, nothing else breaks.
+    echo "::warning::yt-dlp $YT_DLP_VERSION could not be installed; Play on TV will fall back to mirroring" >&2
+  fi
+  rm -f "$yt_tmp"
+fi
+
 # Read what is serving now BEFORE the swap. This is the release log's "what did
 # this replace" boundary. Empty on the first run of this script.
 PREV_SHA="$(sed -n 's/^sha=//p' "$VPS_DIR/build/.deploy-sha" 2>/dev/null | head -1 || true)"
@@ -183,20 +201,22 @@ rsync -a --delete data/skills/ "$VPS_DIR/data/skills/"
 
 echo "==> Placing runtime-read sources..."
 mkdir -p "$VPS_DIR/src/lib/db" "$VPS_DIR/src/lib/constants" \
-         "$VPS_DIR/src/lib/workflows/scraper/python" "$VPS_DIR/src/lib/styles" \
+         "$VPS_DIR/src/lib/scraper/python" "$VPS_DIR/src/lib/styles" \
          "$VPS_DIR/scripts"
 rsync -a src/lib/db/schema.ts "$VPS_DIR/src/lib/db/"
 rsync -a drizzle.config.ts "$VPS_DIR/"
 rsync -a src/app.css "$VPS_DIR/src/" 2>/dev/null || true
 rsync -a src/lib/styles/ "$VPS_DIR/src/lib/styles/" 2>/dev/null || true
-rsync -a src/lib/workflows/scraper/python/ "$VPS_DIR/src/lib/workflows/scraper/python/"
+rsync -a src/lib/scraper/python/ "$VPS_DIR/src/lib/scraper/python/"
 rsync -a scripts/server-with-ws.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/check-retired-integration-storage.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/apply-security-lifecycle.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/apply-daydream-commissions.mjs "$VPS_DIR/scripts/"
+rsync -a scripts/apply-app-owned-schemas.mjs "$VPS_DIR/scripts/"
 mkdir -p "$VPS_DIR/scripts/migrations"
 rsync -a scripts/migrations/2026-09-28-security-lifecycle.sql "$VPS_DIR/scripts/migrations/"
 rsync -a scripts/migrations/2026-09-28-daydream-commissions.sql "$VPS_DIR/scripts/migrations/"
+rsync -a scripts/migrations/2026-10-02-app-owned-schemas.sql "$VPS_DIR/scripts/migrations/"
 # The build smoke harness. `runStaticSmoke` shells out to this by path, and it
 # must live inside the repo — `import('playwright')` resolves from the script's
 # own directory. Shipped in #144 without this line, so the check reported
@@ -292,6 +312,17 @@ fi
 (
   set -a; . /etc/strange-ramblings/main-migrations.env; set +a
   node "$VPS_DIR/scripts/apply-daydream-commissions.mjs"
+)
+
+# Move the single-application tables into their own schemas (drive, policy,
+# dfe, dsd), leaving public compatibility views. Every release, because it is
+# idempotent and cheap. From this release schema.ts declares those tables with
+# pgSchema(...) and drizzle.config.ts confines push to public and excludes the
+# view names, so push leaves them alone in either order; running it first means
+# the release that changes the declarations is the one that moves the tables.
+(
+  set -a; . /etc/strange-ramblings/main-migrations.env; set +a
+  node "$VPS_DIR/scripts/apply-app-owned-schemas.mjs"
 )
 
 # Same shape for the schema. Measured: 7 of 140 master commits touch schema.ts.

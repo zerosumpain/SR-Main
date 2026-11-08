@@ -10,7 +10,7 @@
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
   import AccessEditor from '$lib/components/admin/AccessEditor.svelte';
-  import { LANE_LABEL } from '$lib/access/device-rows';
+  import { LANE_LABEL, appLabel, phoneLabel } from '$lib/access/device-rows';
   import type { Permission } from '$lib/access/catalogue';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -59,6 +59,11 @@
     if (!iso) return '—';
     return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
+  const time = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  // Connect a phone: the card's result, and the choices the form was sent with.
+  const connection = $derived(form && 'connect' in form && form.connect ? form.connect : null);
+  let channel = $state<'testflight' | 'adhoc'>('testflight');
 
   const saved = (what: string) => form && 'saved' in form && form.saved === what;
 </script>
@@ -256,6 +261,88 @@
     {/if}
   </section>
 
+  <section class="nm-sec" data-section="connect">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Connect a phone</span>
+      {#if connection}<span class="nm-pill" data-state="connected">{connection.channel === 'adhoc' ? 'install link' : connection.kind === 'scan' ? 'pairing code' : 'vouched code'}</span>{/if}
+    </div>
+    {#if person.kind === 'household'}
+      <p class="muted">
+        They have no account yet. Give the address their phone signs in with — their Apple ID’s will do — and they
+        join Family Circle as the code is made.
+      </p>
+    {:else}
+      <p class="muted">
+        One code for everything — chat, news, health and location — good for ten minutes. In the app: Welcome → Scan
+        the code, or Settings → Connections → Pair with a code.
+      </p>
+    {/if}
+
+    {#if connection}
+      <div class="pair">
+        <img src={connection.qr} alt="{connection.channel === 'adhoc' ? 'Join link' : 'Pairing'} QR code for {person.name}" width="220" height="220" />
+        <div class="pair-meta">
+          {#if connection.channel === 'adhoc'}
+            {@const link = connection.link}
+            <span class="sr-label-tight">For {person.name} — send it, or scan it with their iPhone</span>
+            <code class="code">{link}</code>
+            <span class="muted">
+              Works for {connection.days} days, on any of their phones. On the iPhone it reads the phone’s ID, builds a
+              copy for it (about half an hour) and installs it; updates come from the app itself.
+            </span>
+            <div class="add-row">
+              <button class="nm-btn-ghost" type="button" onclick={() => navigator.clipboard?.writeText(link)}>Copy link</button>
+            </div>
+          {:else}
+            <span class="sr-label-tight">
+              {connection.kind === 'scan' ? `Only a phone signed in as ${person.name} can use it` : `For ${person.name}’s phone only — show it to no other`}
+            </span>
+            <code class="code">{connection.code}</code>
+            <span class="muted">
+              Expires {time(connection.expiresAt)}{connection.reused ? ' · the code already showing' : ''}{connection.admitted ? ' · added to Family Circle' : ''}
+            </span>
+            <form method="POST" action="?/connect" use:enhance={keep} class="add-row">
+              <input type="hidden" name="channel" value="testflight" />
+              <input type="hidden" name="identity" value={connection.kind === 'scan' ? 'on' : 'off'} />
+              <input type="hidden" name="fresh" value="1" />
+              <button class="nm-btn-ghost" type="submit">New code</button>
+            </form>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    <form method="POST" action="?/connect" use:enhance={keep} class="connect-form">
+      {#if person.kind === 'household'}
+        <label class="nm-field">
+          <span class="sr-label-tight">Email their phone signs in with</span>
+          <input class="nm-text-input" type="email" name="email" required autocomplete="off" />
+        </label>
+      {/if}
+      <fieldset class="checks">
+        <legend class="sr-label-tight">How they get the app</legend>
+        <label class="toggle">
+          <input type="radio" name="channel" value="testflight" bind:group={channel} />
+          <span>TestFlight — show a pairing code</span>
+        </label>
+        <label class="toggle">
+          <input type="radio" name="channel" value="adhoc" bind:group={channel} />
+          <span>No TestFlight (under 13s can’t) — make an install link</span>
+        </label>
+      </fieldset>
+      {#if person.kind !== 'owner' && channel === 'testflight'}
+        <input type="hidden" name="identity" value="off" />
+        <label class="toggle">
+          <input type="checkbox" name="identity" value="on" checked={person.kind === 'account'} />
+          <span>The phone must be signed in as them — untick for a child who cannot sign in on the phone</span>
+        </label>
+      {/if}
+      <div class="add-row">
+        <button class="nm-save-btn" type="submit">{channel === 'adhoc' ? 'Make an install link' : 'Show a pairing code'}</button>
+      </div>
+    </form>
+  </section>
+
   {#if person.email}
     <section class="nm-sec" data-section="phones">
       <div class="nm-sec-hd">
@@ -265,13 +352,14 @@
       {#if person.devices.length}
         <table class="devices">
           <thead>
-            <tr><th>Pairing</th><th>Phone</th><th>Paired</th><th>Last used</th><th></th></tr>
+            <tr><th>Pairing</th><th>Phone</th><th>App</th><th>Paired</th><th>Last used</th><th></th></tr>
           </thead>
           <tbody>
             {#each person.devices as d (d.key)}
               <tr>
                 <td>{LANE_LABEL[d.lane]}</td>
-                <td>{d.label ?? 'iPhone'}</td>
+                <td>{phoneLabel(d)}{#if d.os} · iOS {d.os}{/if}</td>
+                <td>{appLabel(d) ?? '—'}</td>
                 <td>{when(d.paired)}</td>
                 <td>{when(d.lastUsed)}</td>
                 <td>
@@ -362,5 +450,16 @@
   .devices td { padding: 0.4rem; border-bottom: 1px solid var(--divider); }
   @media (max-width: 640px) {
     .devices th:nth-child(3), .devices td:nth-child(3) { display: none; }
+  }
+  .connect-form { display: flex; flex-direction: column; gap: 0.6rem; }
+  .pair { display: flex; gap: 1.25rem; align-items: flex-start; flex-wrap: wrap; margin-bottom: 1rem; }
+  .pair img { border: 1px solid var(--line-strong); image-rendering: pixelated; }
+  .pair-meta { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+  .code {
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+    user-select: all;
   }
 </style>

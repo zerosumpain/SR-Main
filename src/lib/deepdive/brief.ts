@@ -26,7 +26,7 @@ import { researchSessions, sources as sourcesTable, facts, entities } from '$lib
 import type { ResearchSession, Source } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, streamCompletion, generateEmbedding } from './ai';
-import { search } from './tavily';
+import { search } from './web-search';
 import { classifyDomain } from './credibility';
 import {
   GRAPH_EXTRACTION_PROMPT,
@@ -115,6 +115,7 @@ export async function runBrief(
   // the cheapest useful result is already in flight while the model thinks.
   const searchOpts = scopeToSearchOptions(scope);
   const rawSearch = search(topic, {
+    purpose: 'research.brief',
     maxResults: 8,
     searchDepth: 'basic',
     ...searchOpts,
@@ -149,6 +150,7 @@ export async function runBrief(
   const settled = await Promise.allSettled(
     queries.map((q) =>
       search(q, {
+        purpose: 'research.brief',
         maxResults: 6,
         searchDepth: 'basic',
         ...searchOpts,

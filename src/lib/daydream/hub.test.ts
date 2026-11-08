@@ -7,7 +7,7 @@ describe('hubTabs', () => {
 
   it('is the one feed plus the rooms that are not daydream, each a real route', () => {
     const tabs = hubTabs(base);
-    expect(tabs.map((t) => t.id)).toEqual(['feed', 'impact', 'watches', 'briefing']);
+    expect(tabs.map((t) => t.id)).toEqual(['feed', 'solutions', 'impact', 'watches', 'briefing']);
     expect(tabs[0].href).toBe('/jkai/daydreams');
     for (const t of tabs.slice(1)) expect(t.href).toBe(`/jkai/daydreams/${t.id}`);
     for (const t of tabs) expect(isRoom(t.id)).toBe(true);

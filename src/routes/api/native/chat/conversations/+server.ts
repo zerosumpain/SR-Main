@@ -9,6 +9,7 @@ import { resolveDefaultThinkingLevel } from '$lib/server/models/settings';
 import { resolveChatTurnModel } from '$lib/server/models/workload-settings';
 import { isPlaceholderTitle } from '$lib/jkai/thread-title';
 import { snapshotPrice } from '$lib/server/models/price-snapshot';
+import { messageChannel } from '$lib/tools/invoke-contract';
 
 /**
  * GET /api/native/chat/conversations — the thread list, and its search.
@@ -82,6 +83,8 @@ function card(row: ConversationRow) {
     id: row.id,
     title: row.title,
     source: row.source,
+    /** The thread's own channel ('ios', 'whatsapp', 'web'), for the row's tag. */
+    channel: messageChannel(null, row.source),
     pinned: row.pinned,
     messageCount: row.messageCount,
     modelProvider: row.modelProvider,
@@ -137,7 +140,12 @@ export const POST: RequestHandler = withNativeAccess('jkai.chat', async (event, 
       // photo from the phone in one "New thread" folder. NULL is what the web
       // sends, and what the app already shows as "Untitled thread".
       title: isPlaceholderTitle(title) ? null : title,
-      source: 'web',
+      // Started on the phone. It used to say 'web', so a thread opened in the
+      // app looked, everywhere, like one started at the desk. Every reader
+      // that matters takes 'app' already: the web list badges it, the
+      // principal log reads a jobbed turn here as the device, and nothing
+      // filters threads to source 'web'.
+      source: 'app',
       modelProvider: ctx.provider,
       modelId: ctx.modelId,
       modelPinnedByUser: false,
@@ -156,6 +164,7 @@ export const POST: RequestHandler = withNativeAccess('jkai.chat', async (event, 
       id: conv.id,
       title: conv.title,
       source: conv.source,
+      channel: messageChannel(null, conv.source),
       pinned: conv.pinned,
       messageCount: 0,
       modelProvider: conv.modelProvider,

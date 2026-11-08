@@ -10,9 +10,9 @@ import {
 } from '$lib/vitals/state';
 
 describe('roundPulse', () => {
-  it('rounds to nearest 5', () => {
-    expect(roundPulse(72)).toBe(70);
-    expect(roundPulse(73)).toBe(75);
+  it('rounds to whole beats, matching the watch', () => {
+    expect(roundPulse(72)).toBe(72);
+    expect(roundPulse(72.6)).toBe(73);
     expect(roundPulse(60)).toBe(60);
   });
 });

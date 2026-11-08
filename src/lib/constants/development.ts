@@ -85,6 +85,38 @@ export interface BriefLint {
   /** The criteria the model pass judged, so an unchanged set is not paid for twice. */
   judged?: { key: string; model: string };
 }
+/**
+ * Where a commissioned delivery came from (`$lib/jkai/commission`). 'web' is
+ * the owner's New feature form; 'phone' is reserved for the native lane, which
+ * waits for device proof; 'selfimprove' is the nightly lane.
+ */
+export const COMMISSION_SOURCES = ['chat', 'phone', 'web', 'daydream', 'selfimprove'] as const;
+export type CommissionSource = (typeof COMMISSION_SOURCES)[number];
+
+/**
+ * Who asked for a commissioned delivery, and on what terms. JSON on the
+ * delivery's state, so no column and no GRANT; member reads drop it whole
+ * (`memberDeliveryState` is an allow-list), because it names the thread.
+ */
+export interface DeliveryCommission {
+  source: CommissionSource;
+  /** The turn envelope's surface, as a label ('web'). */
+  surface?: string;
+  /** The jkai thread that asked, checked to exist; progress notes go back there. */
+  conversationId?: string;
+  /** The idempotency key: the same key returns the same delivery. */
+  operationKey: string;
+  requestedBy: 'owner';
+  at: string;
+  /** The ChatGPT windows when it was asked, or null when they could not be read. */
+  quotaAtStart: { fiveHourPct: number; weeklyPct: number } | null;
+  refs?: Array<{ kind: string; id: string }>;
+  /** The build model, and whether the owner pinned it in the thread. */
+  model: { provider: string; modelId: string; pinned: boolean };
+  /** Set when the builder sidecar could not be reached at commissioning. */
+  startError?: string;
+}
+
 export interface DeliveryState {
   version: 1;
   /**
@@ -139,6 +171,8 @@ export interface DeliveryState {
   batch: string | null;
   acceptedAt: string | null;
   releasePolicy: ReleasePolicy;
+  /** Set when the delivery was commissioned through `commissionBuild`. */
+  commission?: DeliveryCommission;
   /**
    * The unattended loop's own state. Lives in the delivery jsonb rather than in
    * columns so enabling it needs no migration — and so a `drizzle push` at

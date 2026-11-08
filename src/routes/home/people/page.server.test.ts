@@ -72,6 +72,23 @@ const { forecastMock, namingMock } = vi.hoisted(() => ({
 vi.mock('$lib/home/presence/forecast.server', () => ({ loadForecast: forecastMock }));
 vi.mock('$lib/home/presence/naming.server', () => ({ loadNamingQueue: namingMock, unnamedCount: async () => 3 }));
 
+// The owner's location hold: off unless a test sets one. Applied by the real
+// pure helper, so this checks the page wires it, not a stand-in.
+const { holdState } = vi.hoisted(() => ({ holdState: { on: false } }));
+vi.mock('$lib/home/presence/location-hold.server', async () => {
+  const { applyHold } = await import('$lib/home/presence/location-hold');
+  const hold = { lat: 54.5, lon: -1.5, label: 'Home', since: '2026-09-26T09:30:00Z', until: '2026-09-26T12:00:00Z' };
+  const reading = { isHome: true, placeLabel: 'Elton Parade', distanceHomeKm: 0.01 };
+  const now = new Date('2026-09-26T10:00:00Z');
+  return {
+    loadHoldContext: vi.fn(async () =>
+      holdState.on
+        ? { apply: (input: Parameters<typeof applyHold>[0]) => applyHold({ ...input, recent: input.recent ?? new Map() }, hold, ['alex'], reading, now, 30_000) }
+        : null,
+    ),
+  };
+});
+
 const { load } = await import('./+page.server');
 
 function eventFor(email: string | null, person?: string, days?: string) {
@@ -104,6 +121,29 @@ beforeEach(() => {
   livePositions.mockClear();
   loadFeedChecks.mockClear();
   loadPeopleMovement.mockClear();
+});
+
+describe('/home/people load — the owner\'s location hold', () => {
+  beforeEach(() => {
+    holdState.on = true;
+  });
+
+  it('shows anyone else the held point, fresh, with nothing saying so', async () => {
+    const data = (await load(eventFor('sam@example.test'))) as PeopleData & { positions: Array<Record<string, unknown>> };
+    expect(data.positions).toEqual([{ subject: 'alex', lat: 54.5, lon: -1.5, at: '2026-09-26T09:59:30.000Z', isHome: true }]);
+    expect(data.family.members.find((m) => m.subject === 'alex')).toMatchObject({
+      isHome: true, placeLabel: 'Elton Parade', distanceHomeKm: 0.01, ageMins: 1, batteryPct: 80,
+    });
+    expect(JSON.stringify(data)).not.toMatch(/"hold"|"until"|"held"|"since"/);
+    holdState.on = false;
+  });
+
+  it('never holds the owner\'s own page', async () => {
+    const data = (await load(eventFor('owner@example.test'))) as PeopleData & { positions: unknown };
+    expect(data.positions).toEqual(POSITIONS);
+    expect(data.family.members).toEqual(MEMBERS);
+    holdState.on = false;
+  });
 });
 
 describe('/home/people load — D2 scoping', () => {

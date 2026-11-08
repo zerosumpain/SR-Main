@@ -16,6 +16,7 @@ export const load: PageServerLoad = async (event) => {
       status: researchSessions.status,
       goals: researchSessions.goals,
       shareToken: researchSessions.shareToken,
+      shareTokenHash: researchSessions.shareTokenHash,
       createdAt: researchSessions.createdAt,
       completedAt: researchSessions.completedAt,
     })

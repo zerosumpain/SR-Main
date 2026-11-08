@@ -31,7 +31,7 @@
 // their address or principal. `erase.test.ts` fails when the schema grows a
 // new one that is not classified there.
 
-import { and, eq, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, arrayOverlaps, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import {
   accessInvite,
@@ -49,14 +49,33 @@ import {
   householdJourney,
   householdJourneyViewer,
   familyStepsEvent,
+  familyAlarm,
+  familyMessage,
+  familyPhoto,
+  forecastFeedback,
   familyTask,
+  familyBacklogItem,
+  trip,
+  tripSuggestion,
+  tripMessage,
+  tripProposal,
+  tripQuestion,
+  tripJob,
+  familyBacklogPref,
+  familyBacklogReaction,
   fileShareTokens,
   gameResults,
+  gameRooms,
   gmailAccounts,
   householdMember,
   jkaiAttachments,
   jkaiEvidenceResults,
+  jkaiEvents,
+  jkaiGates,
+  jkaiPresence,
+  jkaiTurns,
   nativeCredentials,
+  appDevice,
   newsFavourites,
   newsReads,
   researchSessions,
@@ -64,7 +83,7 @@ import {
   workflowInteractions,
   workflows,
 } from '$lib/db/schema';
-import { isOwnerEmail } from '$lib/server/access';
+import { getOwnerEmails, isOwnerEmail } from '$lib/server/access';
 import { asList } from '$lib/server/grants';
 import { notifyOwner } from '$lib/server/notify';
 import { enqueueIntelJob } from '$lib/intel-client/outbox';
@@ -102,6 +121,8 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   access_invite: { email: 'erase', used_by_email: 'scrub', created_by: 'scrub' },
   access_request: { email: 'erase', decided_by: 'scrub' },
   native_credentials: { owner_email: 'erase' },
+  // Phones enrolled for the ad-hoc copy: theirs, so gone with them.
+  app_device: { email: 'erase' },
   household_member: { email: 'scrub' },
   news_favourites: { owner_key: 'erase' },
   news_reads: { owner_key: 'erase' },
@@ -113,6 +134,17 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   family_steps_event: { email: 'erase' },
   // Keyed by the games' hash of the address (`playerId`), never the address.
   game_results: { player_id: 'erase' },
+  // Durable game rooms they are in (hashed ids too): the game ends for everyone at that table —
+  // unless the game keeps its rooms through an erasure (`durable.erasePlayer`, a Hometowns
+  // county): then only their seat goes, and the row is rewritten without their id.
+  game_rooms: { host_id: 'erase', player_ids: 'erase' },
+  // Alarms they raised (their message and position) go; one they stood down
+  // for somebody else stays, without their address.
+  family_alarm: { from_email: 'erase', cancelled_by_email: 'scrub' },
+  family_message: { from_email: 'erase' },
+  // The photo of themselves the family's phones show in place of their initials.
+  family_photo: { email: 'erase' },
+  forecast_feedback: { reporter_email: 'erase' },
   family_task: {
     assignee_email: 'scrub',
     created_by_email: 'scrub',
@@ -120,10 +152,34 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
     confirmed_by_email: 'scrub',
     reward_paid_by_email: 'scrub',
   },
+  // What they shared to the family backlog goes; their name comes off what
+  // was shared for them or what they marked done.
+  family_backlog_item: { added_by_email: 'erase', for_email: 'scrub', done_by_email: 'scrub' },
+  family_backlog_reaction: { email: 'erase' },
+  family_backlog_pref: { email: 'erase' },
+  // v5: a family member may create a trip (a family record): it passes to the
+  // site owner rather than vanishing from everyone's plans. Their suggestions go;
+  // their name comes off the ones they decided.
+  trip: { owner_email: 'scrub', question_push_off: 'scrub' },
+  trip_suggestion: { by_email: 'erase', by_id: 'erase', decided_by_email: 'scrub', decided_by_id: 'scrub' },
+  // Their own conversation with the planner goes (each person's thread is theirs alone).
+  trip_message: { author_email: 'erase', author_id: 'erase' },
+  // v8: proposals and questions are the family's plan, so they stay — without
+  // their address or name (and their family-question votes go). Their planner
+  // jobs go.
+  trip_proposal: { author_email: 'scrub', decided_by_email: 'scrub' },
+  trip_question: { answered_by_email: 'scrub' },
+  trip_job: { owner_email: 'erase' },
   gmail_accounts: { email: 'erase', principal_id: 'erase' },
   activity_principals: { external_ref: 'erase' },
   jkai_conversations: { principal_id: 'erase' },
   jkai_attachments: { principal_id: 'erase' },
+  // The durable turn tables (hand-applied, behind Core's JKAI_DURABLE_TURNS):
+  // erased by principal when they exist, and their thread rows cascade too.
+  jkai_turns: { principal_id: 'erase' },
+  jkai_gates: { principal_id: 'erase' },
+  jkai_events: { principal_id: 'erase' },
+  jkai_presence: { principal_id: 'erase' },
   research_session: { principal_id: 'erase' },
   daydream_notebook: { principal_id: 'erase' },
   workflows: { principal_id: 'erase' },
@@ -150,13 +206,13 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   intel_entities: { space_id: 'kept: Core-owned; purged by the mail-purge / file-deleted jobs queued here' },
   intel_relationships: { space_id: 'kept: Core-owned; purged by the mail-purge / file-deleted jobs queued here' },
   intel_timeline_events: { space_id: 'kept: Core-owned; purged by the mail-purge / file-deleted jobs queued here' },
+  // Attachments Core's mail rules filed: only ever from the owner's own Gmail
+  // (owner-accounts), and Core's purgeMailbox clears them with the mailbox.
+  mail_attachment_files: { account_email: 'kept: Core-owned; owner mailboxes only, purged by the mail-purge job queued here' },
   // Owner-only surfaces: a member can never write these, so the value is always the owner or an agent tag.
   activity_share_token: { created_by: 'kept: owner-only (health sharing)' },
   project_share: { created_by: 'kept: owner-only (projects)' },
   deck_share: { created_by: 'kept: owner-only (decks)' },
-  policy_share: { created_by: 'kept: owner-only (policy analysis)' },
-  policy_analyses: { owner: 'kept: owner-only (policy analysis)' },
-  policy_personas: { owner: 'kept: owner-only (policy analysis)' },
   rag_collections: { owner: 'kept: owner-only (the whole authed area)' },
   datastore_collections: { created_by: 'kept: owner-only (datastore)' },
   datastore_records: { created_by: 'kept: owner-only (datastore)' },
@@ -164,6 +220,11 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   daydream_capabilities: { decided_by: 'kept: owner-only (daydream)' },
   daydream_commissions: { principal_id: 'kept: owner-only commissioning; reserved owner principal, never a member' },
   daydream_commission_commands: { principal_id: 'kept: owner-only commissioning command receipts' },
+  // Captures are owner-only (`withDevice`): a member's phone cannot record one
+  // yet, so these hold the owner's space and nobody else's. When members can
+  // record, their captures must be erased here WITH a `derived-delete` job each.
+  capture: { space_id: 'kept: owner-only (captures, withDevice); members cannot record yet' },
+  capture_action: { space_id: 'cascade' },
 };
 
 export interface EraseTarget {
@@ -199,7 +260,11 @@ export interface ErasedRows {
 export async function eraseRows(target: EraseTarget, executor: typeof db = db): Promise<ErasedRows> {
   const addrs = target.addresses;
   const pid = target.principalId;
-  return executor.transaction(async (tx) => {
+  // Durable game rooms deleted below; once committed, the copies in memory are closed too.
+  let gameRoomIds: string[] = [];
+  // Rooms that keep going without them (`durable.erasePlayer`); once committed, memory reloads them.
+  let keptRoomIds: string[] = [];
+  const erased = await executor.transaction(async (tx) => {
     const out: ErasedRows = {
       conversations: 0,
       researchRuns: 0,
@@ -236,8 +301,70 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
 
     await tx.delete(routeGift).where(inArray(routeGift.toEmail, addrs));
 
-    // Their games on the family leaderboard.
-    await tx.delete(gameResults).where(inArray(gameResults.playerId, addrs.map((a) => playerId(a))));
+    // The family alarms they raised; their name off any they stood down.
+    await tx.delete(familyAlarm).where(inArray(familyAlarm.fromEmail, addrs));
+    await tx.update(familyAlarm).set({ cancelledByEmail: null }).where(inArray(familyAlarm.cancelledByEmail, addrs));
+    // Their family messages and replies (replies under their messages go too).
+    const sent = await tx.delete(familyMessage).where(inArray(familyMessage.fromEmail, addrs)).returning({ id: familyMessage.id });
+    if (sent.length) await tx.delete(familyMessage).where(inArray(familyMessage.replyTo, sent.map((m) => m.id)));
+    // Their photo, in place of their initials on the family's phones.
+    await tx.delete(familyPhoto).where(inArray(familyPhoto.email, addrs));
+    // Their "that's wrong" corrections on the forecast.
+    await tx.delete(forecastFeedback).where(inArray(forecastFeedback.reporterEmail, addrs));
+
+    // What they shared to the family backlog; their name off the rest.
+    const shared = await tx.delete(familyBacklogItem).where(inArray(familyBacklogItem.addedByEmail, addrs)).returning({ id: familyBacklogItem.id });
+    if (shared.length) await tx.delete(familyBacklogReaction).where(inArray(familyBacklogReaction.itemId, shared.map((i) => i.id)));
+    await tx.delete(familyBacklogReaction).where(inArray(familyBacklogReaction.email, addrs));
+    await tx.delete(familyBacklogPref).where(inArray(familyBacklogPref.email, addrs));
+    await tx.update(familyBacklogItem).set({ forEmail: null }).where(inArray(familyBacklogItem.forEmail, addrs));
+    await tx.update(familyBacklogItem).set({ doneByEmail: null }).where(inArray(familyBacklogItem.doneByEmail, addrs));
+
+    // Trips they created pass to the site owner; their suggestions go; their name off decisions.
+    const keeper = getOwnerEmails()[0]?.trim().toLowerCase();
+    if (keeper) await tx.update(trip).set({ ownerEmail: keeper }).where(inArray(trip.ownerEmail, addrs));
+    await tx.delete(tripSuggestion).where(inArray(tripSuggestion.byEmail, addrs));
+    await tx.delete(tripMessage).where(inArray(tripMessage.authorEmail, addrs));
+    await tx.update(tripSuggestion).set({ decidedByEmail: null, decidedById: null }).where(inArray(tripSuggestion.decidedByEmail, addrs));
+    // v8: their name off proposals and answered questions; their votes out of family questions; their jobs gone.
+    await tx.update(tripProposal).set({ authorEmail: null }).where(inArray(tripProposal.authorEmail, addrs));
+    await tx.update(tripProposal).set({ decidedByEmail: null }).where(inArray(tripProposal.decidedByEmail, addrs));
+    await tx.update(tripQuestion).set({ answeredByEmail: null, answeredByName: null }).where(inArray(tripQuestion.answeredByEmail, addrs));
+    const voted = await tx
+      .select({ id: tripQuestion.id, votes: tripQuestion.votes })
+      .from(tripQuestion)
+      .where(or(...addrs.map((a) => sql`${tripQuestion.votes}::text ilike ${'%' + a + '%'}`)));
+    for (const q of voted) {
+      const votes = Object.fromEntries(
+        Object.entries((q.votes ?? {}) as Record<string, Array<{ email: string; name: string }>>).map(([k, vs]) => [k, (vs ?? []).filter((v) => !addrs.includes(v.email?.toLowerCase()))]),
+      );
+      await tx.update(tripQuestion).set({ votes }).where(eq(tripQuestion.id, q.id));
+    }
+    await tx.delete(tripJob).where(inArray(tripJob.ownerEmail, addrs));
+    // v8.1: off the trips' "question notifications off" lists.
+    const muted = await tx
+      .select({ id: trip.id, off: trip.questionPushOff })
+      .from(trip)
+      .where(or(...addrs.map((a) => sql`${trip.questionPushOff}::text ilike ${'%' + a + '%'}`)));
+    for (const t of muted) {
+      await tx.update(trip).set({ questionPushOff: (t.off ?? []).filter((e) => !addrs.includes(e.toLowerCase())) }).where(eq(trip.id, t.id));
+    }
+
+    // Their games on the family leaderboard, and any durable game they sit in.
+    const players = addrs.map((a) => playerId(a));
+    await tx.delete(gameResults).where(inArray(gameResults.playerId, players));
+    if (players.length) {
+      // First the rooms that outlive one seat: rewritten without their ids, so the delete misses them.
+      // If the games module cannot load, nothing is kept and the delete takes every room, as it
+      // always did: keeping a county is a courtesy to the others, the erasure itself is not optional.
+      const keeper = await import('$lib/games/erase-seat.server').catch((err) => {
+        console.error('[account] could not load the games catalogue; deleting their game rooms:', (err as Error)?.message ?? err);
+        return null;
+      });
+      keptRoomIds = keeper ? await keeper.keepErasedSeats(tx, players) : [];
+      const rooms = await tx.delete(gameRooms).where(arrayOverlaps(gameRooms.playerIds, players)).returning({ id: gameRooms.id });
+      gameRoomIds = rooms.map((r) => r.id);
+    }
 
     const removed = await tx
       .update(familyTask)
@@ -306,6 +433,22 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
       await tx.delete(jkaiAttachments).where(eq(jkaiAttachments.principalId, pid));
       out.conversations = (await tx.delete(conversations).where(eq(conversations.principalId, pid)).returning({ id: conversations.id })).length;
 
+      // Their durable turns, gates, event channel and presence. Rows tied to
+      // a thread went with it; this takes the rest (a turn or event with no
+      // thread, a phone's presence). The tables are hand-applied and may be
+      // absent, and a failing statement would abort this whole transaction,
+      // so each is asked for first.
+      const present = await tx.execute(sql`SELECT
+          to_regclass('public.jkai_turns') IS NOT NULL AS turns,
+          to_regclass('public.jkai_gates') IS NOT NULL AS gates,
+          to_regclass('public.jkai_events') IS NOT NULL AS events,
+          to_regclass('public.jkai_presence') IS NOT NULL AS presence`);
+      const has = ((present as unknown as { rows?: Array<Record<string, boolean>> }).rows?.[0] ?? {}) as Record<string, boolean>;
+      if (has.gates) await tx.delete(jkaiGates).where(eq(jkaiGates.principalId, pid));
+      if (has.turns) await tx.delete(jkaiTurns).where(eq(jkaiTurns.principalId, pid));
+      if (has.events) await tx.delete(jkaiEvents).where(eq(jkaiEvents.principalId, pid));
+      if (has.presence) await tx.delete(jkaiPresence).where(eq(jkaiPresence.principalId, pid));
+
       const runs = await tx.select({ id: researchSessions.id }).from(researchSessions).where(eq(researchSessions.principalId, pid));
       // Explore-further children of theirs point at their runs; unhook first.
       if (runs.length) {
@@ -340,6 +483,18 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
     }
     return out;
   });
+  if (gameRoomIds.length) {
+    await import('$lib/games/rooms.server')
+      .then((m) => m.dropRooms(gameRoomIds))
+      .catch((err) => console.error('[account] could not close erased game rooms in memory:', (err as Error).message));
+  }
+  if (keptRoomIds.length) {
+    const erasedPlayers = target.addresses.map((a) => playerId(a));
+    await import('$lib/games/rooms.server')
+      .then((m) => m.reloadRooms(keptRoomIds, erasedPlayers))
+      .catch((err) => console.error('[account] could not reload kept game rooms in memory:', (err as Error).message));
+  }
+  return erased;
 }
 
 /**
@@ -350,6 +505,7 @@ export async function eraseRows(target: EraseTarget, executor: typeof db = db): 
  */
 export async function eraseAccountRecords(addresses: string[], executor: DbExecutor = db): Promise<number> {
   const creds = await executor.delete(nativeCredentials).where(inArray(nativeCredentials.ownerEmail, addresses)).returning({ id: nativeCredentials.id });
+  await executor.delete(appDevice).where(inArray(appDevice.email, addresses));
   await executor.delete(accessRequest).where(inArray(accessRequest.email, addresses));
   await executor.delete(accessInvite).where(inArray(accessInvite.email, addresses));
   await executor.delete(allowedUser).where(inArray(allowedUser.email, addresses));

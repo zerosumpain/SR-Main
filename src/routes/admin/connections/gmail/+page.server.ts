@@ -1,7 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/db';
 import { gmailAccounts } from '$lib/db/schema';
-import { ownerGmailWhere } from '$lib/workflows/gmail/owner-accounts';
+import { ownerGmailWhere } from '$lib/integrations/gmail/owner-accounts';
 
 export const load: PageServerLoad = async () => {
   // The owner's mailboxes. A member's has no Test / Delete here: it is theirs,

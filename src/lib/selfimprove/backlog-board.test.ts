@@ -15,7 +15,7 @@ import {
   type BoardCard,
 } from './backlog-board';
 import type { WorkItem, WorkStage } from './board';
-import type { BacklogEpic } from './epic-backlog';
+import type { BacklogEpic } from './backlog-room';
 
 function work(over: Partial<WorkItem> = {}): WorkItem {
   return {

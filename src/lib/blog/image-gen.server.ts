@@ -10,7 +10,7 @@
  *    `getLLMClient`), like every other model call on the site;
  *  - the GENERATION call is a bare `fetch` to OpenRouter's images endpoint,
  *    because that is the only way to reach it — there is no SDK wrapper — and
- *    it is exactly what `$lib/workflows/site-tools/tools/media-generate-image`
+ *    it is exactly what `$lib/tools/tools/media-generate-image`
  *    does for jkai.
  *
  * THE CONSEQUENCE OF THAT BARE FETCH, and it is the thing most easily missed:

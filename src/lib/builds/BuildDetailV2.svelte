@@ -272,7 +272,7 @@
 </script>
 
 <svelte:head>
-  <title>{build.title ?? build.prompt.slice(0, 50)} — JKAI build</title>
+  <title>{build.title ?? build.prompt.slice(0, 50)} — jkai build</title>
 </svelte:head>
 
 <div class="wrap">
@@ -302,7 +302,7 @@
     <div class="hdr-left">
       <a class="row-link" href="/jkai/develop?tab=archive">← all builds</a>
       <div class="kicker">
-        JKAI build ·
+        jkai build ·
         <!-- The bucket, not the raw status: `completed` is claimed by a
              delivery, an open PR, a budget cap-out, a hand-kill and a chat
              registration. Only the first belongs in green. -->

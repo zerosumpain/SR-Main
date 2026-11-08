@@ -161,7 +161,9 @@
 
   {#if tab === 'primitives'}
     <p class="tab-note">General workflow building blocks — triggers, control flow, LLM calls, generic integrations. The orchestrator combines these to compose any activity. Site-specific things (blog, deep-dive, intel, gmail, etc.) live under <strong>Site tools</strong>.</p>
-    {#if filteredPrimitives.length === 0}
+    {#if data.nodesUnavailable}
+      <div class="nm-empty">Workflow nodes are unavailable: SR-Workflows could not be reached for its node catalogue.</div>
+    {:else if filteredPrimitives.length === 0}
       <div class="nm-empty">No primitives match.</div>
     {:else}
       <div class="row-list">
@@ -205,7 +207,7 @@
   {/if}
 
   {#if tab === 'site'}
-    <p class="tab-note">Tools tied to this site's features and connected accounts — workflow node primitives that hit those features, plus orchestrator-callable functions hardcoded under <code>src/lib/workflows/site-tools/</code>.</p>
+    <p class="tab-note">Tools tied to this site's features and connected accounts — workflow node primitives that hit those features, plus orchestrator-callable functions hardcoded under <code>src/lib/tools/</code>.</p>
 
     {#if filteredSiteFamilies.length === 0 && filteredToolsets.length === 0}
       <div class="nm-empty">No site tools match.</div>

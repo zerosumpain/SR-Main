@@ -98,7 +98,7 @@ describe("the owner's number is not in the source tree", () => {
   });
 
   it('is not appended to the always-on capabilities prompt as a literal', () => {
-    const src = readFileSync(resolve(ROOT, 'src/lib/workflows/site-tools/registry.ts'), 'utf8');
+    const src = readFileSync(resolve(ROOT, 'src/lib/tools/registry.ts'), 'utf8');
     expect(src).toContain('ownerPhone()');
     expect(src).not.toMatch(/John's WhatsApp number: \+\d/);
   });

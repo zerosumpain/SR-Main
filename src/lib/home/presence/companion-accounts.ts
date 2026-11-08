@@ -48,6 +48,11 @@ export interface PilotDevice {
   created: string | null;
   expires: string | null;
   lastUsed: string | null;
+  /** What the phone last said it was running; null from a pilot or an app older than the headers. */
+  app: { version: string | null; build: number; commit: string | null; channel: string | null; since: string | null } | null;
+  os: string | null;
+  model: string | null;
+  deviceName: string | null;
 }
 
 async function call(
@@ -170,6 +175,8 @@ export async function listPilotDevices(fetchImpl: typeof fetch = fetch): Promise
     const id = str(d?.id);
     const email = str(d?.email);
     if (!id || !email) continue;
+    const app = d.app && typeof d.app === 'object' ? (d.app as Record<string, unknown>) : null;
+    const build = typeof app?.build === 'number' && Number.isInteger(app.build) && app.build > 0 ? app.build : null;
     devices.push({
       id,
       email: email.toLowerCase(),
@@ -178,6 +185,10 @@ export async function listPilotDevices(fetchImpl: typeof fetch = fetch): Promise
       created: str(d.created),
       expires: str(d.expires),
       lastUsed: str(d.lastUsed),
+      app: build === null ? null : { version: str(app?.version), build, commit: str(app?.commit), channel: str(app?.channel), since: str(app?.since) },
+      os: str(d.os),
+      model: str(d.model),
+      deviceName: str(d.deviceName),
     });
   }
   return { ok: true, value: devices };

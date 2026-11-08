@@ -1,8 +1,8 @@
 import { db } from '$lib/db';
 import { jkaiEvidenceResults } from '$lib/db/schema';
 import { and, eq } from 'drizzle-orm';
-import type { ToolResult, ToolExecContext } from '$lib/workflows/site-tools/registry-internal';
-import { sourceReferences, type EvidenceEnvelope } from './evidence';
+import type { ToolResult, ToolExecContext } from '$lib/tools/registry-internal';
+import { sourceReferences, withoutDisplay, type EvidenceEnvelope } from './evidence';
 export async function retainEvidence(tool: string, result: ToolResult, ctx?: ToolExecContext): Promise<ToolResult> {
   if (tool === 'evidence_read' || !ctx?.conversationId || !result.success) return result;
   const id = crypto.randomUUID();
@@ -20,7 +20,7 @@ export async function retainEvidence(tool: string, result: ToolResult, ctx?: Too
 export async function readEvidence(id: string, conversationId: string, offset = 0, limit = 16000) {
   const [row] = await db.select().from(jkaiEvidenceResults).where(and(eq(jkaiEvidenceResults.id, id), eq(jkaiEvidenceResults.conversationId, conversationId))).limit(1);
   if (!row) throw new Error('No evidence in this conversation with that handle');
-  const text = JSON.stringify(row.result);
+  const text = JSON.stringify(row.result, withoutDisplay);
   const start = Math.max(0, Math.floor(offset));
   const end = Math.min(text.length, start + Math.max(100, Math.min(16000, limit)));
   return { tool: row.tool, retrievedAt: row.createdAt, text: text.slice(start, end), offset: start,

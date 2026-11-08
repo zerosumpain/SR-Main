@@ -12,7 +12,14 @@
 //
 // The wire shape (`NativeNote`) is FIXED: the iPhone app was built against it.
 
+import { solutionView, type SolutionView } from '../act/solution';
 import { QUESTION_EVIDENCE_KIND } from './audit';
+import { noteAct, type NoteAct } from '../act/plan';
+import { followStage, noteFollow, type NoteFollow } from '../act/follow';
+import { readReplaces } from './topics';
+import { PLAN_FRESH_DAYS, readSeenAgain, subjectOf } from './subjects';
+import { reasonOf, type Reason } from '../reasons';
+import { stalenessOf, type Staleness } from './shelf';
 import { describeSources, noteStage, sourceText, splitNarrative, type Bucket, type SourceLine, type Stage } from './explain';
 import { CHANNELS, type Channel, type Outcome } from './questions';
 
@@ -152,6 +159,42 @@ export interface ThinkRow {
   createdAt: Date;
   deliveredAt: Date | null;
   note: string | null;
+  /** The verdict on the claim (`rulings.server.ts`). Optional so readers that
+   *  never show it need not select it. */
+  reviewVerdict?: string | null;
+  reviewReasoning?: string | null;
+  reviewNarrative?: string | null;
+  reviewModel?: string | null;
+  /** `proposed_actions` — a "Do it for me" plan and what became of it. */
+  proposedActions?: unknown;
+  /** A stated last day it matters (`shelf.ts`). Optional like the review. */
+  relevantUntil?: Date | null;
+  /** His one-tap reason (`reasons.ts`), stored as its code. */
+  feedbackNote?: string | null;
+}
+
+/** A ruling on a note's CLAIM — apart from feedback, which is about its kind. */
+export interface NoteReview {
+  verdict: 'holds' | 'wrong' | 'unclear';
+  /** Who ruled: the owner, or a double-check. */
+  by: 'owner' | 'check';
+  reasoning: string;
+  /** What it learned, when wrong. */
+  lesson: string | null;
+}
+
+const FROM_STORED: Record<string, NoteReview['verdict']> = { verified: 'holds', refuted: 'wrong', uncertain: 'unclear' };
+
+export function noteReview(row: Pick<ThinkRow, 'reviewVerdict' | 'reviewReasoning' | 'reviewNarrative' | 'reviewModel'>): NoteReview | null {
+  const verdict = row.reviewVerdict ? FROM_STORED[row.reviewVerdict] : undefined;
+  if (!verdict) return null;
+  return {
+    verdict,
+    // Literal, not imported: `lessons.ts`'s OWNER_REVIEWER, kept dependency-free here.
+    by: row.reviewModel === 'owner' ? 'owner' : 'check',
+    reasoning: row.reviewReasoning ?? '',
+    lesson: verdict === 'wrong' ? (row.reviewNarrative ?? null) : null,
+  };
 }
 
 /**
@@ -227,15 +270,36 @@ export const TODAY_WINDOW_HOURS = 48;
 export const TODAY_LIMIT = 2;
 
 /**
- * The Today card's notes: the newest from the last 48 hours the phone may show,
- * less any the owner has already turned down. Input need not be sorted.
+ * The Today card's notes: the living week plan first, when there is one
+ * (`livingPlanId` — it may be up to a week old), then the newest from the last
+ * 48 hours the phone may show, less any the owner has already turned down.
+ * Input need not be sorted; pass a week of rows for the plan to be found.
  */
 export function todayNotes<R extends ThinkRow>(rows: R[], muted: ReadonlySet<string>, now: Date): R[] {
   const floor = now.getTime() - TODAY_WINDOW_HOURS * 3_600_000;
-  return rows
-    .filter((r) => isForPhone(r, muted) && r.status !== 'dismissed' && r.createdAt.getTime() >= floor)
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-    .slice(0, TODAY_LIMIT);
+  const shown = rows.filter((r) => isForPhone(r, muted) && r.status !== 'dismissed');
+  const planId = livingPlanId(shown, now);
+  const plan = shown.filter((r) => r.id === planId);
+  const recent = shown
+    .filter((r) => r.id !== planId && r.createdAt.getTime() >= floor)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return [...plan, ...recent].slice(0, TODAY_LIMIT);
+}
+
+/**
+ * The living week plan (`subjects.ts`): the newest health_plan note from the
+ * last week that is still on the feed. One at a time — a revision archives the
+ * one before it.
+ */
+export function livingPlanId(rows: readonly Pick<ThinkRow, 'id' | 'kind' | 'status' | 'suppressedReason' | 'createdAt'>[], now: Date): string | null {
+  const floor = now.getTime() - PLAN_FRESH_DAYS * 86_400_000;
+  let best: { id: string; at: number } | null = null;
+  for (const r of rows) {
+    if (r.kind !== 'think_health_plan' || r.status === 'dismissed' || !isOnFeed(r)) continue;
+    const at = r.createdAt.getTime();
+    if (at >= floor && at <= now.getTime() && (!best || at > best.at)) best = { id: r.id, at };
+  }
+  return best?.id ?? null;
 }
 
 // ── The wire ───────────────────────────────────────────────────────────────
@@ -356,12 +420,59 @@ export interface FeedNote extends NativeNote {
   bucket: Bucket;
   commission: NoteContext['commission'];
   build: NoteContext['build'];
+  review: NoteReview | null;
+  /** "Do it for me": what it would do, or did. Null when the step is not
+   *  something it can carry out by itself. */
+  act: NoteAct | null;
+  /** Taking it further — research, the backlog, a prototype, a watch, a
+   *  message, a Home Assistant refresh (`act/follow.ts`). */
+  follow: NoteFollow;
+  /** The one press that does what it suggests (`act/solution.ts`), or null. */
+  solution: SolutionView | null;
+  /** Older notes on the same subject this one replaced (`topics.ts`). */
+  replaces: Array<{ id: string; title: string }>;
+  /** Probably past its date, and why — or null (`shelf.ts`). */
+  stale: Staleness | null;
+  /** His one-tap reason, or null (`reasons.ts`). */
+  reason: Reason | null;
+  /** Days the same finding came back and was folded in (`subjects.ts`). */
+  seenAgain: string[];
+  /** What it is about, or null. */
+  subject: string | null;
+  /** The living week plan — pinned above the list. Set by the loader. */
+  living: boolean;
 }
 
-export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteContext = EMPTY_CONTEXT): FeedNote {
+/** The follow-ups a note gets — the same for the web card and the phone. */
+function followOf(row: ThinkRow, n: NativeNote, split: { summary: string; next: string | null }, review: NoteReview | null, ctx: NoteContext): NoteFollow {
+  return noteFollow({
+    outcome: n.outcome,
+    channel: n.channel,
+    title: row.title,
+    summary: split.summary,
+    next: split.next,
+    verdict: row.feedback,
+    review,
+    sources: describeSources(row.evidence),
+    evidence: row.evidence,
+    build: ctx.build,
+    actions: row.proposedActions,
+  });
+}
+
+/** His own ruling on the claim answers the note as surely as a rating does. */
+function answeredBy(row: ThinkRow, review: NoteReview | null): string | null {
+  return row.feedback ?? (review?.by === 'owner' ? `ruled_${review.verdict}` : null);
+}
+
+export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteContext = EMPTY_CONTEXT, now = new Date()): FeedNote {
   const n = toNativeNote(row);
   const split = splitNarrative(n.body);
-  const where = noteStage({ verdict: row.feedback, commissionState: ctx.commission?.state, build: ctx.build });
+  const review = noteReview(row);
+  const act = noteAct(row.proposedActions, split.next, row.title);
+  const follow = followOf(row, n, split, review, ctx);
+  const solution = solutionView(row.proposedActions);
+  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done' || solution?.state === 'done', following: followStage(follow) });
   return {
     ...n,
     outcomeLabel: outcomeLabel(n.outcome),
@@ -381,6 +492,16 @@ export function toFeedNote(row: ThinkRow, muted: ReadonlySet<string>, ctx: NoteC
     bucket: where.bucket,
     commission: ctx.commission,
     build: ctx.build,
+    review,
+    act,
+    follow,
+    solution,
+    replaces: readReplaces(row.proposedActions),
+    stale: stalenessOf(row, { stage: where.stage, now }),
+    reason: reasonOf(row.feedbackNote),
+    seenAgain: readSeenAgain(row.proposedActions),
+    subject: subjectOf(row.evidence),
+    living: false,
   };
 }
 
@@ -397,12 +518,31 @@ export interface NativeNoteDetail extends NativeNote {
   checkable: boolean;
   commissionId: string | null;
   commissionState: string | null;
+  review: NoteReview | null;
+  act: NoteAct | null;
+  /** Taking it further (`act/follow.ts`); an older app ignores it. */
+  follow: NoteFollow;
+  /** The one-press solution (`act/solution.ts`); an older app ignores it. */
+  solution: SolutionView | null;
+  replaces: Array<{ id: string; title: string }>;
+  /** Probably past its date (`shelf.ts`); an older app ignores it. */
+  stale: Staleness | null;
+  /** His one-tap reason (`reasons.ts`); an older app ignores it. */
+  reason: Reason | null;
+  /** Days the same finding came back (`subjects.ts`); an older app ignores it. */
+  seenAgain: string[];
+  /** The living week plan; set by the loader. An older app ignores it. */
+  living: boolean;
 }
 
-export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT): NativeNoteDetail {
+export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT, now = new Date()): NativeNoteDetail {
   const n = toNativeNote(row);
   const split = splitNarrative(n.body);
-  const where = noteStage({ verdict: row.feedback, commissionState: ctx.commission?.state, build: ctx.build });
+  const review = noteReview(row);
+  const act = noteAct(row.proposedActions, split.next, row.title);
+  const follow = followOf(row, n, split, review, ctx);
+  const solution = solutionView(row.proposedActions);
+  const where = noteStage({ verdict: answeredBy(row, review), commissionState: ctx.commission?.state, build: ctx.build, acted: act?.status === 'done' || solution?.state === 'done', following: followStage(follow) });
   return {
     ...n,
     summary: split.summary,
@@ -413,5 +553,14 @@ export function toNativeDetail(row: ThinkRow, ctx: NoteContext = EMPTY_CONTEXT):
     checkable: ctx.checkable,
     commissionId: ctx.commission?.id ?? null,
     commissionState: ctx.commission?.state ?? null,
+    review,
+    act,
+    follow,
+    solution,
+    replaces: readReplaces(row.proposedActions),
+    stale: stalenessOf(row, { stage: where.stage, now }),
+    reason: reasonOf(row.feedbackNote),
+    seenAgain: readSeenAgain(row.proposedActions),
+    living: false,
   };
 }

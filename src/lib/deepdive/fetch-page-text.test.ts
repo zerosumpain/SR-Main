@@ -35,7 +35,7 @@ describe('fetchPageText — tavily-good path', () => {
       }),
     });
 
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.method).toBe('tavily');
     expect(result.text).toBe(GOOD_TEXT);
   });
@@ -49,7 +49,7 @@ describe('fetchPageText — tavily-good path', () => {
       scraperServiceUrl: 'http://homeserv:5173/api/scraper/run',
     });
 
-    await fetchPageText('https://example.com', {}, deps);
+    await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(deps.fetchFn).not.toHaveBeenCalled();
   });
 
@@ -61,7 +61,7 @@ describe('fetchPageText — tavily-good path', () => {
         failed_results: [],
       }),
     });
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.text.length).toBeLessThanOrEqual(8000);
   });
 });
@@ -80,7 +80,7 @@ describe('fetchPageText — tavily-thin → residential path', () => {
       } as any),
     });
 
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.method).toBe('residential');
     expect(result.text).toBe(GOOD_RESIDENTIAL);
     expect(deps.fetchFn).toHaveBeenCalledOnce();
@@ -99,7 +99,7 @@ describe('fetchPageText — tavily-thin → residential path', () => {
       } as any),
     });
 
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.method).toBe('residential');
   });
 });
@@ -114,7 +114,7 @@ describe('fetchPageText — both thin/fail → none', () => {
       scraperServiceUrl: undefined,
     });
 
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.method).toBe('none');
     expect(result.text).toBe('');
   });
@@ -125,7 +125,7 @@ describe('fetchPageText — both thin/fail → none', () => {
       scraperServiceUrl: undefined,
     });
 
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.method).toBe('none');
     expect(result.text).toBe('');
   });
@@ -143,7 +143,7 @@ describe('fetchPageText — both thin/fail → none', () => {
       } as any),
     });
 
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.method).toBe('none');
     expect(result.text).toBe('');
   });
@@ -158,7 +158,7 @@ describe('fetchPageText — both thin/fail → none', () => {
       fetchFn: vi.fn().mockRejectedValue(new Error('timeout')),
     });
 
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.method).toBe('none');
     expect(result.text).toBe('');
   });
@@ -173,7 +173,7 @@ describe('fetchPageText — both thin/fail → none', () => {
       } as any),
     });
 
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.method).toBe('none');
   });
 });
@@ -188,7 +188,7 @@ describe('fetchPageText — residential skipped when no SCRAPER_SERVICE_URL', ()
       scraperServiceUrl: undefined,
     });
 
-    await fetchPageText('https://example.com', {}, deps);
+    await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(deps.fetchFn).not.toHaveBeenCalled();
   });
 });
@@ -203,7 +203,7 @@ describe('fetchPageText — residential hard timeout (abort path)', () => {
     });
 
     // Should NOT throw — AbortError from the residential path must be swallowed
-    const result = await fetchPageText('https://example.com', {}, deps);
+    const result = await fetchPageText('https://example.com', { purpose: 'test' }, deps);
     expect(result.method).toBe('none');
     expect(result.text).toBe('');
   });
@@ -217,6 +217,6 @@ describe('fetchPageText — function never throws', () => {
       fetchFn: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
     });
 
-    await expect(fetchPageText('https://example.com', {}, deps)).resolves.not.toThrow();
+    await expect(fetchPageText('https://example.com', { purpose: 'test' }, deps)).resolves.not.toThrow();
   });
 });

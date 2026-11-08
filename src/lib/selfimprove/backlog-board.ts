@@ -11,7 +11,7 @@
 
 import { canMove, isTapped, type WorkItem, type WorkStage } from './board';
 import { contentWords } from './narrative';
-import type { BacklogEpic } from './epic-backlog';
+import type { BacklogEpic } from './backlog-room';
 
 export const BOARD_LEVELS = ['epic', 'deliverable'] as const;
 export type BoardLevel = (typeof BOARD_LEVELS)[number];

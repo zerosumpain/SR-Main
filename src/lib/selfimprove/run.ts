@@ -216,7 +216,7 @@ export async function runImprovementNow(
         async () => {
           state.signals = await gatherSignals();
           try {
-            const { autoGroomBacklog } = await import('$lib/workflows/backlog-grooming.server');
+            const { autoGroomBacklog } = await import('./backlog-room.server');
             const { epics } = await autoGroomBacklog();
             return [{ kind: 'themes_found' as const, detail: `${epics.length} epics automatically reconciled with their deliverables` }];
           } catch (err) {

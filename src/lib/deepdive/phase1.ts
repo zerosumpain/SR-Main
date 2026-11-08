@@ -3,7 +3,7 @@ import { sources, researchLeads } from '$lib/db/schema';
 import { eq, and, count } from 'drizzle-orm';
 import type { ResearchSession } from '$lib/db/schema';
 import { jsonCompletion } from './ai';
-import { search } from './tavily';
+import { search } from './web-search';
 import { emitLog, emitStats, shouldStop, getAbortSignal, throwIfStopped } from './worker';
 import { addLeads, takeLeads, recordLeadSources, MAX_LEAD_DEPTH } from './frontier';
 import { emitArtefact } from './desk-events';
@@ -134,7 +134,7 @@ export async function runPhase1(
       const followUps: string[] = [];
 
       try {
-        const results = await search(query, { maxResults: 10 });
+        const results = await search(query, { purpose: 'research.phase1', maxResults: 10 });
 
         for (const result of results.results) {
           if (seenUrls.has(result.url)) continue;

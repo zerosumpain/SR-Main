@@ -9,11 +9,11 @@ import { routeIdsFor } from '$lib/access/catalogue';
  *
  * The hook deciding a member may REACH `/api/deepdive/[id]/data` says nothing
  * about which session comes back: without the guard, any id would. So each
- * route file the catalogue opens under `research` must call the guard (by id),
- * the source guard, or `areaAccess` (lists and creates, which filter with
+ * route file the catalogue opens under `research` must call the guard (by id)
+ * or `areaAccess` (lists and creates, which filter with
  * `readable`/`writable` and stamp `principalId`).
  */
-const GUARDED = /\brequireResearchSession\b|\brequireSourceSession\b|\bareaAccess\b/;
+const GUARDED = /\brequireResearchSession\b|\bareaAccess\b/;
 
 function fileFor(routeId: string): string {
   const dir = `src/routes${routeId}`;
@@ -24,7 +24,7 @@ describe('every research route a member can reach is scoped', () => {
   const ids = routeIdsFor('research');
 
   it('finds the routes at all', () => {
-    expect(ids.length).toBeGreaterThan(25);
+    expect(ids.length).toBeGreaterThan(20);
   });
 
   it('calls the research guard from each', () => {
@@ -42,7 +42,6 @@ describe('every research route a member can reach is scoped', () => {
     for (const id of [
       '/api/research/[id]/to-drive',
       '/api/research/[id]/to-intel',
-      '/api/deepdive',
       '/api/deepdive/index-sources',
       '/api/deepdive/reindex-facts',
       '/api/deepdive/source-image',

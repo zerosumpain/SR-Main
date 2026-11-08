@@ -64,23 +64,13 @@ by production must be included in the release staging process.
 
 ## Field studies
 
-Research projects under `/projects/<slug>` are **field studies** and follow the Field Study
-System in `field-study-system/`. Do not design these pages ad hoc.
-
-When asked to create or edit a field study:
-
-1. Read `field-study-system/INSTRUCTIONS.md` and follow the procedure.
-2. Author content as data in `src/routes/projects/<slug>/study.ts`, validated against
-   `field-study-system/content.schema.json`.
-3. Every beat declares a `template` from `templates.json` (T0–T8). Render with the
-   primitives in `src/lib/fieldstudy/`. Never write a bespoke page layout.
-4. Before opening a PR, run `field-study-system/CHECKLIST.md` and paste the result into the
-   PR description.
+The Svelte field-study kit (`src/lib/fieldstudy/`, `field-study-system/`) was deleted
+unused on 2026-10-01. The `.fs-*` CSS in `src/app.css` remains for The Engine Room and the
+studio gate.
 
 Hard constraints, in priority order over any aesthetic judgement:
 
-- `Confidence = 'fact' | 'hypothesis' | 'contested'` — the shipped type in
-  `src/lib/fieldstudy/types.ts`. Do not invent levels or rename these.
+- `Confidence = 'fact' | 'hypothesis' | 'contested'`. Do not invent levels or rename these.
 - Categorical hues (`#7a5aa6` identifier, `#3a8658` operational/federated, `#b4632e`
   standards, `#8a2d3a` trust/governance) appear only inside a legend and the marks that
   legend labels. Never in chrome, never on a claim. They live in `src/app.css` as

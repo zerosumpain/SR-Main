@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildForecast,
+  cleanHolidays,
+  predictionBand,
+  placeOdds,
+  oddsFor,
+  dayAhead,
+  correctedShare,
   departureGrid,
   learnedTravel,
   localClock,
   nextMoves,
   routinesOf,
   watchItems,
+  type ForecastCorrection,
   type Routine,
+  type SchoolCalendar,
 } from './forecast';
 import type { LiveState, PresenceInsights, RouteInsight } from './insights';
 
@@ -144,5 +152,186 @@ describe('the whole forecast', () => {
     expect(f.departures.flat().reduce((a, b) => a + b, 0)).toBe(12);
     const _typed: Routine = f.routines[0];
     expect(_typed.id).toContain('weekday');
+  });
+});
+
+describe('corrections ("that’s wrong")', () => {
+  const now = new Date('2026-09-28T06:45:00Z'); // Monday 07:45 local
+  const routineId = 'alex:home:school:vehicle:weekday';
+  const wrong = (date: string): ForecastCorrection => ({ subject: 'alex', kind: 'routine', routineId, departedAt: null, date });
+
+  it('takes the move off for the rest of the day it was said', () => {
+    const routines = routinesOf([schoolRun()], now, 28);
+    expect(nextMoves(routines, [atHome()], [], now, [wrong('2026-09-28')])).toEqual([]);
+    // Somebody else's routine is untouched.
+    expect(nextMoves(routines, [atHome()], [], now, [{ ...wrong('2026-09-28'), subject: 'sam' }])).toHaveLength(1);
+  });
+
+  it('counts each right correction against the routine afterwards', () => {
+    const [r] = routinesOf([schoolRun()], now, 28);
+    expect(correctedShare(r)).toBeCloseTo(12 / 15);
+    // Two earlier weekdays it did not run on, each said in advance: 12 / (15 + 4).
+    const said = [wrong('2026-09-28'), wrong('2026-09-29')];
+    expect(correctedShare(r, said)).toBeCloseTo(12 / 19);
+    // A correction on a day it ran anyway was wrong itself, and counts for nothing.
+    expect(correctedShare(r, [wrong('2026-09-21')])).toBeCloseTo(12 / 15);
+  });
+
+  it('drops a routine corrected often enough below the share it is offered at', () => {
+    const now2 = new Date('2026-09-29T06:45:00Z');
+    const thin = route({ starts: WEEKDAYS.slice(9, 15).map((d) => `${d}T07:20:00Z`) });
+    const routines = routinesOf([thin], now2, 28);
+    expect(nextMoves(routines, [atHome()], [], now2)).toHaveLength(1);
+    // 6 of 7 weekdays; six corrected days make it 6 / (7 + 12), under 0.35.
+    const days = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-07', '2026-09-28'].map(wrong);
+    expect(nextMoves(routines, [atHome()], [], now2, days)).toEqual([]);
+  });
+
+  it('hides a live journey somebody said is not going there', () => {
+    const at = new Date('2026-09-28T07:25:00Z');
+    const arrival = { id: 'x', subject: 'alex', person: 'Alex', from: 'Home', to: 'Station', toId: 'station', departedAt: '2026-09-28T07:20:00Z',
+      observedAt: '2026-09-28T07:25:00Z', eta: '2026-09-28T07:37:00Z', earliest: '2026-09-28T07:35:00Z', latest: '2026-09-28T07:40:00Z',
+      minutesLeft: 12, samples: 12, confidence: 'established' as const, returningHome: false };
+    const said: ForecastCorrection = { subject: 'alex', kind: 'arriving', routineId: null, departedAt: arrival.departedAt, date: '2026-09-28' };
+    expect(nextMoves([], [{ ...atHome(), placeId: null }], [arrival], at, [said])).toEqual([]);
+  });
+
+  it('does not call a corrected routine overdue', () => {
+    const late = new Date('2026-09-28T07:55:00Z');
+    const routines = routinesOf([schoolRun()], late, 28);
+    const live = [atHome('alex', '2026-09-28T07:50:00Z')];
+    const input = { routines, routes: [schoolRun()], live, arrivals: [], names: new Map([['alex', 'Alex']]), homeIds: new Set(['home']), now: late };
+    expect(watchItems(input).filter((w) => w.kind === 'overdue')).toHaveLength(1);
+    expect(watchItems({ ...input, corrections: [wrong('2026-09-28')] }).filter((w) => w.kind === 'overdue')).toEqual([]);
+  });
+});
+
+describe('prediction band', () => {
+  it('promises 80% for the NEXT trip: min to max below nine trips, order statistics above', () => {
+    expect(predictionBand([12, 15, 14, 30, 13])).toEqual({ median: 14, low: 12, high: 30, p80: 30 });
+    const twenty = Array.from({ length: 19 }, (_, i) => 10 + i);
+    // j = ⌊0.1 × 20⌋ = 2 → 2nd smallest and 2nd largest; k = ⌈0.8 × 20⌉ = 16.
+    expect(predictionBand(twenty)).toMatchObject({ low: 11, high: 27, p80: 25 });
+  });
+});
+
+describe('routines that keep to some weekdays', () => {
+  // Tuesdays and Wednesdays, 1–23 Sep 2026: 17:20Z is 18:20 local.
+  const tueWed = ['2026-09-01', '2026-09-02', '2026-09-08', '2026-09-09', '2026-09-15', '2026-09-16', '2026-09-22', '2026-09-23'];
+  const grandparents = route({ id: 'alex:gran:home:active', fromId: 'gran', toId: 'home', from: 'Grandparents', to: 'Home', starts: tueWed.map((d) => `${d}T17:20:00Z`) });
+  const now = new Date('2026-09-28T06:00:00Z');
+
+  it('learns "Tue and Wed", and counts only those days', () => {
+    const [r] = routinesOf([grandparents], now, 28);
+    expect(r.weekdays).toEqual([1, 2]);
+    expect(r.days).toBe(8);
+    expect(r.of).toBe(8);
+  });
+
+  it('is not offered on a Thursday, and is on a Tuesday', () => {
+    const routines = routinesOf([grandparents], now, 28);
+    const atGran = (iso: string): LiveState => ({ subject: 'alex', placeId: 'gran', since: iso, lastSeen: iso, moving: null });
+    expect(nextMoves(routines, [atGran('2026-10-01T15:00:00Z')], [], new Date('2026-10-01T15:00:00Z'))).toHaveLength(0);
+    expect(nextMoves(routines, [atGran('2026-09-29T15:00:00Z')], [], new Date('2026-09-29T15:00:00Z'))).toHaveLength(1);
+  });
+
+  it('keeps every weekday when the runs are spread across them', () => {
+    expect(routinesOf([schoolRun()], now, 28)[0].weekdays).toBeUndefined();
+  });
+});
+
+describe('school holidays', () => {
+  const cal: SchoolCalendar = { holidays: [{ from: '2026-09-28', to: '2026-10-02', label: 'INSET' }], schoolIds: new Set(['school']) };
+  const now = new Date('2026-09-28T07:50:00Z');
+
+  it('neither offers nor misses the school run on a holiday', () => {
+    const routines = routinesOf([schoolRun()], now, 28, cal);
+    expect(nextMoves(routines, [atHome('alex', '2026-09-28T06:00:00Z')], [], new Date('2026-09-28T06:00:00Z'), [], cal)).toHaveLength(0);
+    const names = new Map([['alex', 'Alex']]);
+    const items = watchItems({ routines, routes: [schoolRun()], live: [atHome()], arrivals: [], names, homeIds: new Set(['home']), now, cal });
+    expect(items.filter((w) => w.kind === 'overdue')).toHaveLength(0);
+    expect(watchItems({ routines, routes: [schoolRun()], live: [atHome()], arrivals: [], names, homeIds: new Set(['home']), now })
+      .filter((w) => w.kind === 'overdue')).toHaveLength(1);
+  });
+
+  it('does not count holiday days against a school routine', () => {
+    const half = { holidays: [{ from: '2026-09-14', to: '2026-09-18' }], schoolIds: new Set(['school']) };
+    const termOnly = route({ starts: WEEKDAYS.filter((d) => d < '2026-09-14' || d > '2026-09-18').map((d) => `${d}T07:20:00Z`) });
+    const at = new Date('2026-09-28T06:00:00Z');
+    const [plain] = routinesOf([termOnly], at, 28), [termly] = routinesOf([termOnly], at, 28, half);
+    expect(plain.of - termly.of).toBe(5);
+    expect(termly.days / termly.of).toBeGreaterThan(plain.days / plain.of);
+  });
+
+  it('keeps only well-formed ranges from storage, in order', () => {
+    expect(cleanHolidays([{ from: '2026-10-26', to: '2026-10-30', label: ' Half term ' }, { from: '2026-10-09', to: '2026-10-09' },
+      { from: '2026-12-01', to: '2026-11-01' }, { from: 'soon', to: '2026-11-01' }, null, 'x'])).toEqual([
+      { from: '2026-10-09', to: '2026-10-09' }, { from: '2026-10-26', to: '2026-10-30', label: 'Half term' },
+    ]);
+    expect(cleanHolidays(null)).toEqual([]);
+  });
+});
+
+describe('where next: the odds', () => {
+  const at = (d: string, hhmmZ: string) => `${d}T${hhmmZ}:00Z`;
+  // From home on weekday mornings: town three times, the station once, school never.
+  const town = route({ id: 'alex:home:town:active', toId: 'town', to: 'Town', starts: WEEKDAYS.slice(0, 3).map((d) => at(d, '08:00')) });
+  const station = route({ id: 'alex:home:station:active', toId: 'station', to: 'Station', starts: [at(WEEKDAYS[3], '08:10')] });
+  const late = route({ id: 'alex:home:pub:active', toId: 'pub', to: 'Pub', starts: WEEKDAYS.slice(0, 5).map((d) => at(d, '19:00')) });
+
+  it('splits the morning between town and the station, and leaves the evening out', () => {
+    const odds = placeOdds([town, station, late], 'alex', 'home', new Date('2026-09-28T07:00:00Z'));
+    expect(odds?.samples).toBe(4);
+    expect(odds?.options.map((o) => o.to)).toEqual(['Town', 'Station']);
+    expect(odds!.options[0].share).toBeGreaterThan(0.6);
+    expect(odds!.options[0].usual).toBe('09:00');
+  });
+
+  it('says nothing on thin evidence', () => {
+    expect(placeOdds([station], 'alex', 'home', new Date('2026-09-28T07:00:00Z'))).toBeNull();
+  });
+
+  it('is offered for someone sitting at a place, not someone on the move', () => {
+    const moving: LiveState = { subject: 'alex', placeId: null, since: null, lastSeen: null, moving: { fromId: 'home', departedAt: '2026-09-28T06:55:00Z' } };
+    expect(oddsFor([town, station], [atHome()], new Date('2026-09-28T07:00:00Z'))).toHaveLength(1);
+    expect(oddsFor([town, station], [moving], new Date('2026-09-28T07:00:00Z'))).toHaveLength(0);
+  });
+});
+
+describe('the day ahead', () => {
+  const inbound = route({ id: 'alex:school:home:vehicle', fromId: 'school', toId: 'home', from: 'School', to: 'Home', starts: WEEKDAYS.slice(0, 12).map((d) => `${d}T14:30:00Z`) });
+  const routines = routinesOf([schoolRun(), inbound], new Date('2026-09-28T05:00:00Z'), 28);
+
+  it('chains home → school → home to midnight', () => {
+    const [day] = dayAhead(routines, [atHome('alex', '2026-09-28T05:55:00Z')], [], new Date('2026-09-28T06:00:00Z'));
+    expect(day.segments.map((s) => (s.kind === 'stay' ? `stay:${s.place}` : `trip:${s.to}`))).toEqual([
+      'stay:Home', 'trip:School', 'stay:School', 'trip:Home', 'stay:Home',
+    ]);
+    const last = day.segments.at(-1)!;
+    expect(last.kind === 'stay' && last.open).toBe(true);
+    expect(day.until).toBe('2026-09-28T23:00:00.000Z');
+  });
+
+  it('starts from a live journey’s destination, and gives no day to someone nowhere', () => {
+    const arriving = { id: 'a', subject: 'alex', person: 'Alex', from: 'Home', to: 'School', toId: 'school', departedAt: '2026-09-28T07:20:00Z',
+      observedAt: '2026-09-28T07:28:00Z', eta: '2026-09-28T07:37:00Z', earliest: '2026-09-28T07:35:00Z', latest: '2026-09-28T07:40:00Z',
+      minutesLeft: 9, samples: 12, confidence: 'established' as const, returningHome: false };
+    const moving: LiveState = { subject: 'alex', placeId: null, since: null, lastSeen: '2026-09-28T07:28:00Z', moving: { fromId: 'home', departedAt: '2026-09-28T07:20:00Z' } };
+    const [day] = dayAhead(routines, [moving], [arriving], new Date('2026-09-28T07:28:00Z'));
+    expect(day.segments[0]).toMatchObject({ kind: 'trip', confidence: 'live', to: 'School' });
+    expect(day.segments[2]).toMatchObject({ kind: 'trip', to: 'Home' });
+    expect(dayAhead(routines, [moving], [], new Date('2026-09-28T07:28:00Z'))).toEqual([]);
+  });
+
+  it('does not move a missed morning run into the evening', () => {
+    const [day] = dayAhead(routines, [atHome('alex', '2026-09-28T20:25:00Z')], [], new Date('2026-09-28T20:30:00Z'));
+    expect(day.segments).toHaveLength(1);
+    expect(day.segments[0]).toMatchObject({ kind: 'stay', open: true });
+  });
+
+  it('skips the school run on a holiday', () => {
+    const cal = { holidays: [{ from: '2026-09-28', to: '2026-09-28' }], schoolIds: new Set(['school']) };
+    const [day] = dayAhead(routines, [atHome('alex', '2026-09-28T05:55:00Z')], [], new Date('2026-09-28T06:00:00Z'), [], cal);
+    expect(day.segments).toHaveLength(1);
   });
 });

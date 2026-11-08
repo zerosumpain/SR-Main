@@ -22,7 +22,7 @@
 // the metric unattributable, and an unattributable metric cannot roll anything
 // back.
 
-import { getTools, getToolsetManifest } from '$lib/workflows/site-tools/registry';
+import { getTools, getToolsetManifest } from '$lib/tools/registry';
 import {
   getActivePolicy,
   listPolicyVersions,
@@ -39,7 +39,7 @@ import {
   persistMeasurement,
   snapshotOf,
 } from './efficiency';
-import { TRIAL, errMsg, parseJsonLoose, type RunAction } from './types';
+import { TRIAL, errMsg, type RunAction } from './types';
 import {
   loadDeployedCapabilitiesForPromotion,
   pickPromotionCandidate,
@@ -678,5 +678,3 @@ export async function optimiseCalls(
   return actions;
 }
 
-/** Exposed for tests: parse a model overlay response. */
-export const __test = { coerceOverlay, parseJsonLoose };

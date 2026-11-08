@@ -102,11 +102,19 @@ export async function loadBriefingDashboard() {
       .map((node) => String((node.config as Record<string, unknown>)?.operation ?? '')),
   );
   const weatherCount = nodes.filter((node) => node.type === 'weather-brief').length;
+  // Calendar and news are both `site-tool` reads; tell them apart by the tool.
+  const siteTools = new Set(
+    nodes
+      .filter((node) => node.type === 'site-tool')
+      .map((node) => String((node.config as Record<string, unknown>)?.toolName ?? '')),
+  );
 
   const isDirectlyConnected = (key: string, nodeTypesForSource: string[]): boolean => {
     if (key === 'weather-home') return weatherCount >= 1;
     if (key === 'weather-here') return weatherCount >= 2;
     if (key === 'sleep' || key === 'readiness') return healthOps.has(key);
+    if (key === 'calendar') return siteTools.has('apple_calendar_list') || nodeTypes.has('apple-calendar');
+    if (key === 'news') return siteTools.has('news_search');
     return nodeTypesForSource.some((type) => nodeTypes.has(type));
   };
 

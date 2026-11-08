@@ -15,7 +15,6 @@ const GUARDS: Partial<Record<AreaId, RegExp>> = {
   'jkai.notes': /\b(notesAccess|requireNote|requireRecording)\b/,
   home: /\bareaAccess\(\s*event,\s*'home'\s*\)/,
   news: /\bnewsCapabilities\b|\bnewsOwnerKey\b/,
-  games: /\b(withGamesSession|gamesCaller)\b/,
   // A non-owner gets the public showcase: the load branches on the owner check.
   shipped: /\bisOwnerRequest\(event\)/,
 };

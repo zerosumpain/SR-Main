@@ -70,6 +70,17 @@ export const HOOK_BYPASSES: string[] = [
   // What tools exist and which need a human — the other half of the same seam,
   // on the same credential. GET only, and it carries no descriptions or schemas.
   '/api/platform/tools/catalogue', // GET only, same credential
+  // Main-owned domains read and written by SR-Workflows and SR-Jkai-Core, on
+  // the same credential, so neither needs its own copy of the daydream or
+  // backlog code. Named one at a time; /api/platform is not a tree.
+  '/api/platform/daydream/briefing', // GET only, same credential
+  '/api/platform/briefing/context', // GET only, same credential; trip and family summary
+  '/api/platform/backlog/intake', // POST only, same credential; trace ideas only
+  // The model-plumbing lane for the extracted applications: per-application
+  // MODEL_SERVICE_TOKEN_<APP> Bearer, constant-time compared, refused when unset
+  // or under 32 chars. See $lib/server/model-service-auth.
+  '/api/platform/models/config', // GET only, MODEL_SERVICE_TOKEN_<APP>
+  '/api/platform/models/usage', // POST only, same credential; writes agent_actions llm_call rows
   // The two server-side calls chat makes to intel, cross-process now that
   // chat lives in SR-Jkai-Core. Same SR-JKAI credential; each also accepts an
   // owner session and re-checks it. Named one at a time — /api/jkai/intel is
@@ -124,6 +135,7 @@ export const HOOK_BYPASSES: string[] = [
 export const HOOK_EXACT_BYPASSES: string[] = [
   '/api/internal/session', // POST only, audience-bound session authority key
   '/health', // the public health landing; every /health/* child is owner-only
+  '/api/platform/jkai/today', // GET only, service token; the jkai desk's Today (hooks match it with ===)
   // The two orchestrator paths a chat turn needs, opened to a paired iPhone's
   // device token as well as an owner session.
   //
@@ -134,6 +146,13 @@ export const HOOK_EXACT_BYPASSES: string[] = [
   // compared with `===`; the catalogue was the thing that was wrong.
   '/api/workflows/orchestrator/chat',
   '/api/workflows/orchestrator/chat/stream',
+  // Main's owner-only OpenID provider ($lib/server/oidc/provider), for Immich.
+  // Each authenticates itself and 404s while unconfigured. /oauth is NOT a
+  // tree: /oauth/authorize stays behind the session and owner gate.
+  '/.well-known/openid-configuration',
+  '/oauth/jwks',
+  '/oauth/token',
+  '/oauth/userinfo',
 ];
 
 /** Prefix bypasses at the page level. `/tools` is a genuine tree (static/tools/*). */
@@ -152,6 +171,10 @@ export const HOOK_NON_BYPASSES: string[] = [
   // route files live under src/routes/trails any more, so nothing enters the
   // inventory through it.
   '/trails',
+  // Not anonymous: the hook resolves it only AFTER the session check (a visitor
+  // with no session is sent to /login). It skips the owner-only page redirect so
+  // a signed-in non-owner gets the handler's 403; only an owner gets a code.
+  '/oauth/authorize',
 ];
 
 /**
@@ -187,6 +210,11 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/platform/tools/invoke':
     'POST only · JKAI_INVOKE_TOKEN; destructive tools need JKAI_INVOKE_DESTRUCTIVE_TOKEN, unset by default',
   '/api/platform/tools/catalogue': 'GET only · JKAI_INVOKE_TOKEN; tool names and their destructive flag',
+  '/api/platform/daydream/briefing': "GET only · JKAI_INVOKE_TOKEN; yesterday's daydream section for the morning briefing",
+  '/api/platform/briefing/context': 'GET only · JKAI_INVOKE_TOKEN; today\'s trip and the family summary for the morning briefing',
+  '/api/platform/backlog/intake': 'POST only · JKAI_INVOKE_TOKEN; trace findings into the build backlog intake',
+  '/api/platform/models/config': 'GET only · MODEL_SERVICE_TOKEN_<APP>; an extracted app reads its model settings (secrets filtered)',
+  '/api/platform/models/usage': 'POST only · MODEL_SERVICE_TOKEN_<APP>; an extracted app records LLM usage in the cost ledger',
   '/api/jkai/intel/chat-context': 'POST only · JKAI_INVOKE_TOKEN or owner session; intel context for a chat turn',
   '/api/jkai/intel/extract-thread': 'POST only · JKAI_INVOKE_TOKEN or owner session; fire-and-forget extraction',
   '/api/jkai/tools/manifest': 'JKAI_BRIDGE_TOKEN',
@@ -196,5 +224,11 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/jkai/codegraph/ingest': 'Bearer CLAUDE_CHANGELOG_SECRET',
   '/api/jkai/codegraph/query': 'CLAUDE_CHANGELOG_SECRET or owner session',
   '/health': 'public page · owner payload withheld without a session',
+  '/api/platform/jkai/today': 'GET only · jkai service token; the owner payload for the jkai desk Today',
   '/tools': 'public static tree',
+  '/.well-known/openid-configuration': 'public OIDC discovery metadata (endpoint names only) · 404 until SR_OIDC_* is set',
+  '/oauth/jwks': 'public, empty key set (ID tokens are HS256 with the client secret) · 404 until SR_OIDC_* is set',
+  '/oauth/token':
+    'POST only · client secret (basic or post, constant-time) + sealed 60 s single-use code + PKCE S256 verifier · 404 until SR_OIDC_* is set',
+  '/oauth/userinfo': 'Bearer access token (HMAC, 5 min) from /oauth/token · 404 until SR_OIDC_* is set',
 };

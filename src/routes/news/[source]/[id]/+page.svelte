@@ -220,7 +220,7 @@
       {#if data.can.ask}
       <a class="action" href={askHref()}>
         <span class="action-code">AI</span>
-        <span><strong>Ask JKAI</strong><small>Carry it into a fresh conversation</small></span>
+        <span><strong>Ask jkai</strong><small>Carry it into a fresh conversation</small></span>
         <span aria-hidden="true">→</span>
       </a>
       {/if}

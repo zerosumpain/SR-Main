@@ -287,3 +287,122 @@ export async function getOAuthAccessToken(provider: OAuthProvider): Promise<stri
   inFlight.set(provider, run);
   return run;
 }
+
+// ── Re-authorisation (TrueLayer) ────────────────────────────────────────────
+//
+// A refresh token cannot outlive the bank consent behind it: UK open-banking
+// consent lapses after 90 days, and then every exchange above fails with
+// invalid_grant. The only cure is a fresh authorization-code grant — the owner
+// signs in to the bank again. These two functions are that path, so a new
+// refresh token goes straight into the vault row instead of being pasted as
+// JSON (or, worse, into chat).
+//
+// The redirect is TrueLayer's own console page, the URI already registered on
+// the production client: it shows the one-time code, the owner pastes it (or
+// the whole URL) back, and nothing needs re-registering in the console.
+
+export const TRUELAYER_REDIRECT_URI = 'https://console.truelayer.com/redirect-page';
+export const TRUELAYER_SCOPES = [
+  'info',
+  'accounts',
+  'balance',
+  'cards',
+  'transactions',
+  'direct_debits',
+  'standing_orders',
+  'offline_access',
+];
+const TRUELAYER_PROVIDERS = 'uk-ob-all uk-oauth-all';
+
+/** The consent link for the stored client. Reads only the client_id. */
+export async function truelayerAuthorizationUrl(): Promise<string> {
+  const cred = await readCredential('truelayer');
+  const url = new URL(`https://${OAUTH_PROVIDERS.truelayer.tokenHost}/`);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('client_id', cred.client_id);
+  url.searchParams.set('scope', TRUELAYER_SCOPES.join(' '));
+  url.searchParams.set('redirect_uri', TRUELAYER_REDIRECT_URI);
+  url.searchParams.set('providers', TRUELAYER_PROVIDERS);
+  return url.toString();
+}
+
+/**
+ * Accept what the owner pastes: the bare code, or the whole redirect URL
+ * (`…redirect-page?code=…&scope=…`). Returns null when neither shape fits.
+ */
+export function extractAuthCode(input: string): string | null {
+  const s = String(input ?? '').trim();
+  if (!s) return null;
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const u = new URL(s);
+      const fromQuery = u.searchParams.get('code');
+      if (fromQuery) return fromQuery;
+      // Some redirect pages carry the result in the fragment.
+      const fromHash = new URLSearchParams(u.hash.replace(/^#/, '')).get('code');
+      return fromHash || null;
+    } catch {
+      return null;
+    }
+  }
+  const m = /(?:^|[?&#])code=([^&#\s]+)/.exec(s);
+  if (m) return decodeURIComponent(m[1]);
+  return /^[A-Za-z0-9._~-]{16,}$/.test(s) ? s : null;
+}
+
+/**
+ * Trade a one-time authorization code for a fresh access + refresh token and
+ * store them, keeping client_id/client_secret. Runs through the same in-flight
+ * slot as a refresh, so a canvas resolving the handle at the same moment
+ * cannot persist an older token over the new one.
+ */
+export async function reauthoriseTrueLayer(codeOrUrl: string): Promise<{ expiresAt: number }> {
+  const code = extractAuthCode(codeOrUrl);
+  if (!code) {
+    throw new OAuthRefreshError(
+      'no authorization code found — paste the code, or the whole URL TrueLayer redirected you to',
+    );
+  }
+
+  const pending = inFlight.get('truelayer');
+  if (pending) await pending.catch(() => undefined);
+
+  let expiresAt = 0;
+  const run = (async () => {
+    const cred = await readCredential('truelayer');
+    const result = await exchange('truelayer', {
+      grant_type: 'authorization_code',
+      client_id: cred.client_id,
+      client_secret: cred.client_secret,
+      redirect_uri: TRUELAYER_REDIRECT_URI,
+      code,
+    }).catch((e: unknown) => {
+      // The generic message blames the stored refresh token; here the code is
+      // what was refused (single-use, valid for minutes).
+      if (e instanceof OAuthRefreshError && /invalid_grant/.test(e.message)) {
+        throw new OAuthRefreshError(
+          'truelayer refused the code (invalid_grant) — codes are single-use and expire within minutes; open the link again',
+        );
+      }
+      throw e;
+    });
+    if (!result.refresh_token) {
+      throw new OAuthRefreshError(
+        'truelayer issued no refresh_token — the consent must include offline_access; start again from the link',
+      );
+    }
+    expiresAt = Math.floor(Date.now() / 1000) + (result.expires_in ?? 3600);
+    await writeCredential('truelayer', {
+      client_id: cred.client_id,
+      client_secret: cred.client_secret,
+      refresh_token: result.refresh_token,
+      access_token: result.access_token,
+      expires_at: expiresAt,
+    });
+    return result.access_token;
+  })().finally(() => inFlight.delete('truelayer'));
+
+  inFlight.set('truelayer', run);
+  await run;
+  return { expiresAt };
+}

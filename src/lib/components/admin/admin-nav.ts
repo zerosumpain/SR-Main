@@ -68,8 +68,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Tools', href: '/admin/ai/tools' },
       { label: 'API Registry', href: '/admin/ai/apis' },
       { label: 'Datastore', href: '/admin/ai/datastore' },
-      { label: 'Improvement', href: '/admin/ai/improvement' },
-      { label: 'Doctor', href: '/admin/ai/doctor' },
       { label: 'Approvals', href: '/admin/ai/approvals' },
     ],
   },
@@ -86,6 +84,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
       { label: 'Run log', href: '/admin/ops/actions' },
       { label: 'Costs', href: '/admin/ops/costs' },
       { label: 'Tool usage', href: '/admin/ops/tool-usage' },
+      { label: 'Web search', href: '/admin/ops/tavily' },
       { label: 'Live', href: '/admin/ops/live' },
     ],
   },
@@ -109,11 +108,11 @@ export const ADMIN_SECTIONS: AdminSection[] = [
     href: '/admin/access',
     match: (p) => p.startsWith('/admin/access'),
     items: [
-      { label: 'People', href: '/admin/access', match: (p) => p === '/admin/access' || /^\/admin\/access\/(?!devices|security)[^/]+$/.test(p) },
-      // Every person's paired phones, both lanes — the companion pilot's
-      // (health & location) and the site's (chat & news). Moved back from the
-      // companion dashboard (2026-09-26) so the dashboard can be retired.
-      { label: 'Devices', href: '/admin/access/devices' },
+      { label: 'People', href: '/admin/access', match: (p) => p === '/admin/access' || /^\/admin\/access\/(?!app|devices|security)[^/]+$/.test(p) },
+      // The fleet: every phone the household runs the app on, both lanes,
+      // what each is running, and the build they install from. Was
+      // /admin/access/devices (which redirects) until 2026-10-20.
+      { label: 'App', href: '/admin/access/app', match: (p) => p.startsWith('/admin/access/app') || p.startsWith('/admin/access/devices') },
       { label: 'Security', href: '/admin/access/security' },
     ],
   },
@@ -214,6 +213,12 @@ export const ADMIN_ROUTE_REDIRECTS: Record<string, string> = {
   // of them an extracted app, against a VPS running 30 containers — is gone; the
   // map draws the generated model instead.
   '/admin/ops/architecture': '/admin/estate',
+  // The self-improvement and workflow-doctor control pages folded into their
+  // ledgers on /jkai/develop (2026-10-02), as owner-only controls. Past
+  // WhatsApp summaries link the old addresses; a `#run-<id>` fragment survives
+  // the 308 and opens that run on the ledger.
+  '/admin/ai/improvement': '/jkai/develop/improvement',
+  '/admin/ai/doctor': '/jkai/develop/doctor',
   '/admin/deepdive': '/admin/ai/keys',
   '/admin/login': '/login?callbackUrl=/admin',
 };

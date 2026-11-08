@@ -49,10 +49,8 @@ const PUBLIC_PATHS = [
   // canvas slugs. See src/routes/api/landing/vitals/+server.ts.
   '/api/landing/vitals',
   '/projects',
-  // sr. decks — presentations. The hook lets everyone through; per-deck privacy
-  // is enforced by requireDeckVisible in the route loads (private-by-default,
-  // owner or share-token; same two-layer design as /projects). The /decks index
-  // itself 404s non-owners in its own load.
+  // Retired decks (2026-10-02). The only route left under this prefix answers
+  // 410 Gone, so old share links reach that answer instead of a login page.
   '/decks',
   // Read-only shared jkai conversations. The /jkai/shared/<token> route
   // self-gates on shareVisibility ('public' → anyone; 'users' → requires a
@@ -92,6 +90,54 @@ const PUBLIC_PATHS = [
   // and expired all 404 alike ($lib/home/presence/route-session). A PREFIX, so
   // check-public-routes.mjs is what stops a sibling becoming anonymous.
   '/follow',
+  // A fetched family-backlog video, for a TV: /cast/<ticket>.mp4. A Chromecast
+  // or an AirPlay TV has no login, so the ticket is the permission — HMAC over
+  // one item id, six hours, and the item must still be listed; forged, expired,
+  // deleted and evicted all 404 alike ($lib/family/backlog-cast). A PREFIX, so
+  // check-public-routes.mjs is what stops a sibling becoming anonymous.
+  '/cast',
+  // A family game's TV board, cast to the television: /games/<game> and its one
+  // stream. A TV has no login, so the pairing is the permission: the page
+  // shows a code, a player in a room types it on their phone, and the stream
+  // then follows that room with an HMAC ticket ($lib/games/screens), carrying
+  // only the game's `toScreen` — the table everyone in the room can see.
+  // PREFIXES, so check-public-routes.mjs is what stops a sibling becoming
+  // anonymous; the games API itself (/api/native/games) is untouched.
+  '/games',
+  '/api/games/screens',
+  // sr. tv: a party at a linked TV, joined from its QR by phones with no login
+  // ($lib/games/party.server). Every handler names its caller itself
+  // ($lib/games/party-http.server): the TV by its `sr_tv` cookie (HMAC + a
+  // linked, unrevoked row), a player by a seat cookie for that one party (or
+  // their own signed-in session). A party is opened only by a linked TV.
+  // /tv is the short address and only redirects. PREFIXES, so
+  // check-public-routes.mjs is what stops a sibling becoming anonymous.
+  '/tv',
+  '/api/games/tv',
+  '/api/games/party',
+  // A Kelly's Quiz Night photo for the TV and the phones in a room playing
+  // its pack: /api/games/photos/<pack>/<photo>?e=&s= — the HMAC signature
+  // (twelve hours, written into the room) is the permission; forged, expired
+  // and deleted all 404 ($lib/games/quiz-packs.server signedPhoto). A PREFIX.
+  '/api/games/photos',
+  // The iPhone app for a phone that cannot use TestFlight (a child's):
+  // /app (the family's one address), /app/<code> (a join link) and
+  // /install/<token> (the manifest and the app). Safari on that phone has no
+  // session here, so the URL — or the cookie a join link left — is the
+  // permission: HMACs over AUTH_SECRET; a wrong one 404s, and a bare /app
+  // shows only "ask for your link" ($lib/server/adhoc-install). PREFIXES, so
+  // check-public-routes.mjs is what stops a sibling becoming anonymous.
+  '/app',
+  '/install',
+  // Apple's app-site association: the file iOS fetches to let
+  // https://strangeramblings.com/app/… open the installed app. One route
+  // lives under this prefix, and it serves nothing until APPLE_TEAM_ID is set.
+  '/.well-known/apple-app-site-association',
+  // The page that explains the landing page's pixel character. Public like the
+  // landing page itself; only one route lives under this prefix.
+  '/rambler',
+  // His coarse day flags (bands only), re-read by a landing page left open.
+  '/api/rambler/day',
 ];
 
 export function isPublicPath(pathname: string): boolean {

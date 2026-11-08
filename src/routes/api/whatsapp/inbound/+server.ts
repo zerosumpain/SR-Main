@@ -16,7 +16,7 @@
 
 import { json, error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { interceptOwnerInbound } from '$lib/workflows/whatsapp/inbound-intercept';
+import { interceptOwnerInbound } from '$lib/integrations/whatsapp/inbound-intercept';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {

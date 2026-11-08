@@ -231,8 +231,8 @@ export async function repairTools(budget: Budget, runId: string): Promise<RunAct
 
   const contextText = renderContext(await buildContextPack());
 
-  const { register, unregister } = await import('$lib/workflows/site-tools/registry-internal');
-  const { buildHandler } = await import('$lib/workflows/site-tools/custom-tool-loader');
+  const { register, unregister } = await import('$lib/tools/registry-internal');
+  const { buildHandler } = await import('$lib/tools/custom-tool-loader');
 
   for (const tool of targets) {
     if (budget.timeLeftMs() < WORK_CAPS.reserveWallMs) break;
@@ -287,6 +287,10 @@ export async function repairTools(budget: Budget, runId: string): Promise<RunAct
         toolset: row.toolset,
         parameters: row.parameters as { type: 'object'; properties: Record<string, unknown>; required?: string[] },
         category: 'Custom Tool',
+        // A repaired handler is model-written code with full reach (not the
+        // read-only re-enabled loader): destructive until reviewed.
+        effect: 'destructive',
+        destructive: true,
         handler: buildHandler(tool.name, spec.handler_code),
       });
 

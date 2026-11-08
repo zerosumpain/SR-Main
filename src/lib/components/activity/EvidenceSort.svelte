@@ -30,7 +30,7 @@
     </select>
   </label>
   <button type="submit">Apply order</button>
-  <p>Occurred: when it happened. Observed: when the source was seen by JKAI. Unknown dates sort last.</p>
+  <p>Occurred: when it happened. Observed: when the source was seen by jkai. Unknown dates sort last.</p>
 </form>
 
 <style>

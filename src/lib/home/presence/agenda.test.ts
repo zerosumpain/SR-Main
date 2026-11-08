@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { assignSubjects, isAllDay, matchPlace, planAgenda, routeKey, routedEstimate, type AgendaInput, type AgendaPlace } from './agenda';
+import { assignSubjects, isAllDay, matchPlace, planAgenda, routeKey, routinePlaceAt, routedEstimate, type AgendaInput, type AgendaPlace } from './agenda';
 import type { RouteInsight } from './insights';
+import type { Routine } from './forecast';
 
 const people = [
   { subject: 'alex', displayName: 'Alex' },
@@ -114,5 +115,49 @@ describe('the phone’s copy', () => {
     expect(phone.items[0].leaveBy).toBe(items[0].leaveBy);
     expect(JSON.stringify(phone)).not.toMatch(/lat|lon|calendar/);
     expect(phoneAgenda({ items: [], available: false })).toEqual({ available: false, items: [] });
+  });
+});
+
+describe('where they set off from, when only their routines know', () => {
+  const routine = (over: Partial<Routine>): Routine => ({
+    id: 'x', routeId: 'x', subject: 'sam', person: 'Sam', fromId: 'home', toId: 'school', from: 'Home', to: 'Sample College',
+    mode: 'vehicle', dayType: 'weekday', departure: '08:20', departureMin: 500, window: [490, 515], days: 15, of: 18,
+    minutes: { median: 16, low: 14, high: 18, p80: 17 }, dates: [], ...over,
+  });
+  const routines = [
+    routine({ id: 'in' }),
+    routine({ id: 'out', fromId: 'school', toId: 'home', from: 'Sample College', to: 'Home', departure: '15:40', departureMin: 940 }),
+  ];
+  const toPool: RouteInsight = {
+    ...schoolRoute, id: 'sam:school:pool:vehicle', fromId: 'school', toId: 'pool', from: 'Sample College', to: 'Leisure Centre',
+    trips: [18, 20, 22].map((m, i) => ({ start: `2026-09-1${i}T15:00:00Z`, minutes: m, broken: false })),
+  };
+  const dentist = { id: 'e1', title: "Sam's dentist", start: '2026-09-28T14:30:00Z', end: '2026-09-28T15:00:00Z', location: 'Leisure Centre', calendar: null };
+
+  it('is at school on a school-day afternoon, and has to leave early', () => {
+    const { items } = planAgenda(base({ events: [dentist], routes: [schoolRoute, toPool], routines }));
+    expect(items[0].origin).toMatchObject({ id: 'school', why: 'routine' });
+    expect(items[0].issue).toMatchObject({ kind: 'early' });
+    expect(items[0].issue!.text).toContain('before the usual 15:40');
+  });
+
+  it('says nothing about leaving home earlier than usual', () => {
+    const club = routine({ id: 'club', fromId: 'home', toId: 'pool', from: 'Home', to: 'Leisure Centre', departure: '18:00', departureMin: 1080 });
+    const swim = { ...dentist, id: 'e2', title: "Sam's swim", start: '2026-09-28T16:00:00Z', end: '2026-09-28T17:00:00Z' };
+    const { items } = planAgenda(base({ events: [swim], routines: [...routines, club] }));
+    expect(items[0].origin).toMatchObject({ id: 'home', why: 'routine' });
+    expect(items[0].issue).toBeNull();
+  });
+
+  it('falls back to home on a holiday', () => {
+    const cal = { holidays: [{ from: '2026-09-28', to: '2026-09-28' }], schoolIds: new Set(['school']) };
+    const { items } = planAgenda(base({ events: [dentist], routes: [schoolRoute, toPool], routines, cal }));
+    expect(items[0].origin).toMatchObject({ id: 'home', why: 'home' });
+  });
+
+  it('says where routines put someone, and when they usually leave', () => {
+    expect(routinePlaceAt(routines, 'sam', Date.parse('2026-09-28T13:00:00Z'))).toMatchObject({ placeId: 'school', leaves: { id: 'out' } });
+    expect(routinePlaceAt(routines, 'sam', Date.parse('2026-09-28T06:00:00Z'))).toBeNull();
+    expect(routinePlaceAt(routines, 'sam', Date.parse('2026-09-27T13:00:00Z'))).toBeNull(); // a Sunday
   });
 });

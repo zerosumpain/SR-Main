@@ -132,6 +132,10 @@ export function describeSource(tool: string, args: Args): SourceLine {
       return { label: 'Your jkai chats', detail: days(num(args.days) ?? 14) ?? '' };
     case 'activities':
       return { label: 'Recent workouts and outings', detail: num(args.limit) ? `latest ${num(args.limit)}` : '' };
+    case 'household_patterns': {
+      const sec = str(args.section) || 'summary';
+      return { label: sec === 'forecast' ? 'Household forecast' : 'Household movement patterns', detail: join(sec === 'summary' ? null : words(sec), str(args.person)) };
+    }
     case 'health_hub': {
       const secs = list(args.sections).map((s) => HUB_SECTION_WORDS[s] ?? words(s));
       return { label: 'Your /health summary', detail: secs.length > 4 ? `${secs.slice(0, 3).join(', ')} and ${secs.length - 3} more` : secs.join(', ') };
@@ -140,10 +144,19 @@ export function describeSource(tool: string, args: Args): SourceLine {
       return { label: 'Health trend', detail: join(words(str(args.metric)), days(num(args.days) ?? 28)) };
     case 'health_timeline':
       return { label: 'Health timeline', detail: '' };
+    case 'situation':
+      return { label: 'Right now', detail: 'where you were, who with, body, mood, diary' };
+    case 'household':
+      return { label: 'The household today', detail: 'forecast, what looked off, patterns' };
+    case 'compare_days':
+      return {
+        label: 'Compared kinds of day',
+        detail: join(`${words(str(args.metric)) || '?'} by ${words(str(args.when)) || '?'}`, days(num(args.days) ?? 90)),
+      };
     case 'correlate':
       return {
         label: 'Tested a link',
-        detail: join(`${words(str(args.a)) || '?'} against ${words(str(args.b)) || '?'}`, days(num(args.days) ?? 90)),
+        detail: join(`${words(str(args.a)) || '?'} against ${words(str(args.b)) || '?'}${str(args.control) ? `, holding ${words(str(args.control))} fixed` : ''}`, days(num(args.days) ?? 90)),
       };
     case 'ha_find': {
       const what = [...list(args.domain).map(words), ...list(args.area)];
@@ -193,7 +206,7 @@ export function describeSources(evidence: unknown): SourceLine[] {
   const out: SourceLine[] = [];
   const seen = new Set<string>();
   for (const e of evidence as Array<{ kind?: unknown; id?: unknown }>) {
-    if (e?.kind !== 'think-card' || typeof e.id !== 'string') continue;
+    if ((e?.kind !== 'think-card' && e?.kind !== 'think-situation') || typeof e.id !== 'string') continue;
     const parsed = parseCardRef(e.id);
     if (!parsed) continue;
     const line = describeSource(parsed.tool, parsed.args);
@@ -223,6 +236,10 @@ export interface StageInput {
   commissionState?: string | null;
   /** The build-queue item a build idea became, if any. */
   build?: { status: string; accepted: boolean } | null;
+  /** "Do it for me" carried the step out (and it was not undone). */
+  acted?: boolean;
+  /** A follow-up waiting on him, or running without him (`followStage`). */
+  following?: 'decide' | 'motion' | null;
 }
 
 /**
@@ -234,8 +251,12 @@ export interface StageInput {
  */
 export function noteStage(i: StageInput): { stage: Stage; bucket: Bucket } {
   const c = i.commissionState ?? null;
+  // Done is done: nothing left to decide or wait for.
+  if (i.acted) return { stage: 'result', bucket: 'done' };
   if (c && COMMISSION_NEEDS_YOU.has(c)) return { stage: 'decide', bucket: 'decide' };
   if (c && COMMISSION_RUNNING.has(c)) return { stage: 'motion', bucket: 'motion' };
+  if (i.following === 'decide') return { stage: 'decide', bucket: 'decide' };
+  if (i.following === 'motion') return { stage: 'motion', bucket: 'motion' };
   const shipped = i.build?.status === 'shipped';
   const building = !!i.build && i.build.accepted && i.build.status === 'open';
   if (c === 'completed' || shipped) return { stage: 'result', bucket: i.verdict ? 'done' : 'decide' };

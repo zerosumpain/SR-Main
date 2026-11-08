@@ -11,39 +11,15 @@
 // diverge again. Order is editorial, and is the order they appear in.
 //
 // Visibility is NOT here. Whether a card is shown is the server's answer
-// (`data.visibility`), keyed by `key` — and every key must also appear in
+// (`data.cards`, filtered in +page.server.ts), keyed by `key` — and every key must also appear in
 // STATIC_PROJECT_KEYS or its toggle silently 400s. `registry-cards.test.ts`
 // guards that parity against this array.
 
-export interface ProjectCard {
-  /** Visibility key. Must match the key the server reports for this project. */
-  key: string;
-  href: string;
-  /** Accessible name for the card's full-bleed link. */
-  label: string;
-  /** The accent eyebrow — `Field Study №6`, `Tool`, `Reference`. */
-  kind: string;
-  /** The muted counterpart on the line below the eyebrow. */
-  tag: string;
-  title: string;
-  blurb: string;
-  /** The mono strip along the foot of the card. */
-  chips: string;
-  /**
-   * A finished product rather than a study or a toy — the card is marked in ink
-   * instead of accent so it reads as a different KIND of thing at a glance, not
-   * as a more important one. See `.pc.product` in `+page.svelte`.
-   */
-  product?: true;
-  /**
-   * Hidden from the public outright: no visibility key, no public/private
-   * toggle and no Share button, because there is no state in which this card
-   * should be seen by anyone but the owner. Cards carrying it live in
-   * `./owner-cards.server.ts` and are NOT in PROJECT_CARDS — see the note
-   * there for why the visibility toggle is the wrong instrument for them.
-   */
-  ownerOnly?: true;
-}
+// The card's shape lives in $lib/projects/views beside the three views that
+// draw it; re-exported so every existing import keeps working.
+import type { ProjectCard } from '$lib/projects/views';
+import { sharePacksFor } from '$lib/projects/share-pack';
+export type { ProjectCard };
 
 export const PROJECT_CARDS: ProjectCard[] = [
   {
@@ -56,23 +32,42 @@ export const PROJECT_CARDS: ProjectCard[] = [
     blurb:
       'Build a world, choose your rivals, and play for the frontier. An isometric hex conquest game with configurable maps and players, a reinforcement-learning lab, and a rule forge that turns your ideas into new game mechanics. Play a turn yourself, watch the AI compete, or let it learn through thousands of headless matches.',
     chips: 'turn-based conquest · PyTorch · custom rules · independent app',
+    separateApp: true,
   },
   {
-    key: 'policy-analysis',
-    // Another application answers this path — cloudflared routes
-    // /projects/policy-analysis to SR-Policy-Analysis, never to Main. The card
-    // is public and the page behind it is not, so a visitor who clicks it meets
-    // the login wall; `tag` says so before they do.
-    href: '/projects/policy-analysis',
-    label: 'Open Policy Analysis',
-    kind: 'Product',
-    tag: 'Owner only · Policy',
-    title: 'Policy Analysis — Reading a Paper the Way Somebody Who Means to Beat It Would',
+    key: 'marbler',
+    href: '/projects/marbler/',
+    label: 'Open Marbler',
+    kind: 'Game',
+    tag: 'Playable · WebGL',
+    title: 'Marbler — a marble race built on luck',
     blurb:
-      'Give it a policy paper and it spends eighteen stages working out who the paper actually hands power to, and what each of them can do about it — which is a different question from whether the drafting is sound, and it is the one nobody asks. It profiles every body the policy touches and then writes the plays each one can run to serve itself at the policy\'s expense, preferring the ones that stay entirely within the rules, because those are the plays nobody has priced. It remembers the actors between assessments, so the next paper starts with what the last one learned, and it reads each new policy against the ones already done for the holes that only exist because both are in force at once. Shareable without a login, and it prints.',
-    chips: '18 stages · exploitation playbook · cross-policy · shareable',
-    product: true,
+      'Watch a field of marbles race down a machine generated for this race alone: spinners, cogs, trampolines, wrecking balls, black-hole transporters and lava. Every course is measured with thousands of simulated test drops so a marble makes it top to bottom in one clean attempt only about one time in twenty; fall in the lava and you start again from the top. Pick a favourite and see if luck is on its side.',
+    chips: 'Rapier physics · Pixi · procedural courses · Monte Carlo design',
   },
+
+  {
+    key: 'field-study-8',
+    href: '/projects/field-study-8/',
+    label: 'Open Field Study №8',
+    kind: 'Field Study №8',
+    tag: 'Private · Working model',
+    title: 'Private working model',
+    blurb: 'Procurement analysis built from public records. Owner only.',
+    chips: 'public records · private',
+  },
+
+  {
+    key: 'field-study-9',
+    href: '/projects/field-study-9/',
+    label: 'Open Field Study №9',
+    kind: 'Field Study №9',
+    tag: 'Private · Briefing',
+    title: 'Private briefing',
+    blurb: 'Briefing built from public records. Owner only.',
+    chips: 'public records · private',
+  },
+
   {
     key: 'scs-earnings',
     href: '/projects/scs-earnings/',
@@ -101,11 +96,11 @@ export const PROJECT_CARDS: ProjectCard[] = [
     href: '/projects/engine-room',
     label: 'Open The Engine Room',
     kind: 'Field study',
-    tag: 'Interactive · This site, explained',
-    title: 'The Engine Room — how this site works',
+    tag: 'Interactive · Three features, explained',
+    title: 'The Engine Room — Daydream, Build and the App',
     blurb:
-      'This site looks like a blog. Underneath it is a personal knowledge engine — an assistant with reach into mail, files and home, a workflow engine with 88 node types, retrieval over documents, a knowledge graph that resolves entities overnight, and a system that rewrites itself while nobody is watching. Four parts, twenty-one pages, and twenty instruments you can operate rather than read: follow one message through six stages and six layers with a live clock and a running bill, pick a model seller and watch what it costs you, try to get machine-written code past the safety scan, or push a change down the deploy pipeline and watch it stop. Mechanisms and mistakes, no secrets.',
-    chips: 'models · caching · RAG · entity resolution · self-improvement · measured',
+      'Three parts of this site that aren’t ordinary. Daydream thinks about my life on spare cycles, one narrow question at a time, and writes down what’s worth my attention. Build turns the ideas I accept into real changes to the site, with a brief, a running preview and tests, and only ever reaches production through a pull request. And the iPhone app carries it all into my pocket, onto the Lock Screen, the watch and Siri. Every stage, limit and count on the pages is read from the running code, so the study changes when the features do.',
+    chips: 'daydream · autonomous builds · codegraph · iPhone · live from the code',
   },
 
 
@@ -121,6 +116,66 @@ export const PROJECT_CARDS: ProjectCard[] = [
     chips: 'pressures · trade-offs · maturity · cited',
   },
   {
+    key: 'data-spine',
+    href: '/projects/data-spine',
+    label: 'Open The Data Spine',
+    kind: 'Field study',
+    tag: 'Interactive · Identity and data flow',
+    title: 'The Data Spine — Know Every Child, Move the Question',
+    blurb:
+      'The case for two improvements to how education data works in England: one identity that follows every child across their life, and a federated network where questions travel to the data and only answers come back, with a receipt for every exchange. Follow a steady childhood and a turbulent one, send questions from DfE, councils, schools and a mayoral authority through the same front door, and weigh the design against seventeen other education systems.',
+    chips: 'identity · federation · trust ledger · benchmark · cited',
+  },
+  {
+    key: 'spine',
+    href: '/projects/spine',
+    // Recipients get the project's own domain; data-spine.com shows its holding
+    // page to anyone without a live link.
+    shareBase: 'https://data-spine.com/',
+    // The Spine asks for a link's password itself; the owner chooses per link.
+    // Mirrors SHARE_PASSWORD_KEYS ($lib/projects/share-password), which the
+    // share API reads; owner-cards.test.ts holds the two to each other.
+    sharePassword: true,
+    // A link opens the DfE pack (the default) or the schools pack; the Spine
+    // pins its reader to that one. The list lives in $lib/projects/share-pack.
+    sharePacks: sharePacksFor('spine'),
+    label: 'Open The Spine',
+    kind: 'Field study',
+    tag: 'Interactive · Identity and accredited sharing',
+    title: 'The Spine',
+    blurb:
+      'How I think we should join up what the system already knows about a child, written from inside DfE. One protected identity that borrows the NHS number rather than inventing a new one, and a network of accredited partners who ask lawful questions of records where they already sit, with a receipt the family can read. Fourteen chapters, an ink drawing of the spine and its ribs, and a lens for whoever is reading.',
+    chips: 'identity · federation · receipts · standards · vendor lock-in · cited',
+  },
+  {
+    key: 'supply-chain-monitor',
+    href: '/projects/supply-chain-monitor',
+    label: 'Open Supply Chain Monitor',
+    kind: 'Working tool',
+    tag: 'Interactive · Supplier risk',
+    title: 'Supply Chain Monitor — a monthly pulse on the suppliers we depend on',
+    blurb:
+      'Scores every supplier our clients rely on across seven dimensions — filed accounts, filings and governance, contracts won and lost on re-tender, share price, news, and the countries, fuel and shipping routes they depend on — with the evidence behind each number. Models how risk travels through the supply chain to each client, and runs scenarios such as a fuel shortage or a Red Sea closure.',
+    chips: 'supplier risk · re-tender losses · supply chain model · scenarios · public data',
+  },
+  {
+    // Casebook runs on porkserv as its own SvelteKit app, served at
+    // /projects/casebook through the site's gateway (SR-Infra registry
+    // `casebook`, audience sr-casebook). The owner gets the whole app; while it
+    // is private nobody else gets anything, and once public a reader still needs
+    // one of Casebook's own pack links. Private by default.
+    key: 'casebook',
+    href: '/projects/casebook',
+    label: 'Open Casebook',
+    kind: 'Working tool',
+    tag: 'Owner sign-in · Evidence packs',
+    title: 'Casebook — the evidence under the slides',
+    blurb:
+      'I built this to make a case properly. Research keeps a claim only if its quote is really on the page it came from, the chapters are written from those claims and rewritten for whoever is reading them, and a short deck sits on top where every point opens the evidence underneath. One editor takes a pack from a question to something I can share, asking me at each step or deciding for itself. Private by default.',
+    chips: 'claims with receipts · audiences · slide builds · independent app',
+    separateApp: true,
+  },
+  {
     key: 'policy-engine',
     href: '/projects/policy-engine',
     label: 'Open Education Policy Modelling',
@@ -130,6 +185,34 @@ export const PROJECT_CARDS: ProjectCard[] = [
     blurb:
       'A research-backed, system-dynamics simulation of England\'s schools, 2025–2040. Pull the policy levers — SEND & EHCP reform, pupil premium, attendance, early years, the 6,500-teacher pledge, curriculum reform — and watch the disadvantage gap, attainment, the SEND funding deficit and NEET respond in real calculations. Every effect size is sourced or flagged as an assumption, with Monte-Carlo uncertainty and sensitivity analysis.',
     chips: 'system dynamics · Monte-Carlo · cited',
+  },
+  {
+    key: 'local-plan-navigator',
+    href: '/projects/local-plan-navigator',
+    label: 'Open the Local Plan Navigator',
+    kind: 'Prototype',
+    tag: 'GOV.UK-style service · Planning',
+    title: 'Local Plan Navigator — Thirty Months, Three Gateways, One Map',
+    blurb:
+      'A GOV.UK-style prototype for navigating England\'s local plan process, with stage maps, a timeline planner, checklists, cited search and model-assisted answers. Private by default; share it with a link.',
+    chips: 'GOV.UK Frontend · 2026 Regulations · NPPF · cited answers',
+  },
+  {
+    // Wildmind runs on its own host and is served at /wildmind/ through the
+    // site's tunnel (SR-Infra registry `wildmind`). It asks Main's session
+    // authority (audience sr-wildmind) about every request: the owner gets the
+    // whole app; a live share link from this card, or a signed-in person the
+    // owner has invited in Wildmind itself, gets a read-only view. Private by
+    // default; share it with a link.
+    key: 'wildmind',
+    href: '/wildmind/',
+    label: 'Open Wildmind',
+    kind: 'Simulation',
+    tag: 'Live · watch by invitation',
+    title: 'Wildmind — survivors who invent',
+    blurb:
+      'Two characters, JKai and a companion, whose minds are Claude, survive in an open world that grows as they explore. Every tool, building and vehicle is designed by the model, checked against what they have actually discovered, and drawn from primitive shapes in the browser. Nothing is pre-made, and spaceflight is possible but a very long way off.',
+    chips: 'Three.js · Claude · open world · independent app',
   },
   {
     key: 'archetype',

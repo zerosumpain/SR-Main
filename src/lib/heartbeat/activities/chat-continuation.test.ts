@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classify, beatGate } from './chat-continuation';
+import { classify, beatGate, trailingChain, SOFT_CHECKIN_TEXT } from './chat-continuation';
 
 describe('chat-continuation classify', () => {
   it('flags streaming status interleaves as in_progress', () => {
@@ -57,5 +57,40 @@ describe('chat-continuation beatGate', () => {
   it('still goes quiet on a thread nobody answers', () => {
     expect(gate(MAX, 999)).toBe('capped');
     expect(gate(MAX + 3, 999)).toBe('capped');
+  });
+});
+
+/**
+ * The duplicate check-ins of 2026-10-03: a thread was asked "have we landed?"
+ * again after answering it, and a build watcher's closing note set off a
+ * check-in on the thread it narrated, so two threads about one build answered
+ * "landed" and "not landed" in the same tick.
+ */
+describe('chat-continuation trailingChain', () => {
+  const beat = (kind: string, content = 'x') => ({ role: kind === 'user-trigger' ? 'user' : 'assistant', content, metadata: { heartbeat: { activity: 'chat-continuation', kind } } });
+  const plain = (content = 'Here is the answer.') => ({ role: 'assistant', content, metadata: null });
+
+  it('a thread ending on a real reply has no chain', () => {
+    expect(trailingChain([plain(), beat('reply')])).toEqual({ beats: 0, softCheckedIn: false, otherActivity: false });
+  });
+
+  it('remembers that this pause already had its soft check-in', () => {
+    const rows = [beat('reply', "We've landed."), beat('user-trigger', SOFT_CHECKIN_TEXT), plain()];
+    expect(trailingChain(rows)).toEqual({ beats: 2, softCheckedIn: true, otherActivity: false });
+  });
+
+  it('an auto-continue chain is not a soft check-in', () => {
+    const rows = [beat('reply'), beat('user-trigger', '[heartbeat] continuing on your behalf'), plain()];
+    expect(trailingChain(rows).softCheckedIn).toBe(false);
+  });
+
+  it('a check-in from an earlier pause does not count once a real message intervenes', () => {
+    const rows = [plain(), beat('reply'), beat('user-trigger', SOFT_CHECKIN_TEXT)];
+    expect(trailingChain(rows).softCheckedIn).toBe(false);
+  });
+
+  it("flags a thread whose newest row is another heartbeat activity's note", () => {
+    const watcher = { role: 'assistant', content: '✓ build completed', metadata: { heartbeat: { activity: 'watch-build-915fae11', kind: 'note' } } };
+    expect(trailingChain([watcher, plain()])).toEqual({ beats: 0, softCheckedIn: false, otherActivity: true });
   });
 });

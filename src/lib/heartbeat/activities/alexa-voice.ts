@@ -15,7 +15,7 @@ export const alexaVoiceSync: ActivityHandler = {
   defaultCadenceSeconds: 300,
   defaultEnabled: true,
   async run() {
-    const { getHomeAssistantService } = await import('$lib/workflows/homeassistant/service');
+    const { getHomeAssistantService } = await import('$lib/integrations/homeassistant/service');
     const res = await syncVoiceHistory(getHomeAssistantService());
     if (!res.ok) {
       return { outcome: 'skipped', summary: `not synced: ${res.error ?? 'unknown'}`.slice(0, 200), details: { ...res } };
@@ -41,7 +41,7 @@ export const alexaSignalsSync: ActivityHandler = {
   defaultCadenceSeconds: 300,
   defaultEnabled: true,
   async run() {
-    const { getHomeAssistantService } = await import('$lib/workflows/homeassistant/service');
+    const { getHomeAssistantService } = await import('$lib/integrations/homeassistant/service');
     const res = await syncSignalHistory(getHomeAssistantService());
     if (!res.ok) {
       return { outcome: 'skipped', summary: `not synced: ${res.error ?? 'unknown'}`.slice(0, 200), details: { ...res } };

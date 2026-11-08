@@ -2,6 +2,7 @@ import type { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
 import type { CadenceWeek, ConsolePayload, ReleaseMonth } from '$lib/releases/console';
 import type { KindSlice, ShowcaseItem, ShowcaseTotals } from '$lib/releases/public';
 import type { ReleaseSessionsBand } from '$lib/releases/sessions.server';
+import type { SpendBand } from '$lib/releases/spend';
 
 export type ReleasesAudience = 'owner' | 'public';
 
@@ -40,6 +41,8 @@ export interface OwnerReleasesData extends ConsolePayload {
    * anonymous render cannot carry the bytes even by accident.
    */
   sessions: ReleaseSessionsBand;
+  /** What the work cost — Claude Code spend over the page's date window. Owner-only, like `sessions`. */
+  spend: SpendBand;
 }
 
 export type ReleasesData = OwnerReleasesData | PublicReleasesData;

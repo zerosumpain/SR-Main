@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { randomUUID, createHash } from 'node:crypto';
 import { db } from '$lib/db';
 import { eq, inArray } from 'drizzle-orm';
-import { codegraphSnapshots, codegraphNodes, codegraphEdges, codegraphQueries, codegraphLessons, jkaiBuilds, jkaiIterations, jkaiBuildDeliveries, jkaiBuildLessons, codegraphEpisodes } from '$lib/db/schema';
+import { codegraphSnapshots, codegraphNodes, codegraphEdges, codegraphQueries, codegraphLessons, jkaiBuilds, jkaiIterations, jkaiBuildDeliveries, codegraphEpisodes } from '$lib/db/schema';
+import { areaLessons, recordBuildLesson } from './build-lessons.server';
 import { saveSnapshot } from './snapshot.server';
 import { observeDevelopmentAcceptance, contextForBuild } from './development.server';
 import { newDelivery } from '$lib/jkai/development';
@@ -55,8 +56,8 @@ describe.skipIf(!local)('isolated CodeGraph persistence', () => {
       await db.delete(jkaiBuilds).where(eq(jkaiBuilds.id, id));
     }
   });
-  it('retains accepted lesson identity and records local acceptance as local evidence', async () => {
-    const id = randomUUID(); let lessonId: number | undefined;
+  it('writes a build lesson straight to the graph, lists it for its area and serves it to the builder', async () => {
+    const id = randomUUID(); let lessonId: string | undefined;
     const file = `src/synthetic-${id}.ts`;
     const state = newDelivery(`Synthetic task about ${file}`);
     state.acceptedAt = new Date().toISOString(); state.candidate = 'a'.repeat(40); state.batch = 'b'.repeat(40);
@@ -65,11 +66,12 @@ describe.skipIf(!local)('isolated CodeGraph persistence', () => {
     try {
       await db.insert(jkaiBuilds).values({ id, prompt: state.brief.outcome, status: 'paused' });
       await db.insert(jkaiBuildDeliveries).values({ buildId: id, state });
-      const [saved] = await db.insert(jkaiBuildLessons).values({ buildId: id, area: 'Platform', lesson: 'Synthetic validated lesson', evidence: `Synthetic evidence for ${file}`, revision: state.candidate, expiresAt: new Date(Date.now() + 86400000) }).returning();
-      lessonId = saved.id;
+      lessonId = await recordBuildLesson({ buildId: id, lesson: 'Synthetic validated lesson', evidence: `Synthetic evidence for ${file}`, revision: state.candidate, files: [file] });
       await observeDevelopmentAcceptance(id); await observeDevelopmentAcceptance(id);
-      const lessons = await db.select().from(codegraphLessons).where(eq(codegraphLessons.id, `development-lesson:${lessonId}`));
+      const lessons = await db.select().from(codegraphLessons).where(eq(codegraphLessons.id, lessonId));
       expect(lessons).toHaveLength(1); expect(lessons[0].body).toContain('Production deployment is not established');
+      expect(lessons[0].origin).toBe('build');
+      expect((await areaLessons(state.area)).map(l => l.id)).toContain(lessonId);
       await saveSnapshot({ version: 1, repo: 'SR-Main', revision: state.candidate, complete: true, fileCount: 1, files: [file],
         hashes: { [file]: '1'.repeat(40) }, manifestHash: createHash('sha256').update(file).digest('hex'), edges: [], routes: [], dependencies: [], unresolved: [], limitations: [] }, 'candidate', id);
       const iterationId = randomUUID();
@@ -77,11 +79,11 @@ describe.skipIf(!local)('isolated CodeGraph persistence', () => {
       const packed = await contextForBuild(id, iterationId);
       expect(packed.block).toContain('Synthetic validated lesson');
       const [recorded] = await db.select().from(codegraphQueries).where(eq(codegraphQueries.buildId, id));
-      expect(recorded.lessonIds).toContain(`development-lesson:${lessonId}`);
+      expect(recorded.lessonIds).toContain(lessonId);
       expect(recorded.evidence.block).toBe(packed.block);
       expect((await db.select().from(codegraphEpisodes).where(eq(codegraphEpisodes.sourceId, id)))).toHaveLength(1);
     } finally {
-      if (lessonId) await db.delete(codegraphLessons).where(eq(codegraphLessons.id, `development-lesson:${lessonId}`));
+      if (lessonId) await db.delete(codegraphLessons).where(eq(codegraphLessons.id, lessonId));
       await db.delete(codegraphQueries).where(eq(codegraphQueries.buildId, id));
       await db.delete(codegraphSnapshots).where(eq(codegraphSnapshots.buildId, id));
       await db.delete(codegraphEpisodes).where(eq(codegraphEpisodes.sourceId, id));

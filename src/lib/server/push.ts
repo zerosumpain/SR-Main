@@ -41,6 +41,9 @@ export interface PushPayload {
   actionPayload?: Record<string, unknown>;
   /** Explicit routing. Callers that predate the routing table omit it. */
   category?: string;
+  /** Override the category's route for this one alert: a budgeted push over
+   *  its cap is written with both channels off (`$lib/jkai/delivery-push`). */
+  channels?: { whatsapp?: boolean; native?: boolean };
 }
 
 /**
@@ -70,6 +73,7 @@ async function forward(payload: PushPayload): Promise<void> {
     body: payload.body,
     url: payload.url ?? null,
     data: payload.data ?? null,
+    ...(payload.channels ? { channels: payload.channels } : {}),
     // The same sentence about the same thing, twice inside a minute, is one
     // notification. Two different sentences are two.
     dedupeKey: `${payload.title}|${payload.url ?? ''}`,

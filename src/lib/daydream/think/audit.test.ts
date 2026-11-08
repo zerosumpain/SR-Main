@@ -30,6 +30,26 @@ describe('validateThinkOutput', () => {
     expect(n.candidate.evidence.map((e) => e.kind)).toEqual(['think-card', 'think-card']);
   });
 
+  it('carries a ready "do it for me" plan when the note dates it, and drops one it does not', () => {
+    const doIt = { kind: 'calendar_event', title: 'Chase the bike dispatch', date: '2026-10-10', time: null };
+    const bike = note({ title: 'Bike dispatch is overdue', body: 'The shop promised dispatch within a week and nothing has shipped yet.', action: 'Put 10 October in the diary to chase the bike dispatch.', do: doIt });
+    const ok = validateThinkOutput({ notes: [bike] }, cards(1, 2), { today: '2026-10-02' });
+    expect(ok.notes[0].candidate.proposedActions).toHaveLength(1);
+    expect(ok.notes[0].candidate.proposedActions[0].label).toContain('Chase the bike dispatch');
+    const moved = validateThinkOutput({ notes: [{ ...bike, do: { ...doIt, date: '2026-10-11' } }] }, cards(1, 2), { today: '2026-10-02' });
+    expect(moved.notes).toHaveLength(1);
+    expect(moved.notes[0].candidate.proposedActions).toEqual([]);
+    expect(moved.rejected[0]).toMatch(/do-it plan dropped/);
+  });
+
+  it('keeps the model\'s "until" when it is a real day ahead, and drops it otherwise — the note stands', () => {
+    const at = (until: unknown) => validateThinkOutput({ notes: [note({ until })] }, cards(1, 2), { today: '2026-10-11' }).notes[0];
+    expect(at('2026-10-16').until).toBe('2026-10-16');
+    expect(at('2026-10-01').until).toBeNull();
+    expect(at('next week').until).toBeNull();
+    expect(at(undefined).until).toBeNull();
+  });
+
   it('kills a note WHOLE when one citation was never issued', () => {
     // The audit. One real card does not launder an invented one.
     const out = validateThinkOutput({ notes: [note({ cites: ['C1', 'C9'] })] }, cards(1, 2));
@@ -97,5 +117,54 @@ describe('slugOf', () => {
   it('is stable and bounded', () => {
     expect(slugOf('Heating ran at 23°C all night!')).toBe('heating-ran-at-23-c-all-night');
     expect(slugOf('x'.repeat(200)).length).toBeLessThanOrEqual(60);
+  });
+});
+
+describe('subjects, the ledger and the research gate', () => {
+  function correlateCards(): Map<string, Card> {
+    const m = new Map<string, Card>();
+    const c = makeCard(1, 'correlate', { a: 'sleepMinutes', b: 'recoveryScore' }, 'same day: r 0.04 over 62 paired days', '2026-10-16');
+    m.set(c.id, c);
+    return m;
+  }
+  const corr = {
+    outcome: 'correlate',
+    title: 'Extra sleep is not carrying into next-day recovery',
+    body: 'No real link between how long you sleep and next-day recovery (r 0.04 over 62 days).',
+    cites: ['C1'],
+  };
+
+  it('files a note under its subject, in the evidence, with what changed', () => {
+    const m = new Map<string, Card>();
+    const c = makeCard(1, 'spend', {}, '2026-10-15 SKY DIGITAL £41.50 [bank]', '2026-10-16');
+    m.set(c.id, c);
+    const out = validateThinkOutput(
+      { notes: [note({ title: 'Sky rose again', body: 'Sky is now £41.50 a month, a second rise in two months.', cites: ['C1'], subject: 'merchant:Sky', changed: 'now £41.50' })] },
+      m,
+    );
+    expect(out.notes[0].subject).toBe('merchant:sky');
+    expect(out.notes[0].changed).toBe('now £41.50');
+    expect(out.notes[0].candidate.evidence.at(-1)).toEqual({ kind: 'think-subject', id: 'merchant:sky', note: 'changed: now £41.50' });
+  });
+
+  it('refuses a correlate note resting only on a pair tested with nothing new', () => {
+    const cs = correlateCards();
+    const out = validateThinkOutput({ notes: [corr] }, cs, { staleCards: new Set(['C1']) });
+    expect(out.notes).toHaveLength(0);
+    expect(out.rejected[0]).toMatch(/already tested with nothing new/);
+    expect(validateThinkOutput({ notes: [corr] }, cs, { staleCards: new Set() }).notes[0].subject).toBe('correlate:recoveryScore~sleepMinutes');
+    // The monthly summary rests on the ledger by design.
+    expect(validateThinkOutput({ notes: [corr] }, cs, { staleCards: new Set(['C1']), summaryKey: 'correlate:summary:2026-10' }).notes[0].subject).toBe(
+      'correlate:summary:2026-10',
+    );
+  });
+
+  it('drops a research note with nothing he could do with it', () => {
+    const r = { outcome: 'research', title: 'Citation scores can move sixfold with the verifier', body: 'A new paper finds citation scores move sixfold depending on which verifier model scores them.', cites: ['C1'] };
+    const none = validateThinkOutput({ notes: [r] }, cards(1), { allowedOutcomes: ['research'], researchTopic: 'Ember-1' });
+    expect(none.notes).toHaveLength(0);
+    expect(none.rejected[0]).toMatch(/no use for him/);
+    const used = validateThinkOutput({ notes: [{ ...r, action: 'Score the Ember-1 audit with two verifiers and compare.' }] }, cards(1), { allowedOutcomes: ['research'], researchTopic: 'Ember-1' });
+    expect(used.notes[0].subject).toBe('topic:ember-1');
   });
 });
