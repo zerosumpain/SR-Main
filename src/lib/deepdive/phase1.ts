@@ -3,7 +3,7 @@ import { sources, researchLeads } from '$lib/db/schema';
 import { eq, and, count } from 'drizzle-orm';
 import type { ResearchSession } from '$lib/db/schema';
 import { jsonCompletion } from './ai';
-import { search } from './tavily';
+import { search } from './web-search';
 import { emitLog, emitStats, shouldStop, getAbortSignal, throwIfStopped } from './worker';
 import { addLeads, takeLeads, recordLeadSources, MAX_LEAD_DEPTH } from './frontier';
 import { emitArtefact } from './desk-events';

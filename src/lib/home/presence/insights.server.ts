@@ -38,7 +38,7 @@ export function trailRows(key: string, subjects: string[], days: number, now: Da
     const result = await db.execute(sql`
       with candidates as (
         select subject, ts, lat, lon, accuracy_m as "accuracyM", reading_age_s as "readingAgeS",
-          place_id as "placeId", mode, speed_kmh as "speedKmh", is_home as "isHome", id,
+          place_id as "placeId", mode, speed_kmh as "speedKmh", is_home as "isHome", source, id,
           date_bin('2 minutes', ts, timestamptz '2000-01-01') as bin,
           -- A provider reading's age is NOT unusability: a still Life360 phone
           -- repeats one reading for hours. normaliseReadings re-dates them.
@@ -49,7 +49,7 @@ export function trailRows(key: string, subjects: string[], days: number, now: Da
         select distinct on (subject, bin, "placeId", unusable) * from candidates
         order by subject, bin, "placeId", unusable, ts desc, id desc
       )
-      select subject, ts, lat, lon, "accuracyM", "readingAgeS", "placeId", mode, "speedKmh", "isHome"
+      select subject, ts, lat, lon, "accuracyM", "readingAgeS", "placeId", mode, "speedKmh", "isHome", source
       from sampled order by subject, ts
     `);
     return (result.rows as unknown as InsightFix[]).map(r => ({ ...r, ts: new Date(r.ts) }));

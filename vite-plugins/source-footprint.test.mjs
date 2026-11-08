@@ -43,8 +43,26 @@ test('embeds only public SR-Main counts in the client build', async () => {
     const output = Array.isArray(result) ? result[0].output : result.output;
     const chunk = output.find((entry) => entry.type === 'chunk');
     const { SOURCE_FOOTPRINT } = await import(`data:text/javascript;base64,${Buffer.from(chunk.code).toString('base64')}`);
-    assert.equal(SOURCE_FOOTPRINT.categories.code.lines, 5);
+    // 6, not 5: the build's own entry.js sits at the root, and root files count.
+    assert.equal(SOURCE_FOOTPRINT.categories.code.lines, 6);
     assert.equal(SOURCE_FOOTPRINT.repositories.length, 1);
     assert.equal(chunk.code.includes('SR-Health'), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('measures every folder and the languages the apps are written in', async () => {
+  const { sourceCategory } = await import('./source-footprint.mjs');
+  // The first version measured only src/, scripts/, tests/… and TypeScript-family
+  // files, so SR-TV (Kotlin under app/) and the iPhone app (Swift under ios/)
+  // read as nothing.
+  assert.equal(sourceCategory('app/src/main/java/tv/MainActivity.kt'), 'code');
+  assert.equal(sourceCategory('ios/SRAppleApp/TodayScreen.swift'), 'code');
+  assert.equal(sourceCategory('server/agent/mind.ts'), 'code');
+  assert.equal(sourceCategory('index.html'), 'code');
+  assert.equal(sourceCategory('ios/SRAppleAppTests/TodayTests.swift'), 'tests');
+  assert.equal(sourceCategory('pipeline/test_load.py'), 'tests');
+  for (const path of ['static/vendor/three.js', 'public/app.js', 'drizzle/0001_init.sql', 'svelte.config.js',
+    'app/build/generated/R.java', 'gradle/wrapper/x.kts', 'docs/notes.ts', 'data/fixtures.js']) {
+    assert.equal(sourceCategory(path), null, path);
+  }
 });

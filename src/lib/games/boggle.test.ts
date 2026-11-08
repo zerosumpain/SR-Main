@@ -19,8 +19,10 @@ import {
   solve,
   spells,
   start,
+  toScreen,
   toWire,
   trace,
+  kellyWordFor,
   word,
   COUNTDOWN_MS,
   GRACE_MS,
@@ -370,5 +372,67 @@ describe("the lobby", () => {
     const r = room();
     leave(r, "p_john", T0);
     expect(r.phase).toBe("closed");
+  });
+});
+
+describe("on the TV", () => {
+  it("shows the grid and counts while playing, never a word", () => {
+    const r = room();
+    join(r, "p_sam", T0);
+    const t = playing(r);
+    word(r, "p_john", { word: "star" }, t + 1_000);
+    const screen = toScreen(r, t + 1_100);
+    expect(screen.grid).toEqual(BOARD);
+    expect(screen.players.find((p) => p.id === "p_john")?.wordCount).toBe(1);
+    expect(JSON.stringify(screen.players)).not.toContain("star");
+    expect(screen.found).toBeNull();
+  });
+
+  it("hides the grid before play", () => {
+    const r = room();
+    expect(toScreen(r, T0).grid).toBeNull();
+  });
+
+  it("at the finish names who found what", () => {
+    const r = room();
+    join(r, "p_sam", T0);
+    const t = playing(r);
+    word(r, "p_john", { word: "star" }, t + 1_000);
+    advance(r, t + 10 * 60_000, half);
+    const screen = toScreen(r, t + 10 * 60_000);
+    expect(screen.phase).toBe("finished");
+    expect(screen.found?.find((f) => f.word === "star")?.finders).toEqual(["John"]);
+  });
+});
+
+describe("the Kelly word", () => {
+  it("is only dealt at a party", () => {
+    const r = room();
+    join(r, "p_sam", T0);
+    start(r, "p_john", T0);
+    advance(r, T0 + COUNTDOWN_MS, half);
+    expect(r.kellyWord ?? null).toBeNull();
+    const k = room(undefined, "easy", { kelly: true });
+    join(k, "p_sam", T0);
+    start(k, "p_john", T0);
+    advance(k, T0 + COUNTDOWN_MS, half);
+    expect(typeof k.kellyWord).toBe("string");
+  });
+
+  it("prefers a themed word the board holds, and scores double", () => {
+    const solution = solve(BOARD, 3);
+    const pick = kellyWordFor(solution, half);
+    expect(solution.map((t) => t.word)).toContain(pick);
+    const r = room(undefined, "easy", { kelly: true });
+    join(r, "p_sam", T0);
+    const t = playing(r);
+    r.kellyWord = "star";
+    word(r, "p_john", { word: "star" }, t + 1_000);
+    const wire = toWire(r, "p_john", t + 1_100);
+    expect(wire.players.find((p) => p.id === "p_john")?.score).toBe(points("star") * 2);
+    expect(wire.kellyWord).toBeNull();
+    expect(wire.kellyHint).toEqual({ length: 4, first: "s" });
+    advance(r, t + 10 * 60_000, half);
+    expect(toWire(r, "p_john", t + 10 * 60_000).kellyWord).toBe("star");
   });
 });

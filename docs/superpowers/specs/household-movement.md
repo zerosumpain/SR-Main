@@ -32,7 +32,7 @@ This spec is in a public repo: it names no place, address, number or coordinate.
   `users(email, name, family, sharing)`. `sharing` gates location upload and
   `GET /api/apple/family` (each member's latest fix). Accounts come from
   `admin.mjs create-user`; a browser signs in with the site's Auth.js cookie; an
-  email with no `users` row gets 403. Location is kept for 30 days. Fixes arrive
+  email with no `users` row gets 403. Location is kept until the person deletes it (no age-based purge since 2026-11-01). Fixes arrive
   about once a minute while moving and none when still; a phone that is still
   gets suspended by iOS, and so goes silent.
 - SR-Main runs on the same host (`strange-rambling-svelte.service`), so it reaches

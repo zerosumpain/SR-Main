@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analysePatterns, categoryOf, groupOf, parsePlaceTypes, placeQuery, type PatternPlace } from './patterns';
+import { analysePatterns, categoryOf, groupOf, parsePlaceTypes, placeQuery, stepsPerFootHour, type PatternPlace } from './patterns';
 import type { InsightFix } from './insights';
 
 const places: PatternPlace[] = [
@@ -134,5 +134,63 @@ describe('analysePatterns', () => {
     // The broken day is two short visits, not one long one through the hole.
     expect(school.visits).toBe(6);
     expect(school.hours).toBeLessThan(5 * 7.7);
+  });
+
+  it('reads a day at a named place far from home as a holiday day, out of every other comparison', async () => {
+    const rome: PatternPlace = { id: 'rome', label: 'Rome apartment', kind: 'other', lat: 41.9, lon: 12.5, radiusM: 100 };
+    const homeDays = ['2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11'];
+    const romeDays = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17'];
+    const at = (d: string, h: number) => Date.parse(`${d}T00:00:00Z`) + h * 60 * MIN;
+    const trail = [
+      ...homeDays.flatMap((d) => stay('alex', at(d, 0), at(d, 24) - 2 * MIN, 51.5)),
+      ...romeDays.flatMap((d) => stay('alex', at(d, 0), at(d, 24) - 2 * MIN, 41.9).map((f) => ({ ...f, lon: 12.5, isHome: false }))),
+      ...DAYS.flatMap((d) => schoolDay('alex', d)),
+    ];
+    const daily = new Map([...homeDays.map((d) => [d, 3000] as const), ...romeDays.map((d) => [d, 30000] as const), ...DAYS.map((d) => [d, 9000] as const)]);
+    const r = await analysePatterns(trail, [...places, rome], [people[0]], new Map([['alex', daily]]), now, 21, 'home');
+    const alex = r.people[0];
+    expect(alex.awayDays).toBe(4);
+    // A day out is a day out from home: Rome's 30,000 stays out of it.
+    expect(alex.steps).toMatchObject({ homeDay: 3000, homeDays: 5, outDay: 9000, outDays: 5 });
+    expect(alex.steps.byCategory.find((c) => c.category === 'other')).toBeUndefined();
+    expect(alex.steps.byCategory.find((c) => c.category === 'far')).toMatchObject({ days: 4, withMean: 30000 });
+    expect(alex.weekly.find((w) => w.week === '2026-09-14')?.away).toBe(true);
+    // Too few days on each side to be said in words on "Worth knowing".
+    expect(r.findings.some((f) => f.text.includes('more steps on days far from home'))).toBe(false);
+  });
+
+  it('says what everyone shares once for the household, and each person’s own when they are picked', async () => {
+    const r = await analysePatterns(rows, places, people, steps, now, 7, 'home');
+    const anchors = r.findings.filter((f) => f.text.includes('anchor'));
+    expect(anchors.filter((f) => f.only === 'household')).toHaveLength(1);
+    expect(anchors.find((f) => f.only === 'household')?.text).toContain('Sample College for Alex and Sam');
+    expect(anchors.filter((f) => f.only === 'person').map((f) => f.subject).sort()).toEqual(['alex', 'sam']);
+  });
+});
+
+describe('steps per hour on foot', () => {
+  const day = (onFootMinutes: number, steps: number, far = false) => ({ onFootMinutes, steps, far });
+
+  it('gives no figure when the days barely differ in walking (the 70,896-an-hour reading)', () => {
+    // Most days a few minutes on foot; the steps swing for reasons the trail cannot see.
+    const days = [day(0, 6000), day(2, 9000), day(4, 13000), day(1, 7000), day(5, 15000), day(3, 8000), day(0, 5000), day(6, 14000)];
+    expect(stepsPerFootHour(days)).toBeNull();
+  });
+
+  it('reads a walker whose steps follow their time on foot', () => {
+    const days = [day(10, 4000), day(30, 6200), day(60, 9800), day(20, 5300), day(90, 13000), day(45, 8000), day(75, 11200), day(15, 4900)];
+    const f = stepsPerFootHour(days)!;
+    expect(f.slope).toBeGreaterThan(5000);
+    expect(f.slope).toBeLessThan(8000);
+    expect(f.r).toBeGreaterThan(0.9);
+  });
+
+  it('leaves holidays out, and refuses no fit, a negative slope or one past walking pace', () => {
+    const local = [day(20, 5000), day(40, 5100), day(60, 4900), day(30, 5000), day(50, 5050), day(25, 4950)];
+    // A week away with long walking days would make the fit by itself.
+    expect(stepsPerFootHour([...local, day(240, 30000, true), day(300, 32000, true)])).toBeNull();
+    expect(stepsPerFootHour([day(20, 9000), day(40, 7000), day(60, 5000), day(30, 8000), day(50, 6000), day(70, 4000)])).toBeNull();
+    // Half an hour more on foot, 10,000 more steps: not walking.
+    expect(stepsPerFootHour([day(15, 3000), day(45, 13000), day(15, 3500), day(45, 12500), day(20, 4000), day(40, 12000)])).toBeNull();
   });
 });

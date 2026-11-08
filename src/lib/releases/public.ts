@@ -20,7 +20,7 @@
 
 import { db } from '$lib/db';
 import { releases, releaseItems, projectVisibility } from '$lib/db/schema';
-import { desc, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { isItemPublic, redactItem } from './public-filter';
 import { correctedStats } from './corrected-facts';
 import { localDayCadence, type LocalDayCount } from './local-days';
@@ -131,6 +131,14 @@ const EMPTY: ShowcasePayload = {
   generatedAt: new Date(0).toISOString(),
 };
 
+/**
+ * The public record is SR-Main's alone. Since 2026-11-08 the porkserv collector
+ * also records releases from every other site repository, most of them
+ * private; their summaries were never written with the public filter's
+ * assumptions in mind, so they stay in the owner console.
+ */
+export const PUBLIC_REPO = 'zerosumpain/SR-Main';
+
 async function compute(): Promise<ShowcasePayload> {
   const [statRows, itemRows, vis] = await Promise.all([
     // Keep the release boundary beside its stats so a known empty-tree import
@@ -141,7 +149,8 @@ async function compute(): Promise<ShowcasePayload> {
         stats: releases.stats,
         deployedAt: releases.deployedAt,
       })
-      .from(releases),
+      .from(releases)
+      .where(eq(releases.repo, PUBLIC_REPO)),
     // Every summarised item, newest first. 1,056 rows of short text is a single
     // cheap read, and the safety filter has to run in Node anyway — it depends
     // on the visibility map and on prose matching.
@@ -158,6 +167,7 @@ async function compute(): Promise<ShowcasePayload> {
       })
       .from(releaseItems)
       .innerJoin(releases, sql`${releases.id} = ${releaseItems.releaseId}`)
+      .where(eq(releases.repo, PUBLIC_REPO))
       .orderBy(desc(releases.deployedAt), desc(releaseItems.ordinal)),
     visibilityMap(),
   ]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { weekHealth, type HealthDay } from './health-week';
+import { dailyHealth, weekHealth, type HealthDay } from './health-week';
 
 const day = (date: string, over: Partial<HealthDay['timeline']> = {}): HealthDay => {
   const from = Date.parse(`${date}T00:00:00Z`) / 1000 - 3600;
@@ -33,5 +33,21 @@ describe('a week of health', () => {
     const run = { activity: 'Running', start: '2026-10-20T17:00:00Z', end: '2026-10-20T17:40:00Z', seconds: 2400, distance: 6000 };
     expect(weekHealth([day('2026-10-20', { workouts: [run] }), day('2026-10-21', { workouts: [run] })])).toMatchObject({ workouts: 1, workoutMinutes: 40 });
     expect(weekHealth([day('2026-10-20')])).toMatchObject({ steps: null, sleepHours: null, workouts: 0 });
+  });
+});
+
+describe('health day by day', () => {
+  it('gives each date its own steps, wake-up-day sleep, workouts and resting heart rate', () => {
+    const night = [{ stage: 'core', start: '2026-10-20T22:00:00Z', end: '2026-10-21T06:00:00Z' }];
+    const run = { activity: 'running', start: '2026-10-21T17:00:00Z', end: '2026-10-21T17:40:00Z', seconds: 2400, distance: 7000 };
+    const d = dailyHealth([
+      day('2026-10-20', { steps: [{ value: 9000, start: '2026-10-20T08:00:00Z', end: '2026-10-20T21:00:00Z' }], sleep: night }),
+      day('2026-10-21', { steps: [{ value: 12000, start: '2026-10-21T08:00:00Z', end: '2026-10-21T21:00:00Z' }], sleep: night, workouts: [run], restingHeartRate: { value: 52.4, at: '2026-10-21T07:00:00Z' } }),
+      day('2026-10-22', { workouts: [run] }),
+    ]);
+    expect(d.get('2026-10-20')).toEqual({ steps: 9000, sleepHours: null, workouts: 0, workoutMinutes: 0, restingHeartRate: null });
+    // The night ending on the 21st is the 21st's; the run read again on the 22nd is the 21st's, once.
+    expect(d.get('2026-10-21')).toEqual({ steps: 12000, sleepHours: 8, workouts: 1, workoutMinutes: 40, restingHeartRate: 52 });
+    expect(d.get('2026-10-22')).toEqual({ steps: null, sleepHours: null, workouts: 0, workoutMinutes: 0, restingHeartRate: null });
   });
 });

@@ -36,18 +36,36 @@ function storeRoot(): string {
   return resolve(raw);
 }
 
-function assertInsideRoot(abs: string): void {
+// Other spellings of the same root, comma-separated. SR-Main runs on the host
+// and writes rows under the host directory; SR-Drive mounts that directory at
+// /srv/files. Each side names the other's root here so a row written by either
+// resolves to the same bytes.
+function rootAliases(): string[] {
+  return (process.env.WORKFLOW_FILES_ROOT_ALIASES ?? '')
+    .split(',')
+    .map((r) => r.trim())
+    .filter(Boolean)
+    .map((r) => normalize(resolve(r)));
+}
+
+function isUnder(abs: string, root: string): boolean {
+  return abs === root || abs.startsWith(root + sep);
+}
+
+/** The path under THIS process's root, or a throw if it is under no root. */
+function insideRoot(abs: string): string {
   const normAbs = normalize(abs);
   const normRoot = normalize(storeRoot());
-  if (!normAbs.startsWith(normRoot + sep) && normAbs !== normRoot) {
-    throw new Error('path traversal blocked');
+  if (isUnder(normAbs, normRoot)) return normAbs;
+  for (const alias of rootAliases()) {
+    if (isUnder(normAbs, alias)) return join(normRoot, relative(alias, normAbs));
   }
+  throw new Error('path traversal blocked');
 }
 
 // Blob name = diskPath relative to storeRoot, posix-style (blob keys use '/').
 function toBlobName(absPath: string): string {
-  assertInsideRoot(absPath);
-  return relative(storeRoot(), normalize(absPath)).split(sep).join('/');
+  return relative(storeRoot(), insideRoot(absPath)).split(sep).join('/');
 }
 
 /** The connected store a path lives in, or null for the primary store. */
@@ -93,7 +111,7 @@ export function diskPathIn(absPath: string, store: string): string {
 
 export async function saveBuffer(absPath: string, buf: Buffer): Promise<void> {
   if (!isAbsolute(absPath)) throw new Error('absolute path required');
-  assertInsideRoot(absPath);
+  absPath = insideRoot(absPath);
   const c = await connected(absPath);
   if (c) return c.store.save(c.key, buf);
   if (isAzureStorageEnabled()) {
@@ -106,7 +124,7 @@ export async function saveBuffer(absPath: string, buf: Buffer): Promise<void> {
 
 export async function readBuffer(absPath: string): Promise<Buffer> {
   if (!isAbsolute(absPath)) throw new Error('absolute path required');
-  assertInsideRoot(absPath);
+  absPath = insideRoot(absPath);
   const c = await connected(absPath);
   if (c) return c.store.read(c.key);
   if (isAzureStorageEnabled()) return azReadBuffer(toBlobName(absPath));
@@ -115,7 +133,7 @@ export async function readBuffer(absPath: string): Promise<Buffer> {
 
 export async function appendBuffer(absPath: string, buf: Buffer): Promise<number> {
   if (!isAbsolute(absPath)) throw new Error('absolute path required');
-  assertInsideRoot(absPath);
+  absPath = insideRoot(absPath);
   const c = await connected(absPath);
   if (c) return c.store.append(c.key, buf);
   if (isAzureStorageEnabled()) return azAppendBuffer(toBlobName(absPath), buf);
@@ -127,7 +145,7 @@ export async function appendBuffer(absPath: string, buf: Buffer): Promise<number
 
 export async function deleteFile(absPath: string): Promise<void> {
   if (!isAbsolute(absPath)) throw new Error('absolute path required');
-  assertInsideRoot(absPath);
+  absPath = insideRoot(absPath);
   const c = await connected(absPath);
   if (c) return c.store.remove(c.key);
   if (isAzureStorageEnabled()) {
@@ -144,7 +162,7 @@ export async function deleteFile(absPath: string): Promise<void> {
 
 export async function fileSize(absPath: string): Promise<number> {
   if (!isAbsolute(absPath)) throw new Error('absolute path required');
-  assertInsideRoot(absPath);
+  absPath = insideRoot(absPath);
   const c = await connected(absPath);
   if (c) return c.store.size(c.key);
   if (isAzureStorageEnabled()) return azSize(toBlobName(absPath));
@@ -156,7 +174,7 @@ export async function fileSize(absPath: string): Promise<number> {
 
 export async function saveStream(absPath: string, readable: Readable): Promise<number> {
   if (!isAbsolute(absPath)) throw new Error('absolute path required');
-  assertInsideRoot(absPath);
+  absPath = insideRoot(absPath);
   const c = await connected(absPath);
   if (c) return c.store.saveStream(c.key, readable);
   if (isAzureStorageEnabled()) return azSaveStream(toBlobName(absPath), readable);
@@ -168,7 +186,7 @@ export async function saveStream(absPath: string, readable: Readable): Promise<n
 
 export async function readStream(absPath: string): Promise<Readable> {
   if (!isAbsolute(absPath)) throw new Error('absolute path required');
-  assertInsideRoot(absPath);
+  absPath = insideRoot(absPath);
   const c = await connected(absPath);
   if (c) return c.store.readStream(c.key);
   if (isAzureStorageEnabled()) return azReadStream(toBlobName(absPath));
@@ -180,8 +198,8 @@ export async function readStream(absPath: string): Promise<Readable> {
 
 export async function copyFile(srcAbs: string, dstAbs: string): Promise<void> {
   if (!isAbsolute(srcAbs) || !isAbsolute(dstAbs)) throw new Error('absolute path required');
-  assertInsideRoot(srcAbs);
-  assertInsideRoot(dstAbs);
+  srcAbs = insideRoot(srcAbs);
+  dstAbs = insideRoot(dstAbs);
   const src = splitRelative(toBlobName(srcAbs)).store;
   const dst = splitRelative(toBlobName(dstAbs)).store;
   if (src !== PRIMARY_STORE || dst !== PRIMARY_STORE) {

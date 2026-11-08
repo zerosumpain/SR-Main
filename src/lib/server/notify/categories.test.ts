@@ -66,6 +66,16 @@ describe('the notification catalogue', () => {
     expect(daydream.minIntervalSeconds).toBeGreaterThanOrEqual(60 * 60);
   });
 
+  it('keeps drive on the phone only, unthrottled, word for word as Core has it', () => {
+    // Core raises it with an sr:// url, which the WhatsApp text would turn
+    // into a dead link; and Core maps an unknown category to `system`, so the
+    // entry must be identical in both catalogues (build map §2.5).
+    expect(categoryOf('drive')).toEqual({
+      id: 'drive', label: 'Drive', description: 'Attachments saved from important mail, and what jkai found in them.',
+      whatsapp: false, native: true, minIntervalSeconds: 0,
+    });
+  });
+
   it('answers for a category it has never heard of rather than throwing', () => {
     // A caller raising an alert is already in the middle of something going
     // wrong. A typo in a category name must not become a second failure.

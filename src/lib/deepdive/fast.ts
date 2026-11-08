@@ -19,7 +19,7 @@ import { eq } from 'drizzle-orm';
 import { jsonCompletion, streamCompletion, groundedCompletion } from './ai';
 import { coerceGrounding, groundingOption, groundedRoute, isGrounded } from './grounding';
 import { recordCitations } from './grounding.server';
-import { search } from './tavily';
+import { search } from './web-search';
 import { classifyDomain } from './credibility';
 import { emit, emitLog, emitStats, throwIfStopped, beat } from './worker';
 import { emitArtefact } from './desk-events';

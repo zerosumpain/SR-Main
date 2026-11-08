@@ -13,6 +13,8 @@ export function withPrivateFootprint(
   publicFootprint: Footprint,
   sourcePath = process.env.SITE_FOOTPRINT_PATH || join(process.cwd(), 'data/site-footprint.json'),
   mainRevision = getDeployVersion().sha,
+  /** Repositories the owner archived since the snapshot was taken. */
+  archived: ReadonlySet<string> = new Set(),
 ): Footprint {
   const snapshot: unknown = JSON.parse(readFileSync(sourcePath, 'utf8'));
   if (!snapshot || typeof snapshot !== 'object' || !('repositories' in snapshot) ||
@@ -41,6 +43,9 @@ export function withPrivateFootprint(
     }
     if (ids.has(value.id)) throw new Error(`Duplicate private site footprint repository: ${value.id}`);
     ids.add(value.id);
+    // Archived on GitHub from this page: gone from the list and the totals now,
+    // before the nightly snapshot (which skips archived repositories) catches up.
+    if (archived.has(value.id)) continue;
     repositories.push(value as Repository);
   }
 

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { newDiskPath, readBuffer, saveBuffer, deleteFile } from '$lib/file-store/storage';
+import { allocateDiskPath, readBuffer, saveBuffer, deleteFile } from '$lib/file-store/storage';
 import { getSetting } from '$lib/server/models/settings';
 import { encodeHero, requireHeroEncoder } from './hero-encode';
 import { isHeroSource } from './hero-source-policy';
@@ -91,7 +91,7 @@ async function prepare(job: HeroPreparationJob, source: typeof workflowFiles.$in
       paths: { desktop: '', mobile: '', poster: '' },
     };
     for (const kind of ['desktop', 'mobile', 'poster'] as const) {
-      const path = newDiskPath(`hero-${job.id}-${kind}.${kind === 'poster' ? 'webp' : 'mp4'}`);
+      const path = await allocateDiskPath(`hero-${job.id}-${kind}.${kind === 'poster' ? 'webp' : 'mp4'}`);
       paths.push(path);
       await saveBuffer(path, encoded.outputs[kind]);
       record.paths[kind] = path;

@@ -31,6 +31,9 @@
     impact?: string;
     via?: string;
     vias?: { via: string; count: number }[];
+    /** Owner only: which repository shipped it, `owner/name` or 'all'. */
+    repo?: string;
+    repos?: { repo: string; count: number }[];
     owner?: boolean;
     /** `357 capabilities` — what the current filter actually matched. */
     result: string;
@@ -47,11 +50,13 @@
     impact = 'all',
     via = 'all',
     vias = [],
+    repo = 'all',
+    repos = [],
     owner = false,
     result,
   }: Props = $props();
 
-  const dirty = $derived(kind !== 'all' || q !== '' || impact !== 'all' || via !== 'all' || from !== '' || to !== '');
+  const dirty = $derived(kind !== 'all' || q !== '' || impact !== 'all' || via !== 'all' || repo !== 'all' || from !== '' || to !== '');
   const monthPeak = $derived(Math.max(1, ...timeBuckets.map((bucket) => bucket.deploys)));
 
   function daysBack(days: number): string {
@@ -73,10 +78,16 @@
     if (kind !== 'all') params.set('kind', kind);
     if (owner && impact !== 'all') params.set('impact', impact);
     if (owner && via !== 'all') params.set('via', via);
+    if (owner && repo !== 'all') params.set('repo', repo);
     if (start) params.set('from', start);
     if (end) params.set('to', end);
     const query = params.toString();
     return query ? `/releases?${query}` : '/releases';
+  }
+
+  /** `zerosumpain/SR-Health` → `SR-Health`: one owner, so the prefix is noise. */
+  function repoName(slug: string): string {
+    return slug.split('/').pop() ?? slug;
   }
 
   function overlapsMonth(month: string): boolean {
@@ -120,6 +131,16 @@
   </label>
 
   {#if owner}
+    <label class="cf-field">
+      <span class="cf-label">Repository</span>
+      <select id="rel-repo" name="repo" value={repo}>
+        <option value="all">All repositories</option>
+        {#each repos as r (r.repo)}
+          <option value={r.repo}>{repoName(r.repo)} ({r.count})</option>
+        {/each}
+      </select>
+    </label>
+
     <label class="cf-field">
       <span class="cf-label">Impact</span>
       <select id="rel-impact" name="impact" value={impact}>

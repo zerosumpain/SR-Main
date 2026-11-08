@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { OWNER_ONLY_CARDS } from './owner-cards.server';
 import { PROJECT_CARDS } from './cards';
 import { SHARE_PASSWORD_KEYS, sharePasswordAllowed } from '$lib/projects/share-password';
+import { SHARE_PACKS, SHARE_PACK_ID } from '$lib/projects/share-pack';
 import { STATIC_PROJECT_KEYS } from '$lib/projects/registry';
 
 // The inverse of registry-cards.test.ts. That one forces every PUBLIC card's
@@ -69,5 +70,15 @@ describe('share links that ask for a password', () => {
     expect(sharePasswordAllowed('spine')).toBe(true);
     expect(sharePasswordAllowed('policy-engine')).toBe(false);
     expect(sharePasswordAllowed('no-such-project')).toBe(false);
+  });
+});
+
+describe('share links that open one audience pack', () => {
+  it('a card offers exactly the packs the share API accepts, the DfE pack first on the Spine', () => {
+    const offered = Object.fromEntries(PROJECT_CARDS.filter((c) => c.sharePacks?.length).map((c) => [c.key, c.sharePacks]));
+    expect(offered).toEqual(SHARE_PACKS);
+    expect(SHARE_PACKS.spine.map((p) => p.id)).toEqual(['dfe', 'school']);
+    // A pack id the gateway would refuse would make every claim for that link malformed.
+    for (const packs of Object.values(SHARE_PACKS)) for (const p of packs) expect(p.id).toMatch(SHARE_PACK_ID);
   });
 });

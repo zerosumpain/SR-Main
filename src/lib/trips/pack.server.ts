@@ -147,7 +147,7 @@ export const LIVE_PACK_DEPS: PackDeps = {
     }
   },
   async search(query) {
-    const { search } = await import('$lib/deepdive/tavily');
+    const { search } = await import('$lib/deepdive/web-search');
     const found = await search(query, { purpose: 'trips.pack', maxResults: 6, searchDepth: 'basic' });
     return (found.results ?? []).map((r) => ({ title: r.title, url: r.url, content: (r.content ?? '').slice(0, 900) }));
   },

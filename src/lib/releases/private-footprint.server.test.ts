@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { withPrivateFootprint } from './private-footprint.server';
@@ -45,5 +45,34 @@ describe('private site footprint', () => {
     expect(owner.categories.tests.lines).toBe(63);
     expect(main.repositories).toHaveLength(1);
     expect(main.categories.code.lines).toBe(10);
+  });
+
+  it('drops archived repositories from the list and the totals', () => {
+    const main = {
+      lines: 10, files: 1,
+      categories: { code: { lines: 10, files: 1 }, documentation: { lines: 0, files: 0 }, tests: { lines: 0, files: 0 } },
+      repositories: [{
+        id: 'main', name: 'SR-Main', url: 'https://github.com/zerosumpain/SR-Main',
+        role: 'Site', revision: 'abc', measuredAt: '2026-11-08', source: 'this build',
+        code: { lines: 10, files: 1 }, documentation: { lines: 0, files: 0 }, tests: { lines: 0, files: 0 },
+      }],
+      measuredAt: '2026-11-08', snapshotAt: null,
+    } satisfies typeof SOURCE_FOOTPRINT;
+    mkdirSync(temp, { recursive: true });
+    const path = join(temp, 'footprint.json');
+    writeFileSync(path, JSON.stringify({
+      measuredAt: '2026-11-08',
+      repositories: Array.from({ length: 8 }, (_, index) => ({
+        id: `repo-${index}`, name: `Repo ${index}`, url: 'https://github.com/zerosumpain/x',
+        role: 'Service', revision: 'def', updatedAt: '2026-04-01T00:00:00Z', measuredAt: '2026-11-08',
+        source: 'revision snapshot', code: { lines: 100, files: 1 },
+        documentation: { lines: 0, files: 0 }, tests: { lines: 0, files: 0 },
+      })),
+    }));
+    const owner = withPrivateFootprint(main, path, 'abc', new Set(['repo-3', 'repo-5']));
+    expect(owner.repositories.map((r) => r.id)).not.toContain('repo-3');
+    expect(owner.repositories).toHaveLength(7);
+    expect(owner.categories.code.lines).toBe(610);
+    expect(owner.repositories[1].updatedAt).toBe('2026-04-01T00:00:00Z');
   });
 });

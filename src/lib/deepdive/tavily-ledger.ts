@@ -20,6 +20,12 @@
  * credit row cannot leak into a cash total. Credits live in `input`, never in
  * `cost_usd`: they are an allowance, not money.
  *
+ * Brave Search requests, which the search balancer (`./web-search`) sends
+ * some of the site's searches to, are written the same way under
+ * `action_type = 'brave_call'`: one ledger for both providers, read back
+ * together on the same page. A Brave request costs one request of the plan's
+ * allowance, so its `credits` is 1.
+ *
  * This file is copied into SR-Workflows. The copies differ only in `APP`.
  */
 import { hostname } from 'node:os';
@@ -31,6 +37,11 @@ import { executionContext } from '$lib/context/execution';
 import { currentResearchSessionId, type TavilyDepth } from '$lib/context/research-meter';
 
 export const TAVILY_ACTION = 'tavily_call';
+export const BRAVE_ACTION = 'brave_call';
+
+export type SearchProvider = 'tavily' | 'brave';
+
+const ACTION: Record<SearchProvider, string> = { tavily: TAVILY_ACTION, brave: BRAVE_ACTION };
 
 /** Which application made the call. The only line that differs between the copies. */
 const APP = 'main';
@@ -40,7 +51,17 @@ const MAX_URLS_KEPT = 10;
 const MAX_URL_CHARS = 300;
 const MAX_ERROR_CHARS = 400;
 
+/** A provider's own reading of its allowance, from the response that carried it. */
+export interface SearchQuota {
+  limit: number | null;
+  remaining: number | null;
+  /** Seconds until the allowance resets, as the provider stated it. */
+  resetSeconds: number | null;
+}
+
 export interface TavilyCall {
+  /** Which search API answered. Absent means Tavily, which every caller before the balancer was. */
+  provider?: SearchProvider;
   kind: 'search' | 'extract';
   /**
    * The code path that made the request, in `area.step` form
@@ -60,8 +81,10 @@ export interface TavilyCall {
   error?: string | null;
   durationMs: number;
   resultCount?: number | null;
-  /** 1 for the first try, 2 for `withRetry`'s second. Each attempt is its own request. */
+  /** 1 for the first try, 2 for a retry or a failover. Each attempt is its own request. */
   attempt: number;
+  /** Brave only: the monthly allowance its rate-limit headers reported on this response. */
+  quota?: SearchQuota | null;
 }
 
 /** Why the call happened, read from the contexts already carried for the LLM ledger. */
@@ -89,9 +112,15 @@ export function readAmbient(): TavilyAmbient {
   };
 }
 
-/** Tavily keys look like `tvly-…`; an error body or a pasted query must never carry one into the ledger. */
+/**
+ * Tavily keys look like `tvly-…` and Brave's like `BSA…`; an error body or a
+ * pasted query must never carry one into the ledger.
+ */
 function scrub(text: string, max: number): string {
-  return text.replace(/tvly-[A-Za-z0-9_-]+/g, 'tvly-[redacted]').slice(0, max);
+  return text
+    .replace(/tvly-[A-Za-z0-9_-]+/g, 'tvly-[redacted]')
+    .replace(/\bBSA[A-Za-z0-9_-]{16,}/g, 'BSA[redacted]')
+    .slice(0, max);
 }
 
 let host: string | null = null;
@@ -106,8 +135,9 @@ function hostName(): string {
   return host;
 }
 
-/** The `agent_actions` columns one Tavily request writes. */
+/** The `agent_actions` columns one search-provider request writes. */
 export function tavilyCallRow(call: TavilyCall, ambient: TavilyAmbient = readAmbient()) {
+  const provider: SearchProvider = call.provider ?? 'tavily';
   const input: Record<string, unknown> = {
     app: APP,
     host: hostName(),
@@ -124,13 +154,14 @@ export function tavilyCallRow(call: TavilyCall, ambient: TavilyAmbient = readAmb
   if (call.options && Object.keys(call.options).length) input.options = call.options;
   if (typeof call.httpStatus === 'number') input.httpStatus = call.httpStatus;
   if (typeof call.resultCount === 'number') input.resultCount = call.resultCount;
+  if (call.quota) input.quota = call.quota;
   for (const [key, value] of Object.entries(ambient)) {
     if (value) input[key] = value;
   }
 
   return {
-    actionType: TAVILY_ACTION,
-    provider: 'tavily',
+    actionType: ACTION[provider],
+    provider,
     toolName: call.kind,
     // The one id a reader most wants to join on: the research run, else the
     // workflow run, else the chat job. The rest stay in `input`.

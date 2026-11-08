@@ -4,7 +4,7 @@ import { withNativeAccess } from '$lib/server/native-handler';
 import { MAX_UPLOAD_BYTES, driveCaller, parseSpace, uploadFile } from '$lib/drive/native-drive';
 
 /**
- * POST /api/native/drive/files?space=&folder=&filename= — one file, as the raw
+ * POST /api/native/drive/files?space=&folder=&filename=&type=&sha256=&takenAt= — one file, as the raw
  * request body (not multipart: SvelteKit refuses a form POST without a
  * matching Origin, which a phone never sends; see /api/native/chat/attachments).
  * Into the caller's own space or the shared folder, nowhere else.
@@ -20,7 +20,7 @@ export const POST: RequestHandler = withNativeAccess('drive', async (event, iden
   const caller = await driveCaller(event, identity, role);
   const body = await request.arrayBuffer().catch(() => null);
   if (!body) throw error(400, 'The upload was empty.');
-  const file = await uploadFile(caller, {
+  const result = await uploadFile(caller, {
     space,
     folder: url.searchParams.get('folder'),
     filename: url.searchParams.get('filename'),
@@ -29,6 +29,10 @@ export const POST: RequestHandler = withNativeAccess('drive', async (event, iden
     // without a matching Origin as a cross-site form.
     mimeType: (url.searchParams.get('type') || request.headers.get('content-type') || 'application/octet-stream').slice(0, 120),
     bytes: Buffer.from(body),
+    sha256: url.searchParams.get('sha256'),
+    takenAt: url.searchParams.get('takenAt'),
   });
-  return json({ file }, { status: 201 });
+  // 201 for a new file; 200 with duplicate:true when these bytes were already
+  // in the space — both mean "safely stored" to the phone's photo import.
+  return json(result, { status: result.duplicate ? 200 : 201 });
 });

@@ -11,10 +11,18 @@ const insert = vi.fn(() => ({
 }));
 const update = vi.fn(() => ({ set: () => ({ where: () => Promise.resolve() }) }));
 vi.mock('$lib/db', () => ({ db: { insert, update } }));
-vi.mock('$lib/llm/keys', () => ({ getTavilyKey: () => 'tvly-test-key-123' }));
+// Tavily alone is configured, so the balancer sends every search to it and
+// these tests read the Tavily path end to end. Its usage refresh is stubbed
+// out: it would take a turn of each test's fetch mock.
+vi.mock('$lib/llm/keys', () => ({
+  getTavilyKey: () => 'tvly-test-key-123',
+  loadKeys: () => ({ tavilyApiKey: 'tvly-test-key-123' }),
+}));
+vi.mock('./tavily-usage', () => ({ tavilyAccountUsage: async () => null, cachedTavilyAccountUsage: () => null }));
 
 const { tavilyCallRow, TAVILY_ACTION } = await import('./tavily-ledger');
-const { search, extract } = await import('./tavily');
+const { extract } = await import('./tavily');
+const { search } = await import('./web-search');
 const { runWithResearchMeter } = await import('$lib/context/research-meter');
 const { executionContext } = await import('$lib/context/execution');
 const { withActivity } = await import('$lib/context/activity');

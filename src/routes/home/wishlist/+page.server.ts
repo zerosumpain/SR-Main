@@ -17,6 +17,8 @@ async function owner(event: Parameters<PageServerLoad>[0]): Promise<void> {
   if ((await viewerOf(event)).kind !== 'owner') error(403, 'The wish list is the owner\'s.');
 }
 
+const MAX_SHOWN = 40;
+
 export const load: PageServerLoad = async (event) => {
   await owner(event);
   event.setHeaders({ 'cache-control': 'private, no-store' });
@@ -25,7 +27,8 @@ export const load: PageServerLoad = async (event) => {
   const withOffers = await Promise.all(
     items.map(async (item) => {
       const offers = rankOffers(await listOffers(item.id));
-      const shown = offers.filter((o) => o.verdict !== 'no').slice(0, 12);
+      // Every option worth comparing: in budget first, then the over-budget ones being tracked.
+      const shown = offers.filter((o) => o.verdict !== 'no').slice(0, MAX_SHOWN);
       return {
         item,
         offers: shown,

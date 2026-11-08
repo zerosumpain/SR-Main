@@ -123,9 +123,10 @@ function feedsOf(raw: Record<string, unknown>, dropped: string[]): FeedRef[] {
     else dropped.push(`subreddit "${c}"`);
   }
   if (raw.holidayPirates === true) feeds.push({ source: 'holidaypirates', value: 'deals' });
-  if (typeof raw.searchQuery === 'string' && raw.searchQuery.trim()) {
-    feeds.push({ source: 'tavily', value: raw.searchQuery.trim().slice(0, 120) });
-  }
+  // Up to five different searches — the day's allowance, one each. Older
+  // replies (and some models) give one `searchQuery`.
+  const queries = [...words(raw.searchQueries, 5, 120), ...(typeof raw.searchQuery === 'string' ? [raw.searchQuery.trim().slice(0, 120)] : [])];
+  for (const q of [...new Set(queries.filter(Boolean))].slice(0, 5)) feeds.push({ source: 'search', value: q });
   return feeds;
 }
 

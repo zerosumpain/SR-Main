@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   ignored: [] as string[],
   placeTimeCalls: [] as unknown[],
   failRename: false,
+  merges: [] as Array<[string, string[], string]>,
 }));
 
 vi.mock('$lib/home/presence/members', () => ({
@@ -64,6 +65,12 @@ vi.mock('$lib/home/presence/places', () => ({
   ignorePlace: async (id: string) => {
     h.ignored.push(id);
   },
+  mergePlaces: async (target: string, sources: string[], geometry: string) => {
+    h.log.push('merge');
+    if (sources.includes('home')) throw new Error('a home is never merged away');
+    h.merges.push([target, sources, geometry]);
+    return { merged: sources.length, lat: 0, lon: 0, radiusM: 300 };
+  },
   createPlace: async (input: Record<string, unknown>) => {
     h.creates.push(input);
     return { id: 'new-place' };
@@ -99,6 +106,7 @@ beforeEach(() => {
   h.ignored = [];
   h.placeTimeCalls = [];
   h.failRename = false;
+  h.merges = [];
 });
 
 describe('/home/people/places — owner only', () => {
@@ -371,6 +379,40 @@ describe('quick place naming', () => {
   it('refuses blank names and unknown kinds', async () => {
     expect(await actions.name(eventFor('owner@example.test', { placeId: 'school', label: '', kind: 'school' }))).toMatchObject({ status: 400 });
     expect(await actions.name(eventFor('owner@example.test', { placeId: 'school', label: 'X', kind: 'unknown' }))).toMatchObject({ status: 400 });
+    expect(h.named).toEqual([]);
+  });
+});
+
+describe('/home/people/places — merge', () => {
+  /** The panel posts one `sourceIds` per ticked box. */
+  function mergeEvent(email: string | null, sources: string[], fields: Record<string, string>) {
+    const event = eventFor(email, fields);
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    for (const id of sources) form.append('sourceIds', id);
+    return { ...event, request: new Request('http://x/home/people/places?/merge', { method: 'POST', body: form }) } as typeof event;
+  }
+  const fields = { targetId: 'school', geometry: 'enclose', label: 'Sample College', kind: 'school' };
+
+  it('merges every ticked place, then names the result and writes memory', async () => {
+    const result = await actions.merge(mergeEvent('owner@example.test', ['gate', 'field'], fields));
+    expect(h.merges).toEqual([['school', ['gate', 'field'], 'enclose']]);
+    expect(h.log).toEqual(['merge', 'name', 'memory']);
+    expect(h.renames).toEqual([['school', 'Sample College', 'school']]);
+    expect(result).toMatchObject({ saved: 'school', merged: 2 });
+  });
+  it('keeps the circle when asked, and reads a comma list too', async () => {
+    await actions.merge(mergeEvent('owner@example.test', ['gate,field'], { ...fields, geometry: 'keep' }));
+    expect(h.merges).toEqual([['school', ['gate', 'field'], 'keep']]);
+  });
+  it('is owner only, needs something to merge, and never names a merge "home"', async () => {
+    expect(await actions.merge(mergeEvent('sam@example.test', ['gate'], fields))).toMatchObject({ status: 403 });
+    expect(await actions.merge(mergeEvent('owner@example.test', [], fields))).toMatchObject({ status: 400 });
+    expect(await actions.merge(mergeEvent('owner@example.test', ['gate'], { ...fields, kind: 'home' }))).toMatchObject({ status: 400 });
+    expect(h.merges).toEqual([]);
+  });
+  it('says why a merge was refused and names nothing', async () => {
+    expect(await actions.merge(mergeEvent('owner@example.test', ['home'], fields))).toMatchObject({ status: 400, data: { error: 'a home is never merged away' } });
     expect(h.named).toEqual([]);
   });
 });

@@ -206,7 +206,7 @@ async function researchWish(trip: TripRecord, wish: Wish, near: LatLng | null, d
   // (b) one search, (c) one read
   let facts: Facts;
   try {
-    const { search } = await import('$lib/deepdive/tavily');
+    const { search } = await import('$lib/deepdive/web-search');
     const found = await search(searchQuery({ title: wish.title, place }, trip, depth), {
       purpose: depth === 'brief' ? 'trips.brief' : 'trips.deeper',
       maxResults: depth === 'brief' ? 5 : 8,

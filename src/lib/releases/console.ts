@@ -21,6 +21,8 @@ import type { CommitFact, FileFact, ReleaseItemKind, ReleaseStats } from './type
 export const CONSOLE_PAGE_SIZE = 25;
 
 export interface ConsoleFilters {
+  /** `owner/name`, or 'all'. Owner console only; the public record is SR-Main's. */
+  repo: string;
   kind: string;
   impact: string;
   via: string;
@@ -41,7 +43,9 @@ export function parseConsoleFilters(url: URL): ConsoleFilters {
   let from = dateParam(url.searchParams.get('from'));
   let to = dateParam(url.searchParams.get('to'));
   if (from && to && from > to) [from, to] = [to, from];
+  const repo = url.searchParams.get('repo') || 'all';
   return {
+    repo: repo === 'all' || /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) ? repo : 'all',
     kind: url.searchParams.get('kind') || 'all',
     impact: url.searchParams.get('impact') || 'all',
     via: url.searchParams.get('via') || 'all',
@@ -88,6 +92,8 @@ export interface ConsoleItem {
 
 export interface ConsoleRelease {
   id: number;
+  /** `owner/name` of the repository that shipped it. */
+  repo: string;
   version: string;
   sha: string;
   shortSha: string;
@@ -124,6 +130,8 @@ export interface ConsolePayload {
   filters: ConsoleFilters;
   totals: ConsoleTotals;
   vias: { via: string; count: number }[];
+  /** Every repository with recorded releases, busiest first: the picker's options. */
+  repos: { repo: string; count: number }[];
   kindDist: { kind: string; count: number }[];
   cadence: CadenceWeek[];
   timeBuckets: ReleaseMonth[];
@@ -208,9 +216,10 @@ export function monthlyReleaseBuckets(days: { date: string; count: number }[]): 
 }
 
 export async function getReleaseConsole(filters: ConsoleFilters): Promise<ConsolePayload> {
-  const { kind, impact, via, q, from, to, page } = filters;
+  const { repo, kind, impact, via, q, from, to, page } = filters;
 
   const clauses = [];
+  if (repo !== 'all') clauses.push(eq(releases.repo, repo));
   if (via !== 'all') clauses.push(eq(releases.via, via));
   if (from) clauses.push(gte(releases.deployedAt, new Date(`${from}T00:00:00Z`)));
   if (to) {
@@ -242,7 +251,7 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
   const where = clauses.length ? and(...clauses) : undefined;
 
   // ── aggregates over the whole (filtered) set ──
-  const [agg, itemDayRows, viaRows, monthRows] = await Promise.all([
+  const [agg, itemDayRows, viaRows, monthRows, repoRows] = await Promise.all([
     db
       .select({
         id: releases.id,
@@ -280,6 +289,14 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
       })
       .from(releases)
       .groupBy(sql`1`),
+    // The picker's options come from the whole table, never the filtered set,
+    // for the reason the public kind picker gives: options derived from the
+    // current filter shrink to the choice already made.
+    db
+      .select({ repo: releases.repo, n: sql<number>`count(*)::int` })
+      .from(releases)
+      .groupBy(releases.repo)
+      .orderBy(sql`count(*) desc`),
   ]);
 
   let commits = 0;
@@ -362,6 +379,7 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
     );
     return {
       id: r.id,
+      repo: r.repo,
       version: r.version,
       sha: r.sha,
       shortSha: r.shortSha,
@@ -419,6 +437,7 @@ export async function getReleaseConsole(filters: ConsoleFilters): Promise<Consol
       maxDate,
     },
     vias: viaRows.map((v) => ({ via: v.via, count: v.n })),
+    repos: repoRows.map((r) => ({ repo: r.repo, count: r.n })),
     kindDist,
     cadence,
     timeBuckets: monthlyReleaseBuckets(monthRows.map((row) => ({ date: `${row.month}-01`, count: row.n }))),

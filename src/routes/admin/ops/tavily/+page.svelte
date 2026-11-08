@@ -6,6 +6,9 @@
 
   const audit = $derived(data.audit);
   const account = $derived(data.account);
+  const balancer = $derived(data.balancer);
+  const providerRow = (p: 'tavily' | 'brave') => audit?.byProvider.find((r) => r.provider === p) ?? null;
+  const PROVIDER_NAME = { tavily: 'Tavily', brave: 'Brave' } as const;
 
   /**
    * Plain-English names for the purposes the code writes. A purpose not listed
@@ -22,8 +25,11 @@
     'research.source-summary': 'Opening a source summary',
     'research.source-index': 'Indexing source text for search',
     'research.keep-in-drive': 'Keep in Drive',
-    'tool.tavily_search': 'tavily_search tool (chat or a workflow agent)',
-    'workflow.tavily-search': 'Workflow Tavily Search node',
+    'tool.tavily_search': 'tavily_search tool (chat or a workflow agent; always Tavily)',
+    'wishlist': 'Wishlist price sweep',
+    'trips.guide': 'Trips: destination guide',
+    'trips.pack': 'Trips: packing list',
+    'workflow.tavily-search': 'Workflow web search node',
     'admin.key-test': 'Key test on /admin/ai/keys',
   };
   const describe = (purpose: string) => PURPOSES[purpose] ?? purpose;
@@ -35,13 +41,24 @@
       : '—';
   const share = (part: number, whole: number) => (whole > 0 ? `${Math.round((part / whole) * 100)}%` : '—');
 
-  function href(params: { days?: number; purpose?: string | null }) {
+  function href(params: { days?: number; purpose?: string | null; provider?: string | null }) {
     const q = new URLSearchParams();
     q.set('days', String(params.days ?? data.days));
     const p = params.purpose === undefined ? data.purpose : params.purpose;
     if (p) q.set('purpose', p);
+    const pr = params.provider === undefined ? data.provider : params.provider;
+    if (pr) q.set('provider', pr);
     return `?${q.toString()}`;
   }
+
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const resetIn = (seconds: number | null, at: string | null) => {
+    if (seconds === null || !at) return null;
+    const ms = new Date(at).getTime() + seconds * 1000 - Date.now();
+    if (ms <= 0) return 'reset since';
+    const d = Math.floor(ms / 86_400_000);
+    return d >= 1 ? `resets in ${d}d` : `resets in ${Math.ceil(ms / 3_600_000)}h`;
+  };
 
   const purposeMax = $derived(Math.max(1, ...(audit?.byPurpose ?? []).map((p) => p.credits)));
   const dayPeak = $derived(Math.max(1, ...(audit?.perDay ?? []).map((d) => d.credits)));
@@ -61,19 +78,23 @@
   });
 </script>
 
-<svelte:head><title>Tavily usage — Admin</title></svelte:head>
+<svelte:head><title>Web search usage — Admin</title></svelte:head>
 
 <PageWrap width="wide">
   <PageHeader
     kicker="Ops"
-    title="Tavily usage"
-    sub="Every request the site makes to Tavily: which process made it, what it searched for, and when."
+    title="Web search usage"
+    sub="Every search the site makes goes through the search balancer to Tavily or Brave. Which provider answered, which process asked, what it searched for, and when."
   />
 
   <div class="filter-row">
     <span class="tele-days">
       {#each [1, 7, 30, 90] as d (d)}
         <a class="day-pill" class:active={data.days === d} href={href({ days: d })} data-sveltekit-noscroll>{d}d</a>
+      {/each}
+      <span class="pill-gap"></span>
+      {#each [null, 'tavily', 'brave'] as const as p (p ?? 'all')}
+        <a class="day-pill" class:active={data.provider === p} href={href({ provider: p })} data-sveltekit-noscroll>{p ? PROVIDER_NAME[p] : 'Both'}</a>
       {/each}
     </span>
     <span class="host-note">
@@ -83,10 +104,70 @@
     </span>
   </div>
 
+  <!-- The balancer: both providers side by side -->
+  <section class="nm-sec">
+    <div class="nm-sec-hd">
+      <span class="sr-label-tight">Search balancer</span>
+      <span class="nm-sec-meta">by how much of each month is left</span>
+    </div>
+    <div class="nm-table-scroll">
+      <table class="nm-table fit">
+        <thead>
+          <tr><th>Provider</th><th class="num">Left this month</th><th class="num">Share now</th><th class="num">This month</th><th class="num">Last {data.days}d</th><th class="num minor">Failed</th><th class="num minor">Retries</th><th class="when minor">Last</th></tr>
+        </thead>
+        <tbody>
+          {#each ['tavily', 'brave'] as const as p (p)}
+            {@const row = providerRow(p)}
+            <tr>
+              <td>
+                <span class="proc-sm">{PROVIDER_NAME[p]}</span>
+                <span class="proc-id mono">
+                  {#if !balancer.configured[p]}
+                    no key · <a href="/admin/ai/keys">add one</a>
+                  {:else if balancer.restingUntil[p]}
+                    <span class="warn">resting until {when(balancer.restingUntil[p])} · {balancer.restReason[p]}</span>
+                  {:else if p === 'brave' && audit?.braveQuota}
+                    {resetIn(audit.braveQuota.resetSeconds, audit.braveQuota.at) ?? 'allowance reported'} · {balancer.braveBurst.limit}/{balancer.braveBurst.windowSeconds}s burst
+                  {:else if p === 'tavily' && account?.plan}
+                    {account.plan} plan
+                  {:else}
+                    configured
+                  {/if}
+                </span>
+              </td>
+              <td class="num mono">
+                {#if !balancer.configured[p]}—
+                {:else if p === 'tavily'}
+                  {account?.limit != null ? `${fmt(Math.max(0, account.limit - account.used))} / ${fmt(account.limit)}` : account ? 'no cap' : '—'}
+                {:else if audit?.braveQuota?.limit != null}
+                  {fmt(audit.braveQuota.remaining ?? 0)} / {fmt(audit.braveQuota.limit)}
+                {:else}
+                  <span title="Brave reports its allowance on each response; none recorded yet">not reported yet</span>
+                {/if}
+              </td>
+              <td class="num mono">{balancer.configured[p] ? pct(balancer.share[p]) : '—'}</td>
+              <td class="num mono">{fmt(row?.monthCalls ?? 0)}</td>
+              <td class="num mono">{fmt(row?.calls ?? 0)}</td>
+              <td class="num mono minor" class:warn={(row?.failed ?? 0) > 0}>{row?.failed || ''}</td>
+              <td class="num mono minor">{row?.retries || ''}</td>
+              <td class="when mono minor">{when(row?.lastAt ?? null)}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+    <p class="empty-note small">
+      "Share now" is the proportion of ordinary searches each provider is drawing at the moment. Searches that need a
+      written answer or advanced depth, and queries too long for Brave, go to Tavily first; a search over Brave's burst
+      limit goes to Tavily; a provider that fails hands the search to the other. Retries count those second attempts.
+      Extraction is Tavily-only.
+    </p>
+  </section>
+
   <!-- Account against ledger -->
   <section class="nm-sec">
     <div class="nm-sec-hd">
-      <span class="sr-label-tight">Monthly allowance</span>
+      <span class="sr-label-tight">Tavily monthly allowance</span>
       <span class="nm-sec-meta">{account?.plan ? `${account.plan} plan` : 'account'}</span>
     </div>
     <div class="stat-grid">
@@ -96,7 +177,7 @@
       </div>
       <div class="stat">
         <span class="stat-v">{audit ? fmt(audit.monthCredits) : '—'}</span>
-        <span class="stat-l">recorded here this month</span>
+        <span class="stat-l">Tavily, recorded here this month</span>
       </div>
       <div class="stat">
         <span class="stat-v" class:warn={gap !== null && gap > 0 && !recordingThisMonth}>{gap === null ? '—' : fmt(gap)}</span>
@@ -119,10 +200,10 @@
   </section>
 
   {#if !audit}
-    <section class="nm-sec"><p class="empty-note">Could not read the Tavily ledger.</p></section>
+    <section class="nm-sec"><p class="empty-note">Could not read the search ledger.</p></section>
   {:else if audit.totals.calls === 0}
     <section class="nm-sec">
-      <p class="empty-note">No Tavily requests recorded in the last {data.days} day{data.days === 1 ? '' : 's'}.</p>
+      <p class="empty-note">No {data.provider ? PROVIDER_NAME[data.provider] : 'search'} requests recorded in the last {data.days} day{data.days === 1 ? '' : 's'}.</p>
     </section>
   {:else}
     <div class="stat-grid">
@@ -141,11 +222,11 @@
             <tr><th>Process</th><th class="bar-col">Credits</th><th class="num">Share</th><th class="num">Calls</th><th class="num minor">Failed</th><th class="when minor">Last</th></tr>
           </thead>
           <tbody>
-            {#each audit.byPurpose as p (p.app + p.purpose)}
+            {#each audit.byPurpose as p (p.app + p.provider + p.purpose)}
               <tr>
                 <td>
                   <a class="proc" href={href({ purpose: p.purpose })} data-sveltekit-noscroll>{describe(p.purpose)}</a>
-                  <span class="proc-id mono">{p.app} · {p.purpose}</span>
+                  <span class="proc-id mono">{p.app} · {PROVIDER_NAME[p.provider]} · {p.purpose}</span>
                 </td>
                 <td class="bar-col">
                   <span class="hbar-track"><span class="hbar-fill" style={`width:${Math.max(2, Math.round((p.credits / purposeMax) * 100))}%`}></span></span>
@@ -211,7 +292,7 @@
     <!-- Per day -->
     <section class="nm-sec">
       <div class="nm-sec-hd"><span class="sr-label-tight">Credits per day</span><span class="nm-sec-meta">UTC days</span></div>
-      <div class="spark" role="img" aria-label="Tavily credits per day">
+      <div class="spark" role="img" aria-label="Search credits per day">
         {#each audit.perDay as d (d.day)}
           <div class="spark-col" title={`${d.day}: ${fmt(d.credits)} credits, ${d.calls} calls — mostly ${describe(d.top ?? 'unlabelled')}`}>
             <div class="spark-bar" style={`height:${Math.max(4, Math.round((d.credits / dayPeak) * 100))}%`}></div>
@@ -247,7 +328,7 @@
                   <td class="when mono">{when(c.at)}</td>
                   <td>
                     <span class="proc-sm">{describe(c.purpose)}</span>
-                    <span class="proc-id mono">{c.app} · {c.kind}{c.depth === 'advanced' ? ' · advanced' : ''}{c.attempt > 1 ? ' · retry' : ''}</span>
+                    <span class="proc-id mono">{c.app} · {PROVIDER_NAME[c.provider]} · {c.kind}{c.depth === 'advanced' ? ' · advanced' : ''}{c.attempt > 1 ? ' · retry' : ''}</span>
                   </td>
                   <td class="query">
                     {#if c.query !== null}
@@ -268,8 +349,9 @@
         </div>
       {/if}
       <p class="empty-note small">
-        Credits use Tavily's published rates (search 1, advanced search 2, extract 1 per 5 URLs) at the time of the
-        request, so they are an estimate. A failed request is not billed and counts 0.
+        Tavily credits use its published rates (search 1, advanced search 2, extract 1 per 5 URLs) at the time of the
+        request, so they are an estimate. A Brave request counts 1, its plan's own unit. A failed request is not billed
+        and counts 0.
       </p>
     </section>
   {/if}
@@ -277,7 +359,9 @@
 
 <style>
   .filter-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; gap: 1rem; flex-wrap: wrap; }
-  .tele-days { display: inline-flex; gap: 0.3rem; }
+  .tele-days { display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }
+  .pill-gap { width: 0.6rem; }
+  .proc-id a { color: var(--accent-ink); }
   .day-pill { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.2rem 0.55rem; border: 1px solid var(--card-border); border-radius: var(--radius-round); color: var(--text-secondary); text-decoration: none; }
   .day-pill.active { color: var(--bg); background: var(--accent); border-color: var(--accent); }
   .host-note { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); }

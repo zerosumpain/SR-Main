@@ -92,3 +92,61 @@ export function weekHealth(days: readonly HealthDay[]): WeekHealth {
     workoutMinutes: Math.round([...workouts.values()].reduce((a, b) => a + b, 0) / 60),
   };
 }
+
+export interface DayFigures {
+  steps: number | null;
+  /** Hours asleep in the night that ENDS on this date (the wake-up day). */
+  sleepHours: number | null;
+  workouts: number;
+  workoutMinutes: number;
+  restingHeartRate: number | null;
+}
+
+/**
+ * Each local date's own figures, the day-by-day form of `weekHealth`: the
+ * same pick-never-sum steps, the same sleep stages and the same wake-up-day
+ * nights as the digest. A span read on two days counts once; a workout
+ * belongs to the day it started. PURE.
+ */
+export function dailyHealth(days: readonly HealthDay[]): Map<string, DayFigures> {
+  const out = new Map<string, DayFigures>();
+  const sleep = new Map<string, [number, number]>();
+  const workouts = new Map<string, { date: string; seconds: number }>();
+  const at = (date: string): DayFigures => {
+    let f = out.get(date);
+    if (!f) out.set(date, (f = { steps: null, sleepHours: null, workouts: 0, workoutMinutes: 0, restingHeartRate: null }));
+    return f;
+  };
+  for (const d of days) {
+    const f = at(d.date);
+    f.steps = daySteps(d.timeline.steps, d.from, d.to);
+    const rhr = d.timeline.restingHeartRate;
+    if (rhr && Number.isFinite(rhr.value) && rhr.value > 0) f.restingHeartRate = Math.round(rhr.value);
+    for (const s of d.timeline.sleep) {
+      if (NOT_ASLEEP.has(s.stage.toLowerCase())) continue;
+      sleep.set(`${s.start}|${s.end}|${s.stage}`, [Date.parse(s.start), Date.parse(s.end)]);
+    }
+    for (const w of d.timeline.workouts) {
+      const start = Date.parse(w.start) / 1000;
+      // A workout belongs to the day it started in.
+      if (Number.isFinite(start) && start >= d.from && start < d.to) workouts.set(`${w.start}|${w.activity}`, { date: d.date, seconds: w.seconds });
+    }
+  }
+  const nights = new Map<string, Array<[number, number]>>();
+  for (const span of sleep.values()) {
+    const night = new Date(span[1] + 6 * 3_600_000).toISOString().slice(0, 10);
+    const list = nights.get(night) ?? [];
+    list.push(span); nights.set(night, list);
+  }
+  for (const [night, spans] of nights) {
+    const hours = unionMs(spans) / 3_600_000;
+    // Only the dates asked for: a night ending outside the window is not ours.
+    if (hours >= 1 && out.has(night)) out.get(night)!.sleepHours = Math.round(hours * 10) / 10;
+  }
+  for (const w of workouts.values()) {
+    const f = at(w.date);
+    f.workouts += 1;
+    f.workoutMinutes += Math.round(w.seconds / 60);
+  }
+  return out;
+}

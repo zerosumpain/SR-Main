@@ -78,3 +78,46 @@ describe('privatePush — the Bat phone', () => {
     expect(JSON.stringify(p)).not.toMatch(/Sam|Private Place|23|51\.5/);
   });
 });
+
+describe('privatePush — the Bat phone message', () => {
+  it('stays time-sensitive with an ordinary sound, without who, where or battery', () => {
+    const message = {
+      title: 'Bat phone — Sam', body: 'I need you.\nPrivate Place · battery 23%\nhttps://maps.apple.com/?ll=51.50000,-0.10000',
+      category: 'family-msg', threadId: 'family-msg', level: 'time-sensitive' as const, sound: 'default', relevance: 1,
+      collapseId: 'msg-m1', ttlSeconds: 86_400, userInfo: { category: 'family-msg', messageId: 'm1', kind: 'bat-phone' },
+    };
+    const p = privatePush(message);
+    expect(p).toMatchObject({ title: 'Bat phone', level: 'time-sensitive', sound: 'default', ttlSeconds: 86_400, category: 'family-msg' });
+    expect(p.userInfo).toEqual({ category: 'family-msg', messageId: 'm1', kind: 'bat-phone' });
+    expect(JSON.stringify(p)).not.toMatch(/Sam|Private Place|23|51\.5/);
+  });
+});
+
+describe('privatePush — game pushes', () => {
+  it('an invite keeps time-sensitive, the lobby expiry and the room, but not who invited', () => {
+    const message = {
+      title: 'Sam invited you to Chess', body: 'Easy, with Sam and Robin. Tap to join.', category: 'game', threadId: 'game',
+      level: 'time-sensitive' as const, relevance: 1, collapseId: 'game-g1', ttlSeconds: 120,
+      userInfo: { roomId: 'g1', game: 'chess', category: 'game' },
+    };
+    const p = privatePush(message);
+    expect(p).toMatchObject({ title: 'Game invite', level: 'time-sensitive', ttlSeconds: 120, collapseId: 'game-g1', category: 'game' });
+    expect(p.userInfo).toEqual({ category: 'game', roomId: 'g1', game: 'chess' });
+    expect(JSON.stringify(p)).not.toMatch(/Sam|Robin/);
+  });
+  it('a turn reads as a turn', () => {
+    const p = privatePush({ title: 'Your move in Homestead', body: 'Sam rolled a 9.', category: 'game', level: 'active', ttlSeconds: 3600,
+      userInfo: { roomId: 'g2', game: 'homestead', category: 'game', kind: 'turn' } });
+    expect(p).toMatchObject({ title: 'Your move', ttlSeconds: 3600 });
+    expect(JSON.stringify(p)).not.toMatch(/Sam/);
+  });
+});
+
+describe('privatePush — anything else', () => {
+  it('hides the words but keeps how urgent it is and how long Apple keeps trying', () => {
+    const p = privatePush({ title: 'Sam left school', body: 'Private Place', category: 'household', level: 'time-sensitive', ttlSeconds: 900,
+      userInfo: { category: 'household' } });
+    expect(p).toMatchObject({ title: 'Strange Ramblings', level: 'time-sensitive', ttlSeconds: 900 });
+    expect(JSON.stringify(p)).not.toMatch(/Sam|Private Place/);
+  });
+});

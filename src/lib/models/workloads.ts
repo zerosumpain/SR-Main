@@ -514,6 +514,18 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
       'The ANSWER model, not the embedding model — those are separate roles because they are separately consequential: changing this one is free, and changing Embeddings invalidates every stored vector.',
   },
   {
+    id: 'drive-analysis',
+    scope: 'site',
+    label: 'Drive file analysis',
+    blurb: 'Summarising a /drive file into a document type, key facts, dates, amounts and any action needed — on demand and for mail attachments filed by rule.',
+    key: 'jkai.drive_analysis.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Unpinned, it follows RAG answering rather than the site default, because both read the same indexed document text; pin it here to split them.',
+  },
+  {
     id: 'mapping',
     scope: 'site',
     label: 'Canvas edge mapping',

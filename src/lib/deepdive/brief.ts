@@ -26,7 +26,7 @@ import { researchSessions, sources as sourcesTable, facts, entities } from '$lib
 import type { ResearchSession, Source } from '$lib/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { jsonCompletion, streamCompletion, generateEmbedding } from './ai';
-import { search } from './tavily';
+import { search } from './web-search';
 import { classifyDomain } from './credibility';
 import {
   GRAPH_EXTRACTION_PROMPT,

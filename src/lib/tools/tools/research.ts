@@ -507,8 +507,9 @@ register({
   handler: async (args) => {
     const query = String(args.query ?? '').trim();
     if (!query) return { success: false, error: 'query is required.' };
-    const { search } = await import('$lib/deepdive/tavily');
-    const results = await search(query, { purpose: 'tool.tavily_search', maxResults: 8, searchDepth: args.depth === 'advanced' ? 'advanced' : 'basic' });
+    const { search } = await import('$lib/deepdive/web-search');
+    // This tool is the one John reaches for by name, so it asks Tavily, not the balancer's choice.
+    const results = await search(query, { purpose: 'tool.tavily_search', provider: 'tavily', maxResults: 8, searchDepth: args.depth === 'advanced' ? 'advanced' : 'basic' });
     return {
       success: true,
       data: {

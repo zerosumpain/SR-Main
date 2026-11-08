@@ -12,6 +12,8 @@
 # If CI fails on this file: a route was added under a public prefix. Confirm it
 # is MEANT to be anonymous — and if it self-gates, that the gate is actually
 # called — then run `npm run gate:public-routes -- --write` and commit.
+/.well-known/apple-app-site-association
+/.well-known/openid-configuration
 /api/admin/security
 /api/blog/images/[postId]/[filename]
 /api/claude-changelog/ingest
@@ -20,7 +22,18 @@
 /api/daydream/observe
 /api/deepdive/index-sources
 /api/deepdive/reindex-facts
+/api/games/party/[code]
+/api/games/party/[code]/act
+/api/games/party/[code]/host
+/api/games/party/[code]/join
+/api/games/party/[code]/stream
+/api/games/photos/[pack]/[photo]
 /api/games/screens/stream
+/api/games/tv/backlog
+/api/games/tv/claim
+/api/games/tv/link
+/api/games/tv/party
+/api/games/tv/party/stream
 /api/health/workflow-engine
 /api/internal/session
 /api/jkai/codegraph/ingest
@@ -68,7 +81,20 @@
 /api/native/drive
 /api/native/drive/files
 /api/native/drive/files/[id]
+/api/native/drive/files/[id]/analyse
+/api/native/drive/files/[id]/intel
+/api/native/drive/files/[id]/meta
+/api/native/drive/files/[id]/preview
 /api/native/drive/folders
+/api/native/drive/have
+/api/native/drive/photos/face/[id]
+/api/native/drive/photos/people
+/api/native/drive/photos/search
+/api/native/drive/photos/thumb/[id]
+/api/native/drive/search
+/api/native/drive/uploads
+/api/native/drive/uploads/[id]
+/api/native/drive/uploads/[id]/complete
 /api/native/family/alarm
 /api/native/family/alarm/cancel
 /api/native/family/backlog
@@ -98,6 +124,7 @@
 /api/native/games/[id]/stream
 /api/native/games/leaderboard
 /api/native/games/offline-results
+/api/native/games/party/[code]/join
 /api/native/games/suggestions
 /api/native/health/activities
 /api/native/health/activities/[id]
@@ -191,10 +218,16 @@
 /decks/[...path]
 /follow/[token]
 /games/[game]
+/games/join/[code]
+/games/tv
+/games/tv/install
 /install/[token]
 /install/[token]/app.ipa
 /install/[token]/manifest.plist
 /login
+/oauth/jwks
+/oauth/token
+/oauth/userinfo
 /privacy
 /projects
 /projects/[slug]/[...path]
@@ -222,6 +255,9 @@
 /rss.xml
 /sitemap.xml
 /tos
+/tv
+/tv/get
+/tv/version.json
 /welcome
 /welcome/[code]
 /welcome/app

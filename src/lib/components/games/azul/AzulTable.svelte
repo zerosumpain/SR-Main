@@ -71,7 +71,7 @@
 
 <div class="azul" class:solo={seated.length <= 2}>
   <header class="top">
-    <span class="brand"><span class="mark">sr.</span> azul</span>
+    <span class="gb-brand"><span class="mark">sr.</span> azul</span>
     {#key headline}
       <h1 in:fly={{ y: -12, duration: 380 }}>{headline}</h1>
     {/key}
@@ -195,7 +195,7 @@
     border-bottom: 1px solid var(--on-ink-14);
     padding-bottom: 0.9cqw;
   }
-  .brand {
+  .gb-brand {
     font-family: var(--font-mono);
     font-size: 1.1cqw;
     letter-spacing: 0.16em;

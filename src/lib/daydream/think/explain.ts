@@ -132,6 +132,10 @@ export function describeSource(tool: string, args: Args): SourceLine {
       return { label: 'Your jkai chats', detail: days(num(args.days) ?? 14) ?? '' };
     case 'activities':
       return { label: 'Recent workouts and outings', detail: num(args.limit) ? `latest ${num(args.limit)}` : '' };
+    case 'household_patterns': {
+      const sec = str(args.section) || 'summary';
+      return { label: sec === 'forecast' ? 'Household forecast' : 'Household movement patterns', detail: join(sec === 'summary' ? null : words(sec), str(args.person)) };
+    }
     case 'health_hub': {
       const secs = list(args.sections).map((s) => HUB_SECTION_WORDS[s] ?? words(s));
       return { label: 'Your /health summary', detail: secs.length > 4 ? `${secs.slice(0, 3).join(', ')} and ${secs.length - 3} more` : secs.join(', ') };
@@ -142,6 +146,8 @@ export function describeSource(tool: string, args: Args): SourceLine {
       return { label: 'Health timeline', detail: '' };
     case 'situation':
       return { label: 'Right now', detail: 'where you were, who with, body, mood, diary' };
+    case 'household':
+      return { label: 'The household today', detail: 'forecast, what looked off, patterns' };
     case 'compare_days':
       return {
         label: 'Compared kinds of day',

@@ -33,6 +33,9 @@ for (const entry of manifest) {
   if (!input?.path) throw new Error(`Missing checkout for ${entry.id}`);
   const checkout = resolve(input.path);
   const revision = execFileSync('git', ['-C', checkout, 'rev-parse', input.ref || 'HEAD'], { encoding: 'utf8' }).trim();
+  // When the repository last moved: the measured commit's own date, so the
+  // owner can see which rows are dormant and worth archiving.
+  const updatedAt = execFileSync('git', ['-C', checkout, 'log', '-1', '--format=%cI', revision], { encoding: 'utf8' }).trim();
   const temp = mkdtempSync(join(tmpdir(), 'sr-site-source-'));
   try {
     const archive = join(temp, 'source.tar');
@@ -40,7 +43,7 @@ for (const entry of manifest) {
     execFileSync('mkdir', ['-p', extracted]);
     execFileSync('git', ['-C', checkout, 'archive', '--format=tar', '-o', archive, revision]);
     execFileSync('tar', ['-xf', archive, '-C', extracted]);
-    repositories.push({ ...entry, revision, measuredAt, source: 'revision snapshot', ...measureRepository(extracted) });
+    repositories.push({ ...entry, revision, updatedAt, measuredAt, source: 'revision snapshot', ...measureRepository(extracted) });
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }

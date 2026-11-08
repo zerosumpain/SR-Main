@@ -22,6 +22,7 @@ import { hasToolConfirmer, publishToolStep, requestToolConfirmation } from '$lib
 import { isDestructive, describeDestructiveAction } from '$lib/jkai/chat/confirmation-gate';
 import { resolveDisplayTool, summarizeRunningTool, summarizeToolResult } from '$lib/jkai/chat/tool-summary';
 import { dispatchMetaTool, JKAI_EXTENDED_TOOL } from './meta-tool';
+import { withoutDisplay } from '$lib/jkai/grounding/evidence';
 
 // Every registered tool is exposed via MCP. We don't gate at the MCP layer.
 
@@ -461,7 +462,8 @@ export async function dispatchJsonRpc(
                 content: [
                   {
                     type: 'text',
-                    text: typeof out === 'string' ? out : JSON.stringify(out),
+                    // `display` (thumbnails) is for a chat screen, not an MCP client's model.
+                    text: typeof out === 'string' ? out : JSON.stringify(out, withoutDisplay),
                   },
                   ...datestampContent(name, args),
                 ],

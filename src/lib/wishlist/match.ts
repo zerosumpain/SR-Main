@@ -103,6 +103,14 @@ export function comparablePrice(listing: Listing, criteria: WishCriteria): { pen
   return { pence: listing.pricePence * basis.party, note: ` (${formatPence(listing.pricePence)}pp × ${basis.party})` };
 }
 
+/** How far over the ceiling a listing that meets every spec is still kept, as an option. */
+export const OVER_BUDGET_PCT = 50;
+
+function priceWithin(listing: Listing, criteria: WishCriteria, pct: number): boolean {
+  const { pence } = comparablePrice(listing, criteria);
+  return criteria.maxPricePence !== null && pence !== null && pence <= criteria.maxPricePence * (1 + pct / 100);
+}
+
 export function evaluate(listing: Listing, criteria: WishCriteria, now = new Date()): Evaluation {
   const specs = readSpecs(listing.title, listing.description);
   const asOf = listing.postedAt ? new Date(listing.postedAt) : now;
@@ -136,15 +144,21 @@ export function evaluate(listing: Listing, criteria: WishCriteria, now = new Dat
   const unknown = specResults.filter((r) => r.ok === null);
   if (unknown.some((r) => r.field === 'gpu' || r.essential) || unknown.length > 1) return { verdict: 'no', results };
   const silent = unknown.length === 1;
-  if (priceOk === false) return { verdict: priceNear && !silent ? 'near' : 'no', results };
+  if (priceOk === false) {
+    if (silent) return { verdict: 'no', results };
+    if (priceNear) return { verdict: 'near', results };
+    return { verdict: priceWithin(listing, criteria, OVER_BUDGET_PCT) ? 'over' : 'no', results };
+  }
   if (priceOk === null || silent) return { verdict: 'possible', results };
   return { verdict: 'match', results };
 }
 
 /** The ones worth telling someone about, best first. */
 export const ALERTABLE: readonly string[] = ['match', 'near', 'possible'];
+/** What a hunt stores: the alertable, and the over-budget options it tracks. */
+export const KEPT: readonly string[] = [...ALERTABLE, 'over'];
 export function verdictRank(v: string): number {
-  return v === 'match' ? 0 : v === 'possible' ? 1 : v === 'near' ? 2 : 3;
+  return v === 'match' ? 0 : v === 'possible' ? 1 : v === 'near' ? 2 : v === 'over' ? 3 : 4;
 }
 
 /** One constraint in words, for the page: "RTX 5060 or better", "16GB+ RAM". */

@@ -6,7 +6,9 @@
    * Name, kind (not for home: home is home), radius; whether the household
    * hears about a crossing ("Notify family", OFF unless set — home included)
    * and, only once that is on, which directions and whether by WhatsApp too;
-   * who spends how long here; and "Remove place" with a confirm (never home).
+   * who spends how long here; "Merge places into this one" for the stray
+   * clusters the trail splits one place into (never home); and "Remove place"
+   * with a confirm (never home).
    *
    * The page owns the geometry draft (the map drags it too), so the radius
    * field reports through `onradius` and "Undo move" through `onrevert`. The
@@ -15,7 +17,7 @@
   import { enhance } from '$app/forms';
   import type { SubmitFunction } from '@sveltejs/kit';
   import type { Geometry } from '$lib/components/home/PlacesMap.svelte';
-  import { clampRadius } from '$lib/home/presence/geo';
+  import { clampRadius, distanceM } from '$lib/home/presence/geo';
   import type { PanelPlace } from '$lib/home/presence/places';
   import type { PersonPlaceTime } from '$lib/home/presence/stats';
 
@@ -26,6 +28,7 @@
     note?: string;
     moved?: string;
     notified?: string;
+    merged?: number;
   } | null;
 
   let {
@@ -42,6 +45,7 @@
     onrevert,
     afterGeometry,
     afterRemove,
+    others = [],
     confirming = $bindable(false),
   }: {
     place: PanelPlace;
@@ -57,6 +61,8 @@
     onrevert: () => void;
     afterGeometry: SubmitFunction;
     afterRemove: SubmitFunction;
+    /** Every place on the panel, for "Merge places into this one". */
+    others?: PanelPlace[];
     /** "Remove place" is asking for a yes. Bindable, so the page's Escape
      *  can answer "Keep" rather than close the panel. */
     confirming?: boolean;
@@ -124,6 +130,24 @@
       const el = box(name);
       if (el) el.checked = v;
     }
+  };
+
+  // Merge: the places within 2 km, nearest first, never home or this one.
+  const MERGE_REACH_M = 2000;
+  let merging = $state(false);
+  let picked = $state<string[]>([]);
+  const nearby = $derived(
+    others
+      .filter((o) => o.id !== place.id && !o.isHome)
+      .map((o) => ({ o, d: distanceM(place.lat, place.lon, o.lat, o.lon) }))
+      .filter((x) => x.d <= MERGE_REACH_M)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 12),
+  );
+  const far = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 10) * 10} m`);
+  const afterMerge: SubmitFunction = () => async ({ result, update }) => {
+    await update({ reset: false });
+    if (result.type === 'success') { merging = false; picked = []; }
   };
 
   /** Keyboard focus onto the confirm's safe answer as it appears. */
@@ -267,6 +291,51 @@
   </div>
 
   {#if !place.isHome}
+    {#if merging}
+      <form class="merge" method="POST" action="?/merge" use:enhance={afterMerge}>
+        <input type="hidden" name="targetId" value={place.id} />
+        <p class="field-label">Merge into {place.label ?? place.suggestedLabel ?? 'this place'}</p>
+        {#if !nearby.length}
+          <p class="quiet">No other places within {far(MERGE_REACH_M)}.</p>
+        {:else}
+          <fieldset class="pick">
+            <legend class="quiet">Places that are really this one: their history moves here and they leave the list.</legend>
+            {#each nearby as { o, d } (o.id)}
+              <label class="toggle">
+                <input type="checkbox" name="sourceIds" value={o.id} bind:group={picked} />
+                <span>{o.label ?? o.suggestedLabel ?? 'Unnamed place'} <small>· {far(d)}{o.label ? '' : ' · unnamed'}</small></span>
+              </label>
+            {/each}
+          </fieldset>
+          <fieldset class="pick">
+            <legend class="quiet">This place's circle</legend>
+            <label class="toggle"><input type="radio" name="geometry" value="enclose" checked /><span>grow it to cover them</span></label>
+            <label class="toggle"><input type="radio" name="geometry" value="keep" /><span>keep it as drawn</span></label>
+          </fieldset>
+          <div class="actions">
+            <label class="field">
+              <span class="field-label">Name</span>
+              <input class="text-input" name="label" required value={place.label ?? place.suggestedLabel ?? ''} maxlength={labelMax} autocomplete="off" />
+            </label>
+            <label class="field kind">
+              <span class="field-label">Kind</span>
+              <select class="text-input select" name="kind">
+                {#each kinds.filter((k) => k !== 'home') as k (k)}<option value={k} selected={k === (kinds.includes(place.kind) && place.kind !== 'home' ? place.kind : 'other')}>{k}</option>{/each}
+              </select>
+            </label>
+          </div>
+        {/if}
+        <div class="card-actions">
+          {#if nearby.length}<button class="cta sm" type="submit" disabled={!picked.length}>{picked.length ? `Merge ${picked.length} ${picked.length === 1 ? 'place' : 'places'}` : 'Merge'}</button>{/if}
+          <button class="btn" type="button" onclick={() => { merging = false; picked = []; }}>Cancel</button>
+        </div>
+      </form>
+    {:else}
+      <div class="card-actions">
+        <button class="btn" type="button" onclick={() => { merging = true; confirming = false; }}>Merge places into this one</button>
+        {#if form?.merged && form.saved === place.id}<span class="note good inline" role="status">Merged {form.merged}.</span>{/if}
+      </div>
+    {/if}
     {#if confirming}
       <form class="confirm" method="POST" action="?/remove" use:enhance={afterRemove}>
         <input type="hidden" name="placeId" value={place.id} />
@@ -367,6 +436,34 @@
     .time-here .visits {
       display: none;
     }
+  }
+  .merge {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-elevated);
+  }
+  .merge .field-label {
+    margin: 0;
+  }
+  .pick {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .pick legend {
+    margin-bottom: 6px;
+    padding: 0;
+  }
+  .pick small {
+    color: var(--text-muted);
   }
   .confirm {
     display: flex;

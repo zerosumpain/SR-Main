@@ -73,7 +73,7 @@
 
 <div class="cn" class:red-turn={playing && room.turnTeam === 'red'} class:blue-turn={playing && room.turnTeam === 'blue'}>
   <header class="top">
-    <span class="brand"><span class="mark">sr.</span> codenames</span>
+    <span class="gb-brand"><span class="mark">sr.</span> codenames</span>
     {#key headline}
       <h1 in:fly={{ y: -12, duration: 380 }}>{headline}</h1>
     {/key}
@@ -222,7 +222,7 @@
     border-bottom: 1px solid var(--on-ink-14);
     padding-bottom: 0.9cqw;
   }
-  .brand {
+  .gb-brand {
     font-family: var(--font-mono);
     font-size: 1.1cqw;
     letter-spacing: 0.16em;

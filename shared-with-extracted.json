@@ -7,7 +7,7 @@
   "files": {
     "src/lib/file-store/storage.ts": {
       "peer": "zerosumpain/SR-Drive",
-      "sha256": "03b606e3fc9fb6d9517616795ac8abafafb46576f9a35209f96fea6ceb6c7b78"
+      "sha256": "3182143474179b5b0c5baba86d8be7886f9c25c7e01aff361ed84a820f30c5be"
     },
     "src/lib/file-store/backends.ts": {
       "peer": "zerosumpain/SR-Drive",
