@@ -13,6 +13,7 @@ import {
   PARTY_IDLE_MS,
   _resetParties,
   _sweepParties,
+  hostAct,
   joinFamily,
   joinGuest,
   memberAct,
@@ -89,6 +90,37 @@ describe('opening a party', () => {
     const a = openParty(tv);
     _sweepParties(Date.now() + PARTY_IDLE_MS + 1_000);
     expect(() => partyByCode(a.code)).toThrow();
+  });
+});
+
+describe('the host', () => {
+  it('is whoever joined first, and the next one along once they are taken out', () => {
+    const { code } = openParty(tv);
+    expect(partyByCode(code).hostId).toBeNull();
+    const sam = joinGuest(code, 'Sam');
+    const alex = joinGuest(code, 'Alex');
+    expect(alex.party.hostId).toBe(sam.memberId);
+    expect(tvAct(tv.id, 'kick', { memberId: sam.memberId }).hostId).toBe(alex.memberId);
+  });
+
+  it('drives the party from their phone: pick, start, back to the lobby', () => {
+    const { code } = openParty(tv);
+    const sam = joinGuest(code, 'Sam');
+    joinGuest(code, 'Alex');
+    expect(hostAct(code, sam.memberId, 'pick', { game: 'boggle', options: { difficulty: 'easy' } }).options).toEqual({ difficulty: 'easy' });
+    expect(hostAct(code, sam.memberId, 'start').phase).toBe('playing');
+    expect(hostAct(code, sam.memberId, 'end').phase).toBe('lobby');
+  });
+
+  it('nobody else may, and the host cannot close the party or take themselves out', () => {
+    const { code } = openParty(tv);
+    const sam = joinGuest(code, 'Sam');
+    const alex = joinGuest(code, 'Alex');
+    expect(() => hostAct(code, alex.memberId, 'start')).toThrow(/Only the host/u);
+    expect(() => hostAct(code, sam.memberId, 'close')).toThrow(/Unknown action/u);
+    expect(() => hostAct(code, sam.memberId, 'report')).toThrow(/Unknown action/u);
+    expect(() => hostAct(code, sam.memberId, 'kick', { memberId: sam.memberId })).toThrow(/yourself/u);
+    expect(hostAct(code, sam.memberId, 'kick', { memberId: alex.memberId }).members).toHaveLength(1);
   });
 });
 

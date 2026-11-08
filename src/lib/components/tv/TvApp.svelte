@@ -7,8 +7,12 @@
   import { fade, fly } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import TvStage from './TvStage.svelte';
+  import PixelTile from './PixelTile.svelte';
+  import { artFor } from './pixel';
+  import { castTvItem, fetchTvBacklog, type CastWire, type TvBacklogItem } from '$lib/games/tv-backlog';
   import { focusFirst, remote } from './focus';
   import { openTv, tvParty, type TvState } from './tv-stream';
+  import { TvMusic, musicOff, trackFor } from './tv-music';
   import { DIFFICULTY, GAME_OPTIONS, GAME_BLURBS, defaultOptions, type TvOption } from './tv-games';
   import { STING, hostLine } from '$lib/games/kelly';
   import BoggleTable from '$lib/components/games/boggle/BoggleTable.svelte';
@@ -28,9 +32,23 @@
   import type { PackSummary } from '$lib/games/quiz-packs';
   import type { ScreenRoom as BoggleRoom } from '$lib/games/boggle';
 
-  let { tvName, family = [], packs = [] }: { tvName: string; family?: string[]; packs?: PackSummary[] } = $props();
+  interface TvProject {
+    key: string;
+    href: string;
+    title: string;
+    blurb: string;
+  }
 
-  type View = 'menu' | 'lobby' | 'about';
+  let {
+    tvName,
+    family = [],
+    packs = [],
+    projects = [],
+  }: { tvName: string; family?: string[]; packs?: PackSummary[]; projects?: TvProject[] } = $props();
+
+  type View = 'menu' | 'lobby' | 'about' | 'backlog';
+  /** The video playing over everything, and where getting it ready has got to. */
+  type Player = { item: TvBacklogItem; cast: CastWire | null };
   type Sheet = null | { kind: 'end' } | { kind: 'kick'; id: string; name: string };
 
   let link = $state<TvState>({ kind: 'connecting' });
@@ -40,9 +58,21 @@
   let joinUrl = $state('');
   let error = $state<string | null>(null);
   let busy = $state(false);
+  let musicOn = $state(!musicOff());
+  /** The menu tile with the remote's focus, for the line under the heading. */
+  let focusedBlurb = $state<string | null>(null);
+  let backlog = $state<TvBacklogItem[] | null>(null);
+  let backlogError = $state<string | null>(null);
+  let player = $state<Player | null>(null);
+  let controlsShown = $state(true);
+
+  const music = new TvMusic();
 
   // Plain handles (svelte5-pitfalls §1).
   let qrFor: string | null = null;
+  /** What the menu last saw: somebody joining, or the host picking a game, moves the TV to the lobby. */
+  let seenJoined = 0;
+  let seenPick = '';
   let errorTimer: ReturnType<typeof setTimeout> | null = null;
 
   const party = $derived<PartyView | null>(link.kind === 'party' ? link.party : null);
@@ -54,11 +84,136 @@
   const writing = $derived((room as { prep?: string } | null)?.prep === 'writing');
   const current = $derived(party?.games.find((g) => g.id === party?.game) ?? null);
   const seed = $derived(party ? party.code.charCodeAt(0) + party.code.charCodeAt(3) : 0);
+  const host = $derived(party?.members.find((m) => m.id === party?.hostId) ?? null);
   const greeting = $derived.by(() => {
     if (!party) return '';
     if (family.length && party.members.length === 0) return `Right then — ${family[seed % family.length]}, grab a phone and scan the code.`;
+    if (host) return `${host.name} is the host — pick and start from their phone, or with the remote.`;
     return hostLine('lobby', seed);
   });
+
+  // What is on screen picks the track; TvMusic itself holds no reactive state.
+  // A family video plays over silence.
+  $effect(() => {
+    if (player) music.stop();
+    else if (party) music.play(trackFor(view, party.game, playing));
+  });
+
+  let video: HTMLVideoElement | null = $state(null);
+  // Plain handles (svelte5-pitfalls §1).
+  let castTimer: ReturnType<typeof setTimeout> | null = null;
+  let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function loadBacklog() {
+    backlogError = null;
+    try {
+      backlog = await fetchTvBacklog();
+    } catch (err) {
+      backlogError = `Could not fetch the list just now (${(err as Error).message}). Try again in a minute.`;
+      backlog = backlog ?? [];
+    }
+  }
+
+  async function openBacklog() {
+    await go('backlog');
+    await loadBacklog();
+    await tick();
+    focusFirst(true);
+  }
+
+  /** Get a video ready on the server, asking again while it is fetched, then play it. */
+  async function play(item: TvBacklogItem) {
+    if (castTimer) clearTimeout(castTimer);
+    player = { item, cast: null };
+    controlsShown = true;
+    await tick();
+    focusFirst(true);
+    const ask = async () => {
+      if (player?.item.id !== item.id) return;
+      let cast: CastWire;
+      try {
+        cast = await castTvItem(item.id);
+      } catch (err) {
+        cast = { state: 'fallback', fallback: 'mirror', reason: (err as Error).message, url: null };
+      }
+      if (player?.item.id !== item.id) return;
+      player = { item, cast };
+      if (cast.state === 'preparing') castTimer = setTimeout(ask, cast.retryAfterSeconds * 1000);
+      else {
+        await tick();
+        focusFirst(true);
+        if (cast.state === 'ready') showControls();
+      }
+    };
+    await ask();
+  }
+
+  function nextItem(): TvBacklogItem | null {
+    if (!player || !backlog) return null;
+    const i = backlog.findIndex((b) => b.id === player!.item.id);
+    return i >= 0 && i + 1 < backlog.length ? backlog[i + 1] : null;
+  }
+
+  function playNext() {
+    const next = nextItem();
+    if (next) void play(next);
+    else closePlayer();
+  }
+
+  function closePlayer() {
+    if (castTimer) clearTimeout(castTimer);
+    if (hideTimer) clearTimeout(hideTimer);
+    const was = player?.item.id;
+    player = null;
+    void tick().then(() => {
+      const card = was ? document.querySelector<HTMLElement>(`[data-backlog="${was}"]`) : null;
+      if (card) card.focus();
+      else focusFirst(true);
+    });
+  }
+
+  function togglePause() {
+    if (!video) return;
+    if (video.paused) void video.play().catch(() => {});
+    else video.pause();
+  }
+
+  function seek(by: number) {
+    if (video) video.currentTime = Math.max(0, Math.min(video.duration || Infinity, video.currentTime + by));
+  }
+
+  /** The player's controls show on any key and fade after a few quiet seconds while it plays. */
+  function showControls() {
+    controlsShown = true;
+    if (hideTimer) clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      if (video && !video.paused) controlsShown = false;
+    }, 4_000);
+  }
+
+  function onPlayerKey(e: KeyboardEvent) {
+    if (!player) return;
+    showControls();
+    if (e.key === 'MediaPlayPause' || e.key === 'MediaPlay' || e.key === 'MediaPause') {
+      e.preventDefault();
+      togglePause();
+    } else if (e.key === 'MediaFastForward') seek(10);
+    else if (e.key === 'MediaRewind') seek(-10);
+  }
+
+  function openProject(href: string) {
+    music.stop();
+    location.assign(href);
+  }
+
+  function openMarbler() {
+    // Marbler's TV mode: races run by themselves, the remote picks the next one, Back comes home.
+    openProject('/projects/marbler/?tv=1');
+  }
+
+  function toggleMusic() {
+    musicOn = !music.toggle();
+  }
 
   function say(message: string) {
     error = message;
@@ -171,6 +326,10 @@
   }
 
   function back(): boolean {
+    if (player) {
+      closePlayer();
+      return true;
+    }
     if (sheet) {
       sheet = null;
       void tick().then(() => focusFirst(true));
@@ -197,6 +356,12 @@
       if (s.kind === 'unlinked') location.reload();
       if (s.kind === 'party') {
         void refreshQr(s.party.code);
+        const joined = s.party.members.length;
+        const pickKey = JSON.stringify([s.party.game, s.party.options]);
+        // A phone is driving: a newcomer, or the host choosing a game, brings the TV to the lobby to show it.
+        if (!first && view === 'menu' && !player && (joined > seenJoined || (joined > 0 && pickKey !== seenPick))) void go('lobby');
+        seenJoined = joined;
+        seenPick = pickKey;
         const nowPlaying = !!s.party.roomId;
         // A game ending (or one started elsewhere) moves focus to whatever is now on screen.
         if (wasPlaying !== nowPlaying) {
@@ -209,14 +374,19 @@
     return () => {
       close();
       stopRemote();
+      music.stop();
+      if (castTimer) clearTimeout(castTimer);
+      if (hideTimer) clearTimeout(hideTimer);
       if (errorTimer) clearTimeout(errorTimer);
     };
   });
 </script>
 
-<TvStage>
+<!-- A game board gets no painting behind it; the lobby has the kitchen table, everything else the living room. -->
+<TvStage art={playing ? null : view === 'lobby' && party ? '/tv-art/lobby.webp' : '/tv-art/menu.webp'}>
   {#if !party}
     <div class="tv-center" in:fade>
+      <div class="tv-splash"><PixelTile label="sr." /></div>
       <p class="tv-brand"><span class="tv-mark">sr.</span> tv</p>
       <p class="tv-lead">Opening the games…</p>
     </div>
@@ -253,32 +423,113 @@
   {:else if view === 'menu'}
     <section class="tv-menu" in:fade={{ duration: 250 }}>
       <header class="tv-top">
-        <p class="tv-brand"><span class="tv-mark">sr.</span> tv · {tvName}</p>
-        <h1>What are we playing?</h1>
-        <p class="tv-lead">{greeting}</p>
+        <div class="tv-logo"><PixelTile label="sr." /></div>
+        <div class="tv-top-text">
+          <p class="tv-brand"><span class="tv-mark">sr.</span> tv · {tvName}</p>
+          <h1>What are we playing?</h1>
+          <p class="tv-lead">{focusedBlurb ?? greeting}</p>
+        </div>
+        <!-- Join from the menu: the first phone in is the host and can pick the game itself. -->
+        <div class="tv-menu-join">
+          {#if qr}<img src={qr} alt="Scan to join" />{/if}
+          <p>
+            <span class="tv-menu-code" aria-label="Code {party.code.split('').join(' ')}">{party.code}</span>
+            <span>{host ? `${host.name} is hosting` : 'Scan to play · first in hosts'}</span>
+          </p>
+        </div>
       </header>
-      <div class="tv-tiles">
-        {#each party.games as g, i (g.id)}
-          <button type="button" class="tv-tile" data-tv data-tv-first={i === 0 ? '' : undefined} onclick={() => pick(g.id)}>
-            <span class="tv-tile-name">{g.title}</span>
-            <span class="tv-tile-blurb">{GAME_BLURBS[g.id] ?? ''}</span>
-            <span class="tv-tile-meta">{g.min === g.max ? g.min : `${g.min}–${g.max}`} players</span>
-          </button>
-        {/each}
-        {#if packs.length}
-          <button type="button" class="tv-tile tv-tile-kelly" data-tv onclick={pickKelly}>
-            <span class="tv-tile-name">Kelly’s Quiz Night</span>
-            <span class="tv-tile-blurb">Questions about us — old photos, holidays and the stories we keep telling.</span>
-            <span class="tv-tile-meta">{packs.length} {packs.length === 1 ? 'pack' : 'packs'} · 1–8 players</span>
-          </button>
-        {/if}
-        <button type="button" class="tv-tile tv-tile-quiet" data-tv onclick={() => go('about')}>
-          <span class="tv-tile-name">About</span>
-          <span class="tv-tile-blurb">What this is, and who made it.</span>
-          <span class="tv-tile-meta">strangeramblings.com</span>
-        </button>
+
+      <div class="tv-rail">
+        <span class="tv-label">Games</span>
+        <div class="tv-row">
+          {#each party.games as g, i (g.id)}
+            {@render card({
+              art: g.id,
+              name: g.title,
+              meta: `${g.min === g.max ? g.min : `${g.min}–${g.max}`} players`,
+              blurb: GAME_BLURBS[g.id] ?? '',
+              first: i === 0,
+              onclick: () => pick(g.id),
+            })}
+          {/each}
+          {#if packs.length}
+            {@render card({
+              art: 'kelly',
+              name: 'Kelly’s Quiz Night',
+              meta: `${packs.length} ${packs.length === 1 ? 'pack' : 'packs'} · 1–8 players`,
+              blurb: 'Questions about us — old photos, holidays and the stories we keep telling.',
+              onclick: pickKelly,
+            })}
+          {/if}
+        </div>
       </div>
-      <p class="tv-sting">{STING}</p>
+
+      <div class="tv-rail">
+        <span class="tv-label">Watch</span>
+        <div class="tv-row">
+          {@render card({
+            art: 'backlog',
+            name: 'Family backlog',
+            meta: 'From your phones',
+            blurb: 'The videos everyone shared to SR from their phones, ready to play on the big screen.',
+            onclick: openBacklog,
+          })}
+          {@render card({
+            art: 'marbler',
+            name: 'Marbler',
+            meta: 'Marble races',
+            blurb: 'Sit back and watch the marbles race down a machine built for this race alone. Pick a favourite.',
+            onclick: openMarbler,
+          })}
+        </div>
+      </div>
+
+      {#if projects.length}
+        <div class="tv-rail">
+          <span class="tv-label">From the site</span>
+          <div class="tv-row">
+            {#each projects as p (p.key)}
+              {@render card({ art: 'projects', name: p.title, meta: 'On the site', blurb: p.blurb, onclick: () => openProject(p.href) })}
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <div class="tv-foot">
+        <button type="button" class="tv-quiet" data-tv onclick={() => go('about')} onfocus={() => (focusedBlurb = 'What this is, and who made it.')}>About</button>
+        <p class="tv-sting">{STING}</p>
+        <button type="button" class="tv-quiet" data-tv onclick={toggleMusic} onfocus={() => (focusedBlurb = null)}>Music: {musicOn ? 'on' : 'off'}</button>
+      </div>
+    </section>
+  {:else if view === 'backlog'}
+    <section class="tv-backlog" in:fade={{ duration: 250 }} inert={!!player}>
+      <header class="tv-top">
+        <div class="tv-logo">{@render art('backlog')}</div>
+        <div class="tv-top-text">
+          <p class="tv-brand"><span class="tv-mark">sr.</span> tv · {tvName}</p>
+          <h1>Family backlog</h1>
+          <p class="tv-lead">Shared from the app with Share → SR. Pick one and it plays here.</p>
+        </div>
+      </header>
+      {#if backlog === null}
+        <p class="tv-empty">Fetching the list…</p>
+      {:else if backlog.length === 0}
+        <p class="tv-empty">{backlogError ?? 'Nothing to watch yet. Share a YouTube, TikTok or Instagram video to SR from a phone and it turns up here.'}</p>
+        <div class="tv-actions"><button type="button" data-tv data-tv-first onclick={() => go('menu')}>Back to the menu</button></div>
+      {:else}
+        <div class="tv-videos">
+          {#each backlog as item, i (item.id)}
+            <button type="button" class="tv-video" data-tv data-tv-first={i === 0 ? '' : undefined} data-backlog={item.id} onclick={() => play(item)}>
+              <span class="tv-thumb">
+                {#if item.thumbnailUrl}<img src={item.thumbnailUrl} alt="" loading="lazy" referrerpolicy="no-referrer" />{/if}
+                <span class="tv-provider">{item.provider}</span>
+              </span>
+              <span class="tv-video-title">{item.title}</span>
+              <span class="tv-card-meta">{item.sharedBy ? `Shared by ${item.sharedBy}` : 'Shared from the app'}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
     </section>
   {:else if view === 'about'}
     <section class="tv-about" in:fade={{ duration: 250 }}>
@@ -344,7 +595,7 @@
               {#each party.members as m (m.id)}
                 <li animate:flip={{ duration: 250 }} in:fly={{ y: 16, duration: 250 }}>
                   <button type="button" class="tv-member" class:tv-off={!m.online} data-tv onclick={() => openSheet({ kind: 'kick', id: m.id, name: m.name })}>
-                    <span class="tv-dot"></span>{m.name}{#if m.kind === 'family'}<span class="tv-fam">family</span>{/if}
+                    <span class="tv-dot"></span>{m.name}{#if m.id === party.hostId}<span class="tv-fam">host</span>{:else if m.kind === 'family'}<span class="tv-fam">family</span>{/if}
                   </button>
                 </li>
               {/each}
@@ -385,7 +636,72 @@
       </div>
     </div>
   {/if}
+  {#if player}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="tv-player" transition:fade={{ duration: 200 }} onkeydown={onPlayerKey}>
+      {#if player.cast?.state === 'ready'}
+        <!-- svelte-ignore a11y_media_has_caption -->
+        <video
+          bind:this={video}
+          src={player.cast.mediaUrl}
+          poster={player.cast.posterUrl ?? undefined}
+          autoplay
+          playsinline
+          onended={playNext}
+          onpause={() => (controlsShown = true)}
+          onplay={showControls}
+        ></video>
+        <div class="tv-player-bar" class:tv-hidden={!controlsShown}>
+          <p class="tv-player-title">{player.item.title}{#if player.item.sharedBy}<span> · {player.item.sharedBy}</span>{/if}</p>
+          <div class="tv-actions">
+            <button type="button" data-tv onclick={() => seek(-10)}>−10 s</button>
+            <button type="button" class="tv-primary" data-tv data-tv-first onclick={togglePause}>Play / pause</button>
+            <button type="button" data-tv onclick={() => seek(10)}>+10 s</button>
+            <button type="button" data-tv onclick={playNext}>{nextItem() ? 'Next video' : 'Finish'}</button>
+            <button type="button" data-tv onclick={closePlayer}>Back to the list</button>
+          </div>
+        </div>
+      {:else}
+        <div class="tv-center">
+          <p class="tv-brand"><span class="tv-mark">sr.</span> family backlog</p>
+          <h2>{player.item.title}</h2>
+          {#if player.cast?.state === 'fallback'}
+            <p class="tv-lead">This one will not play on the TV: {player.cast.reason}</p>
+            <div class="tv-actions tv-actions-centre">
+              {#if nextItem()}<button type="button" class="tv-primary" data-tv data-tv-first onclick={playNext}>Next video</button>{/if}
+              <button type="button" data-tv data-tv-first={nextItem() ? undefined : ''} onclick={closePlayer}>Back to the list</button>
+            </div>
+          {:else}
+            <p class="tv-lead">Getting it ready — the first play of a video takes a few seconds.</p>
+            <div class="tv-actions tv-actions-centre"><button type="button" data-tv data-tv-first onclick={closePlayer}>Cancel</button></div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  {/if}
 </TvStage>
+
+{#snippet art(id: string)}
+  <PixelTile art={artFor(id)} />
+{/snippet}
+
+{#snippet card(c: { art: string; name: string; meta: string; blurb: string; first?: boolean; onclick: () => void })}
+  <button
+    type="button"
+    class="tv-card"
+    style="--hue: {artFor(c.art).hue.glow}"
+    data-tv
+    data-tv-first={c.first ? '' : undefined}
+    onclick={c.onclick}
+    onfocus={() => (focusedBlurb = c.blurb)}
+  >
+    <span class="tv-card-art">{@render art(c.art)}</span>
+    <span class="tv-card-text">
+      <span class="tv-card-name">{c.name}</span>
+      <span class="tv-card-meta">{c.meta}</span>
+    </span>
+  </button>
+{/snippet}
 
 <style>
   .tv-fill,
@@ -475,63 +791,271 @@
     color: var(--error);
   }
 
-  /* Menu */
-  .tv-menu {
-    padding: 3.6cqw 5cqw 2.4cqw;
+  /* Menu: the app's logo, then a row of tiles per kind, each tile wearing its own Prism hue. */
+  .tv-menu,
+  .tv-backlog {
+    padding: 2.6cqw 5cqw 2cqw;
     display: flex;
     flex-direction: column;
+    gap: 1.3cqw;
+  }
+  .tv-top {
+    display: flex;
+    align-items: center;
     gap: 2.2cqw;
   }
-  .tv-menu h1 {
-    font-size: 3.8cqw;
-  }
-  /* Four across: every game and the About tile fit the screen without scrolling. */
-  .tv-tiles {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1.6cqw;
-  }
-  .tv-tile {
-    min-height: 12cqw;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    text-align: left;
-    gap: 0.6cqw;
-    padding: 1.5cqw 1.6cqw;
-  }
-  .tv-tile-name {
-    font-family: var(--font-display);
-    font-weight: var(--font-display-weight);
-    font-size: 2.1cqw;
-    line-height: 1.1;
-  }
-  .tv-tile-blurb {
-    font-size: 1.2cqw;
-    line-height: 1.4;
-    color: var(--on-ink-70);
+  .tv-top-text {
+    min-width: 0;
     flex: 1;
   }
-  .tv-tile-meta {
-    font-family: var(--font-mono);
+  .tv-menu-join {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 1cqw;
+    padding: 0.6cqw;
+    background: var(--tv-surface);
+    border: 1px solid var(--on-ink-14);
+  }
+  .tv-menu-join img {
+    width: 7cqw;
+    height: 7cqw;
+    background: #fff;
+    padding: 0.3cqw;
+  }
+  .tv-menu-join p {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3cqw;
+    max-width: 12cqw;
     font-size: 1.1cqw;
+    color: var(--on-ink-80);
+  }
+  .tv-menu-code {
+    font-family: var(--font-mono);
+    font-size: 2.2cqw;
+    letter-spacing: 0.2em;
+    color: var(--chrome-ink);
+  }
+  .tv-logo {
+    width: 6.6cqw;
+    flex: none;
+  }
+  .tv-splash {
+    width: 12cqw;
+    margin: 0 auto 1.4cqw;
+  }
+  .tv-menu h1,
+  .tv-backlog h1 {
+    font-size: 3.4cqw;
+    margin-top: 0.3cqw;
+  }
+  .tv-top .tv-lead {
+    margin-top: 0.5cqw;
+    font-size: 1.5cqw;
+    min-height: 2.2cqw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tv-rail .tv-label {
+    margin-bottom: 0.2cqw;
+  }
+  /* A row scrolls sideways under the remote; the padding leaves room for a focused tile's lift. */
+  .tv-row {
+    display: flex;
+    gap: 1.4cqw;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.7cqw 0.6cqw;
+    margin: 0 -0.6cqw;
+    scrollbar-width: none;
+    scroll-padding: 0 1cqw;
+  }
+  .tv-row::-webkit-scrollbar {
+    display: none;
+  }
+  /* One height for every tile, so three rows and the footer always fit the screen. */
+  .tv-card {
+    flex: none;
+    width: 20.4cqw;
+    height: 7.6cqw;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 1.2cqw;
+    padding: 1cqw;
+    text-align: left;
+    background: var(--tv-surface);
+    border-color: var(--on-ink-14);
+  }
+  .tv-card:focus,
+  .tv-card:focus-visible {
+    border-color: var(--hue) !important;
+    background: color-mix(in srgb, var(--hue) 16%, var(--tv-surface)) !important;
+  }
+  .tv-card-art {
+    width: 5.2cqw;
+    flex: none;
+  }
+  .tv-card-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5cqw;
+    min-width: 0;
+  }
+  .tv-card-name {
+    font-family: var(--font-display);
+    font-weight: var(--font-display-weight);
+    font-size: 1.6cqw;
+    line-height: 1.1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .tv-card .tv-card-meta {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tv-card-meta {
+    font-family: var(--font-mono);
+    font-size: 1cqw;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--accent-on-dark);
+    color: var(--tv-ink-2);
   }
-  .tv-tile-kelly {
-    border-color: var(--accent);
+  .tv-foot {
+    margin: auto 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2cqw;
   }
-  .tv-tile-quiet .tv-tile-meta {
-    color: var(--on-ink-55);
+  .tv-quiet {
+    font-family: var(--font-mono);
+    font-size: 1.1cqw;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.6cqw 1.2cqw;
   }
   .tv-sting {
-    margin: auto 0 0;
+    margin: 0;
     font-family: var(--font-mono);
     font-size: 1.1cqw;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--on-ink-45);
+  }
+
+  /* Family backlog: thumbnails four across, scrolling under the remote. */
+  .tv-videos {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.6cqw;
+    overflow-y: auto;
+    padding: 0.7cqw 0.6cqw;
+    margin: 0 -0.6cqw;
+    scrollbar-width: none;
+    scroll-padding: 1cqw 0;
+  }
+  .tv-videos::-webkit-scrollbar {
+    display: none;
+  }
+  .tv-video {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6cqw;
+    padding: 0.8cqw;
+    text-align: left;
+    background: var(--tv-surface);
+    border-color: var(--on-ink-14);
+  }
+  .tv-thumb {
+    position: relative;
+    display: block;
+    aspect-ratio: 16 / 9;
+    background: var(--on-ink-08);
+    overflow: hidden;
+  }
+  .tv-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .tv-provider {
+    position: absolute;
+    left: 0.5cqw;
+    bottom: 0.5cqw;
+    padding: 0.2cqw 0.6cqw;
+    font-family: var(--font-mono);
+    font-size: 0.9cqw;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--chrome-bg);
+    color: var(--chrome-ink);
+  }
+  .tv-video-title {
+    font-size: 1.4cqw;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* The player: the video fills the stage; its controls fade while it plays. */
+  .tv-player {
+    position: absolute;
+    inset: 0;
+    background: #000;
+  }
+  .tv-player video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .tv-player-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 2cqw 4cqw 2.4cqw;
+    display: flex;
+    flex-direction: column;
+    gap: 1cqw;
+    background: linear-gradient(transparent, rgba(11, 10, 28, 0.92) 40%);
+    transition: opacity 400ms ease;
+  }
+  .tv-player-bar.tv-hidden {
+    opacity: 0;
+  }
+  .tv-player-title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: var(--font-display-weight);
+    font-size: 2cqw;
+  }
+  .tv-player-title span {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: 1.2cqw;
+    color: var(--tv-ink-2);
+  }
+  .tv-player .tv-center {
+    position: absolute;
+    inset: 0;
+    padding: 0 12cqw;
+  }
+  .tv-actions-centre {
+    justify-content: center;
+    margin-top: 1.4cqw;
   }
 
   /* About */
@@ -684,7 +1208,7 @@
     inset: 0;
     display: grid;
     place-items: center;
-    background: rgba(11, 8, 6, 0.78);
+    background: rgba(11, 10, 28, 0.82);
   }
   .tv-sheet {
     width: 52cqw;

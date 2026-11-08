@@ -81,16 +81,37 @@ describe('share link rows', () => {
   it('a live link answers with its verifier; no live link answers null', async () => {
     const verifier = 'scrypt$' + 'a'.repeat(22) + '$' + 'b'.repeat(43);
     state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: verifier }]);
-    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: verifier });
+    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: verifier, pack: null });
 
     state.queue.push([{ id: 's2', expiresAt: null, revokedAt: null, passwordHash: null }]);
-    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: null });
+    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: null, pack: null });
 
     state.queue.push([{ id: 's3', expiresAt: null, revokedAt: new Date(), passwordHash: null }]);
     expect(await validateProjectShare('spine', 't'.repeat(43))).toBeNull();
     state.queue.push([]);
     expect(await validateProjectShare('spine', 't'.repeat(43))).toBeNull();
     expect(await validateProjectShare('spine', 'short')).toBeNull();
+  });
+
+  it('a link stores the pack it was minted for, or none for the app\'s default, and answers with it', async () => {
+    state.queue.push([{ id: 's1' }], [{ id: 's2' }]);
+    await createShare({ projectKey: 'spine', createdBy: 'owner', pack: 'school' });
+    await createShare({ projectKey: 'spine', createdBy: 'owner' });
+    expect(state.inserted[0].pack).toBe('school');
+    expect(state.inserted[1].pack).toBeNull();
+
+    state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: null, pack: 'school' }]);
+    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: null, pack: 'school' });
+    // Checked for the owner behind view-as: the same answer, counted nowhere.
+    state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: null, pack: 'school' }]);
+    expect(await validateProjectShare('spine', 't'.repeat(43), null, false)).toEqual({ passwordHash: null, pack: 'school' });
+  });
+
+  it('lists each link with its pack, null for the default', async () => {
+    const row = { label: null, createdAt: new Date(), expiresAt: null, revokedAt: null, lastUsedAt: null, useCount: 0, hasPassword: false };
+    state.queue.push([{ id: 's1', ...row, pack: 'school' }, { id: 's2', ...row, pack: null }]);
+    const links = await listSharesWithVisits('spine');
+    expect(links.map((l) => [l.id, l.pack])).toEqual([['s1', 'school'], ['s2', null]]);
   });
 
   it('counts every request toward use when the gateway does not say which open a page', async () => {
@@ -124,7 +145,7 @@ describe('share link rows', () => {
   it('a live link checked for the owner behind view-as counts nothing and records no one', async () => {
     state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: null }]);
     const visit = { open: true, visitorHash: 'h'.repeat(32), networkHash: '', agent: null, country: null };
-    expect(await validateProjectShare('spine', 't'.repeat(43), visit, false)).toEqual({ passwordHash: null });
+    expect(await validateProjectShare('spine', 't'.repeat(43), visit, false)).toEqual({ passwordHash: null, pack: null });
     expect(state.sets).toHaveLength(0);
     expect(state.recorded).toHaveLength(0);
   });

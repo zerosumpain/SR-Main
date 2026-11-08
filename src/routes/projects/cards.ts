@@ -18,6 +18,7 @@
 // The card's shape lives in $lib/projects/views beside the three views that
 // draw it; re-exported so every existing import keeps working.
 import type { ProjectCard } from '$lib/projects/views';
+import { sharePacksFor } from '$lib/projects/share-pack';
 export type { ProjectCard };
 
 export const PROJECT_CARDS: ProjectCard[] = [
@@ -135,6 +136,9 @@ export const PROJECT_CARDS: ProjectCard[] = [
     // Mirrors SHARE_PASSWORD_KEYS ($lib/projects/share-password), which the
     // share API reads; owner-cards.test.ts holds the two to each other.
     sharePassword: true,
+    // A link opens the DfE pack (the default) or the schools pack; the Spine
+    // pins its reader to that one. The list lives in $lib/projects/share-pack.
+    sharePacks: sharePacksFor('spine'),
     label: 'Open The Spine',
     kind: 'Field study',
     tag: 'Interactive · Identity and accredited sharing',
@@ -153,6 +157,23 @@ export const PROJECT_CARDS: ProjectCard[] = [
     blurb:
       'Scores every supplier our clients rely on across seven dimensions — filed accounts, filings and governance, contracts won and lost on re-tender, share price, news, and the countries, fuel and shipping routes they depend on — with the evidence behind each number. Models how risk travels through the supply chain to each client, and runs scenarios such as a fuel shortage or a Red Sea closure.',
     chips: 'supplier risk · re-tender losses · supply chain model · scenarios · public data',
+  },
+  {
+    // Casebook runs on porkserv as its own SvelteKit app, served at
+    // /projects/casebook through the site's gateway (SR-Infra registry
+    // `casebook`, audience sr-casebook). The owner gets the whole app; while it
+    // is private nobody else gets anything, and once public a reader still needs
+    // one of Casebook's own pack links. Private by default.
+    key: 'casebook',
+    href: '/projects/casebook',
+    label: 'Open Casebook',
+    kind: 'Working tool',
+    tag: 'Owner sign-in · Evidence packs',
+    title: 'Casebook — the evidence under the slides',
+    blurb:
+      'I built this to make a case properly. Research keeps a claim only if its quote is really on the page it came from, the chapters are written from those claims and rewritten for whoever is reading them, and a short deck sits on top where every point opens the evidence underneath. One editor takes a pack from a question to something I can share, asking me at each step or deciding for itself. Private by default.',
+    chips: 'claims with receipts · audiences · slide builds · independent app',
+    separateApp: true,
   },
   {
     key: 'policy-engine',

@@ -1,6 +1,6 @@
 // The project visibility/share decision Main signs for an extracted project
 // application (SR-Policy-Engine, SR-DfE-Data-Strategy, SR-Data-Standard-Designer,
-// SR-DataSpine, SR-Spine, Supply Chain Monitor, Local Plan Navigator, Wildmind).
+// SR-DataSpine, SR-Spine, Supply Chain Monitor, Local Plan Navigator, Wildmind, Casebook).
 //
 // Those applications used to read `project_visibility` and `project_share`
 // themselves and bump the share's use count from their own process. Now the
@@ -12,6 +12,10 @@
 // A share link can ask for a password (24 Oct 2026, the Spine only). Main does
 // not ask it: the claim carries the link's verifier as `pass`, and the app puts
 // the question and checks the answer ($lib/projects/share-password).
+//
+// A share link can also name an audience pack (8 Nov 2026, the Spine's 'dfe' or
+// 'school'): the claim carries it as `pack`, and the app opens that pack alone
+// ($lib/projects/share-pack). No pack, no key: the app's default.
 //
 // The gateway also says who is asking (24 Oct 2026): a visitor id, network,
 // browser and whether the request opened a page, all reduced to hashes and
@@ -40,15 +44,20 @@ export const PROJECT_AUDIENCES: Readonly<Record<string, string>> = Object.freeze
   'sr-supply-chain-monitor': 'supply-chain-monitor',
   'sr-local-plan-navigator': 'local-plan-navigator',
   'sr-wildmind': 'wildmind',
+  'sr-casebook': 'casebook',
 });
 
 export type ProjectAccess = 'public' | 'owner' | 'share' | 'none';
 
-/** `pass` only on a share whose link asks for a password: that link's verifier. */
+/**
+ * `pass` only on a share whose link asks for a password: that link's verifier.
+ * `pack` only on a share whose link names an audience pack.
+ */
 export interface ProjectClaim {
   key: string;
   access: ProjectAccess;
   pass?: string;
+  pack?: string;
 }
 
 export function projectKeyForAudience(audience: string): string | null {
@@ -91,6 +100,11 @@ export async function projectAccessFor(
   if (email && isOwnerEmail(email)) return { key, access: 'owner' };
   const token = share.fromUrl || cookieValue(share.cookie, shareCookieName(key));
   const live = token && token.length <= 512 ? await validateProjectShare(key, token, share.visit ?? null, share.count !== false) : null;
-  if (live) return live.passwordHash ? { key, access: 'share', pass: live.passwordHash } : { key, access: 'share' };
+  if (live) {
+    const claim: ProjectClaim = { key, access: 'share' };
+    if (live.passwordHash) claim.pass = live.passwordHash;
+    if (live.pack) claim.pack = live.pack;
+    return claim;
+  }
   return { key, access: 'none' };
 }

@@ -24,10 +24,12 @@
 /api/deepdive/reindex-facts
 /api/games/party/[code]
 /api/games/party/[code]/act
+/api/games/party/[code]/host
 /api/games/party/[code]/join
 /api/games/party/[code]/stream
 /api/games/photos/[pack]/[photo]
 /api/games/screens/stream
+/api/games/tv/backlog
 /api/games/tv/claim
 /api/games/tv/link
 /api/games/tv/party

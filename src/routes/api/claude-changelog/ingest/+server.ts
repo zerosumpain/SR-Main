@@ -72,7 +72,7 @@ type SessionIn = {
   messageCount?: number; userMsgCount?: number; assistantMsgCount?: number; toolCallCount?: number;
   models?: unknown; tokens?: unknown; estCostUsd?: number; costKnown?: boolean;
   featureTypes?: unknown; termFreq?: unknown; toolHistogram?: unknown; touchedPaths?: unknown;
-  skills?: unknown; costBreakdown?: unknown; fullTranscript?: string; pullRequests?: unknown;
+  skills?: unknown; costBreakdown?: unknown; fullTranscript?: string; pullRequests?: unknown; pullRequestRefs?: unknown;
   summary?: string; transcriptPath?: string; contentHash?: string;
   fileMtime?: string | null; fileSize?: number; schemaVersion?: number;
 };
@@ -133,6 +133,11 @@ export const POST: RequestHandler = async ({ request, url }) => {
     // `undefined`, NOT `[]`, when the payload omits it — see $lib/changelog/ingest-guard.
     pullRequests: Array.isArray(s.pullRequests)
       ? [...new Set(s.pullRequests.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+      : undefined,
+    // `owner/repo#N`, lowercased; anything else is dropped. Same undefined rule.
+    pullRequestRefs: Array.isArray(s.pullRequestRefs)
+      ? [...new Set(s.pullRequestRefs.filter((r): r is string =>
+          typeof r === 'string' && /^[a-z0-9_.-]+\/[a-z0-9_.-]+#\d{1,6}$/.test(r)))]
       : undefined,
     skills: s.skills ?? {},
     costBreakdown: s.costBreakdown ?? [],

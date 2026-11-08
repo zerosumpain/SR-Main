@@ -20,7 +20,7 @@ import { act, createGame, endRoom, ensureRoom, hostOf, roomStage, subscribe, wat
 import { newCode, normaliseCode } from './screens';
 import { GameError, isDifficulty, type Difficulty } from './tap-duel';
 import { SCREEN_ACTOR } from './biscuit-tower';
-import { PARTY_GAMES, PARTY_MAX, QUIZZES_PER_TV_DAY, SETUP_FIRST, cleanGuestName, issueSeat, newGuestId, newPartyId, partyRange, type MemberKind, type PartyGame, type PartyView } from './party';
+import { HOST_VERBS, PARTY_GAMES, PARTY_MAX, QUIZZES_PER_TV_DAY, SETUP_FIRST, cleanGuestName, issueSeat, newGuestId, newPartyId, partyRange, type MemberKind, type PartyGame, type PartyView } from './party';
 
 export type { MemberKind, PartyGame, PartyView };
 
@@ -71,6 +71,11 @@ export function partyGames(): PartyGame[] {
   return PARTY_GAMES.filter((g) => !!GAMES[g]?.toScreen).map((id) => ({ id, title: TITLES[id], ...partyRange(id) }));
 }
 
+/** The first in who is still in. Kicked, and the next one along takes over. */
+function hostOfParty(p: Party): Member | null {
+  return p.members.find((m) => m.active) ?? null;
+}
+
 function view(p: Party, now = Date.now()): PartyView {
   return {
     id: p.id,
@@ -81,6 +86,7 @@ function view(p: Party, now = Date.now()): PartyView {
     game: p.game,
     options: p.options,
     members: p.members.filter((m) => m.active).map((m) => ({ id: m.id, name: m.name, kind: m.kind, online: (p.online.get(m.id) ?? 0) > 0 })),
+    hostId: hostOfParty(p)?.id ?? null,
     roomId: p.roomId,
     notice: p.notice,
     games: partyGames(),
@@ -400,6 +406,20 @@ export function tvAct(tvId: string, action: unknown, body: Record<string, unknow
   }
   changed(p);
   return view(p, now);
+}
+
+/**
+ * One of the TV's verbs from the host's phone (`HOST_VERBS`): the first in
+ * runs the evening from their phone as well as the remote can. The host
+ * cannot take themselves out — the TV's remote can.
+ */
+export function hostAct(code: unknown, memberId: string, action: unknown, body: Record<string, unknown> = {}, now = Date.now()): PartyView {
+  const p = codeParty(code);
+  member(p, memberId);
+  if (hostOfParty(p)?.id !== memberId) throw new GameError(403, 'Only the host can do that. The host is whoever joined first.');
+  if (typeof action !== 'string' || !HOST_VERBS.has(action)) throw new GameError(400, 'Unknown action.');
+  if (action === 'kick' && body.memberId === memberId) throw new GameError(400, 'You can’t take yourself out — use the TV’s remote.');
+  return tvAct(p.tvId, action, body, now);
 }
 
 /** A move from a player at the party, into the room it is playing. */

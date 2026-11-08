@@ -58,6 +58,8 @@ export type ReleaseIngestPayload = {
   files: FileFact[];
   stats: ReleaseStats;
   contentHash?: string;
+  /** `owner/name` of the repository that shipped it. Omitted = SR-Main (its CI). */
+  repo?: string;
 };
 
 /** One entry the LLM produces for a release. */

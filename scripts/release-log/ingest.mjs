@@ -17,6 +17,11 @@
 //   --batch <n>         summarise: releases per request (default 5, server max 25)
 //   --retry-failed      summarise: also retry releases whose last pass failed
 //   --repo <path>       repo to read (default: this script's repo)
+//   --repo-slug <o/n>   tag every release with this repository (default: none = SR-Main)
+//   --settled           backfill: skip releases younger than the clustering gap, so
+//                       a run of commits still in progress is not cut in two
+//   --summarise-new     backfill: let the server summarise releases it has not seen
+//                       (the porkserv collector after a repository's first backfill)
 //
 // Env:
 //   RELEASE_LOG_URL     site base URL (default: https://strangeramblings.com)
@@ -39,6 +44,9 @@ const value = (flag, fallback = null) => {
 
 const DRY = has('--dry');
 const REPO = value('--repo', DEFAULT_REPO);
+const REPO_SLUG = value('--repo-slug', null);
+/** @param {object} payload */
+const tagged = (payload) => (REPO_SLUG ? { ...payload, repo: REPO_SLUG } : payload);
 
 async function post(pathname, body) {
   const res = await fetch(`${BASE}${pathname}`, {
@@ -89,7 +97,7 @@ async function runHead() {
       `${payload.stats.commits} commits · ${payload.stats.files} files · +${payload.stats.insertions}/-${payload.stats.deletions}`,
   );
   if (DRY) return;
-  const result = await post('/api/releases/ingest', payload);
+  const result = await post('/api/releases/ingest', tagged(payload));
   console.log(`release-log: recorded ${result.version ?? '?'}${result.skipped ? ` (${result.skipped})` : ''}`);
 }
 
@@ -100,6 +108,13 @@ async function runBackfill() {
   let payloads = collectHistory(branch, REPO, { gapSeconds: gap, branch });
   const limit = Number(value('--limit', 0));
   if (limit > 0) payloads = payloads.slice(-limit);
+  // A cluster of direct commits is closed by a quiet gap. Until that gap has
+  // passed, the newest cluster may still grow, and recording it now would
+  // leave its later commits as a second, overlapping release.
+  if (has('--settled')) {
+    const cutoff = Date.now() - gap * 1000;
+    payloads = payloads.filter((p) => new Date(p.deployedAt).getTime() <= cutoff);
+  }
 
   console.log(`release-log: ${payloads.length} releases reconstructed from ${branch} (gap ${gap}s)`);
   if (DRY) {
@@ -120,7 +135,10 @@ async function runBackfill() {
     try {
       // summarise=0: the backfill must not fire hundreds of concurrent LLM
       // calls. `--summarise` drives that pass afterwards, rate-limited.
-      const result = await post('/api/releases/ingest?summarise=0', payload);
+      const result = await post(
+        has('--summarise-new') ? '/api/releases/ingest' : '/api/releases/ingest?summarise=0',
+        tagged(payload),
+      );
       if (result.skipped) skipped++;
       else ok++;
     } catch (err) {
