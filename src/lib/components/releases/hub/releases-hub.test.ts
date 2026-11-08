@@ -450,3 +450,20 @@ describe('weeklyCadence', () => {
    expect(mainOnly).not.toContain('Archive SR-Main on GitHub');
    expect(html(publicData())).not.toContain('on GitHub"');
  });
+
+ it('links a repository to where it runs, only when that is a web address', () => {
+   const base = {
+     name: 'Policy Lab', url: 'https://github.com/zerosumpain/policy-lab', role: 'Policy Lab',
+     revision: 'abcdef1234567890', measuredAt: '2026-11-08T03:40:00Z', source: 'revision snapshot',
+     code: { lines: 10, files: 1 }, documentation: { lines: 0, files: 0 }, tests: { lines: 0, files: 0 },
+   };
+   const owner = html(ownerData({ sourceFootprint: { ...footprint, repositories: [
+     { ...base, id: 'policy-lab', liveUrl: 'https://policy-lab.strangeramblings.com/' },
+     { ...base, id: 'odd', name: 'Odd', liveUrl: 'javascript:alert(1)' },
+     { ...base, id: 'none', name: 'Nowhere' },
+   ] } }));
+   expect(owner).toContain('href="https://policy-lab.strangeramblings.com/"');
+   expect(owner).toContain('Access Policy Lab live');
+   expect(owner).not.toContain('javascript:');
+   expect(owner).not.toContain('Access Nowhere live');
+ });

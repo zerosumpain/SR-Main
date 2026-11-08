@@ -72,7 +72,7 @@ export function measureSource(root) {
   }
   catch { /* A fixture or source archive can have no .git directory. */ }
   const repositories = [
-    { id: 'main', name: 'SR-Main', url: 'https://github.com/zerosumpain/SR-Main', role: 'Site and shared platform services', revision, updatedAt, measuredAt: new Date().toISOString(), source: 'this build', ...main },
+    { id: 'main', name: 'SR-Main', url: 'https://github.com/zerosumpain/SR-Main', role: 'Site and shared platform services', liveUrl: 'https://strangeramblings.com/', revision, updatedAt, measuredAt: new Date().toISOString(), source: 'this build', ...main },
   ];
   return {
     lines: main.code.lines,
