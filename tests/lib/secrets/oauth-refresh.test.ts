@@ -208,3 +208,70 @@ describe('the documented vault-row setup is actually creatable', () => {
     }
   });
 });
+
+describe('TrueLayer re-authorisation', () => {
+  it('builds a consent link from the stored client_id with offline_access and the registered redirect', async () => {
+    seed({});
+    const { truelayerAuthorizationUrl, TRUELAYER_REDIRECT_URI } = await import('$lib/secrets/oauth-refresh');
+    const u = new URL(await truelayerAuthorizationUrl());
+    expect(u.host).toBe('auth.truelayer.com');
+    expect(u.searchParams.get('client_id')).toBe('cid-1234');
+    expect(u.searchParams.get('response_type')).toBe('code');
+    expect(u.searchParams.get('redirect_uri')).toBe(TRUELAYER_REDIRECT_URI);
+    expect(u.searchParams.get('scope')).toContain('offline_access');
+    expect(u.toString()).not.toContain('shhh-secret');
+  });
+
+  it('extracts the code from a bare code, a redirect URL, or a pasted query string', async () => {
+    const { extractAuthCode } = await import('$lib/secrets/oauth-refresh');
+    const code = 'a'.repeat(64);
+    expect(extractAuthCode(code)).toBe(code);
+    expect(extractAuthCode(`https://console.truelayer.com/redirect-page?code=${code}&scope=info`)).toBe(code);
+    expect(extractAuthCode(`https://console.truelayer.com/redirect-page#code=${code}`)).toBe(code);
+    expect(extractAuthCode(`code=${code}&scope=info`)).toBe(code);
+    expect(extractAuthCode('')).toBeNull();
+    expect(extractAuthCode('hello')).toBeNull();
+    expect(extractAuthCode('https://console.truelayer.com/redirect-page?error=access_denied')).toBeNull();
+  });
+
+  it('trades the code for a new refresh token and keeps the client credentials', async () => {
+    seed({ refresh_token: 'dead-refresh' });
+    const f = mockTokenEndpoint({ access_token: 'new-access', expires_in: 3600, refresh_token: 'refresh-NEW' });
+    vi.stubGlobal('fetch', f);
+    const { reauthoriseTrueLayer } = await import('$lib/secrets/oauth-refresh');
+
+    await reauthoriseTrueLayer('https://console.truelayer.com/redirect-page?code=abcdef0123456789abcdef');
+
+    const sent = new URLSearchParams(String((f as unknown as { mock: { calls: [string, { body: string }][] } }).mock.calls[0][1].body));
+    expect(sent.get('grant_type')).toBe('authorization_code');
+    expect(sent.get('code')).toBe('abcdef0123456789abcdef');
+    expect(sent.get('redirect_uri')).toBe('https://console.truelayer.com/redirect-page');
+    const stored = JSON.parse(storedPayload);
+    expect(stored).toMatchObject({
+      client_id: 'cid-1234',
+      client_secret: 'shhh-secret',
+      refresh_token: 'refresh-NEW',
+      access_token: 'new-access',
+    });
+    // The next canvas resolve uses the new access token without another exchange.
+    await expect(getOAuthAccessToken('truelayer')).resolves.toBe('new-access');
+  });
+
+  it('blames the code, not the stored token, on invalid_grant — and stores nothing', async () => {
+    seed({ refresh_token: 'dead-refresh' });
+    vi.stubGlobal('fetch', mockTokenEndpoint({ error: 'invalid_grant' }, false, 400));
+    const { reauthoriseTrueLayer } = await import('$lib/secrets/oauth-refresh');
+
+    await expect(reauthoriseTrueLayer('abcdef0123456789abcdef')).rejects.toThrow(/single-use/);
+    expect(updateCount).toBe(0);
+  });
+
+  it('refuses a response with no refresh_token rather than storing a dead credential', async () => {
+    seed({});
+    vi.stubGlobal('fetch', mockTokenEndpoint({ access_token: 'x', expires_in: 3600 }));
+    const { reauthoriseTrueLayer } = await import('$lib/secrets/oauth-refresh');
+
+    await expect(reauthoriseTrueLayer('abcdef0123456789abcdef')).rejects.toThrow(/offline_access/);
+    expect(updateCount).toBe(0);
+  });
+});

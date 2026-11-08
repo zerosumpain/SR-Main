@@ -100,6 +100,35 @@
     if (a?.apis) apis = a.apis;
   }
 
+  // ── TrueLayer reconnect ─────────────────────────────────────────────────
+  // Bank consent lapses after 90 days and the refresh token dies with it
+  // (invalid_grant). Open the consent link, sign in to the bank, paste the
+  // code (or the whole redirect URL) back; the server stores the new token.
+  // Built server-side (it reads only the client_id); an anchor rather than a
+  // window.open after a fetch, which popup blockers swallow.
+  const truelayerLink = data.truelayerLink as string | null;
+  let tlCode = $state('');
+
+  async function submitTrueLayerCode() {
+    busy = 'tl:code';
+    try {
+      const res = await fetch('/api/admin/apis/oauth/truelayer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ code: tlCode }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      tlCode = '';
+      say('TrueLayer reconnected — new refresh token stored.');
+      await refresh();
+    } catch (e) {
+      say(`TrueLayer reconnect failed: ${(e as Error).message}`, true);
+    } finally {
+      busy = null;
+    }
+  }
+
   // ── Integrations ────────────────────────────────────────────────────────
   async function testIntegration(row: Integration) {
     busy = `test:${row.key}`;
@@ -539,6 +568,27 @@
       </div>
     {:else}
       <div class="nm-empty">No credentials registered. Add one below to let jkai authenticate an API.</div>
+    {/if}
+
+    {#if truelayerLink && !editing}
+      <div class="sform">
+        <div class="nm-sec-hd"><span class="sr-label-tight">Reconnect TrueLayer</span></div>
+        <p class="sec-lede">
+          When the bank consent lapses (every 90 days) the stored refresh token stops working and
+          TrueLayer canvases fail with <code>invalid_grant</code>. Open the consent link, sign in to the
+          bank, then paste the code — or the whole URL of the page TrueLayer lands you on — below. Codes
+          are single-use and expire within minutes.
+        </p>
+        <div class="r-actions">
+          <a class="link-btn" href={truelayerLink} target="_blank" rel="noopener noreferrer">1. Open bank consent link ↗</a>
+        </div>
+        <input class="nm-text-input" type="password" bind:value={tlCode} placeholder="2. paste the code or redirect URL" autocomplete="off" />
+        <div class="r-actions">
+          <button class="nm-save-btn" onclick={submitTrueLayerCode} disabled={busy === 'tl:code' || !tlCode.trim()}>
+            {busy === 'tl:code' ? 'Reconnecting…' : '3. Store new token'}
+          </button>
+        </div>
+      </div>
     {/if}
 
     {#if credentialSpecs.length && !editing}
