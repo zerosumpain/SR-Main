@@ -14,6 +14,7 @@ import { db } from '$lib/db';
 import { claudeSessions, releases } from '$lib/db/schema';
 import { getReleaseSessions } from './sessions.server';
 import { getReleaseConsole, parseConsoleFilters } from './console';
+import { _resetShowcaseCache, getReleaseShowcase } from './public';
 
 const PREFIX = 'itest_xrepo';
 const PR = 98_767; // far above any real PR number, so no real row can join
@@ -75,5 +76,16 @@ describe('cross-repository release links', () => {
     expect(console_.repos.map((r) => r.repo)).toEqual(expect.arrayContaining(['zerosumpain/SR-Main', 'zerosumpain/SR-Drive']));
     const all = await getReleaseConsole(parseConsoleFilters(new URL('https://example.test/releases?from=2001-01-01&to=2001-01-01')));
     expect(all.items.map((r) => r.id).sort()).toEqual([ids.main, ids.drive].sort());
+  });
+
+  it('keeps every other repository out of the public record', async () => {
+    if (!dbReady) return expect(dbReady).toBe(false);
+    _resetShowcaseCache();
+    const before = await getReleaseShowcase();
+    await db.delete(releases).where(like(releases.sha, `${PREFIX}_drive`));
+    _resetShowcaseCache();
+    const after = await getReleaseShowcase();
+    // Removing the SR-Drive row changes nothing a visitor can see.
+    expect(after.totals).toEqual(before.totals);
   });
 });
