@@ -49,7 +49,52 @@
   const fmt = (n: number) => n.toLocaleString('en-GB');
   /** The snapshot is ours, but an href is still only ever a web address. */
   const liveHref = (url: string | undefined) => (url && /^https:\/\//.test(url) ? url : null);
+
+  // Sortable repository table. Client-side only: the server order (SR-Main,
+  // then the manifest's) is the default, and a header click re-orders the
+  // rows already on the page. Clicking the active column flips direction.
+  type Repository = (typeof sourceFootprint.repositories)[number];
+  type SortKey = 'name' | 'code' | 'documentation' | 'tests' | 'updated';
+  const SORT_VALUE: Record<SortKey, (r: Repository) => string | number> = {
+    name: (r) => r.name.toLowerCase(),
+    code: (r) => r.code.lines,
+    documentation: (r) => r.documentation.lines,
+    tests: (r) => r.tests.lines,
+    updated: (r) => r.updatedAt ?? '',
+  };
+  let sortKey = $state<SortKey | null>(null);
+  let sortDesc = $state(true);
+  const repositories = $derived.by(() => {
+    const rows = [...sourceFootprint.repositories];
+    if (!sortKey) return rows;
+    const value = SORT_VALUE[sortKey];
+    return rows.sort((a, b) => {
+      const x = value(a);
+      const y = value(b);
+      const order = x < y ? -1 : x > y ? 1 : 0;
+      return sortDesc ? -order : order;
+    });
+  });
+  function sortBy(key: SortKey) {
+    if (sortKey === key) sortDesc = !sortDesc;
+    else {
+      sortKey = key;
+      // Names read A→Z first; numbers and dates biggest or newest first.
+      sortDesc = key !== 'name';
+    }
+  }
+  function ariaSort(key: SortKey): 'ascending' | 'descending' | 'none' {
+    return sortKey === key ? (sortDesc ? 'descending' : 'ascending') : 'none';
+  }
 </script>
+
+{#snippet sortable(key: SortKey, label: string)}
+  <th scope="col" aria-sort={ariaSort(key)}>
+    <button type="button" class="a-sort" class:on={sortKey === key} onclick={() => sortBy(key)}>
+      {label}<span class="a-sort-mark" aria-hidden="true">{sortKey === key ? (sortDesc ? '↓' : '↑') : '↕'}</span>
+    </button>
+  </th>
+{/snippet}
 
 <section class="a">
   <div class="a-inner">
@@ -79,9 +124,16 @@
         <p class="a-scroll-hint">Swipe across the table for each repository's tests, revision and last update →</p>
         <div class="a-repositories" role="region" aria-label="Source lines by site repository">
           <table>
-            <thead><tr><th scope="col">Repository</th><th scope="col">Code</th><th scope="col">Documentation</th><th scope="col">Tests</th><th scope="col">Revision</th><th scope="col">Updated</th>{#if onArchive}<th scope="col"><span class="a-sr">Archive</span></th>{/if}</tr></thead>
+            <thead><tr>
+              {@render sortable('name', 'Repository')}
+              {@render sortable('code', 'Code')}
+              {@render sortable('documentation', 'Documentation')}
+              {@render sortable('tests', 'Tests')}
+              <th scope="col">Revision</th>
+              {@render sortable('updated', 'Updated')}
+              {#if onArchive}<th scope="col"><span class="a-sr">Archive</span></th>{/if}</tr></thead>
             <tbody>
-              {#each sourceFootprint.repositories as repository (repository.id)}
+              {#each repositories as repository (repository.id)}
                 <tr>
                   <th scope="row"><a href={repository.url} target="_blank" rel="noopener noreferrer">{repository.name}</a><small>{repository.role}{#if liveHref(repository.liveUrl)} · <a class="a-live" href={liveHref(repository.liveUrl)} target="_blank" rel="noopener noreferrer" aria-label="Access {repository.name} live">Access live here ↗</a>{/if}</small></th>
                   <td>{fmt(repository.code.lines)}</td>
@@ -239,6 +291,11 @@
   .a-repositories th, .a-repositories td { padding: 7px 11px; border-bottom: 1px solid rgba(237, 228, 212, .16); }
   .a-repositories thead th { color: rgba(237, 228, 212, .65); font: 500 var(--fs-label-xs) var(--font-mono); letter-spacing: .1em; text-transform: uppercase; text-align: right; white-space: nowrap; }
   .a-repositories thead th:first-child { text-align: left; }
+  .a-sort { all: unset; cursor: pointer; display: inline-flex; gap: 5px; align-items: baseline; }
+  .a-sort:hover, .a-sort.on { color: var(--bg); }
+  .a-sort:focus-visible { outline: 2px solid var(--accent-on-dark); outline-offset: 2px; }
+  .a-sort-mark { opacity: .55; }
+  .a-sort.on .a-sort-mark { opacity: 1; color: var(--accent-on-dark); }
   .a-repositories tbody th { text-align: left; font-weight: 600; min-width: 190px; }
   .a-repositories tbody th a { color: var(--bg); text-underline-offset: 3px; }
   .a-repositories tbody th a:hover { color: var(--accent-on-dark); }

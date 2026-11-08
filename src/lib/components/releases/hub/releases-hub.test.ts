@@ -486,3 +486,16 @@ describe('weeklyCadence', () => {
    expect(owner).toMatch(/chip repo[^>]*>SR-Drive</);
    expect(html(publicData())).not.toContain('All repositories');
  });
+
+ it('offers sortable column headings on the repository table', () => {
+   const repository = {
+     id: 'tv', name: 'SR-TV', url: 'https://github.com/zerosumpain/SR-TV', role: 'TV', revision: 'abcdef12',
+     updatedAt: '2026-11-02T10:00:00Z', measuredAt: '2026-11-08T03:40:00Z', source: 'revision snapshot',
+     code: { lines: 463, files: 2 }, documentation: { lines: 60, files: 1 }, tests: { lines: 0, files: 0 },
+   };
+   const owner = html(ownerData({ sourceFootprint: { ...footprint, repositories: [repository] } }));
+   for (const label of ['Repository', 'Code', 'Documentation', 'Tests', 'Updated']) {
+     expect(owner).toMatch(new RegExp(`<button type="button" class="a-sort[^"]*"[^>]*>${label}`));
+   }
+   expect(owner).toContain('aria-sort="none"');
+ });
