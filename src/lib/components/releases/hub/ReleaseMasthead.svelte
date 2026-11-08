@@ -209,6 +209,8 @@
               Retry {queue.failed} failed
             </button>
           {/if}
+          <!-- Owner only, like the rest of this block: the merge/revert desk. -->
+          <a class="a-btn ghost" href="/releases/pulls">Pull requests →</a>
         </div>
       </div>
     {/if}
@@ -365,6 +367,7 @@
       background 0.2s ease-out,
       color 0.2s ease-out;
   }
+  a.a-btn { text-decoration: none; display: inline-block; }
   .a-btn.ghost {
     background: transparent;
     color: var(--accent-on-dark);
