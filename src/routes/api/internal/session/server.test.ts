@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   driveOpen: true,
   shareValid: false,
   sharePass: null as string | null,
+  sharePack: null as string | null,
   shareCalls: [] as [string, string][],
   shareVisits: [] as unknown[],
   shareCounted: [] as boolean[],
@@ -79,7 +80,7 @@ vi.mock('$lib/projects/shares', () => ({
     state.shareCalls.push([key, token]);
     state.shareVisits.push(visit);
     state.shareCounted.push(count);
-    return state.shareValid ? { passwordHash: state.sharePass } : null;
+    return state.shareValid ? { passwordHash: state.sharePass, pack: state.sharePack } : null;
   },
 }));
 vi.mock('$lib/access/catalogue', async (importOriginal) => {
@@ -120,6 +121,7 @@ beforeEach(() => {
   state.driveOpen = true;
   state.shareValid = false;
   state.sharePass = null;
+  state.sharePack = null;
   state.shareCalls.length = 0;
   state.shareVisits.length = 0;
   state.shareCounted.length = 0;
@@ -297,6 +299,34 @@ describe('session authority claims', () => {
     // The owner previewing is not a share, so never learns a verifier.
     state.email = 'owner@x.test';
     state.sharePass = verifier;
+    state.queue.push([]);
+    const owner = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(owner.claims.project).toEqual({ key: 'spine', access: 'owner' });
+  });
+
+  it('a Spine share carries its link\'s pack, beside any password, and only a share does', async () => {
+    const verifier = 'scrypt$' + 'a'.repeat(22) + '$' + 'b'.repeat(43);
+    state.shareValid = true;
+    state.sharePack = 'school';
+    state.queue.push([]);
+    const school = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(school.claims.project).toEqual({ key: 'spine', access: 'share', pack: 'school' });
+
+    state.sharePass = verifier;
+    state.queue.push([]);
+    const both = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(both.claims.project).toEqual({ key: 'spine', access: 'share', pass: verifier, pack: 'school' });
+
+    // A link with no pack: no pack key, so the app opens its default.
+    state.sharePass = null;
+    state.sharePack = null;
+    state.queue.push([]);
+    const plain = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect('pack' in plain.claims.project).toBe(false);
+
+    // The owner is never pinned to a link's pack.
+    state.email = 'owner@x.test';
+    state.sharePack = 'school';
     state.queue.push([]);
     const owner = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
     expect(owner.claims.project).toEqual({ key: 'spine', access: 'owner' });

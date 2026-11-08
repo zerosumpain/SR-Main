@@ -16,6 +16,7 @@
   import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import ShareModal from './ShareModal.svelte';
   import type { ProjectCard } from './cards';
+  import type { SharePack } from '$lib/projects/share-pack';
   import { resolveProjectCard } from '$lib/jkai/project-card';
   import ViewSwitch from '$lib/components/projects/ViewSwitch.svelte';
   import ProjectsFoot from '$lib/components/projects/ProjectsFoot.svelte';
@@ -26,7 +27,7 @@
   let projects = $state(data.projects);
   let removing = $state<string | null>(null);
   // The project whose secure-share panel is open (owner-only).
-  let shareModal = $state<{ key: string; href: string; title: string; shareBase?: string; sharePassword?: true } | null>(null);
+  let shareModal = $state<{ key: string; href: string; title: string; shareBase?: string; sharePassword?: true; sharePacks?: readonly SharePack[] } | null>(null);
 
   // Per-project public/private overlay. Seeded from the server; toggles update
   // it optimistically.
@@ -152,7 +153,7 @@
         {#if !isPub(e.key)}<span class="ctl-chip private">Private</span>{/if}
         <button
           class="ctl"
-          onclick={() => (shareModal = { key: e.key, href: e.href, title: e.title, shareBase: e.shareBase, sharePassword: e.sharePassword })}
+          onclick={() => (shareModal = { key: e.key, href: e.href, title: e.title, shareBase: e.shareBase, sharePassword: e.sharePassword, sharePacks: e.sharePacks })}
           title="Create a secure share link — opens this project for a recipient even while private"
         >
           Share
@@ -209,6 +210,7 @@
     href={shareModal.href}
     shareBase={shareModal.shareBase}
     sharePassword={shareModal.sharePassword === true}
+    sharePacks={shareModal.sharePacks ?? []}
     title={shareModal.title}
     onClose={() => (shareModal = null)}
   />

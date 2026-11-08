@@ -18,6 +18,7 @@
 // The card's shape lives in $lib/projects/views beside the three views that
 // draw it; re-exported so every existing import keeps working.
 import type { ProjectCard } from '$lib/projects/views';
+import { sharePacksFor } from '$lib/projects/share-pack';
 export type { ProjectCard };
 
 export const PROJECT_CARDS: ProjectCard[] = [
@@ -135,6 +136,9 @@ export const PROJECT_CARDS: ProjectCard[] = [
     // Mirrors SHARE_PASSWORD_KEYS ($lib/projects/share-password), which the
     // share API reads; owner-cards.test.ts holds the two to each other.
     sharePassword: true,
+    // A link opens the DfE pack (the default) or the schools pack; the Spine
+    // pins its reader to that one. The list lives in $lib/projects/share-pack.
+    sharePacks: sharePacksFor('spine'),
     label: 'Open The Spine',
     kind: 'Field study',
     tag: 'Interactive · Identity and accredited sharing',

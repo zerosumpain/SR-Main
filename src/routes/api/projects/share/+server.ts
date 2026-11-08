@@ -8,6 +8,7 @@ import {
   SHARE_PASSWORD_MAX,
   SHARE_PASSWORD_MIN,
 } from '$lib/projects/share-password';
+import { normaliseSharePack, sharePacksFor } from '$lib/projects/share-pack';
 
 // Owner-only management of per-project share links. Auth is enforced by the hook
 // (401 for /api/* when unauthed; bypassed on the homeserv LAN), exactly like the
@@ -20,6 +21,10 @@ import {
 // A link may ask for a password, on a project whose app checks one
 // (SHARE_PASSWORD_KEYS, today only the Spine). The password is never echoed back and
 // the row keeps only its scrypt verifier.
+//
+// A link may name an audience pack, on a project whose app has more than one
+// (SHARE_PACKS, today only the Spine: 'dfe' or 'school'). No pack is the app's
+// default; a pack the project does not offer is refused, never stored.
 
 async function ownerEmail(locals: App.Locals): Promise<string> {
   try {
@@ -43,7 +48,7 @@ export const GET: RequestHandler = async ({ url }) => {
 };
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-  let body: { key?: unknown; label?: unknown; expiresInDays?: unknown; password?: unknown };
+  let body: { key?: unknown; label?: unknown; expiresInDays?: unknown; password?: unknown; pack?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -61,6 +66,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     if (!password) {
       return json({ error: `Password must be ${SHARE_PASSWORD_MIN}–${SHARE_PASSWORD_MAX} characters.` }, { status: 400 });
     }
+  }
+
+  let pack: string | null = null;
+  if (body.pack !== undefined && body.pack !== null) {
+    if (!sharePacksFor(key).length) {
+      return json({ error: 'This project has only one pack — create the link without choosing one.' }, { status: 400 });
+    }
+    pack = normaliseSharePack(key, body.pack);
+    if (!pack) return json({ error: 'Unknown pack for this project.' }, { status: 400 });
   }
 
   // Bound the active-link set per project (owner-only, cheap defence-in-depth).
@@ -83,9 +97,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     label,
     expiresAt,
     password,
+    pack,
   });
   // token returned ONCE — the DB only stores its sha256. The password is never echoed.
-  return json({ ok: true, id, token, key, expiresAt, hasPassword: password !== null });
+  return json({ ok: true, id, token, key, expiresAt, hasPassword: password !== null, pack });
 };
 
 export const DELETE: RequestHandler = async ({ request }) => {
