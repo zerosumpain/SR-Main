@@ -8,6 +8,7 @@
 // A visitor who reads the home page as a place walks into a town of projects.
 
 import type { Snippet } from 'svelte';
+import type { SharePack } from './share-pack';
 
 /** One hand-built or agent-built card, as data (the list itself is src/routes/projects/cards.ts). */
 export interface ProjectCard {
@@ -64,6 +65,12 @@ export interface ProjectCard {
    * refuses it. Must match SHARE_PASSWORD_KEYS in $lib/projects/share-password.
    */
   sharePassword?: true;
+  /**
+   * The audience packs the project's app can open, the default first (the
+   * Spine: DfE and schools), so the Share panel offers a choice per link. Read
+   * from SHARE_PACKS in $lib/projects/share-pack, which the share API checks.
+   */
+  sharePacks?: readonly SharePack[];
 }
 
 /** What kind of thing a card is, read off its eyebrow. */

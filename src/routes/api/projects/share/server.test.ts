@@ -62,6 +62,29 @@ describe('POST /api/projects/share', () => {
     expect(state.created).toHaveLength(0);
   });
 
+  it('mints a link with no pack by default, so the app opens its default', async () => {
+    const res = await post({ key: 'spine' });
+    expect(res.body.pack).toBeNull();
+    expect(state.created[0].pack).toBeNull();
+  });
+
+  it('mints a Spine link for any pack its card offers', async () => {
+    for (const pack of ['dfe', 'school']) {
+      const res = await post({ key: 'spine', pack });
+      expect(res.status).toBe(200);
+      expect(res.body.pack).toBe(pack);
+    }
+    expect(state.created.map((c) => c.pack)).toEqual(['dfe', 'school']);
+  });
+
+  it('refuses a pack the project does not offer, or any pack on a one-pack project', async () => {
+    for (const pack of ['teachers', 'School', 'dfe ', '', 7, ['school']]) {
+      expect((await post({ key: 'spine', pack })).status).toBe(400);
+    }
+    expect((await post({ key: 'policy-engine', pack: 'dfe' })).status).toBe(400);
+    expect(state.created).toHaveLength(0);
+  });
+
   it('refuses a password that is too short, too long, or not a string', async () => {
     for (const password of ['abc', '   ab   ', '', 'x'.repeat(129), 1234]) {
       expect((await post({ key: 'spine', password })).status).toBe(400);
