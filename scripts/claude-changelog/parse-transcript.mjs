@@ -16,11 +16,15 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import { FOLDER_PROJECT, canonicalProject } from '../../src/lib/releases/session-projects.mjs';
 
 // v5 (2026-10-04): subagent transcripts count toward the session (cost, stage
 // cost, touched paths), and worktree folders resolve to the repository they
 // check out, so `sr-main-foo-20261003` reports as strange-rambling-svelte.
-export const SCHEMA_VERSION = 5;
+// v6 (2026-11-08): pull requests in EVERY zerosumpain repository are recorded
+// as `owner/repo#N` refs (the release log now covers all site repositories),
+// and the folder fallbacks live in $lib/releases/session-projects.mjs.
+export const SCHEMA_VERSION = 6;
 
 // ── Pricing per MTok (USD). cache_read ~0.1x input; cache_write_5m ~1.25x; 1h ~2x.
 // Keyed by normalised model id prefix. Unknown Claude ids fall back to opus.
@@ -76,22 +80,9 @@ const REPO_PROJECT = {
 };
 
 // Folder-name fallbacks for a worktree that no longer exists on disk (they are
-// deleted after merge, and a SCHEMA_VERSION bump re-parses old sessions). Order
-// matters: the first matching prefix wins.
-const FOLDER_PROJECT = [
-  [/^(sr-main|wt-|sr-shipped|sr-news|sr-deploy|sr-build|sr-jkai-grounding)/, 'strange-rambling-svelte'],
-  [/^sr-health/, 'sr-health'],
-  [/^sr-jkai/, 'sr-jkai-core'],
-  [/^sr-workflows?/, 'sr-workflows'],
-  [/^sr-drive/, 'sr-drive'],
-  [/^sr-infra/, 'sr-infra'],
-  [/^sr-hex/, 'sr-hex'],
-  [/^sr-policy-engine/, 'sr-policy-engine'],
-  [/^sr-policy/, 'sr-policy-analysis'],
-  [/^sr-apple/, 'SR-AppleApp'],
-  [/^wildmind/, 'wildmind'],
-];
-
+// deleted after merge, and a SCHEMA_VERSION bump re-parses old sessions), and
+// for folders that are not checkouts at all. Shared with the /releases cost
+// band, which applies the same rules to rows stored before a rule existed.
 const repoCache = new Map();
 /**
  * The GitHub repository a checkout belongs to, or null. Worktrees resolve to
@@ -266,6 +257,21 @@ function extractPullRequests(raw) {
   // that opened 2. The URL only appears when `gh` prints it, which happens when
   // the session creates, views or checks that PR.
   return [...found].filter((n) => n > 0 && n < 100_000).sort((a, b) => a - b);
+}
+
+/**
+ * Pull requests in any repository, as lowercased `owner/repo#N` refs. The same
+ * origin anchor as above; SR-Main's own PRs are included so one list answers
+ * "which PRs did this session open", and `pullRequests` stays for the
+ * numeric SR-Main join that predates it.
+ */
+export function extractPullRequestRefs(raw) {
+  const found = new Set();
+  for (const m of raw.matchAll(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/(\d{1,6})/g)) {
+    const n = Number(m[3]);
+    if (n > 0 && n < 100_000) found.add(`${m[1]}/${m[2]}#${n}`.toLowerCase());
+  }
+  return [...found].sort();
 }
 
 /**
@@ -451,6 +457,9 @@ export function parseTranscript(file, opts = {}) {
     const base = path.basename(cwd);
     project = PROJECT_MAP[base] || (base === path.basename(os.homedir()) ? os.hostname().split('.')[0] : projectOfFolder(base));
   }
+  // A session in ~ that edited nothing is named after the host; the shared rules
+  // file that, and any other ops folder, under infrastructure.
+  project = canonicalProject(project);
 
   // ── first substantive user prompt ──
   let firstPrompt = '';
@@ -662,6 +671,7 @@ export function parseTranscript(file, opts = {}) {
 
   const fullTranscript = renderTranscript(timeline);
   const pullRequests = extractPullRequests(raw);
+  const pullRequestRefs = extractPullRequestRefs(raw);
 
   // ── status: active if the transcript was modified very recently ──
   const status = (now - stat.mtimeMs) < 30 * 60 * 1000 ? 'active' : 'completed';
@@ -687,6 +697,7 @@ export function parseTranscript(file, opts = {}) {
       toolHistogram,
       touchedPaths,
       pullRequests,
+      pullRequestRefs,
       skills: skillsUsed,
       costBreakdown,
       fullTranscript,

@@ -75,7 +75,7 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
     mode: 'owner',
     today: '2026-09-25',
     sourceFootprint: footprint,
-    filters: { kind: 'all', impact: 'all', via: 'all', q: '', from: '', to: '', page: 0 },
+    filters: { repo: 'all', kind: 'all', impact: 'all', via: 'all', q: '', from: '', to: '', page: 0 },
     totals: {
       releases: 418,
       commits: 2338,
@@ -88,12 +88,14 @@ function ownerData(over: Partial<OwnerReleasesData> = {}): OwnerReleasesData {
       maxDate: '2026-07-29',
     },
     vias: [{ via: 'github-actions', count: 400 }],
+    repos: [{ repo: 'zerosumpain/SR-Main', count: 400 }, { repo: 'zerosumpain/SR-Drive', count: 72 }],
     kindDist: [{ kind: 'feature', count: 308 }],
     cadence: [{ week: '2026-W30', deploys: 9, shipped: 14, insertions: 120, deletions: 34 }],
     timeBuckets: [{ month: '2026-07', deploys: 9 }],
     items: [
       {
         id: 1,
+        repo: 'zerosumpain/SR-Main',
         version: '2026.07.29.6',
         sha: SHA,
         shortSha: SHA.slice(0, 8),
@@ -434,4 +436,53 @@ describe('weeklyCadence', () => {
    expect(owner).toContain('12345678');
    expect(owner).toContain('7 Sep');
    expect(html(publicData())).not.toContain('SR-Health');
+ });
+
+ it('shows when each repository last moved, and offers the owner an archive button except on SR-Main', () => {
+   const repository = {
+     id: 'smashamole', name: 'smashamole', url: 'https://github.com/zerosumpain/smashamole',
+     role: 'Game', revision: 'abcdef1234567890', updatedAt: '2026-04-12T10:00:00Z',
+     measuredAt: '2026-11-08T03:40:00Z', source: 'revision snapshot', code: { lines: 10, files: 1 },
+     documentation: { lines: 0, files: 0 }, tests: { lines: 0, files: 0 },
+   };
+   const owner = html(ownerData({ sourceFootprint: { ...footprint, repositories: [repository] } }));
+   expect(owner).toContain('datetime="2026-04-12T10:00:00Z"');
+   expect(owner).toContain('Archive smashamole on GitHub');
+   const mainOnly = html(ownerData({ sourceFootprint: { ...footprint, repositories: [{ ...repository, id: 'main', name: 'SR-Main' }] } }));
+   expect(mainOnly).not.toContain('Archive SR-Main on GitHub');
+   expect(html(publicData())).not.toContain('on GitHub"');
+ });
+
+ it('links a repository to where it runs, only when that is a web address', () => {
+   const base = {
+     name: 'Policy Lab', url: 'https://github.com/zerosumpain/policy-lab', role: 'Policy Lab',
+     revision: 'abcdef1234567890', measuredAt: '2026-11-08T03:40:00Z', source: 'revision snapshot',
+     code: { lines: 10, files: 1 }, documentation: { lines: 0, files: 0 }, tests: { lines: 0, files: 0 },
+   };
+   const owner = html(ownerData({ sourceFootprint: { ...footprint, repositories: [
+     { ...base, id: 'policy-lab', liveUrl: 'https://policy-lab.strangeramblings.com/' },
+     { ...base, id: 'odd', name: 'Odd', liveUrl: 'javascript:alert(1)' },
+     { ...base, id: 'none', name: 'Nowhere' },
+   ] } }));
+   expect(owner).toContain('href="https://policy-lab.strangeramblings.com/"');
+   expect(owner).toContain('Access Policy Lab live');
+   expect(owner).not.toContain('javascript:');
+   expect(owner).not.toContain('Access Nowhere live');
+ });
+
+ it('reads a repository filter and refuses anything not shaped like owner/name', () => {
+   expect(parseConsoleFilters(new URL('https://example.test/releases?repo=zerosumpain/SR-Drive')).repo).toBe('zerosumpain/SR-Drive');
+   expect(parseConsoleFilters(new URL('https://example.test/releases')).repo).toBe('all');
+   expect(parseConsoleFilters(new URL("https://example.test/releases?repo=x'%20or%201=1")).repo).toBe('all');
+ });
+
+ it('offers the owner a repository picker and tags releases from other repositories', () => {
+   const base = ownerData();
+   const drive = { ...base.items[0], id: 9, repo: 'zerosumpain/SR-Drive', version: '2026.07.29.9' };
+   const owner = html(ownerData({ items: [base.items[0], drive] }));
+   expect(owner).toContain('All repositories');
+   expect(owner).toContain('SR-Drive (72)');
+   expect(owner).toMatch(/class="chip repo[ "]/);
+   expect(owner).toMatch(/chip repo[^>]*>SR-Drive</);
+   expect(html(publicData())).not.toContain('All repositories');
  });

@@ -29,6 +29,8 @@
     /** Hoisted to the hub so the batch buttons and the per-release Regenerate
      *  share one in-flight flag and one error surface. */
     onSummarise?: (body: Record<string, unknown>, label: string) => void;
+    /** Owner only. Omit and no Archive column renders. */
+    onArchive?: (id: string, name: string) => void;
   }
 
   let {
@@ -41,9 +43,12 @@
     busy = false,
     busyMsg = null,
     onSummarise = () => {},
+    onArchive,
   }: Props = $props();
 
   const fmt = (n: number) => n.toLocaleString('en-GB');
+  /** The snapshot is ours, but an href is still only ever a web address. */
+  const liveHref = (url: string | undefined) => (url && /^https:\/\//.test(url) ? url : null);
 </script>
 
 <section class="a">
@@ -71,18 +76,29 @@
         <div><span>Tests</span><strong>{fmt(sourceFootprint.categories.tests.lines)}</strong></div>
       </div>
       {#if sourceFootprint.repositories.length}
-        <p class="a-scroll-hint">Swipe across the table for each repository's tests and revision →</p>
+        <p class="a-scroll-hint">Swipe across the table for each repository's tests, revision and last update →</p>
         <div class="a-repositories" role="region" aria-label="Source lines by site repository">
           <table>
-            <thead><tr><th scope="col">Repository</th><th scope="col">Code</th><th scope="col">Documentation</th><th scope="col">Tests</th><th scope="col">Revision</th></tr></thead>
+            <thead><tr><th scope="col">Repository</th><th scope="col">Code</th><th scope="col">Documentation</th><th scope="col">Tests</th><th scope="col">Revision</th><th scope="col">Updated</th>{#if onArchive}<th scope="col"><span class="a-sr">Archive</span></th>{/if}</tr></thead>
             <tbody>
               {#each sourceFootprint.repositories as repository (repository.id)}
                 <tr>
-                  <th scope="row"><a href={repository.url} target="_blank" rel="noopener noreferrer">{repository.name}</a><small>{repository.role}</small></th>
+                  <th scope="row"><a href={repository.url} target="_blank" rel="noopener noreferrer">{repository.name}</a><small>{repository.role}{#if liveHref(repository.liveUrl)} · <a class="a-live" href={liveHref(repository.liveUrl)} target="_blank" rel="noopener noreferrer" aria-label="Access {repository.name} live">Access live here ↗</a>{/if}</small></th>
                   <td>{fmt(repository.code.lines)}</td>
                   <td>{fmt(repository.documentation.lines)}</td>
                   <td>{fmt(repository.tests.lines)}</td>
                   <td class="a-rev">{repository.revision?.slice(0, 8) ?? 'local build'}</td>
+                  <td class="a-updated">
+                    {#if repository.updatedAt}<time datetime={repository.updatedAt}>{shortDate(repository.updatedAt.slice(0, 10))}</time>{:else}—{/if}
+                  </td>
+                  {#if onArchive}
+                    <td class="a-archive">
+                      {#if repository.id !== 'main'}
+                        <button type="button" class="a-btn ghost" disabled={busy} onclick={() => onArchive(repository.id, repository.name)}
+                          aria-label="Archive {repository.name} on GitHub">Archive</button>
+                      {/if}
+                    </td>
+                  {/if}
                 </tr>
               {/each}
             </tbody>
@@ -97,7 +113,11 @@
         {:else}
           SR-Main is measured from this build.
         {/if}
-        The deployment chart below currently records SR-Main releases only.
+        {#if sourceFootprint.repositories.length}
+          The chart and log below record releases from every repository; pick one with the Repository filter.
+        {:else}
+          The deployment chart below records SR-Main releases.
+        {/if}
         Shared source copied into more than one repository is counted in each repository's row.
       </p>
     </div>
@@ -222,9 +242,12 @@
   .a-repositories tbody th { text-align: left; font-weight: 600; min-width: 190px; }
   .a-repositories tbody th a { color: var(--bg); text-underline-offset: 3px; }
   .a-repositories tbody th a:hover { color: var(--accent-on-dark); }
+  .a-repositories tbody th small .a-live { color: var(--accent-on-dark); font-weight: 400; }
   .a-repositories tbody th small { display: block; color: rgba(237, 228, 212, .55); font: var(--fs-label-xs) var(--font-body); }
   .a-repositories td { text-align: right; font: var(--fs-label) var(--font-code); white-space: nowrap; }
-  .a-repositories .a-rev { color: rgba(237, 228, 212, .58); }
+  .a-repositories .a-rev, .a-repositories .a-updated { color: rgba(237, 228, 212, .58); }
+  .a-repositories .a-archive .a-btn { padding: 3px 9px; }
+  .a-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 680px) {
     .a-counts { grid-template-columns: 1fr; }
     .a-counts > div + div { border-left: 0; border-top: 1px solid rgba(237, 228, 212, .2); }
