@@ -18,7 +18,7 @@ const list = [
 describe('archiving a footprint repository', () => {
   beforeEach(() => {
     delete rows.v;
-    process.env.GITHUB_API_TOKEN = 'ghp_testtokentesttokentesttoken';
+    process.env.GITHUB_API_TOKEN = 'test-token-not-real';
   });
 
   it('never archives SR-Main or anything off the list, and never calls GitHub for them', async () => {
