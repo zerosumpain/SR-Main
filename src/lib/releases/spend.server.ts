@@ -10,6 +10,7 @@
  * transcript is up to 1.5 MB.
  */
 import { sql } from 'drizzle-orm';
+import { canonicalProject } from './session-projects.mjs';
 import { db } from '$lib/db';
 import { buildSpendBand, type SpendBand, type SpendReleaseRow, type SpendSessionRow } from './spend';
 
@@ -60,7 +61,10 @@ export async function getSpendBand(window: { from?: string; to?: string }): Prom
                from release_items ri where ri.release_id = r.id
              ), '[]'::jsonb) as items
       from releases r
-      where exists (
+      -- pull_requests holds SR-Main PR numbers only. Other repositories record
+      -- releases too now, and their PR 67 is not the SR-Main PR 67.
+      where r.repo = 'zerosumpain/SR-Main'
+        and exists (
         select 1 from jsonb_array_elements_text(coalesce(r.stats->'prs', '[]'::jsonb)) p(n)
         join linked l on l.n = p.n::int
       )
@@ -79,7 +83,8 @@ export async function getSpendBand(window: { from?: string; to?: string }): Prom
   const sessions: SpendSessionRow[] = rowsOf(sessionResult).map((r) => ({
     id: String(r.id),
     title: (r.title as string) ?? null,
-    project: String(r.project ?? 'unknown'),
+    // Stored rows can predate a folder rule; read them through the same rules.
+    project: canonicalProject(r.project),
     startedAt: iso(r.started_at),
     costUsd: r.est_cost_usd == null ? 0 : Number(r.est_cost_usd),
     costKnown: r.cost_known !== false,

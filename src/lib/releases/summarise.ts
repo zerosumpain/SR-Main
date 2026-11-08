@@ -122,7 +122,7 @@ function groupFiles(files: FileFact[]): string {
  * ceiling, and a shorter prompt with fewer requested items lands inside it.
  */
 export function buildSummaryPrompt(
-  r: Pick<Release, 'version' | 'shortSha' | 'deployedAt' | 'commits' | 'files' | 'stats'>,
+  r: Pick<Release, 'version' | 'shortSha' | 'deployedAt' | 'commits' | 'files' | 'stats'> & { repo?: string },
   compact = false,
 ): string {
   const commits = (r.commits as CommitFact[]) ?? [];
@@ -136,6 +136,9 @@ export function buildSummaryPrompt(
 
   const parts = [
     `RELEASE ${r.version} (${r.shortSha}) deployed ${r.deployedAt instanceof Date ? r.deployedAt.toISOString() : r.deployedAt}`,
+    // Other repositories record releases too; name the one this came from so
+    // the notes do not describe, say, a Wildmind change as a change to the site.
+    ...(r.repo && r.repo !== 'zerosumpain/SR-Main' ? [`REPOSITORY ${r.repo}`] : []),
     `${stats.commits ?? commits.length} commits · ${stats.files ?? files.length} files · +${stats.insertions ?? 0}/-${stats.deletions ?? 0}` +
       (stats.prs?.length ? ` · PRs ${stats.prs.map((n) => `#${n}`).join(', ')}` : ''),
     '',

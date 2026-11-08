@@ -1,9 +1,11 @@
-// POST /api/releases/repositories/archive — archive one repository from the
+// POST /api/site-footprint/archive — archive one repository from the
 // /releases footprint table on GitHub.   { id: "smashamole" }
 //
 // Owner only, and never falls open: archiving makes a repository read-only for
-// everyone. The id must name a row of the installed footprint snapshot; the
-// GitHub slug is read from that row, not from the request.
+// everyone. Deliberately NOT under /api/releases, whose POSTs skip the session
+// gate for CI (HOOK_BYPASSES is a prefix list), so the hook's owner gate and
+// this handler's check both apply. The id must name a row of the installed
+// footprint snapshot; the GitHub slug is read from that row, not the request.
 import { json, error } from '@sveltejs/kit';
 import { SOURCE_FOOTPRINT } from 'virtual:sr-source-footprint';
 import { isOwnerRequest } from '$lib/server/owner';

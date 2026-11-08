@@ -79,3 +79,33 @@ describe('pull-request extraction', () => {
     expect(extract('just reading the code today, nothing shipped')).toEqual([]);
   });
 });
+
+/** Must stay identical to extractPullRequestRefs in parse-transcript.mjs — see its canary. */
+const REFS_PATTERN = String.raw`/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/(\d{1,6})/g`;
+
+function extractRefs(text: string): string[] {
+  const re = /github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/(\d{1,6})/g;
+  const found = new Set<string>();
+  for (const m of text.matchAll(re)) {
+    const n = Number(m[3]);
+    if (n > 0 && n < 100_000) found.add(`${m[1]}/${m[2]}#${n}`.toLowerCase());
+  }
+  return [...found].sort();
+}
+
+describe('pull-request refs in any repository', () => {
+  it('uses the same pattern the parser does', () => {
+    expect(readFileSync(SOURCE, 'utf8')).toContain(REFS_PATTERN.slice(1, -2));
+  });
+
+  it('keeps the repository, so one number never means two pull requests', () => {
+    expect(extractRefs(
+      'https://github.com/zerosumpain/SR-Drive/pull/67 https://github.com/zerosumpain/SR-Main/pull/67 ' +
+        'https://github.com/zerosumpain/casebook/pull/12',
+    )).toEqual(['zerosumpain/casebook#12', 'zerosumpain/sr-drive#67', 'zerosumpain/sr-main#67']);
+  });
+
+  it('still ignores the short form prose uses', () => {
+    expect(extractRefs('see /SR-Drive/pull/67 and #12')).toEqual([]);
+  });
+});

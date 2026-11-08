@@ -27,6 +27,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
+import { canonicalProject } from './session-projects.mjs';
 
 export interface SessionStageSlice {
   stage: string;
@@ -89,13 +90,14 @@ const EMPTY: ReleaseSessionsBand = { sessions: [], byRelease: {}, unlinkedInWind
 export async function getReleaseSessions(releaseIds: number[]): Promise<ReleaseSessionsBand> {
   if (!releaseIds.length) return EMPTY;
 
-  // One round trip. `stats->'prs'` is the release's PR list and `pull_requests`
-  // is the session's; the overlap is the link. jsonb array overlap has no
+  // One round trip. `stats->'prs'` is the release's PR list and the session's
+  // `pull_requests` (SR-Main) or `pull_request_refs` (any repo) is the other
+  // side; the overlap is the link. jsonb array overlap has no
   // operator, so both sides are expanded — the GIN index on pull_requests still
   // serves the containment half.
   const rows = await db.execute(sql`
     with page as (
-      select id, coalesce(stats->'prs', '[]'::jsonb) as prs, deployed_at
+      select id, repo, coalesce(stats->'prs', '[]'::jsonb) as prs, deployed_at
       from releases
       where id in (${sql.join(releaseIds.map((id) => sql`${id}`), sql`, `)})
     ),
@@ -103,7 +105,13 @@ export async function getReleaseSessions(releaseIds: number[]): Promise<ReleaseS
       select distinct s.id as session_id, p.id as release_id
       from page p
       join lateral jsonb_array_elements_text(p.prs) as pr(n) on true
-      join claude_sessions s on s.pull_requests @> to_jsonb(array[pr.n::int])
+      -- SR-Main releases join on the numeric list; every other repository on
+      -- the owner/repo#N refs, so one PR number never links across repos.
+      join claude_sessions s on (
+        (p.repo = 'zerosumpain/SR-Main' and s.pull_requests @> to_jsonb(array[pr.n::int]))
+        or (p.repo <> 'zerosumpain/SR-Main'
+            and s.pull_request_refs @> to_jsonb(array[lower(p.repo) || '#' || pr.n]))
+      )
     )
     select s.id, s.title, s.project, s.started_at, s.ended_at, s.message_count,
            s.tool_call_count, s.est_cost_usd, s.cost_known, s.pull_requests,
@@ -118,7 +126,7 @@ export async function getReleaseSessions(releaseIds: number[]): Promise<ReleaseS
   const sessions: ReleaseSession[] = rowsOf(rows).map((r) => ({
     id: String(r.id),
     title: (r.title as string) ?? null,
-    project: String(r.project ?? 'unknown'),
+    project: canonicalProject(r.project),
     startedAt: r.started_at ? new Date(r.started_at as string) : null,
     endedAt: r.ended_at ? new Date(r.ended_at as string) : null,
     messageCount: Number(r.message_count ?? 0),
@@ -159,9 +167,11 @@ export async function getReleaseSessions(releaseIds: number[]): Promise<ReleaseS
   // page must say so rather than quietly showing fewer sessions than exist.
   const [counts] = rowsOf(await db.execute(sql`
     select
-      count(*) filter (where jsonb_array_length(pull_requests) = 0) as without_prs,
+      count(*) filter (where jsonb_array_length(pull_requests) = 0
+                         and jsonb_array_length(pull_request_refs) = 0) as without_prs,
       count(*) filter (
         where jsonb_array_length(pull_requests) = 0
+          and jsonb_array_length(pull_request_refs) = 0
           and started_at between (select min(deployed_at) from releases where id in (
                 ${sql.join(releaseIds.map((id) => sql`${id}`), sql`, `)}))
                             and (select max(deployed_at) from releases where id in (

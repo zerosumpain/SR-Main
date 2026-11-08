@@ -62,7 +62,7 @@
     busy = true;
     busyMsg = `archiving ${name}…`;
     try {
-      const res = await fetch('/api/releases/repositories/archive', {
+      const res = await fetch('/api/site-footprint/archive', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id }),
@@ -217,6 +217,8 @@
           impact={data.filters.impact}
           via={data.filters.via}
           vias={data.vias}
+          repo={data.filters.repo}
+          repos={data.repos}
           {result}
         />
       {:else}

@@ -4738,6 +4738,15 @@ export const claudeSessions = pgTable(
      * of 180 transcripts on disk carry at least one.
      */
     pullRequests: jsonb('pull_requests').notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Every pull request the session touched, in ANY repository, as lowercased
+     * `owner/repo#N` strings. `pull_requests` above is SR-Main's numbers only,
+     * and joins only to SR-Main releases; this joins the session to releases
+     * other repositories recorded (`releases.repo` + `stats.prs`). A separate
+     * column rather than strings inside `pull_requests`, whose readers cast
+     * every element to int. Parser v6 onwards; older rows hold `[]`.
+     */
+    pullRequestRefs: jsonb('pull_request_refs').notNull().default(sql`'[]'::jsonb`),
     schemaVersion: integer('schema_version').notNull().default(1),
     ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
   },

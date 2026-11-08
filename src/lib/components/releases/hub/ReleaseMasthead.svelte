@@ -113,7 +113,11 @@
         {:else}
           SR-Main is measured from this build.
         {/if}
-        The deployment chart below currently records SR-Main releases only.
+        {#if sourceFootprint.repositories.length}
+          The chart and log below record releases from every repository; pick one with the Repository filter.
+        {:else}
+          The deployment chart below records SR-Main releases.
+        {/if}
         Shared source copied into more than one repository is counted in each repository's row.
       </p>
     </div>

@@ -33,8 +33,9 @@
  */
 
 import { usdToGbp } from '$lib/utils/cost-format';
+import { PROJECT_LABEL, SITE_PROJECT } from './session-projects.mjs';
 
-export const SITE_PROJECT = 'strange-rambling-svelte';
+export { SITE_PROJECT };
 
 /** The first parser schema that extracted pull-request numbers from a transcript. */
 export const PR_TRAIL_SCHEMA = 4;
@@ -210,17 +211,8 @@ const AREA_LABEL: Record<string, string> = {
   docs: 'Docs',
 };
 
-const REPO_LABEL: Record<string, string> = {
-  'sr-health': 'SR-Health',
-  'sr-jkai-core': 'SR-Jkai-Core',
-  'sr-workflows': 'SR-Workflows',
-  'sr-drive': 'SR-Drive',
-  'sr-infra': 'SR-Infra',
-  'sr-hex': 'SR-Hex',
-  'sr-policy-engine': 'Policy Engine',
-  'sr-policy-analysis': 'Policy Analysis',
-  wildmind: 'Wildmind',
-};
+/** One list, shared with the transcript parser's project rules. */
+const REPO_LABEL: Record<string, string> = PROJECT_LABEL;
 
 function alias(segment: string): string {
   return AREA_ALIAS[segment] ?? segment;

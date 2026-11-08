@@ -13,7 +13,7 @@ import { claudeSessions } from '$lib/db/schema';
 // A key absent from the payload is now absent from the SET clause, so the
 // stored value survives. A key PRESENT and empty is still a real instruction
 // to clear it.
-export const PRESERVED = ['pullRequests'] as const;
+export const PRESERVED = ['pullRequests', 'pullRequestRefs'] as const;
 
 export function updateSet(r: Record<string, unknown>): Record<string, unknown> {
   const set: Record<string, unknown> = { ...r, id: sql`${claudeSessions.id}` };
