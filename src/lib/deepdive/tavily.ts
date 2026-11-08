@@ -30,7 +30,7 @@ async function withRetry<T>(fn: (attempt: number) => Promise<T>, label: string):
 }
 
 /** The status a failed request carried, when it got as far as a response. */
-class TavilyHttpError extends Error {
+export class TavilyHttpError extends Error {
   constructor(
     message: string,
     readonly status: number,
@@ -89,7 +89,13 @@ export interface TavilySearchResponse {
   answer?: string;
 }
 
-export async function search(
+/**
+ * One Tavily search request. Not called directly: every search on the site
+ * goes through `search()` in `./web-search`, which chooses between Tavily and
+ * Brave and owns the retry and the failover — so this makes exactly one
+ * attempt, and says which one it is for the ledger.
+ */
+export async function tavilySearch(
   query: string,
   options: {
     /** What is searching, for the ledger — see `TavilyCall.purpose`. */
@@ -107,6 +113,8 @@ export async function search(
      */
     includeDomains?: string[];
     signal?: AbortSignal;
+    /** 1 for the first try; the balancer passes 2 for a retry or failover. */
+    attempt?: number;
   },
 ): Promise<TavilySearchResponse> {
   const apiKey = getTavilyKey();
@@ -118,38 +126,35 @@ export async function search(
   if (options.includeDomains?.length) requestOptions.includeDomains = options.includeDomains;
   if (options.excludeDomains?.length) requestOptions.excludeDomains = options.excludeDomains;
 
-  return withRetry(async (attempt) => {
-    const response = await ledgered<TavilySearchResponse>(
-      { kind: 'search', purpose: options.purpose, depth, query, options: requestOptions, credits: searchCredits(depth), attempt },
-      () => fetch(`${TAVILY_BASE}/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_key: apiKey,
-          query,
-          max_results: options.maxResults ?? 10,
-          search_depth: depth,
-          include_raw_content: false,
-          ...(options.includeAnswer ? { include_answer: true } : {}),
-          ...(options.topic ? { topic: options.topic } : {}),
-          // `days` is only honoured by the Tavily API when topic='news'; sending
-          // it otherwise is ignored by the server but harmless.
-          ...(options.days && options.days > 0 ? { days: Math.floor(options.days) } : {}),
-          ...(options.excludeDomains?.length ? { exclude_domains: options.excludeDomains } : {}),
-          ...(options.includeDomains?.length ? { include_domains: options.includeDomains } : {}),
-        }),
-        signal: combineSignals(options.signal, TAVILY_TIMEOUT_MS),
+  const response = await ledgered<TavilySearchResponse>(
+    { kind: 'search', purpose: options.purpose, depth, query, options: requestOptions, credits: searchCredits(depth), attempt: options.attempt ?? 1 },
+    () => fetch(`${TAVILY_BASE}/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: apiKey,
+        query,
+        max_results: options.maxResults ?? 10,
+        search_depth: depth,
+        include_raw_content: false,
+        ...(options.includeAnswer ? { include_answer: true } : {}),
+        ...(options.topic ? { topic: options.topic } : {}),
+        // `days` is only honoured by the Tavily API when topic='news'; sending
+        // it otherwise is ignored by the server but harmless.
+        ...(options.days && options.days > 0 ? { days: Math.floor(options.days) } : {}),
+        ...(options.excludeDomains?.length ? { exclude_domains: options.excludeDomains } : {}),
+        ...(options.includeDomains?.length ? { include_domains: options.includeDomains } : {}),
       }),
-      'search',
-      (body) => body.results?.length ?? 0,
-    );
+      signal: combineSignals(options.signal, TAVILY_TIMEOUT_MS),
+    }),
+    'search',
+    (body) => body.results?.length ?? 0,
+  );
 
-    // Metered on success only. A refused request is not billed, and the one
-    // retry above is a rare enough over- or under-count to be worth less than
-    // the simplicity. No-op outside a research run.
-    countTavilySearch(depth);
-    return response;
-  }, `search("${query.slice(0, 50)}")`);
+  // Metered on success only. A refused request is not billed. No-op outside a
+  // research run.
+  countTavilySearch(depth);
+  return response;
 }
 
 export interface TavilyExtractResult {

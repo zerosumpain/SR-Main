@@ -5,6 +5,8 @@
 // by a value stored at one scale and read at another; a price that is always
 // an integer number of pence cannot be.
 
+import type { UnitId } from './units';
+
 /** `track`: one known product, watched for price. `hunt`: criteria, watched for listings that meet them. */
 export type WishKind = 'track' | 'hunt';
 export type WishStatus = 'watching' | 'paused' | 'bought' | 'dropped';
@@ -15,18 +17,56 @@ export type WishStatus = 'watching' | 'paused' | 'bought' | 'dropped';
  * matches", because a match the code cannot show its working for is a match
  * nobody should be alerted about.
  */
-export type SpecField = 'gpu' | 'ram_gb' | 'ram_type' | 'storage_gb' | 'text';
+export type SpecField = 'gpu' | 'ram_gb' | 'ram_type' | 'storage_gb' | 'text' | 'attr' | 'dates';
 
 export type Constraint =
   | { field: 'gpu'; op: 'rank_gte'; value: string }
   | { field: 'ram_gb' | 'storage_gb'; op: 'gte'; value: number }
   | { field: 'ram_type'; op: 'in'; value: string[] }
-  | { field: 'text'; op: 'contains_any' | 'excludes_any'; value: string[] };
+  | { field: 'text'; op: 'contains_any' | 'excludes_any'; value: string[] }
+  /**
+   * Any measurable thing, for any kind of product: a TV's "55in or more", a
+   * holiday's "at least 7 nights" or "4 stars+", a LEGO set's pieces. `unit`
+   * picks the fixed reader in `units.ts`; `label` is what the page calls it.
+   * `essential`: a listing that does not state it is not one we can vouch for
+   * (the GPU rule, generalised) — otherwise one unstated detail is a "Check".
+   */
+  | { field: 'attr'; label: string; unit: UnitId; op: 'gte' | 'lte'; value: number; essential?: boolean }
+  /**
+   * When it is for — a holiday's travel window, inclusive ISO dates. `label`
+   * is how the ask put it ("February half term"). See `dates.ts`.
+   */
+  | { field: 'dates'; from: string; to: string; label: string };
+
+/**
+ * One thing the value score weighs. `measure` is a unit from `units.ts`, or one
+ * of the PC readers (`gpu`/`cpu` rankings, RAM, storage). Each listing scores
+ * value/ref (or ref/value when lower is better), capped at 2×, times `weight`.
+ */
+export interface ValueFactor {
+  label: string;
+  measure: UnitId | 'gpu' | 'cpu' | 'ram_gb' | 'storage_gb';
+  weight: number;
+  /** What a typical good one has — scores 1.0. */
+  ref: number;
+  better: 'higher' | 'lower';
+}
 
 /** Where a hunt looks. Each is checked to resolve before it is saved. */
 export type FeedRef =
   | { source: 'hukd-tag'; value: string }
   | { source: 'pricerunner-cl'; value: string }
+  /** An Overclockers category path, e.g. `pc-systems/pcs-by-price/gaming-pcs-under-1000`. */
+  | { source: 'ocuk-cat'; value: string }
+  /** A Scan category path from `SCAN_CATEGORIES`. */
+  | { source: 'scan-cat'; value: string }
+  /** A subreddit from `REDDIT_SUBS`. */
+  | { source: 'reddit'; value: string }
+  /** HolidayPirates' deal feed (one feed; value is always "deals"). */
+  | { source: 'holidaypirates'; value: string }
+  /** One open-web search query. See `sources/search.server.ts`. */
+  | { source: 'search'; value: string }
+  /** Before 2026-11-01: one daily search of PriceRunner only. Read as `search`. */
   | { source: 'tavily'; value: string };
 
 export interface WishCriteria {
@@ -34,6 +74,13 @@ export interface WishCriteria {
   /** Alert on a listing up to this far over the ceiling, as a near miss. Default 10%. */
   nearMissPct: number;
   constraints: Constraint[];
+  /** What "value for money" means for this item; empty = cheapest is best. */
+  value?: ValueFactor[];
+  /**
+   * Holidays and tickets are priced per person. With `per: 'total'` and a
+   * party size, a listing priced "pp" is compared at price × party.
+   */
+  price?: { per: 'total' | 'person'; party: number | null };
 }
 
 export interface WishItem {
@@ -56,17 +103,29 @@ export interface WishItem {
   deadline: string | null;
   createdAt: string;
   lastCheckedAt: string | null;
-  /** Web search costs credits, so a hunt searches at most daily, whatever its cadence. */
+  /** When the item last searched the web. */
   lastSearchedAt?: string | null;
+  /**
+   * Today's web searches (UTC day): at most `SEARCHES_PER_DAY`, spread over
+   * the day — see `searchesAllowed`. `cursor` rotates through the queries.
+   */
+  searches?: { day: string; count: number; cursor: number };
   lastError: string | null;
 }
 
-export type Verdict = 'match' | 'possible' | 'near' | 'no';
+/**
+ * `over`: meets every spec, but costs more than the near-miss band (up to
+ * `OVER_BUDGET_PCT` over) — an option kept and price-tracked, never alerted
+ * until its price brings it into budget.
+ */
+export type Verdict = 'match' | 'possible' | 'near' | 'over' | 'no';
 
 export interface ConstraintResult {
   field: SpecField | 'price';
   ok: boolean | null; // null = the listing does not say
   reason: string;
+  /** An unstated essential attribute rules the listing out. */
+  essential?: boolean;
 }
 
 export interface Evaluation {
@@ -85,7 +144,7 @@ export interface WishOffer {
   itemId: string;
   /** Stable per listing — see `offerKey`. */
   key: string;
-  source: 'hukd' | 'pricerunner' | 'retailer';
+  source: 'hukd' | 'pricerunner' | 'retailer' | 'reddit' | 'holidaypirates';
   title: string;
   description: string;
   url: string;
@@ -102,6 +161,7 @@ export interface WishOffer {
   alertedPence: number | null;
   /** PriceRunner product pages: every seller, cheapest first. */
   sellers?: { merchant: string; pricePence: number; inStock: boolean | null }[];
+  perPerson?: boolean;
 }
 
 /** What a source hands the sweep before it is judged. */
@@ -116,4 +176,6 @@ export interface Candidate {
   /** HUKD posts: when it was posted. Older posts are usually expired deals. */
   postedAt?: string | null;
   sellers?: WishOffer['sellers'];
+  /** The source prices per person (HolidayPirates always does). Otherwise read from "pp" in the text. */
+  perPerson?: boolean;
 }

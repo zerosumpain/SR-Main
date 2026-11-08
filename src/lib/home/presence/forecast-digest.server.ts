@@ -35,7 +35,7 @@ export interface StoredDigest {
 export const loadDigest = () => getSetting<StoredDigest>(DIGEST_KEY).catch(() => null);
 
 /** Minutes BEHIND UTC on a local date, as `dayBounds` wants them (BST is -60). */
-function offsetOn(date: string): number {
+export function offsetOn(date: string): number {
   const noon = Date.parse(`${date}T12:00:00Z`);
   return -(localClock(noon).minute - 12 * 60);
 }

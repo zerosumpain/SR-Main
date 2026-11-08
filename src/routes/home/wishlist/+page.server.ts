@@ -1,10 +1,11 @@
 import { error, fail } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { viewerOf } from '$lib/server/viewer';
-import { addWish } from '$lib/wishlist/add.server';
+import { addWish, rereadWish } from '$lib/wishlist/add.server';
 import { checkItem, rankOffers } from '$lib/wishlist/sweep.server';
 import { deleteItem, getItem, listItems, listOffers, saveItem } from '$lib/wishlist/store.server';
 import { cadenceMs } from '$lib/wishlist/due';
+import { compareRows, valueModel } from '$lib/wishlist/value';
 import type { WishStatus } from '$lib/wishlist/types';
 
 // The wish list: things to buy, each either a product watched for price or a
@@ -16,6 +17,8 @@ async function owner(event: Parameters<PageServerLoad>[0]): Promise<void> {
   if ((await viewerOf(event)).kind !== 'owner') error(403, 'The wish list is the owner\'s.');
 }
 
+const MAX_SHOWN = 40;
+
 export const load: PageServerLoad = async (event) => {
   await owner(event);
   event.setHeaders({ 'cache-control': 'private, no-store' });
@@ -24,9 +27,13 @@ export const load: PageServerLoad = async (event) => {
   const withOffers = await Promise.all(
     items.map(async (item) => {
       const offers = rankOffers(await listOffers(item.id));
+      // Every option worth comparing: in budget first, then the over-budget ones being tracked.
+      const shown = offers.filter((o) => o.verdict !== 'no').slice(0, MAX_SHOWN);
       return {
         item,
-        offers: offers.filter((o) => o.verdict !== 'no').slice(0, 12),
+        offers: shown,
+        compare: compareRows(shown, item.criteria),
+        factors: valueModel(item.criteria).map((f) => ({ label: f.label, weight: f.weight })),
         hidden: offers.filter((o) => o.verdict === 'no').length,
         nextCheckAt: item.lastCheckedAt ? new Date(Date.parse(item.lastCheckedAt) + cadenceMs(item, now)).toISOString() : null,
       };
@@ -63,6 +70,19 @@ export const actions: Actions = {
     if (!item) return fail(404, { error: 'That has gone from the list.' });
     const res = await checkItem(item);
     return { checked: item.id, events: res.events, errors: res.errors };
+  },
+
+  reread: async (event) => {
+    const denied = await ownerAction(event);
+    if (denied) return denied;
+    const item = await getItem(String((await event.request.formData()).get('id') ?? ''));
+    if (!item) return fail(404, { error: 'That has gone from the list.' });
+    try {
+      const { dropped } = await rereadWish(item);
+      return { reread: item.id, dropped };
+    } catch (err) {
+      return fail(422, { error: err instanceof Error ? err.message : 'Could not re-read that.' });
+    }
   },
 
   status: async (event) => {

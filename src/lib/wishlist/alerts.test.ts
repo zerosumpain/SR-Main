@@ -74,7 +74,7 @@ describe('compile validation', () => {
       {
         kind: 'hunt', title: 'Gaming PC', maxPricePounds: 1100,
         constraints: [{ field: 'gpu', value: 'GeForce RTX 5060' }, { field: 'ram_gb', value: 16 }, { field: 'ram_type', value: ['ddr5'] }, { field: 'colour', value: 'red' }, { field: 'gpu', value: 'Voodoo 2' }],
-        hukdTags: ['gaming-pc', '../etc'], pricerunnerCategories: ['223/Desktop-Computers'], searchQuery: 'prebuilt gaming pc rtx 5060 ddr5',
+        hukdTags: ['gaming-pc', '../etc'], pricerunnerCategories: ['223/Desktop-Computers'], searchQuery: 'prebuilt gaming pc rtx 5060 ddr5', searchQueries: ['rtx 5060 gaming pc uk', 'rtx 5060 gaming pc uk', 'gaming pc under £1100'],
         deadline: '2026-12-20',
       },
       'gaming pc',
@@ -85,7 +85,8 @@ describe('compile validation', () => {
       { field: 'ram_gb', op: 'gte', value: 16 },
       { field: 'ram_type', op: 'in', value: ['DDR5'] },
     ]);
-    expect(c.feeds.map((f) => f.source)).toEqual(['hukd-tag', 'pricerunner-cl', 'tavily']);
+    expect(c.feeds.map((f) => f.source)).toEqual(['hukd-tag', 'pricerunner-cl', 'search', 'search', 'search']);
+    expect(c.feeds.filter((f) => f.source === 'search').map((f) => f.value)).toEqual(['rtx 5060 gaming pc uk', 'gaming pc under £1100', 'prebuilt gaming pc rtx 5060 ddr5']);
     expect(c.dropped.join(' ')).toMatch(/colour.*Voodoo.*\.\.\/etc/);
   });
 

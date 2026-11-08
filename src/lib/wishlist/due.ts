@@ -29,6 +29,24 @@ export function isDue(item: WishItem, now: Date): boolean {
   return now.getTime() - Date.parse(item.lastCheckedAt) >= cadenceMs(item, now) - 5 * 60_000;
 }
 
-export function searchDue(item: WishItem, now: Date): boolean {
-  return !item.lastSearchedAt || now.getTime() - Date.parse(item.lastSearchedAt) >= 22 * HOUR;
+/** Web searches one item may make in a UTC day. */
+export const SEARCHES_PER_DAY = 5;
+const DAY = 24 * HOUR;
+
+/** Searches already made today (UTC), as the item records them. */
+export function searchesToday(item: WishItem, now: Date): number {
+  return item.searches?.day === now.toISOString().slice(0, 10) ? item.searches.count : 0;
+}
+
+/**
+ * How many web searches this check may make. The day's five are paced, not
+ * spent at the first check: by any moment, the day may have used its share of
+ * the time elapsed plus one cadence ahead. A six-hourly hunt makes 2+2+1 (or
+ * so) across its checks; an hourly one in sale season about one every five
+ * hours; a new item, checked late in the day, gets the day's remainder at once.
+ */
+export function searchesAllowed(item: WishItem, now: Date): number {
+  const sinceMidnight = now.getTime() % DAY;
+  const byNow = Math.ceil((SEARCHES_PER_DAY * (sinceMidnight + cadenceMs(item, now))) / DAY);
+  return Math.max(0, Math.min(SEARCHES_PER_DAY, byNow) - searchesToday(item, now));
 }

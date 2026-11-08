@@ -96,6 +96,30 @@ const PUBLIC_PATHS = [
   // deleted and evicted all 404 alike ($lib/family/backlog-cast). A PREFIX, so
   // check-public-routes.mjs is what stops a sibling becoming anonymous.
   '/cast',
+  // A family game's TV board, cast to the television: /games/<game> and its one
+  // stream. A TV has no login, so the pairing is the permission: the page
+  // shows a code, a player in a room types it on their phone, and the stream
+  // then follows that room with an HMAC ticket ($lib/games/screens), carrying
+  // only the game's `toScreen` — the table everyone in the room can see.
+  // PREFIXES, so check-public-routes.mjs is what stops a sibling becoming
+  // anonymous; the games API itself (/api/native/games) is untouched.
+  '/games',
+  '/api/games/screens',
+  // sr. tv: a party at a linked TV, joined from its QR by phones with no login
+  // ($lib/games/party.server). Every handler names its caller itself
+  // ($lib/games/party-http.server): the TV by its `sr_tv` cookie (HMAC + a
+  // linked, unrevoked row), a player by a seat cookie for that one party (or
+  // their own signed-in session). A party is opened only by a linked TV.
+  // /tv is the short address and only redirects. PREFIXES, so
+  // check-public-routes.mjs is what stops a sibling becoming anonymous.
+  '/tv',
+  '/api/games/tv',
+  '/api/games/party',
+  // A Kelly's Quiz Night photo for the TV and the phones in a room playing
+  // its pack: /api/games/photos/<pack>/<photo>?e=&s= — the HMAC signature
+  // (twelve hours, written into the room) is the permission; forged, expired
+  // and deleted all 404 ($lib/games/quiz-packs.server signedPhoto). A PREFIX.
+  '/api/games/photos',
   // The iPhone app for a phone that cannot use TestFlight (a child's):
   // /app (the family's one address), /app/<code> (a join link) and
   // /install/<token> (the manifest and the app). Safari on that phone has no

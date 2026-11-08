@@ -197,8 +197,8 @@ describe('the bar is never empty', () => {
 describe('the jkai menu anchors Trips', () => {
   const jkai = JKAI_ITEM;
 
-  it('offers jkai, Daydreams and Trips under the jkai cell', () => {
-    expect(jkai.children?.map((c) => c.href)).toEqual(['/jkai', '/jkai/daydreams', '/trips']);
+  it('offers jkai, Daydreams, Trips and the Wish list under the jkai cell', () => {
+    expect(jkai.children?.map((c) => c.href)).toEqual(['/jkai', '/jkai/daydreams', '/trips', '/home/wishlist']);
   });
 
   it('lights the jkai cell on a trip and walks a trip up to jkai', () => {

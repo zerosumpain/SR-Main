@@ -228,6 +228,12 @@ export const homeObserve: ActivityHandler = {
       const { deliverWatchAlerts } = await import('$lib/home/presence/watch-alerts.server');
       details.watch = await deliverWatchAlerts();
     } catch (err) { details.watchError = errMsg(err).slice(0, 160); }
+    try {
+      // A child stopped somewhere, or not at school when they usually are:
+      // pushed to their guardians. After the stops above, so a new spot is a place.
+      const { deliverParentAlerts } = await import('$lib/home/presence/parent-alerts.server');
+      details.parents = await deliverParentAlerts();
+    } catch (err) { details.parentsError = errMsg(err).slice(0, 160); }
 
     return { outcome, summary: bits.join(' · ') || 'nothing to record', details };
   },

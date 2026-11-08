@@ -8,8 +8,13 @@
 
 import { canonicalGpu, gpuScore } from './gpu';
 import { isHukdTag } from './sources/hukd';
+import { isOcukCategory } from './sources/ocuk';
 import { isAllowedPricerunnerUrl, isPricerunnerCategory } from './sources/pricerunner';
-import type { Constraint, FeedRef, WishCriteria, WishKind } from './types';
+import { isRedditSub } from './sources/reddit';
+import { isScanCategory } from './sources/scan';
+import { isUnit } from './units';
+import { SCHOOL_HOLIDAYS } from './dates';
+import type { Constraint, FeedRef, ValueFactor, WishCriteria, WishKind } from './types';
 
 export interface CompiledWish {
   kind: WishKind;
@@ -24,12 +29,18 @@ export interface CompiledWish {
   dropped: string[];
 }
 
-const words = (v: unknown, max = 8): string[] =>
+const words = (v: unknown, max = 8, len = 40): string[] =>
   (Array.isArray(v) ? v : [])
     .filter((w): w is string => typeof w === 'string')
-    .map((w) => w.trim().slice(0, 40))
+    .map((w) => w.trim().slice(0, len))
     .filter(Boolean)
     .slice(0, max);
+
+/** Words that describe a wish rather than a listing. */
+const VAGUE = new Set([
+  'sunny', 'sun', 'warm', 'hot', 'cheap', 'budget', 'affordable', 'good', 'great', 'nice', 'best', 'big', 'small',
+  'family', 'family-friendly', 'fun', 'luxury', 'luxurious', 'relaxing', 'quiet', 'romantic', 'decent', 'quality',
+]);
 
 const pounds = (v: unknown): number | null => {
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v.replace(/[£,]/g, '')) : NaN;
@@ -58,9 +69,26 @@ function constraintOf(raw: unknown, dropped: string[]): Constraint | null {
       const types = words(r.value).map((t) => t.toUpperCase()).filter((t) => /^DDR\d$/.test(t));
       return types.length ? { field: 'ram_type', op: 'in', value: types } : null;
     }
+    case 'attr': {
+      const n = Number(r.value);
+      const label = typeof r.label === 'string' ? r.label.trim().slice(0, 40) : '';
+      if (!isUnit(r.unit)) {
+        dropped.push(`"${label || String(r.unit)}" — no reader for unit "${String(r.unit)}"`);
+        return null;
+      }
+      if (!label || !Number.isFinite(n) || n <= 0 || n > 1_000_000) return null;
+      return { field: 'attr', label, unit: r.unit, op: r.op === 'lte' ? 'lte' : 'gte', value: n, ...(r.essential === true ? { essential: true } : {}) };
+    }
     case 'text': {
       const op = r.op === 'excludes_any' ? 'excludes_any' : 'contains_any';
       const value = words(r.value);
+      // A "must mention" made only of words that describe the wish, not the
+      // listing, rules out everything: the model asked twice for "sunny" on a
+      // holiday, despite the prompt, and no deal title says it (2026-10-31).
+      if (op === 'contains_any' && value.length && value.every((w) => VAGUE.has(w.toLowerCase()))) {
+        dropped.push(`"must mention ${value.join(' / ')}" — listings do not say that`);
+        return null;
+      }
       return value.length ? { field: 'text', op, value } : null;
     }
     default:
@@ -76,20 +104,86 @@ function feedsOf(raw: Record<string, unknown>, dropped: string[]): FeedRef[] {
     if (isHukdTag(slug)) feeds.push({ source: 'hukd-tag', value: slug });
     else dropped.push(`hotukdeals tag "${t}"`);
   }
-  for (const c of words(raw.pricerunnerCategories, 3)) {
+  for (const c of words(raw.pricerunnerCategories, 3, 120)) {
     if (isPricerunnerCategory(c)) feeds.push({ source: 'pricerunner-cl', value: c });
     else dropped.push(`PriceRunner category "${c}"`);
   }
-  if (typeof raw.searchQuery === 'string' && raw.searchQuery.trim()) {
-    feeds.push({ source: 'tavily', value: raw.searchQuery.trim().slice(0, 120) });
+  for (const c of words(raw.overclockersCategories, 2, 200)) {
+    const path = c.toLowerCase().replace(/^\/+|\/+$/g, '');
+    if (isOcukCategory(path)) feeds.push({ source: 'ocuk-cat', value: path });
+    else dropped.push(`Overclockers category "${c}"`);
   }
+  for (const c of words(raw.scanCategories, 2, 200)) {
+    if (isScanCategory(c)) feeds.push({ source: 'scan-cat', value: c });
+    else dropped.push(`Scan category "${c}"`);
+  }
+  for (const c of words(raw.subreddits, 2)) {
+    const sub = c.toLowerCase().replace(/^r\//, '');
+    if (isRedditSub(sub)) feeds.push({ source: 'reddit', value: sub });
+    else dropped.push(`subreddit "${c}"`);
+  }
+  if (raw.holidayPirates === true) feeds.push({ source: 'holidaypirates', value: 'deals' });
+  // Up to five different searches — the day's allowance, one each. Older
+  // replies (and some models) give one `searchQuery`.
+  const queries = [...words(raw.searchQueries, 5, 120), ...(typeof raw.searchQuery === 'string' ? [raw.searchQuery.trim().slice(0, 120)] : [])];
+  for (const q of [...new Set(queries.filter(Boolean))].slice(0, 5)) feeds.push({ source: 'search', value: q });
   return feeds;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MS = 86_400_000;
+
+/**
+ * The travel window: a named school holiday from the table (so "February half
+ * term" is the table's dates, not the model's recollection), or explicit dates.
+ */
+function datesOf(raw: unknown, dropped: string[]): Constraint | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.schoolHoliday === 'string' && r.schoolHoliday.trim()) {
+    const hit = SCHOOL_HOLIDAYS.find((h) => h.name.toLowerCase() === (r.schoolHoliday as string).trim().toLowerCase());
+    if (hit) return { field: 'dates', from: hit.from, to: hit.to, label: hit.name };
+    dropped.push(`school holiday "${r.schoolHoliday}" is not in the table`);
+  }
+  const from = typeof r.from === 'string' && ISO_DATE.test(r.from) ? r.from : null;
+  const to = typeof r.to === 'string' && ISO_DATE.test(r.to) ? r.to : from;
+  if (!from || !to) return null;
+  const span = (Date.parse(to) - Date.parse(from)) / DAY_MS;
+  if (!(span >= 0 && span <= 400)) {
+    dropped.push(`travel dates ${from} to ${to}`);
+    return null;
+  }
+  const label = typeof r.label === 'string' ? r.label.trim().slice(0, 60) : '';
+  return { field: 'dates', from, to, label };
+}
+
+const PC_MEASURES = ['gpu', 'cpu', 'ram_gb', 'storage_gb'] as const;
+
+/** What value means for this item: at most 5 factors, weights normalised to 1. */
+function valueOf(raw: unknown, dropped: string[]): ValueFactor[] {
+  const out: ValueFactor[] = [];
+  for (const f of (Array.isArray(raw) ? raw : []).slice(0, 5)) {
+    if (!f || typeof f !== 'object') continue;
+    const r = f as Record<string, unknown>;
+    const measure = r.measure;
+    const label = typeof r.label === 'string' ? r.label.trim().slice(0, 40) : '';
+    const weight = Number(r.weight);
+    const ref = Number(r.ref);
+    if (!(isUnit(measure) || (PC_MEASURES as readonly unknown[]).includes(measure))) {
+      dropped.push(`value factor "${label || String(measure)}" — no reader for "${String(measure)}"`);
+      continue;
+    }
+    if (!label || !(weight > 0) || !(ref > 0)) continue;
+    out.push({ label, measure: measure as ValueFactor['measure'], weight, ref, better: r.better === 'lower' ? 'lower' : 'higher' });
+  }
+  const total = out.reduce((n, f) => n + f.weight, 0);
+  return out.map((f) => ({ ...f, weight: Math.round((f.weight / total) * 100) / 100 }));
 }
 
 export function validateCompiled(raw: unknown, ask: string): CompiledWish {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const dropped: string[] = [];
-  const urls = words(r.urls, 5).filter((u) => {
+  const urls = words(r.urls, 5, 500).filter((u) => {
     try {
       const url = new URL(u);
       if (url.protocol !== 'https:') return false;
@@ -104,13 +198,26 @@ export function validateCompiled(raw: unknown, ask: string): CompiledWish {
     .map((c) => constraintOf(c, dropped))
     .filter((c): c is Constraint => c !== null)
     .slice(0, 12);
-  const deadline = typeof r.deadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.deadline) ? r.deadline : null;
+  const travel = datesOf(r.travelDates, dropped);
+  if (travel) constraints.push(travel);
+  // A trip's hunt is over once the trip has started.
+  const asked = typeof r.deadline === 'string' && ISO_DATE.test(r.deadline) ? r.deadline : null;
+  const leaves = travel?.field === 'dates' ? travel.from : null;
+  const deadline = asked && leaves ? (asked < leaves ? asked : leaves) : (asked ?? leaves);
   const title = (typeof r.title === 'string' && r.title.trim() ? r.title.trim() : ask.trim()).slice(0, 120);
 
   return {
     kind,
     title,
-    criteria: { maxPricePence: pounds(r.maxPricePounds), nearMissPct: 10, constraints },
+    criteria: {
+      maxPricePence: pounds(r.maxPricePounds),
+      nearMissPct: 10,
+      constraints,
+      value: valueOf(r.value, dropped),
+      ...(r.pricePer === 'person' || r.pricePer === 'total'
+        ? { price: { per: r.pricePer, party: Number.isInteger(r.partySize) && (r.partySize as number) > 0 && (r.partySize as number) <= 20 ? (r.partySize as number) : null } }
+        : {}),
+    },
     feeds: kind === 'hunt' ? feedsOf(r, dropped) : [],
     urls: kind === 'track' ? urls : [],
     targetPricePence: pounds(r.targetPricePounds),

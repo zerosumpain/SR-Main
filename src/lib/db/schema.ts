@@ -1825,6 +1825,10 @@ export const projectShares = pgTable(
     // the link asks for none. Never sent to a browser: listShares says only
     // hasPassword. The app checks the answer; Main only mints.
     passwordHash: text('password_hash'),
+    // The audience pack the link opens ($lib/projects/share-pack), null for the
+    // app's default. Carried as the project claim's `pack`; the Spine's 'dfe'
+    // or 'school'.
+    pack: text('pack'),
   },
   (t) => ({
     byTokenHash: uniqueIndex('project_share_token_hash_idx').on(t.tokenHash),
@@ -3617,6 +3621,67 @@ export const workflowFiles = pgTable(
 export type WorkflowFile = typeof workflowFiles.$inferSelect;
 export type NewWorkflowFile = typeof workflowFiles.$inferInsert;
 
+// What jkai concluded about one /drive file (build map §2.3, D7): a summary, a
+// document type and the facts worth surfacing. One row per file, upserted —
+// written by SR-Drive for on-demand "Analyse" and by SR-Jkai-Core for files
+// filed from mail rules. Deliberately not `workflow_files.description`, which
+// people edit. `content_hash` is the hash that was analysed: the cache key.
+export const fileAnalyses = pgTable(
+  'file_analyses',
+  {
+    id: serial('id').primaryKey(),
+    fileId: text('file_id')
+      .notNull()
+      .references(() => workflowFiles.id, { onDelete: 'cascade' }),
+    contentHash: text('content_hash'),
+    /** 'drive' | 'mail-rule' */
+    source: text('source').notNull(),
+    model: text('model').notNull(),
+    /** ≤1200 chars. */
+    summary: text('summary').notNull(),
+    /** invoice | receipt | contract | statement | letter | report | form | photo | other */
+    docType: text('doc_type').notNull(),
+    /** {keyFacts:[{label,value}]≤8, dates:[{label,date:'YYYY-MM-DD'}], amounts:[{label,value,currency}]} */
+    facts: jsonb('facts').notNull().default(sql`'{}'::jsonb`),
+    /** ≤300 chars; null = nothing to do. */
+    actionNeeded: text('action_needed'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('file_analyses_file_id_key').on(t.fileId)],
+);
+
+// One row per email attachment part SR-Jkai-Core's mail-filing rules saved
+// into /drive (build map §2.3). Dedupe is (account, message, part) — Gmail's
+// attachmentId is unstable — and sha256 across messages. Keyed by account
+// EMAIL, never the Gmail account id, which changes on re-link.
+export const mailAttachmentFiles = pgTable(
+  'mail_attachment_files',
+  {
+    id: serial('id').primaryKey(),
+    accountEmail: text('account_email').notNull(),
+    gmailMessageId: text('gmail_message_id').notNull(),
+    partId: text('part_id').notNull(),
+    gmailThreadId: text('gmail_thread_id').notNull(),
+    filename: text('filename').notNull(),
+    sha256: text('sha256').notNull(),
+    fileId: text('file_id').references(() => workflowFiles.id, { onDelete: 'set null' }),
+    ruleId: text('rule_id').notNull(),
+    fromAddress: text('from_address').notNull(),
+    fromName: text('from_name'),
+    /** ≤300 chars. */
+    subject: text('subject'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
+    analysedAt: timestamp('analysed_at', { withTimezone: true }),
+    notifiedAt: timestamp('notified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('mail_attachment_files_msg_part_key').on(t.accountEmail, t.gmailMessageId, t.partId),
+    index('mail_attachment_files_sha256_idx').on(t.sha256),
+    index('mail_attachment_files_file_id_idx').on(t.fileId),
+  ],
+);
+
 // One high-entropy capability, one drive file. Replaced `route_export_token`,
 // the GPX-only ancestor dropped in #311 — that table's `expires_at` was
 // nullable and never written, so every link it minted was a permanent,
@@ -4677,6 +4742,15 @@ export const claudeSessions = pgTable(
      * of 180 transcripts on disk carry at least one.
      */
     pullRequests: jsonb('pull_requests').notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Every pull request the session touched, in ANY repository, as lowercased
+     * `owner/repo#N` strings. `pull_requests` above is SR-Main's numbers only,
+     * and joins only to SR-Main releases; this joins the session to releases
+     * other repositories recorded (`releases.repo` + `stats.prs`). A separate
+     * column rather than strings inside `pull_requests`, whose readers cast
+     * every element to int. Parser v6 onwards; older rows hold `[]`.
+     */
+    pullRequestRefs: jsonb('pull_request_refs').notNull().default(sql`'[]'::jsonb`),
     schemaVersion: integer('schema_version').notNull().default(1),
     ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
   },

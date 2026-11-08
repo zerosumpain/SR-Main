@@ -2,7 +2,7 @@ import type { RequestHandler } from './$types';
 import { error, json } from '@sveltejs/kit';
 import { getCredential, updateCredential, deleteCredential } from '$lib/integrations/credentials';
 import { getIntegrationAdapter } from '$lib/integrations/registry';
-import { buildManualPayload, getManualCredentialSpec } from '$lib/integrations/manual-credentials';
+import { buildManualPayload, checkManualPayload, getManualCredentialSpec } from '$lib/integrations/manual-credentials';
 import type { CredentialPayload } from '$lib/integrations/types';
 
 /**
@@ -48,6 +48,8 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   }
   const built = buildManualPayload(spec, body.payload ?? {}, current.payload as unknown as Record<string, unknown>);
   if ('error' in built) throw error(400, built.error);
+  const invalid = checkManualPayload(current.integrationType, built.payload);
+  if (invalid) throw error(400, invalid);
 
   await updateCredential(id, {
     label: body.label,

@@ -25,7 +25,13 @@ import * as fireworks from './fireworks';
 import * as manhunt from './manhunt';
 import * as homestead from './homestead';
 import * as hometowns from './hometowns/hometowns';
+import * as azul from './azul';
+import * as codenames from './codenames';
+import * as snapHappy from './snap-happy';
+import * as biscuitTower from './biscuit-tower';
+import * as ironRoads from './iron-roads';
 import { writeQuiz } from './quiz-night.server';
+import { loadPackQuiz } from './quiz-packs.server';
 import type { Difficulty, PlayerStatus, Rng } from './tap-duel';
 
 export const GAME_IDS = [
@@ -49,6 +55,11 @@ export const GAME_IDS = [
   'manhunt',
   'homestead',
   'hometowns',
+  'azul',
+  'codenames',
+  'snap-happy',
+  'biscuit-tower',
+  'iron-roads',
 ] as const;
 export type GameId = (typeof GAME_IDS)[number];
 
@@ -195,6 +206,13 @@ export interface GameRules {
    * re-marked). Never called for a lobby.
    */
   seat?(room: RoomBase, player: { id: string; name: string }, now: number): void;
+  /**
+   * The room as a shared screen sees it — the TV board at `/games/<game>`,
+   * paired from a phone in the room (`screens.server`). Public information
+   * only: whatever this returns reaches a browser with no login, holding
+   * nothing but a pairing ticket. Absent: the game has no TV board.
+   */
+  toScreen?(room: RoomBase, now: number): { id: string; phase: string; serverNow: number };
   /** The paces a host may pick; absent = ['live']. */
   paces?: readonly Pace[];
   /**
@@ -235,7 +253,8 @@ export const GAMES: Record<GameId, GameRules> = {
   },
   'quiz-night': {
     ...quizNight,
-    prepare: (room) => writeQuiz(room as quizNight.Room),
+    // Kelly's Quiz Night plays a pack John wrote; any other quiz is written by jkai.
+    prepare: (room) => ((room as quizNight.Room).pack ? loadPackQuiz(room as quizNight.Room) : writeQuiz(room as quizNight.Room)),
     moves: {
       answer: (room, playerId, body, now) =>
         quizNight.answer(room as quizNight.Room, playerId, { question: num(body.question) ?? -1, choice: num(body.choice) ?? -1 }, now),
@@ -445,5 +464,55 @@ export const GAMES: Record<GameId, GameRules> = {
     moves: Object.fromEntries(
       Object.entries(hometowns.moves).map(([name, fn]): [string, Move] => [name, (room, p, b, now) => fn(room as hometowns.Room, p, b, now)]),
     ),
+  },
+  // Tile drafting for two to four, on phones alone or with the TV board (spec 2026-10-31 Azul).
+  // Exports durable = { schema: 1 }, paces = ['live', 'async'], waitingOn, resume and toScreen.
+  azul: {
+    ...azul,
+    maxPlayers: azul.MAX_PLAYERS,
+    moves: {
+      // Raw on purpose: `take` types its own fields (400 with a sentence for a line that cannot take it).
+      take: (room, p, b, now) => azul.take(room as azul.Room, p, { source: b.source, colour: b.colour, line: b.line }, now),
+    },
+  },
+  // Two teams (four to eight) or co-op (two or three), the grid on the TV board (spec 2026-11-01 TV games).
+  // Exports durable = { schema: 1 }, waitingOn, resume and toScreen; the leaderboard ranks by `place`.
+  codenames: {
+    ...codenames,
+    maxPlayers: codenames.MAX_PLAYERS,
+    resultScore: () => null,
+    resultRank: (s) => (typeof s.place === 'number' ? s.place : null),
+    moves: {
+      // Raw on purpose: each types its own fields (400 with a sentence for a clue on the board).
+      team: (room, p, b, now) => codenames.pickTeam(room as codenames.Room, p, { team: b.team, spymaster: b.spymaster }, now),
+      clue: (room, p, b, now) => codenames.giveClue(room as codenames.Room, p, { word: b.word, count: b.count }, now),
+      guess: (room, p, b, now) => codenames.guess(room as codenames.Room, p, { card: b.card }, now),
+      pass: (room, p, _b, now) => codenames.pass(room as codenames.Room, p, now),
+    },
+  },
+  // sr. tv's reaction game: the TV flicks through pictures, phones SNAP on the target (spec 2026-11-02 sr. tv §9).
+  'snap-happy': {
+    ...snapHappy,
+    moves: {
+      snap: (room, p, b, now) => snapHappy.snap(room as snapHappy.Room, p, { round: b.round, at: b.at }, now),
+    },
+  },
+  // sr. tv's physics game: phones DROP, the TV runs the physics and reports (party TV only, `SCREEN_ACTOR`).
+  'biscuit-tower': {
+    ...biscuitTower,
+    moves: {
+      drop: (room, p, b, now) => biscuitTower.drop(room as biscuitTower.Room, p, { turn: b.turn, at: b.at }, now),
+      report: (room, p, b, now) => biscuitTower.report(room as biscuitTower.Room, p, { turn: b.turn, outcome: b.outcome, height: b.height }, now),
+    },
+  },
+  // sr. tv's board game: route building on a North-East rail map, Darlington at its heart (spec 2026-11-02 sr. tv §9).
+  'iron-roads': {
+    ...ironRoads,
+    moves: {
+      keep: (room, p, b, now) => ironRoads.keep(room as ironRoads.Room, p, { tickets: b.tickets }, now),
+      draw: (room, p, b, now) => ironRoads.draw(room as ironRoads.Room, p, { source: b.source }, now),
+      claim: (room, p, b, now) => ironRoads.claim(room as ironRoads.Room, p, { route: b.route, colour: b.colour }, now),
+      tickets: (room, p, b, now) => ironRoads.tickets(room as ironRoads.Room, p, b, now),
+    },
   },
 };

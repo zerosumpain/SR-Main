@@ -7,18 +7,21 @@
 // as `lastError`, where the page shows it.
 
 import { notifyOwner } from '$lib/server/notify';
-import { search as tavilySearch } from '$lib/deepdive/tavily';
 import { eventFor, mergeOffer, offerKey, summarise, type AlertEvent } from './alerts';
-import { isDue, searchDue } from './due';
-import { ALERTABLE } from './match';
+import { isDue } from './due';
+import { KEPT } from './match';
 import { fetchHukdTag } from './sources/hukd';
-import { fetchPageScripts } from './sources/fetch.server';
-import { categoryUrl, isAllowedPricerunnerUrl, parseCategoryPayload, parseProductLd } from './sources/pricerunner';
+import { fetchPageScripts, fetchScanCards } from './sources/fetch.server';
+import { ocukCategoryUrl, parseOcukItemList } from './sources/ocuk';
+import { fetchSubreddit } from './sources/reddit';
+import { fetchHolidayPirates } from './sources/holidaypirates';
+import { parseScanList, scanCategoryUrl } from './sources/scan';
+import { categoryUrl, parseCategoryPayload, parseProductLd } from './sources/pricerunner';
+import { searchTheWeb } from './sources/search.server';
 import { getItem, listItems, listOffers, saveItem, saveOffer } from './store.server';
 import type { Candidate, FeedRef, WishItem, WishOffer } from './types';
 
 const MAX_ITEMS_PER_RUN = 8;
-const SEARCH_PRODUCT_PAGES = 3;
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 200);
 
@@ -40,7 +43,7 @@ async function readProductPage(url: string): Promise<Candidate> {
   };
 }
 
-async function readFeed(feed: FeedRef, item: WishItem, now: Date): Promise<Candidate[]> {
+async function readFeed(feed: FeedRef): Promise<Candidate[]> {
   switch (feed.source) {
     case 'hukd-tag':
       return fetchHukdTag(feed.value);
@@ -49,21 +52,22 @@ async function readFeed(feed: FeedRef, item: WishItem, now: Date): Promise<Candi
       if (!page.payload) throw new Error(`PriceRunner ${feed.value}: no product list`);
       return parseCategoryPayload(page.payload);
     }
-    case 'tavily': {
-      if (!searchDue(item, now)) return [];
-      item.lastSearchedAt = now.toISOString();
-      const res = await tavilySearch(feed.value, { purpose: 'wishlist', maxResults: 8, includeDomains: ['pricerunner.com'] });
-      const urls = res.results.map((r) => r.url).filter(isAllowedPricerunnerUrl).slice(0, SEARCH_PRODUCT_PAGES);
-      const out: Candidate[] = [];
-      for (const u of urls) {
-        try {
-          out.push(await readProductPage(u));
-        } catch {
-          // One unreadable result is not the search failing.
-        }
-      }
-      return out;
+    case 'ocuk-cat': {
+      const page = await fetchPageScripts(ocukCategoryUrl(feed.value));
+      const list = parseOcukItemList(page.ld);
+      if (!list.length) throw new Error(`Overclockers ${feed.value}: no product list`);
+      return list;
     }
+    case 'scan-cat':
+      return parseScanList(await fetchScanCards(scanCategoryUrl(feed.value)));
+    case 'reddit':
+      return fetchSubreddit(feed.value);
+    case 'holidaypirates':
+      return fetchHolidayPirates();
+    case 'search':
+    case 'tavily':
+      // All of an item's searches run together, against its daily allowance — see checkItem.
+      return [];
   }
 }
 
@@ -83,11 +87,14 @@ export async function checkItem(item: WishItem, now = new Date()): Promise<ItemC
   if (item.kind === 'hunt') {
     for (const feed of item.feeds) {
       try {
-        candidates.push(...(await readFeed(feed, item, now)));
+        candidates.push(...(await readFeed(feed)));
       } catch (err) {
         errors.push(`${feed.source} ${feed.value}: ${errMsg(err)}`);
       }
     }
+    const web = await searchTheWeb(item, now);
+    candidates.push(...web.candidates);
+    errors.push(...web.errors);
   } else {
     for (const url of item.urls) {
       try {
@@ -109,10 +116,12 @@ export async function checkItem(item: WishItem, now = new Date()): Promise<ItemC
     seen.add(key);
     const prev = stored.get(key) ?? null;
     const next = mergeOffer(item, prev, { ...c, pricePence: c.pricePence }, now);
-    // A hunt keeps only listings worth looking at (and any it already holds, so
-    // a match that turns into a "no" is recorded as such). A category page is a
-    // hundred products; storing every one would bury the few that matter.
-    if (item.kind === 'hunt' && !prev && !ALERTABLE.includes(next.verdict)) continue;
+    // A hunt keeps listings worth looking at — including ones that meet every
+    // spec but cost too much, tracked in case the price falls — and any it
+    // already holds, so a match that turns into a "no" is recorded as such. A
+    // category page is a hundred products; storing every one would bury the
+    // few that matter.
+    if (item.kind === 'hunt' && !prev && !KEPT.includes(next.verdict)) continue;
     const event = eventFor(item, prev, next, c.postedAt, now);
     if (event) {
       next.alertedPence = next.pricePence;
@@ -170,6 +179,6 @@ export async function sweepWishlist(now = new Date()): Promise<SweepResult> {
 
 /** Offers for the page, best first. */
 export function rankOffers(offers: WishOffer[]): WishOffer[] {
-  const order = { match: 0, possible: 1, near: 2, no: 3 } as const;
+  const order = { match: 0, possible: 1, near: 2, over: 3, no: 4 } as const;
   return [...offers].sort((a, b) => order[a.verdict] - order[b.verdict] || a.pricePence - b.pricePence);
 }

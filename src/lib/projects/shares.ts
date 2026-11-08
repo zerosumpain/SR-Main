@@ -27,9 +27,11 @@ export function shareCookieName(key: string): string {
   return 'psh_' + key.replace(/[^a-zA-Z0-9_-]/g, '');
 }
 
-/** A live link, as the access decision needs it: whether it asks for a password, and which. */
+/** A live link, as the access decision needs it: whether it asks for a password, and which pack it opens. */
 export interface LiveShare {
   passwordHash: string | null;
+  /** null: the app's default pack. */
+  pack: string | null;
 }
 
 let visitWarnedAt = 0;
@@ -57,6 +59,7 @@ export async function validateProjectShare(
       expiresAt: projectShares.expiresAt,
       revokedAt: projectShares.revokedAt,
       passwordHash: projectShares.passwordHash,
+      pack: projectShares.pack,
     })
     .from(projectShares)
     .where(and(eq(projectShares.tokenHash, hash), eq(projectShares.projectKey, key)))
@@ -64,7 +67,8 @@ export async function validateProjectShare(
   if (!row) return null;
   if (row.revokedAt) return null;
   if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
-  if (!count) return { passwordHash: row.passwordHash ?? null };
+  const live: LiveShare = { passwordHash: row.passwordHash ?? null, pack: row.pack ?? null };
+  if (!count) return live;
   // Async last-used bump (do not await — keep the request hot path fast).
   // useCount counts page opens: a gateway that says which requests open a page
   // is counted on those alone; an older one, and Main's own pages, on every
@@ -83,13 +87,15 @@ export async function validateProjectShare(
       console.warn(`[shares] visitor not recorded: ${err.message}`);
     });
   }
-  return { passwordHash: row.passwordHash ?? null };
+  return live;
 }
 
 /**
  * Mint a new share link for a project. Returns the RAW token once (never
  * stored). With a password, the row keeps only its scrypt verifier; the caller
- * has already checked the project's app asks for one and the length.
+ * has already checked the project's app asks for one and the length. A pack
+ * (already checked against the project's packs) is stored as given; none is the
+ * app's default.
  */
 export async function createShare(input: {
   projectKey: string;
@@ -97,6 +103,7 @@ export async function createShare(input: {
   label?: string | null;
   expiresAt?: Date | null;
   password?: string | null;
+  pack?: string | null;
 }): Promise<{ id: string; token: string }> {
   const token = generateShareToken();
   const passwordHash = input.password ? await hashSharePassword(input.password) : null;
@@ -109,6 +116,7 @@ export async function createShare(input: {
       createdBy: input.createdBy,
       expiresAt: input.expiresAt ?? null,
       passwordHash,
+      pack: input.pack ?? null,
     })
     .returning({ id: projectShares.id });
   return { id: row.id, token };
@@ -124,6 +132,8 @@ export interface PublicShare {
   useCount: number;
   /** The link asks for a password. The verifier itself never leaves the server. */
   hasPassword: boolean;
+  /** The pack the link opens; null is the app's default. */
+  pack: string | null;
 }
 
 /** All links for a project (newest first), never exposing the token hash or password verifier. */
@@ -138,11 +148,12 @@ export async function listShares(projectKey: string): Promise<PublicShare[]> {
       lastUsedAt: projectShares.lastUsedAt,
       useCount: projectShares.useCount,
       hasPassword: sql<boolean>`${projectShares.passwordHash} is not null`,
+      pack: projectShares.pack,
     })
     .from(projectShares)
     .where(eq(projectShares.projectKey, projectKey))
     .orderBy(desc(projectShares.createdAt));
-  return rows.map((r) => ({ ...r, hasPassword: r.hasPassword === true }));
+  return rows.map((r) => ({ ...r, hasPassword: r.hasPassword === true, pack: r.pack ?? null }));
 }
 
 /** A link as the owner's Share panel lists it: the row, and who has opened it. */

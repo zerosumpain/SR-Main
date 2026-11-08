@@ -118,6 +118,12 @@ export const POST: RequestHandler = async (event) => {
     prs: Array.isArray(body.stats?.prs) ? body.stats.prs.map(num).filter((n) => n > 0) : [],
   };
 
+  // Which repository shipped it. SR-Main's CI omits the field; the porkserv
+  // collector names every other repository. Anything not shaped like
+  // `owner/name` is refused rather than stored as a new "repository".
+  const repo = body.repo === undefined ? 'zerosumpain/SR-Main' : String(body.repo);
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) throw error(400, 'invalid repo');
+
   const via: ReleaseVia = RELEASE_VIA.includes(body.via as ReleaseVia) ? (body.via as ReleaseVia) : 'github-actions';
   const row = {
     sha: body.sha,
@@ -131,6 +137,7 @@ export const POST: RequestHandler = async (event) => {
     files,
     stats,
     contentHash: body.contentHash ?? null,
+    repo,
     summaryStatus: 'pending' as const,
     ingestedAt: new Date(),
   };

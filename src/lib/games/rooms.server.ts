@@ -27,8 +27,9 @@ import { GameError, MAX_PLAYERS, type Difficulty } from './tap-duel';
 import { GAMES, PACES, type GameId, type GameRules, type Pace, type RoomBase } from './catalogue';
 import { roundRows, type RoundRow, type Window } from './results';
 import type { RoomMeta, RoomStore, SaveResult, StoredRoom } from './room-store';
+import { isGuestId } from './party';
 
-type WireRoom = ReturnType<GameRules['toWire']>;
+export type WireRoom = ReturnType<GameRules['toWire']>;
 
 /** How long an invite sent from the lobby holds the lobby open for, at least. */
 const INVITE_HOLD_MS = 2 * 60_000;
@@ -186,7 +187,9 @@ function record(live: Live, now: number): void {
   live.round += 1;
   let rows: RoundRow[];
   try {
-    rows = roundRows(room, live.rules, live.round, now, live.optionKeys);
+    // A party's guests (`v_` ids, no account) play and are placed, but only
+    // the family's rows are kept: the leaderboard is theirs.
+    rows = roundRows(room, live.rules, live.round, now, live.optionKeys).filter((r) => !isGuestId(r.playerId));
   } catch (err) {
     console.error(`[games] ${room.id}: could not read the result`, err);
     return;
@@ -1036,6 +1039,12 @@ export function gameOf(id: string, playerId: string): GameId {
   return live.room.game;
 }
 
+/** Who hosts a loaded room now (the host can pass on when somebody leaves), or null. */
+export function hostOf(id: string): string | null {
+  const live = rooms.get(id);
+  return live && !live.dead ? live.room.hostId : null;
+}
+
 /** Which game a loaded room is and the phase it is in, or null when it is not loaded. */
 export function roomStage(id: string): { game: GameId; phase: string } | null {
   const live = rooms.get(id);
@@ -1365,6 +1374,29 @@ export function closeLobby(id: string, byName: string): void {
 }
 
 /**
+ * End a room whatever its phase — the TV running a party stops the game it
+ * is showing (`party.server`): every phone sees it close, with `closedBy`.
+ * A room already closed is left as it is.
+ */
+export function endRoom(id: string, byName: string): void {
+  const live = rooms.get(id);
+  if (!live || live.dead) return;
+  const now = Date.now();
+  const moved = advanceRoom(live, now);
+  record(live, now);
+  const { room } = live;
+  if (room.phase === 'closed') {
+    settle(live, moved);
+    return;
+  }
+  room.phase = 'closed';
+  room.phaseEndsAt = null;
+  if ('updatedAt' in room) (room as RoomBase & { updatedAt: number }).updatedAt = now;
+  live.closedBy = byName;
+  settle(live, true);
+}
+
+/**
  * Follow a room: `onRoom` with this player's view now and on every change,
  * `onGone` once when it is dropped. Returns the unsubscribe.
  */
@@ -1408,6 +1440,38 @@ export function subscribe(
     live.touchedAt = Date.now();
   };
   return stop;
+}
+
+/**
+ * The game of a room a shared screen may show — one whose rules have a
+ * `toScreen` — or a 404 / 400 GameError. No player check: the caller has
+ * already been let in (a player pairing it, or a screen holding a ticket).
+ */
+export function screenGame(id: string): GameId {
+  const live = rooms.get(id);
+  if (!live || live.dead) throw new GameError(404, 'That game has finished.');
+  if (!live.rules.toScreen) throw new GameError(400, 'This game has no TV board yet.');
+  return live.room.game;
+}
+
+/**
+ * Follow a room as a shared screen (the TV board): the game's `toScreen` now
+ * and on every change, `onGone` once when the room is dropped. A screen is
+ * nobody at the table — it neither counts as a player watching (pushes still
+ * go) nor keeps a durable room from being evicted. Returns the unsubscribe.
+ */
+export function watch(id: string, onRoom: (room: WireRoom) => void, onGone: () => void): () => void {
+  const live = get(id);
+  const toScreen = live.rules.toScreen;
+  if (!toScreen) throw new GameError(400, 'This game has no TV board yet.');
+  const change = () => onRoom(toScreen(live.room, Date.now()) as WireRoom);
+  live.emitter.on('change', change);
+  live.emitter.once('gone', onGone);
+  change();
+  return () => {
+    live.emitter.off('change', change);
+    live.emitter.off('gone', onGone);
+  };
 }
 
 /** Tests only. */

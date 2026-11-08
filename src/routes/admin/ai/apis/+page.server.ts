@@ -3,6 +3,7 @@ import { listIntegrationsForPicker } from '$lib/apis/integrations';
 import { listCatalogApis } from '$lib/tools/tools/apis';
 import { listRefSources, listSecrets } from '$lib/secrets/registry';
 import { CREDENTIAL_REQUEST_SPECS } from '$lib/secrets/credential-requests';
+import { truelayerAuthorizationUrl } from '$lib/secrets/oauth-refresh';
 
 // The API register. Owner-gated in hooks.server.ts; reads run server-side and
 // mutations go through /api/admin/apis/* with ?token= (datastore/blog precedent).
@@ -27,12 +28,15 @@ const credentialSpecs = Object.values(CREDENTIAL_REQUEST_SPECS).map((spec) => ({
 }));
 
 export const load: PageServerLoad = async () => {
-  const [integrations, apis, secrets, refSources] = await Promise.all([
+  const [integrations, apis, secrets, refSources, truelayerLink] = await Promise.all([
     listIntegrationsForPicker().catch(() => []),
     listCatalogApis().catch(() => []),
     listSecrets().catch(() => []),
     Promise.resolve(listRefSources()),
+    // The bank consent link for "Reconnect TrueLayer". Reads only the stored
+    // client_id — no token exchange — and is null when TrueLayer isn't set up.
+    truelayerAuthorizationUrl().catch(() => null),
   ]);
 
-  return { integrations, apis, secrets, refSources, credentialSpecs };
+  return { integrations, apis, secrets, refSources, credentialSpecs, truelayerLink };
 };

@@ -31,6 +31,8 @@ export type Phase = 'lobby' | 'countdown' | 'question' | 'reveal' | 'finished' |
 export type Prep = 'writing' | 'ready' | 'failed';
 
 export const QUESTIONS = 10;
+/** Up to eight round one TV (a party, `party.server`). */
+export const maxPlayers = 8;
 /** Fewer usable questions than this and the game is not worth starting. */
 export const MIN_QUESTIONS = 6;
 export const OPTIONS = 4;
@@ -52,6 +54,8 @@ export interface Question {
   explain: string | null;
   /** The spec heading a GCSE question tests — what the end-of-game recap groups by. */
   topic: string | null;
+  /** Kelly's Quiz Night: a signed URL of the pack photo shown with the question (`quiz-packs.server`). */
+  photo?: string | null;
 }
 
 export interface Pick {
@@ -82,6 +86,8 @@ export interface Room {
   timeMs: number;
   /** What the host asked for; null = jkai picks. */
   topic: string | null;
+  /** Kelly's Quiz Night: the quiz pack this room plays instead of a written quiz; absent/null otherwise. */
+  pack?: string | null;
   /** The topic jkai actually wrote about — the same as `topic` unless it picked. */
   title: string | null;
   hostId: string;
@@ -159,7 +165,7 @@ export function createRoom(input: {
   now: number;
 }): Room {
   const invited = input.invite.filter((p, i, all) => p.id !== input.host.id && all.findIndex((q) => q.id === p.id) === i);
-  if (invited.length > MAX_PLAYERS - 1) throw new GameError(400, `Up to ${MAX_PLAYERS} players.`);
+  if (invited.length > maxPlayers - 1) throw new GameError(400, `Up to ${maxPlayers} players.`);
   const mode: Mode = input.options?.mode === 'gcse' ? 'gcse' : 'general';
   const subject = mode === 'gcse' ? subjectFor(input.options?.subject) : null;
   if (mode === 'gcse' && !subject) throw new GameError(400, 'Pick a GCSE subject.');
@@ -179,6 +185,7 @@ export function createRoom(input: {
     board,
     timeMs: subject ? gcseTimeMs(subject, input.difficulty) : TIME_MS[input.difficulty],
     topic,
+    pack: !subject && typeof input.options?.pack === 'string' && /^qp_[0-9a-f]{12}$/u.test(input.options.pack) ? input.options.pack : null,
     title: subject ? `GCSE ${subject.label}` : topic,
     hostId: input.host.id,
     phase: 'lobby',
@@ -549,6 +556,7 @@ export function toWire(room: Room, meId: string, now: number) {
       : null,
     topic: room.topic,
     title: room.title,
+    pack: room.pack ?? null,
     phase: room.phase,
     prep: room.prep,
     prepError: room.prepError,
@@ -570,6 +578,7 @@ export function toWire(room: Room, meId: string, now: number) {
             index: room.index,
             prompt: q.prompt,
             options: q.options,
+            photo: q.photo ?? null,
             startsAt: room.questionStartsAt,
             // Who has answered, never what — until the reveal.
             answeredIds: room.players.filter((p) => p.picks.some((x) => x.question === room.index)).map((p) => p.id),
@@ -609,10 +618,20 @@ export function review(room: Room, meId: string) {
     answerIndex: q.answerIndex,
     explain: q.explain,
     topic: q.topic,
+    photo: q.photo ?? null,
     myChoice: me?.picks.find((x) => x.question === index)?.choice ?? null,
     rightCount: playing.filter((p) => p.picks.some((x) => x.question === index && x.points > 0)).length,
     playerCount: playing.length,
   }));
+}
+
+/**
+ * The TV board's view: the question, who has answered (never what) and the
+ * scores — the same as a phone that is nobody's, so no `myChoice` and a
+ * review with no picks of its own.
+ */
+export function toScreen(room: Room, now: number) {
+  return toWire(room, '', now);
 }
 
 export type WireRoom = ReturnType<typeof toWire>;

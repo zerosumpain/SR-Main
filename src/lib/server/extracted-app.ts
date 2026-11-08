@@ -155,7 +155,7 @@ export interface RawExtractedResponse {
  */
 export function requestExtracted(
 	app: ExtractedApp,
-	method: 'GET' | 'POST' | 'DELETE',
+	method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
 	path: string,
 	{
 		headers = {},
@@ -211,6 +211,58 @@ export function requestExtracted(
 			reject(error instanceof ExtractedAppError ? error : new ExtractedAppError(String(error))),
 		);
 		if (body) request.write(body);
+		request.end();
+	});
+}
+
+export interface StreamedExtractedResponse {
+	status: number;
+	headers: http.IncomingHttpHeaders;
+	/** The body as it arrives; destroying it (or cancelling the web stream made from it) closes the socket. */
+	body: http.IncomingMessage;
+}
+
+/**
+ * One request whose answer is handed over as soon as its headers arrive, the
+ * body still streaming — for relaying bytes (the SR app's Drive previews)
+ * without holding them in Main's memory first. `timeoutMs` caps the wait for
+ * the headers and then the whole body; the socket's idle timeout is the same.
+ */
+export function streamExtracted(
+	app: ExtractedApp,
+	method: 'GET',
+	path: string,
+	{ headers = {}, timeoutMs = 10_000 }: { headers?: Record<string, string>; timeoutMs?: number } = {},
+): Promise<StreamedExtractedResponse> {
+	const token = process.env[APPS[app].tokenEnv];
+	if (!token) {
+		return Promise.reject(
+			new ExtractedAppError(`${APPS[app].tokenEnv} is not set, so the ${app} service lane is closed`),
+		);
+	}
+	return new Promise<StreamedExtractedResponse>((resolve, reject) => {
+		const request = http.request(
+			{
+				host: '127.0.0.1',
+				port: APPS[app].port,
+				path,
+				method,
+				headers: { ...headers, Host: CANONICAL_HOST, Authorization: `Bearer ${token}` },
+				timeout: timeoutMs,
+			},
+			(response) => resolve({ status: response.statusCode ?? 0, headers: response.headers, body: response }),
+		);
+		const deadline = setTimeout(() => {
+			request.destroy(new ExtractedAppError(`${app}${path} exceeded ${timeoutMs}ms`));
+		}, timeoutMs);
+		deadline.unref?.();
+		request.on('close', () => clearTimeout(deadline));
+		request.on('timeout', () => request.destroy(new ExtractedAppError(`${app}${path} timed out after ${timeoutMs}ms`)));
+		// Before the headers this rejects; after them it is a no-op here and the
+		// body stream errors instead, which ends the relayed response.
+		request.on('error', (error) =>
+			reject(error instanceof ExtractedAppError ? error : new ExtractedAppError(String(error))),
+		);
 		request.end();
 	});
 }

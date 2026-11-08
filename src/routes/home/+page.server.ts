@@ -7,6 +7,8 @@ import { loadHousehold } from '$lib/home/presence/household';
 import { loadHoldContext } from '$lib/home/presence/location-hold.server';
 import { mayOpenPerson, peopleViewerOf, scopeHousehold, type PeopleViewer } from '$lib/home/presence/viewer';
 import { areaAccess } from '$lib/server/area-scope';
+import { screenGames } from '$lib/games/screens.server';
+import { TITLES } from '$lib/games/invite-push.server';
 
 // The house, now: one slice of each sub-page, every read on its own so one
 // source being down (Home Assistant off the tailnet, say) blanks its own card
@@ -99,5 +101,7 @@ export const load: PageServerLoad = async (event) => {
     showEchoes: hearsVoice,
     devices: devs.value,
     devicesError: devs.error,
+    /** Every game with a TV board at /games/<game>, to open on the television. */
+    boards: screenGames().map((game) => ({ game, title: TITLES[game] })),
   };
 };

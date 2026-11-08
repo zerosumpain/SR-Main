@@ -127,5 +127,6 @@ export const SITUATION_RULES = [
   'THE SITUATION CARD comes first: read it before anything else, and test every suggestion against it.',
   '- A suggestion that ignores it is wrong. Abroad or on a trip: no home training plan, no house chore, no "today at home" step. A red recovery: no hard session. A full diary: nothing that needs an hour he does not have. With the family: prefer what they can do together.',
   '- Look for the INTERACTION, not one signal: sleep with mood, recovery with who he was with, a busy diary with both. Say which factors you weighed.',
+  '- THE HOUSEHOLD CARD, beside it, is the family\'s real week: their forecast today and their ninety-day patterns. Fit a suggestion to them (when people are usually out or home, who is together, who walks least, a routine about to happen), and use household_patterns for detail. They are context, never the subject: no note just reports where someone goes.',
   '- Cite the situation card when it shaped the note.',
 ] as const;

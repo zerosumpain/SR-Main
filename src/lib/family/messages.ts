@@ -128,8 +128,34 @@ export function replyView(
   };
 }
 
+/**
+ * How every Bat phone message starts (`BatPhoneWords.opening` in SR-AppleApp).
+ * Since 2026-10-27 the Bat phone is a message, not the alarm.
+ */
+export const BAT_PHONE_OPENING = '🦇 Bat phone';
+
+export function isBatPhone(body: string): boolean {
+  return body.startsWith(BAT_PHONE_OPENING);
+}
+
 /** The push every other family member gets. The app gives it the reply buttons. */
 export function messagePush(message: MessageRecord): PushMessage {
+  if (isBatPhone(message.body)) {
+    // Urgent enough to break through a Focus, but a message's one ordinary
+    // sound — never the alarm's siren (John, 2026-11-01).
+    return {
+      title: `Bat phone — ${message.fromName}`,
+      body: message.body.slice(BAT_PHONE_OPENING.length).replace(/^\s*—\s*/u, '').trim() || 'I need you.',
+      category: MESSAGE_CATEGORY,
+      threadId: MESSAGE_CATEGORY,
+      level: 'time-sensitive',
+      relevance: 1,
+      sound: 'default',
+      collapseId: `msg-${message.id}`,
+      ttlSeconds: 86_400,
+      userInfo: { category: MESSAGE_CATEGORY, messageId: message.id, kind: 'bat-phone' },
+    };
+  }
   return {
     title: `${message.fromName} · Family`,
     body: message.body,

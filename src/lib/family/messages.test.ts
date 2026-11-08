@@ -75,4 +75,12 @@ describe('pushes', () => {
   it('quotes by character, not code unit', () => {
     expect(quote('😀'.repeat(50), 5)).toBe('😀😀😀😀…');
   });
+  it('a Bat phone message breaks through a Focus with an ordinary sound, never the siren', () => {
+    const p = messagePush(row({ fromName: 'Sam', body: '🦇 Bat phone — I need you.\nPrivate Place · battery 23%' }));
+    expect(p).toMatchObject({
+      title: 'Bat phone — Sam', body: 'I need you.\nPrivate Place · battery 23%', level: 'time-sensitive', sound: 'default',
+      category: 'family-msg', userInfo: { category: 'family-msg', messageId: 'm1', kind: 'bat-phone' },
+    });
+    expect(messagePush(row()).level).toBe('active');
+  });
 });

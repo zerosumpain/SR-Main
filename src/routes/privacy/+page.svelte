@@ -7,7 +7,7 @@
   <meta name="description" content="What strangeramblings.com collects, why, and what it does with it." />
 </svelte:head>
 
-<LegalPage title="Privacy" updated="28 September 2026">
+<LegalPage title="Privacy" updated="1 November 2026">
   <p>
     Strange Ramblings is my personal website, run by me, John Kelly, in the UK. It isn't a business and
     it doesn't sell anything, least of all you. This page says what the site collects, why, and what I do
@@ -104,7 +104,7 @@
     you send to the site's AI features may go to the model providers described above.
   </p>
   <p>
-    Companion locations are kept for up to 30 days, queued household alerts for seven days, and cached
+    Companion locations, journeys and daily step counts are kept until deleted (they build the household's longer-term patterns), queued household alerts for seven days, and cached
     household views for at most five minutes. Health records stay until deleted. Pausing location
     sharing stops uploads and invalidates shared views; it does not erase history. Switching family
     steps off hides your counts and removes the board's copies on the next successful refresh.

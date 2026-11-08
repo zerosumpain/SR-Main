@@ -89,9 +89,9 @@ if (!building) {
  * Returns a 429 Response when the caller is over, or null to proceed.
  */
 function rateLimited(pathname: string, method: string, callerKey: string): Response | null {
-  const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname));
+  const limit = RATE_LIMITS.find((r) => r.pattern.test(pathname) && (!r.methods || r.methods.includes(method)));
   if (!limit || method === 'GET') return null;
-  const result = rateLimit(`${callerKey}:${pathname}`, {
+  const result = rateLimit(`${callerKey}:${limit.bucket ?? pathname}`, {
     capacity: limit.capacity,
     refillPerSecond: limit.refillPerSecond,
   });
@@ -109,8 +109,16 @@ function rateLimited(pathname: string, method: string, callerKey: string): Respo
 }
 
 // Expensive endpoints — apply per-user rate limits.
-// Pattern → { capacity (burst), refillPerSecond (steady-state) }.
-const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: number }> = [
+// Pattern → { capacity (burst), refillPerSecond (steady-state) }. `methods`
+// narrows an entry to those verbs; `bucket` shares one bucket across every
+// path the pattern matches (otherwise each path has its own).
+const RATE_LIMITS: Array<{
+  pattern: RegExp;
+  capacity: number;
+  refillPerSecond: number;
+  methods?: string[];
+  bucket?: string;
+}> = [
   // Synthesis is a per-toggle streamed LLM pass — costlier than a deep run kickoff
   // and user-triggerable in bursts. Must precede the broad /api/deepdive rule
   // because RATE_LIMITS.find() returns the FIRST matching pattern.
@@ -138,6 +146,23 @@ const RATE_LIMITS: Array<{ pattern: RegExp; capacity: number; refillPerSecond: n
   // in that window could hold open at once.
   { pattern: /^\/api\/jkai\/run-snippet(\/|$)/, capacity: 20, refillPerSecond: 20 / 60 },
   { pattern: /^\/api\/projects\/share(\/|$)/, capacity: 30, refillPerSecond: 30 / 60 }, // share-link create/revoke
+  // The phone's Drive uploads: one POST per file, so importing 200 photos (or
+  // "move from phone" draining an album) is 200 writes in a minute or two and
+  // broke on the 60/min lane below. Its own, larger bucket — 300 burst,
+  // refilling at 5/s — still caps a runaway retry loop, and Drive's quota is
+  // what bounds the bytes. Must precede the broad /api/native rule (first
+  // match wins). Only the upload paths: `files` exactly (not a file's own
+  // rename, delete or jkai calls) and the chunked `uploads` lane (phase 2).
+  //
+  // A chunk PUT of a resumable upload has its own bucket, ONE per device across
+  // every session: a 4 GiB video is 512 sequential 8 MiB PUTs and several files
+  // may go at once, so at ~10/s the 5/s refill above would 429 a long video
+  // part-way. 20/s sustained (160 MiB/s of pieces — more than any phone sends)
+  // with a 600 burst never starves a real upload and still caps a runaway loop;
+  // Drive's 6 open sessions, staging guard and quota bound the bytes. Must
+  // precede the entry below (first match wins).
+  { pattern: /^\/api\/native\/drive\/uploads\/[^/]+$/, methods: ['PUT'], capacity: 600, refillPerSecond: 20, bucket: 'native-drive-chunks' },
+  { pattern: /^\/api\/native\/drive\/(files|uploads(\/.*)?)$/, capacity: 300, refillPerSecond: 5 },
   // The phone's writes. Matched nothing until now: the per-device key was being
   // computed and handed to a table with no pattern for it, so `rateLimited`
   // returned null and the lane was uncapped. The limiter only fires on non-GET,
@@ -239,6 +264,7 @@ if (runsService('background')) {
 // is the kill switch; =on loads them whatever the role (the local preview,
 // whose Main runs as 'builder' so no WhatsApp or engines start).
 import { resolveServiceRole } from '$lib/server/service-role';
+import { keepsOwnNativeCache } from '$lib/drive/native-preview-cache';
 const customToolsSwitch = (process.env.JKAI_CUSTOM_TOOLS ?? '').trim().toLowerCase();
 if (!building && customToolsSwitch !== 'off' && (customToolsSwitch === 'on' || resolveServiceRole() === 'web')) {
   void import('$lib/tools/custom-tool-loader')
@@ -591,6 +617,21 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // The handler validates a dedicated, audience-bound credential itself.
 
   if (isPublicPath(pathname)) {
+    return resolve(event);
+  }
+
+  // Main's owner-only OpenID provider ($lib/server/oidc/provider): Immich signs
+  // the owner in with this site's session. These four authenticate themselves
+  // (discovery and keys are public metadata; token checks the client secret,
+  // the sealed code and the PKCE verifier; userinfo checks its bearer) and all
+  // 404 while the provider is unconfigured. EXACT paths. /oauth/authorize is
+  // deliberately NOT here: it needs the session and the owner gate below.
+  if (
+    pathname === '/.well-known/openid-configuration' ||
+    pathname === '/oauth/jwks' ||
+    pathname === '/oauth/token' ||
+    pathname === '/oauth/userinfo'
+  ) {
     return resolve(event);
   }
 
@@ -999,6 +1040,12 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     throw redirect(302, `/login?callbackUrl=${callbackUrl}`);
   }
 
+  // Signing in to another app with this site ($lib/server/oidc/provider): a
+  // SIGNED-IN non-owner reaches the handler so it can say "only the owner"
+  // with a 403, rather than being bounced to `/` with no explanation. Session
+  // already required above; the handler gives a code to an owner only.
+  if (pathname === '/oauth/authorize') return resolve(event);
+
   // Authed pages are owner-only by default. A guest on the login allow-list can
   // sign in but only reach public pages plus any guest-allowed prefix
   // (isGuestAllowedPath — empty by default). /jkai, /admin, /live, /deepdive, the
@@ -1073,7 +1120,11 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     response.headers.set('X-Frame-Options', 'SAMEORIGIN');
   }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  if (event.url.pathname.startsWith('/api/native/')) response.headers.set('Cache-Control', 'private, no-store');
+  // The phone's API is never cached — except the Drive previews, whose
+  // private, ETag-keyed headers are what let the app keep a tile instead of
+  // fetching it again (SR-Drive sets them; the relay refuses anything public).
+  const keepsPreviewCache = keepsOwnNativeCache(event.route.id, response.status, response.headers.get('Cache-Control'));
+  if (event.url.pathname.startsWith('/api/native/') && !keepsPreviewCache) response.headers.set('Cache-Control', 'private, no-store');
   // Defence-in-depth for share links: any /projects/* response opened with a
   // share token (?t=) must never be edge-cached, indexed, or leak the token
   // onward via Referer — even if a route handler forgets. (Per-route guards

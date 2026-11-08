@@ -3,7 +3,7 @@
    * /home/people/patterns — ninety days of the household's movement, looked
    * at for its patterns rather than its moment: what is worth knowing, the
    * shape of each person's day, where the time goes by kind of place, who is
-   * with whom, each person's destinations, their steps against where they
+   * with whom, each person's destinations, their routines and outings, their steps against where they
    * went, their rhythm, and the weeks. Built nightly; this page only draws
    * the stored report, narrowed by `?person=`.
    */
@@ -13,12 +13,17 @@
   import KpiStrip from '$lib/components/home/people/KpiStrip.svelte';
   import PeopleFilterBar from '$lib/components/home/people/PeopleFilterBar.svelte';
   import DepartureHeat from '$lib/components/home/people/DepartureHeat.svelte';
-  import PatternDayShape from '$lib/components/home/people/PatternDayShape.svelte';
+  import PatternTimeOfDay from '$lib/components/home/people/PatternTimeOfDay.svelte';
+  import PlaceMapDialog, { type MapPlace } from '$lib/components/home/people/PlaceMapDialog.svelte';
   import PatternTogether from '$lib/components/home/people/PatternTogether.svelte';
   import PatternPlaces from '$lib/components/home/people/PatternPlaces.svelte';
   import PatternSteps from '$lib/components/home/people/PatternSteps.svelte';
+  import PatternStepsCompare from '$lib/components/home/people/PatternStepsCompare.svelte';
+  import PatternHabits from '$lib/components/home/people/PatternHabits.svelte';
+  import PatternMonths from '$lib/components/home/people/PatternMonths.svelte';
   import { GROUPS, categoryLabel, groupOf, type Group } from '$lib/home/presence/patterns';
   import { dayLabel } from '$lib/components/home/people/format';
+  import { emphasise } from '$lib/components/home/people/emphasis';
   import type { ActionData, PageData } from './$types';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -27,12 +32,26 @@
   const names = $derived(Object.fromEntries((report?.people ?? []).map((p) => [p.subject, p.displayName])));
   const focus = $derived(report?.people.find((p) => p.subject === data.person) ?? null);
   const shown = $derived(focus ? [focus] : (report?.people ?? []));
+  // A report built before habits existed has none: the card waits for the next build.
+  const habits = $derived(focus ? focus.habits : report?.household.habits);
+  // The pop-up map. Reports built before places carried their geometry have none: no button.
+  let mapPlace = $state<MapPlace | null>(null);
+  const showPlace = (p: { name: string; type?: string | null; category: Parameters<typeof categoryLabel>[0]; lat?: number; lon?: number; radiusM?: number }) => {
+    if (p.lat == null || p.lon == null || !p.radiusM) return;
+    mapPlace = { name: p.name, detail: p.type ?? categoryLabel(p.category), lat: p.lat, lon: p.lon, radiusM: p.radiusM };
+  };
+  const mappable = (p: { radiusM?: number }) => !!p.radiusM;
+  // Reports built before the split have no `inside`.
+  const inside = $derived((focus ? focus.inside : report?.household.inside) ?? []);
   const pct = (n: number) => `${Math.round(n * 100)}%`;
   const n = (v: number | null | undefined) => (v == null ? '—' : v.toLocaleString('en-GB'));
   const hrefFor = (next: { person?: string | null }) => (next.person ? `?person=${encodeURIComponent(next.person)}` : '?');
 
   const findings = $derived(
-    (report?.findings ?? []).filter((f) => !focus || f.subject === focus.subject || f.subject == null).slice(0, focus ? 8 : 10),
+    // A person's own copy of a household line shows only when they are picked; the household line only when nobody is.
+    (report?.findings ?? [])
+      .filter((f) => (focus ? (f.subject === focus.subject || (f.subject == null && f.only !== 'household')) : f.only !== 'person'))
+      .slice(0, focus ? 8 : 10),
   );
 
   const kpis = $derived.by(() => {
@@ -110,7 +129,11 @@
         <p class="kicker">Worth knowing</p>
         <h2 id="find-h">{focus ? `${focus.displayName}, in a few lines` : 'The household, in a few lines'}</h2>
         {#if findings.length}
-          <ol class="finds">{#each findings as f, i (i)}<li>{f.text}</li>{/each}</ol>
+          <ol class="finds">
+            {#each findings as f, i (i)}
+              <li class:lead={i === 0}>{#each emphasise(f.text) as seg, j (j)}{#if seg.key}<strong>{seg.text}</strong>{:else}{seg.text}{/if}{/each}</li>
+            {/each}
+          </ol>
         {:else}
           <p class="strap quiet">Nothing stands out yet.</p>
         {/if}
@@ -119,8 +142,8 @@
       <section class="card wide" aria-labelledby="shape-h">
         <p class="kicker">Times of day</p>
         <h2 id="shape-h">The shape of {focus ? `${focus.displayName}'s` : 'everyone’s'} day</h2>
-        <p class="strap">Each column is one hour: where the observed time in it went, across the window. Hover a block for its share.</p>
-        <PatternDayShape people={shown} />
+        <p class="strap">Pick one kind of place or several (each button shows the total time there): each chart is the share of every hour {focus ? `${focus.displayName}` : 'each person'} spent at any of them, weekdays against weekends, all on one scale. Hover, or use the arrow keys, to read an hour.</p>
+        <PatternTimeOfDay people={shown} />
       </section>
 
       <section class="card" aria-labelledby="where-h">
@@ -161,22 +184,46 @@
         {#if focus}
           <h2 id="pl-h">Where {focus.displayName} goes</h2>
           <p class="strap">Most time first. “Way in” is the journey that arrived (and how often it was on foot); “× stay” is the stay against that journey. Steps are an estimate: the day’s steps above a day at home, shared out by minutes on foot.</p>
-          <PatternPlaces person={focus} {names} />
+          <PatternPlaces person={focus} {names} onplace={showPlace} />
         {:else}
           <h2 id="pl-h">The places the household shares</h2>
           <p class="strap">Away from home, somewhere two or more people stay. Pick a person above for their own destinations in full.</p>
           <ul class="rows">
             {#each report.household.shared as s (s.placeId)}
-              <li><span><strong>{s.name}</strong><small>{s.people.map((x) => names[x] ?? x).join(', ')}</small></span><span class="num">{s.visits} visits · {Math.round(s.hours)} h</span></li>
+              <li><span>{#if mappable(s)}<button type="button" class="place-btn" onclick={() => showPlace(s)} title="Show on a map">{s.name}</button>{:else}<strong>{s.name}</strong>{/if}<small>{s.type ?? categoryLabel(s.category)} · {s.people.map((x) => names[x] ?? x).join(', ')}</small></span><span class="num">{s.visits} visits · {Math.round(s.hours)} h</span></li>
+            {/each}
+          </ul>
+        {/if}
+        {#if inside.length}
+          <h3>Inside the big places</h3>
+          <p class="strap">The cafés and shops inside places like Town, where someone sat still beside one: named when it was clearly the nearest.</p>
+          <ul class="rows">
+            {#each inside.slice(0, 12) as s (s.placeId)}
+              <li>
+                <span>{#if mappable(s)}<button type="button" class="place-btn" onclick={() => showPlace(s)} title="Show on a map">{s.name}</button>{:else}<strong>{s.name}</strong>{/if}<small>{s.type ?? categoryLabel(s.category)} · {focus ? `usually ${s.arrives}, for ${s.medianStay} min` : s.people.map((x) => names[x] ?? x).join(', ')}</small></span>
+                <span class="num">{s.visits} {s.visits === 1 ? 'visit' : 'visits'}</span>
+              </li>
             {/each}
           </ul>
         {/if}
       </section>
 
+      {#if habits}
+        <section class="card wide" aria-labelledby="hb-h">
+          <p class="kicker">Habits</p>
+          <h2 id="hb-h">{focus ? `${focus.displayName}'s routines and outings` : 'The household’s routines and outings'}</h2>
+          <p class="strap">{focus ? '' : 'People out together count as one outing, and a day counts once whoever went. '}A routine needs three dates and at least a third of that weekday's seen days. A café or a shop inside a big place like Town counts as a stop of its own when someone sat still beside it (fifteen minutes for a meal, ten for a shop), named when it is clearly the nearest; the map of what is where is © OpenStreetMap contributors.</p>
+          <PatternHabits {habits} who={focus ? focus.displayName : 'the household'} />
+        </section>
+      {/if}
+
       <section class="card wide" aria-labelledby="st-h">
         <p class="kicker">Steps</p>
-        <h2 id="st-h">What going out does to the step count</h2>
-        <p class="strap">Daily steps from the app against the days' movement. Only days the trail saw for 16 hours or more are compared.</p>
+        <h2 id="st-h">Who walks, and what going out does to it</h2>
+        <p class="strap">Daily steps from the app, person by person: the average day, weekdays against weekends, and the week day by day.</p>
+        <PatternStepsCompare people={report.people} {focus} />
+        <h3>A day at home against a day out</h3>
+        <p class="strap">The same steps against the days' movement. Only days the trail saw for 16 hours or more are compared, and a day with a stay more than 80 km from home (a holiday, a long day trip) counts only as "far from home", never towards the others.</p>
         <PatternSteps people={report.people} {focus} />
       </section>
 
@@ -223,16 +270,25 @@
             <span class="wk-name">{p.displayName}</span>
             <div class="wk-charts">
               <div class="wk-bars" aria-label={`${p.displayName}: hours out by week`} role="img">
-                {#each p.weekly as w (w.week)}<span class="wk-plot" title={`Week of ${dayLabel(`${w.week}T12:00:00Z`)}: ${w.awayHours} h out, ${w.trips} journeys, ${w.places} places`}><span style:height={`${(w.awayHours / weekPeak) * 100}%`}></span></span>{/each}
+                {#each p.weekly as w (w.week)}<span class="wk-plot" class:away={w.away} title={`Week of ${dayLabel(`${w.week}T12:00:00Z`)}: ${w.awayHours} h out, ${w.trips} journeys, ${w.places} places${w.away ? ', with days far from home' : ''}`}><span style:height={`${(w.awayHours / weekPeak) * 100}%`}></span></span>{/each}
               </div>
               <div class="wk-bars steps" aria-label={`${p.displayName}: mean steps by week`} role="img">
-                {#each p.weekly as w (w.week)}<span class="wk-plot" title={`Week of ${dayLabel(`${w.week}T12:00:00Z`)}: ${n(w.steps)} steps a day`}><span style:height={`${((w.steps ?? 0) / stepPeak) * 100}%`}></span></span>{/each}
+                {#each p.weekly as w (w.week)}<span class="wk-plot" class:away={w.away} class:none={w.steps == null} title={`Week of ${dayLabel(`${w.week}T12:00:00Z`)}: ${w.steps == null ? 'no step count' : `${n(w.steps)} steps a day`}${w.away ? ', with days far from home' : ''}`}><span style:height={`${((w.steps ?? 0) / stepPeak) * 100}%`}></span></span>{/each}
               </div>
             </div>
           </div>
         {/each}
-        <p class="wk-key"><span class="sw out"></span>Hours out <span class="sw stp"></span>Steps a day</p>
+        <p class="wk-key"><span class="sw out"></span>Hours out <span class="sw stp"></span>Steps a day <span class="sw far"></span>Week with days far from home <span class="sw none"></span>No step count</p>
       </section>
+
+      {#if report.history?.months.length}
+        <section class="card wide" aria-labelledby="mo-h">
+          <p class="kicker">Month by month</p>
+          <h2 id="mo-h">How the months compare</h2>
+          <p class="strap">Each calendar month summed on its own and kept for good, so this grows as the months go by. Hours out are per day, leaving out days far from home; a month is compared with the one before only once both are over, and only for someone the same tracker saw in both.</p>
+          <PatternMonths history={report.history} focus={data.person} />
+        </section>
+      {/if}
 
       <section class="card" aria-labelledby="dep-h">
         <p class="kicker">Departures</p>
@@ -249,7 +305,29 @@
   </div>
 </HomeFrame>
 
+<PlaceMapDialog place={mapPlace} onclose={() => (mapPlace = null)} />
+
 <style>
+  .place-btn {
+    display: block;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: 600 var(--fs-body-sm) var(--font-body);
+    text-align: left;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 3px;
+  }
+  .place-btn:hover {
+    text-decoration-color: var(--accent);
+  }
+  .place-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .desk {
     width: min(1400px, 100%);
     margin: 0 auto;
@@ -308,16 +386,37 @@
     color: var(--text-muted);
     font-weight: 400;
   }
+  /* Read at a glance: the figures carry the line, so they are bold and in ink;
+     the strongest finding leads, larger, across both columns. */
   .finds {
     margin: 0;
-    padding-left: 1.4em;
+    padding-left: 1.6em;
     columns: 2 420px;
     column-gap: 40px;
   }
   .finds li {
-    margin-bottom: 8px;
-    font-size: var(--fs-body);
+    margin-bottom: 12px;
+    font-size: var(--fs-body-lg);
+    line-height: 1.45;
     break-inside: avoid;
+  }
+  .finds li::marker {
+    font: 600 var(--fs-label) var(--font-mono);
+    color: var(--accent);
+  }
+  .finds li.lead {
+    column-span: all;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: var(--fs-display-xs);
+    line-height: 1.3;
+  }
+  .finds strong {
+    font-weight: 700;
+    color: var(--accent-ink);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .aw {
     list-style: none;
@@ -466,6 +565,17 @@
   }
   .sw.out {
     background: var(--accent-ink);
+  }
+  .wk-bars .wk-plot.away span,
+  .sw.far {
+    background: var(--chart-cat-4);
+  }
+  .wk-plot.none {
+    border-bottom: 1px dashed var(--line-strong);
+  }
+  .sw.none {
+    background: none;
+    border: 1px dashed var(--line-strong);
   }
   .rebuild {
     display: flex;

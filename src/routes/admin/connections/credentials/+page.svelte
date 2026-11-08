@@ -81,7 +81,13 @@
   }
 
   async function deleteCredential(c: CredRow) {
-    if (!confirm(`Delete "${c.label}"? Workflows using it will stop working.`)) return;
+    // The last Mapbox token draws every map on /health; deleting it blanked
+    // them all on 2026-10-31. Say so, and suggest Replace instead.
+    const lastMapbox = c.integrationType === 'mapbox' && (grouped.mapbox?.length ?? 0) <= 1;
+    const warning = lastMapbox
+      ? `Delete "${c.label}"? This is the only Mapbox token: every map on /health will go blank. To change the token, use "Replace key" instead.`
+      : `Delete "${c.label}"? Workflows using it will stop working.`;
+    if (!confirm(warning)) return;
     busyId = c.id;
     busyAction = 'deleting';
     try {

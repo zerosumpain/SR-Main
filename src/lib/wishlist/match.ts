@@ -10,6 +10,8 @@
 
 import { gpuScore } from './gpu';
 import { readSpecs, type Specs } from './specs';
+import { formatUnit, readUnit } from './units';
+import { fitDates, formatWindow, readTravelDates } from './dates';
 import type { Constraint, ConstraintResult, Evaluation, WishCriteria } from './types';
 
 export function formatPence(p: number): string {
@@ -17,7 +19,8 @@ export function formatPence(p: number): string {
   return `£${pounds.toLocaleString('en-GB', { minimumFractionDigits: p % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
-function checkOne(c: Constraint, specs: Specs, text: string): ConstraintResult {
+function checkOne(c: Constraint, specs: Specs, title: string, description: string, asOf: Date): ConstraintResult {
+  const text = `${title}\n${description}`;
   switch (c.field) {
     case 'gpu': {
       const want = gpuScore(c.value);
@@ -46,6 +49,17 @@ function checkOne(c: Constraint, specs: Specs, text: string): ConstraintResult {
         ? { field: 'ram_type', ok: true, reason: specs.ramType }
         : { field: 'ram_type', ok: false, reason: `${specs.ramType}, not ${want.join('/')}` };
     }
+    case 'attr': {
+      const want = `${c.op === 'gte' ? '≥' : '≤'} ${formatUnit(c.unit, c.value)}`;
+      const got = readUnit(c.unit, title, description);
+      if (got === null) return { field: 'attr', ok: null, reason: `${c.label} not stated (want ${want})`, essential: c.essential };
+      const ok = c.op === 'gte' ? got >= c.value : got <= c.value;
+      return { field: 'attr', ok, reason: ok ? `${c.label} ${formatUnit(c.unit, got)}` : `${c.label} ${formatUnit(c.unit, got)}, not ${want}` };
+    }
+    case 'dates': {
+      const fit = fitDates(readTravelDates(title, description, asOf), c);
+      return { field: 'dates', ok: fit.ok, reason: fit.reason };
+    }
     case 'text': {
       const lower = text.toLowerCase();
       const hits = c.value.filter((w) => lower.includes(w.toLowerCase()));
@@ -61,27 +75,61 @@ function checkOne(c: Constraint, specs: Specs, text: string): ConstraintResult {
   }
 }
 
-export function evaluate(
-  listing: { title: string; description: string; pricePence: number | null },
-  criteria: WishCriteria,
-): Evaluation {
+/** "£299pp", "£299 per person", "£299 pp" — a price for one traveller, not the party. */
+const PER_PERSON = /£\s*[\d,.]+\s*(?:pp|p\/p|per\s+person|each)\b/i;
+
+export interface Listing {
+  title: string;
+  description: string;
+  pricePence: number | null;
+  /** The source prices per person whatever the text says (HolidayPirates). */
+  perPerson?: boolean;
+  /** When the deal was posted — a date with no year is the next one after it. */
+  postedAt?: string | null;
+}
+
+/**
+ * The price to hold against the budget. A listing priced per person, on an
+ * item budgeted for the whole party, is compared at price × party — "£299pp"
+ * for four is £1,196 — and the reason says so. Without a party size the
+ * per-person price stands, and the reason flags it.
+ */
+export function comparablePrice(listing: Listing, criteria: WishCriteria): { pence: number | null; note: string } {
+  if (listing.pricePence === null) return { pence: null, note: '' };
+  const pp = listing.perPerson === true || PER_PERSON.test(`${listing.title}\n${listing.description}`);
+  const basis = criteria.price;
+  if (!pp || !basis || basis.per === 'person') return { pence: listing.pricePence, note: pp ? ' pp' : '' };
+  if (!basis.party) return { pence: listing.pricePence, note: ' pp' };
+  return { pence: listing.pricePence * basis.party, note: ` (${formatPence(listing.pricePence)}pp × ${basis.party})` };
+}
+
+/** How far over the ceiling a listing that meets every spec is still kept, as an option. */
+export const OVER_BUDGET_PCT = 50;
+
+function priceWithin(listing: Listing, criteria: WishCriteria, pct: number): boolean {
+  const { pence } = comparablePrice(listing, criteria);
+  return criteria.maxPricePence !== null && pence !== null && pence <= criteria.maxPricePence * (1 + pct / 100);
+}
+
+export function evaluate(listing: Listing, criteria: WishCriteria, now = new Date()): Evaluation {
   const specs = readSpecs(listing.title, listing.description);
-  const text = `${listing.title}\n${listing.description}`;
-  const results = criteria.constraints.map((c) => checkOne(c, specs, text));
+  const asOf = listing.postedAt ? new Date(listing.postedAt) : now;
+  const results = criteria.constraints.map((c) => checkOne(c, specs, listing.title, listing.description, asOf));
 
   let priceOk: boolean | null = true;
   let priceNear = false;
   if (criteria.maxPricePence !== null) {
-    if (listing.pricePence === null) {
+    const { pence, note } = comparablePrice(listing, criteria);
+    if (pence === null) {
       priceOk = null;
       results.unshift({ field: 'price', ok: null, reason: 'Price not stated' });
-    } else if (listing.pricePence <= criteria.maxPricePence) {
-      results.unshift({ field: 'price', ok: true, reason: `${formatPence(listing.pricePence)} ≤ ${formatPence(criteria.maxPricePence)}` });
+    } else if (pence <= criteria.maxPricePence) {
+      results.unshift({ field: 'price', ok: true, reason: `${formatPence(pence)}${note} ≤ ${formatPence(criteria.maxPricePence)}` });
     } else {
       priceOk = false;
-      const over = listing.pricePence - criteria.maxPricePence;
+      const over = pence - criteria.maxPricePence;
       priceNear = over <= criteria.maxPricePence * (criteria.nearMissPct / 100);
-      results.unshift({ field: 'price', ok: false, reason: `${formatPence(listing.pricePence)}, ${formatPence(over)} over` });
+      results.unshift({ field: 'price', ok: false, reason: `${formatPence(pence)}${note}, ${formatPence(over)} over` });
     }
   }
 
@@ -91,18 +139,26 @@ export function evaluate(
   // name the GPU you asked for is not a gaming PC we can vouch for — the first
   // live run (2026-10-31) offered Mac minis, all-in-ones and handhelds as
   // "possible" on exactly that gap — and two unstated specs is a guess.
+  // The same holds for any attribute the ask marked essential (a TV's screen
+  // size, a holiday's nights).
   const unknown = specResults.filter((r) => r.ok === null);
-  if (unknown.some((r) => r.field === 'gpu') || unknown.length > 1) return { verdict: 'no', results };
+  if (unknown.some((r) => r.field === 'gpu' || r.essential) || unknown.length > 1) return { verdict: 'no', results };
   const silent = unknown.length === 1;
-  if (priceOk === false) return { verdict: priceNear && !silent ? 'near' : 'no', results };
+  if (priceOk === false) {
+    if (silent) return { verdict: 'no', results };
+    if (priceNear) return { verdict: 'near', results };
+    return { verdict: priceWithin(listing, criteria, OVER_BUDGET_PCT) ? 'over' : 'no', results };
+  }
   if (priceOk === null || silent) return { verdict: 'possible', results };
   return { verdict: 'match', results };
 }
 
 /** The ones worth telling someone about, best first. */
 export const ALERTABLE: readonly string[] = ['match', 'near', 'possible'];
+/** What a hunt stores: the alertable, and the over-budget options it tracks. */
+export const KEPT: readonly string[] = [...ALERTABLE, 'over'];
 export function verdictRank(v: string): number {
-  return v === 'match' ? 0 : v === 'possible' ? 1 : v === 'near' ? 2 : 3;
+  return v === 'match' ? 0 : v === 'possible' ? 1 : v === 'near' ? 2 : v === 'over' ? 3 : 4;
 }
 
 /** One constraint in words, for the page: "RTX 5060 or better", "16GB+ RAM". */
@@ -118,5 +174,13 @@ export function describeConstraint(c: import('./types').Constraint): string {
       return c.value.join(' / ');
     case 'text':
       return c.op === 'contains_any' ? `mentions ${c.value.join(' / ')}` : `not ${c.value.join(' / ')}`;
+    case 'dates':
+      return c.label ? `${c.label}: ${formatWindow(c.from, c.to)}` : formatWindow(c.from, c.to);
+    case 'attr': {
+      // "≥ 7 nights", not "Nights ≥ 7 nights" — the unit already says what it is.
+      const amount = formatUnit(c.unit, c.value);
+      const label = amount.toLowerCase().includes(c.label.toLowerCase()) ? '' : `${c.label} `;
+      return `${label}${c.op === 'gte' ? '≥' : '≤'} ${amount}`;
+    }
   }
 }

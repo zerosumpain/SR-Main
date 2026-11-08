@@ -67,6 +67,13 @@ export const POST: RequestHandler = async ({ request }) => {
     changed = true;
   }
 
+  if (body.braveApiKey !== undefined) {
+    if (typeof body.braveApiKey !== 'string') throw error(400, 'invalid braveApiKey');
+    // The search balancer's second provider. See $lib/deepdive/brave.
+    await setSetting('brave.api_key', { value: body.braveApiKey });
+    changed = true;
+  }
+
   if (body.openrouterApiKey !== undefined) {
     if (typeof body.openrouterApiKey !== 'string') throw error(400, 'invalid openrouterApiKey');
     await setSetting('openrouter.api_key', { value: body.openrouterApiKey });

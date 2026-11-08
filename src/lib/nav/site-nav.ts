@@ -88,6 +88,10 @@ export const CHROME_EXCLUSIONS: { prefix: string; exact?: boolean; why: string }
   },
   { prefix: '/auth-error', why: 'The auth gate’s failure page — same reason as /login.' },
   {
+    prefix: '/games',
+    why: 'TV boards for family games (`/games/<game>`), cast to a television across the room: a full-viewport 16:9 stage with no pointer and no login, so every cell on a nav bar would be a dead end.',
+  },
+  {
     prefix: '/deepdive/share',
     why: 'A full-viewport research desk — `position: fixed; inset: 0` declared on both the host and ResearchDesk’s own shell — already wearing CommandBar.',
   },
@@ -113,9 +117,10 @@ export function wearsSharedChrome(path: string): boolean {
 }
 
 /**
- * The jkai cell: the assistant and the two things it does without being asked
- * to chat — it notices (Daydreams) and it plans (Trips). /trips has no strip of
- * its own on a site page, so this menu is how it is reached from anywhere.
+ * The jkai cell: the assistant and the things it does without being asked to
+ * chat — it notices (Daydreams), it plans (Trips) and it watches prices (Wish
+ * list). Neither /trips nor /home/wishlist has a strip of its own on a site
+ * page, so this menu is how they are reached from anywhere.
  * Every nav bar renders it through `JkaiMenu.svelte`.
  */
 export const JKAI_ITEM: NavItem = {
@@ -127,6 +132,7 @@ export const JKAI_ITEM: NavItem = {
     { label: 'jkai', href: '/jkai', ownerOnly: true, meta: 'Ask, chat, run things', match: (p) => p === '/jkai' },
     { label: 'Daydreams', href: '/jkai/daydreams', ownerOnly: true, meta: 'What it noticed while idle' },
     { label: 'Trips', href: '/trips', ownerOnly: true, meta: 'Plan the days away' },
+    { label: 'Wish list', href: '/home/wishlist', ownerOnly: true, meta: 'Things to buy, watched for a price' },
   ],
 };
 

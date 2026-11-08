@@ -85,7 +85,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 // Erasing a seat (games/erase-seat.integration, 2026-10-25) runs the account
 // erasure's room delete beside keepErasedSeats in one transaction against
 // game_rooms; rows carry an id prefix and are removed each case.
-const INTEGRATION_FILES = 48;
+// Releases from every repository (releases/cross-repo.integration, 2026-11-08)
+// prove a session links only to its own repository's release when two repos
+// share a PR number, and that the owner console filters by repository; rows
+// carry an id prefix and are removed each run. The nightly runs it, not merges.
+const INTEGRATION_FILES = 49;
 
 function tracked(pattern: string): string[] {
 	return execFileSync('git', ['ls-files', pattern], { cwd: ROOT, encoding: 'utf8' })

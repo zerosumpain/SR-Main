@@ -97,6 +97,7 @@
             <span class="rel-title">{r.title ?? r.commits[0]?.subject ?? r.shortSha}</span>
             <span class="rel-meta">
               <span class="rel-date">{fmtDate(r.deployedAt)}</span>
+              {#if r.repo && r.repo !== 'zerosumpain/SR-Main'}<span class="chip repo">{r.repo.split('/').pop()}</span>{/if}
               {#if r.via !== 'github-actions'}<span class="chip via">{r.via}</span>{/if}
               {#if r.corrected}<span class="chip">diff corrected</span>{/if}
               {#each r.kinds as k (k)}<span class="chip">{KIND_LABEL[k] ?? k}</span>{/each}

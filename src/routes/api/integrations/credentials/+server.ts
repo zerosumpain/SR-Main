@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getIntegrationAdapter } from '$lib/integrations/registry';
-import { buildManualPayload, getManualCredentialSpec } from '$lib/integrations/manual-credentials';
+import { buildManualPayload, checkManualPayload, getManualCredentialSpec } from '$lib/integrations/manual-credentials';
 import { createCredential } from '$lib/integrations/credentials';
 
 /**
@@ -36,6 +36,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
   const built = buildManualPayload(spec, (body.payload ?? {}) as Record<string, unknown>);
   if ('error' in built) throw error(400, built.error);
+  const invalid = checkManualPayload(integrationType, built.payload);
+  if (invalid) throw error(400, invalid);
 
   // Build the kind-specific payload from the validated fields (see the contract
   // in manual-credentials.ts: basic → username/password, apikey → key).

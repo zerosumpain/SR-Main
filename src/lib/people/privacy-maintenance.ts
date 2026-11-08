@@ -1,8 +1,5 @@
-import { sql } from 'drizzle-orm';
-import { db } from '$lib/db';
 import { companionToken, companionUrl } from '$lib/home/presence/companion';
 import { drainPrivacyJobs } from '$lib/home/presence/privacy-jobs';
-import { trailChanged } from '$lib/home/presence/trail-generation';
 
 let draining = false;
 /** Runs independently of projection/ingestion so stopped upload traffic is irrelevant. */
@@ -30,15 +27,9 @@ export async function privacyMaintenance(): Promise<void> {
         }
       } catch (error) { failures.push(error); }
     }
-    // Local retention must still run while the companion is unavailable.
-    await db.execute(sql`DELETE FROM daydream_trail WHERE source='companion' AND ts<now()-interval '30 days'`);
-    trailChanged();
-    await db.execute(sql`DELETE FROM household_journey_viewer WHERE journey_id IN
-      (SELECT id FROM household_journey WHERE started_at<now()-interval '30 days')`);
-    await db.execute(sql`DELETE FROM household_journey WHERE started_at<now()-interval '30 days'`);
-    await db.execute(sql`DELETE FROM household_event WHERE at<now()-interval '30 days'`);
-    await db.execute(sql`DELETE FROM family_steps_day WHERE day<current_date-30`);
-    await db.execute(sql`DELETE FROM family_steps_event WHERE day<current_date-30`);
+    // No age-based purge: the trail, journeys, events and step days are kept
+    // (the owner's decision, 2026-11-01). Only a person's own deletion request,
+    // above, removes their data.
     if (failures.length) throw new AggregateError(failures, 'Privacy jobs remain pending');
   } finally { draining = false; }
 }

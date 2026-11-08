@@ -11,7 +11,7 @@
 // first thing it guesses wrong is "you have not left the house in three days"
 // when the truth is that homeserv was down.
 
-import { and, desc, eq, gte, inArray, isNotNull, lt, max } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, max } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamTrail, daydreamPlaces } from '$lib/db/schema';
 import {
@@ -26,7 +26,6 @@ import {
   DEFAULT_SUBJECT,
   MAX_USABLE_ACCURACY_M,
   RAIL_MIN_FIXES,
-  TRAIL_RETENTION_DAYS,
   errMsg,
   type IncomingFix,
   type MovementMode,
@@ -276,18 +275,6 @@ export async function latestTsBySource(
     if (r.ts) out.set(r.subject, r.ts instanceof Date ? r.ts : new Date(r.ts));
   }
   return out;
-}
-
-/** Drop raw fixes past the retention horizon. Places, which are the point of
- *  having kept them, are aggregates and survive. */
-export async function pruneTrail(retentionDays = TRAIL_RETENTION_DAYS): Promise<number> {
-  const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
-  const deleted = await db
-    .delete(daydreamTrail)
-    .where(lt(daydreamTrail.ts, cutoff))
-    .returning({ id: daydreamTrail.id });
-  if (deleted.length) trailChanged();
-  return deleted.length;
 }
 
 /**

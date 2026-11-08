@@ -10,12 +10,49 @@
   import HomeFrame from '$lib/components/home/HomeFrame.svelte';
   import SectionHead from '$lib/components/jkai/daydream/hub/SectionHead.svelte';
   import { describeConstraint, formatPence } from '$lib/wishlist/match';
+  import { SCAN_CATEGORIES } from '$lib/wishlist/sources/scan';
+  import { searchQueries } from '$lib/wishlist/sources/search';
+  import { SEARCHES_PER_DAY, searchesToday } from '$lib/wishlist/due';
   import type { FeedRef, Verdict, WishItem, WishOffer } from '$lib/wishlist/types';
+  import type { CompareRow } from '$lib/wishlist/value';
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
   let adding = $state(false);
   let busyId = $state<string | null>(null);
+  /** Per item: the listings table, or the side-by-side spec comparison. */
+  let views = $state<Record<string, 'list' | 'compare'>>({});
+  let sorts = $state<Record<string, SortKey>>({});
+
+  /** `factor` sorts by the item's heaviest value factor — the GPU, the screen, the nights. */
+  type SortKey = 'value' | 'price' | 'factor';
+  const sortsFor = (factors: { label: string }[]): [SortKey, string][] => [
+    ['value', 'Best value'],
+    ['price', 'Cheapest'],
+    ...(factors.length ? ([['factor', `Best ${factors[0].label.toLowerCase()}`]] as [SortKey, string][]) : []),
+  ];
+  // Unscored rows sort last whatever the key — an unknown is not a zero.
+  const last = (n: number | null, dir: 1 | -1) => (n === null ? Infinity : dir * n);
+  function sorted(rows: CompareRow[], key: SortKey, heaviest: number): CompareRow[] {
+    const by: Record<SortKey, (r: CompareRow) => number> = {
+      value: (r) => last(r.value, -1),
+      price: (r) => r.comparePence,
+      factor: (r) => last(r.factors[heaviest]?.score ?? null, -1),
+    };
+    return [...rows].sort((a, b) => by[key](a) - by[key](b) || a.comparePence - b.comparePence);
+  }
+  /** The factor columns as one line, for a phone, where the columns are hidden. */
+  const specLine = (r: CompareRow) =>
+    r.factors
+      .filter((f) => f.shown)
+      .map((f) => `${f.shown}${f.sub && !f.sub.startsWith('score') ? ' ' + f.sub : ''}`)
+      .join(' · ') || 'nothing stated';
+  const heaviestOf = (factors: { weight: number }[]) => factors.reduce((h, f, n) => (f.weight > (factors[h]?.weight ?? -1) ? n : h), 0);
+  const pct = (w: number) => `${Math.round(w * 100)}%`;
+  function explainValue(factors: { label: string; weight: number }[]): string {
+    if (!factors.length) return 'Nothing measurable was asked for, so value is price alone: the cheapest here = 100.';
+    return `Value is performance per pound, best here = 100. Performance weighs ${factors.map((f) => `${f.label} ${pct(f.weight)}`).join(', ')}, each against a typical good one; a factor a listing does not state counts as half that, so hiding a spec never helps.`;
+  }
 
   const WHEN = new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Europe/London',
@@ -42,13 +79,18 @@
     match: { label: 'Match', tone: 't-good' },
     possible: { label: 'Check', tone: 't-watch' },
     near: { label: 'Near miss', tone: 't-action' },
+    over: { label: 'Over budget', tone: 't-steady' },
     no: { label: 'No', tone: 't-quiet' },
   };
 
   function feedLabel(f: FeedRef): string {
     if (f.source === 'hukd-tag') return `hotukdeals · ${f.value}`;
     if (f.source === 'pricerunner-cl') return `PriceRunner · ${f.value.split('/')[1]?.replace(/-/g, ' ') ?? f.value}`;
-    return `search · “${f.value}”`;
+    if (f.source === 'ocuk-cat') return `Overclockers · ${f.value.split('/').at(-1)?.replace(/-/g, ' ') ?? f.value}`;
+    if (f.source === 'scan-cat') return `Scan · ${SCAN_CATEGORIES[f.value] ?? f.value}`;
+    if (f.source === 'reddit') return `r/${f.value}`;
+    if (f.source === 'holidaypirates') return 'HolidayPirates';
+    return `web · “${f.value}”`;
   }
 
   function host(url: string): string {
@@ -77,6 +119,7 @@
     if (i.forPerson) parts.push(`for ${i.forPerson}`);
     if (i.deadline) parts.push(`by ${DAY.format(new Date(i.deadline))}`);
     parts.push(i.lastCheckedAt ? `checked ${WHEN.format(new Date(i.lastCheckedAt))}` : 'first check running…');
+    if (i.kind === 'hunt' && searchQueries(i.feeds).length) parts.push(`${searchesToday(i, new Date())} of ${SEARCHES_PER_DAY} web searches today`);
     return parts;
   }
 </script>
@@ -87,9 +130,9 @@
   path="/home/wishlist"
   kicker="Home · Wish list"
   title={['Things to buy,', 'watched for you']}
-  standfirst="Say what you want — a product link to watch for a price drop, or what it has to be (“gaming PC under £1,100, 16GB DDR5, RTX 5060 or better”). The sweep reads hotukdeals and PriceRunner and messages you when something meets it."
+  standfirst="Say what you want — a product link to watch for a price drop, or what it has to be — “a 55in+ TV under £600”, “a family week in the sun, 4 stars, under £2,000 for the four of us”, “gaming PC under £1,100, RTX 5060 or better”. The sweep reads hotukdeals, PriceRunner, HolidayPirates and — for PCs — Overclockers, Scan and r/buildapcsalesuk, searches the web up to five times a day per item, and messages you when something meets it."
   {summary}
-  footer={['strangeramblings.com/home/wishlist', 'hotukdeals · PriceRunner', 'The owner only, for now']}
+  footer={['strangeramblings.com/home/wishlist', 'hotukdeals · PriceRunner · HolidayPirates · Overclockers · Scan · Reddit · the web', 'The owner only, for now']}
 >
   <section class="band flush-top">
     <div class="inner">
@@ -111,7 +154,7 @@
           name="ask"
           class="text-input area"
           rows="3"
-          placeholder="A gaming PC for Christmas: under £1,100, at least 16GB DDR5, RTX 5060 or better"
+          placeholder="Anything — a 55in+ TV under £600, a 4-star family week in the sun under £2,000 for four, a gaming PC with an RTX 5060…"
           value={form && 'ask' in form && typeof form.ask === 'string' ? form.ask : ''}
         ></textarea>
         <div class="wl-add-row">
@@ -151,31 +194,88 @@
                 {#if i.lastError}<p class="note warn">{i.lastError}</p>{/if}
 
                 {#if row.offers.length}
-                  <div class="tbl-wrap">
-                    <table class="tbl compact wl-offers">
-                      <thead><tr><th>Verdict</th><th class="right">Price</th><th>Listing</th><th>Why</th><th>History</th></tr></thead>
-                      <tbody>
-                        {#each row.offers as o (o.key)}
-                          <tr>
-                            <td class="nowrap"><span class="pill {VERDICT[o.verdict].tone}">{VERDICT[o.verdict].label}</span></td>
-                            <td class="right num nowrap">
-                              {formatPence(o.pricePence)}
-                              {#if o.inStock === false}<br /><small class="dim">out of stock</small>{/if}
-                            </td>
-                            <td class="cell-wrap">
-                              <a class="link" href={o.url} target="_blank" rel="noopener noreferrer">{o.title}</a>
-                              <br /><small class="dim">{o.merchant ? `${o.merchant} · ` : ''}{host(o.url)} · seen {WHEN.format(new Date(o.lastSeenAt))}</small>
-                              {#if o.sellers && o.sellers.length > 1}
-                                <br /><small class="dim">{o.sellers.slice(0, 4).map((s) => `${s.merchant} ${formatPence(s.pricePence)}`).join(' · ')}</small>
-                              {/if}
-                            </td>
-                            <td class="cell-wrap"><small>{reasons(o)}</small></td>
-                            <td class="nowrap"><small class="dim">{history(o)}</small></td>
-                          </tr>
+                  {@const view = views[i.id] ?? 'list'}
+                  {@const sortKey = sorts[i.id] ?? 'value'}
+                  {@const heaviest = heaviestOf(row.factors)}
+                  <div class="wl-viewbar" role="group" aria-label="How to show the listings">
+                    <button class="btn sm" type="button" aria-pressed={view === 'list'} onclick={() => (views[i.id] = 'list')}>Listings</button>
+                    <button class="btn sm" type="button" aria-pressed={view === 'compare'} onclick={() => (views[i.id] = 'compare')}>Compare</button>
+                    {#if view === 'compare'}
+                      <span class="wl-sort">
+                        <small class="dim">Sort</small>
+                        {#each sortsFor(row.factors.length ? [row.factors[heaviest]] : []) as [k, label] (k)}
+                          <button class="btn sm" type="button" aria-pressed={sortKey === k} onclick={() => (sorts[i.id] = k)}>{label}</button>
                         {/each}
-                      </tbody>
-                    </table>
+                      </span>
+                    {/if}
                   </div>
+                  {#if view === 'compare'}
+                    <div class="tbl-wrap">
+                      <table class="tbl compact wl-compare">
+                        <thead>
+                          <tr>
+                            <th>Value</th><th class="right">Price</th><th>Listing</th>
+                            {#if i.criteria.constraints.some((c) => c.field === 'dates')}<th class="wl-spec">When</th>{/if}
+                            {#each row.factors as f (f.label)}<th class="wl-spec">{f.label}</th>{/each}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {#each sorted(row.compare, sortKey, heaviest) as r (r.key)}
+                            <tr>
+                              <td class="nowrap">
+                                {#if r.value !== null}
+                                  <span class="num">{r.value}</span>
+                                  <span class="wl-meter" aria-hidden="true"><span style:width="{r.value}%"></span></span>
+                                  {#if r.coverage < 1}<br /><small class="dim" title="How much of the value score the listing actually states">states {Math.round(r.coverage * 100)}%</small>{/if}
+                                {:else}
+                                  <small class="dim">no {row.factors[heaviest]?.label ?? 'spec'} stated</small>
+                                {/if}
+                              </td>
+                              <td class="right num nowrap">
+                                {r.priceLabel}{#if r.priceNote}<br /><small class="dim">{r.priceNote}</small>{/if}
+                              </td>
+                              <td class="cell-wrap">
+                                <a class="link" href={r.url} target="_blank" rel="noopener noreferrer">{r.title}</a>
+                                <br /><small class="dim">{r.merchant ? `${r.merchant} · ` : ''}{host(r.url)} · <span class="pill {VERDICT[r.verdict].tone}">{VERDICT[r.verdict].label}</span></small>
+                                {#if r.factors.length || r.when}<br /><small class="wl-specline">{[r.when, r.factors.length ? specLine(r) : null].filter(Boolean).join(' · ')}</small>{/if}
+                              </td>
+                              {#if i.criteria.constraints.some((c) => c.field === 'dates')}<td class="wl-spec">{r.when ?? '—'}</td>{/if}
+                              {#each r.factors as f (f.label)}
+                                <td class="nowrap wl-spec">{f.shown ?? '—'}{#if f.sub}<br /><small class="dim">{f.sub}</small>{/if}</td>
+                              {/each}
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p class="card-body sm dim">{explainValue(row.factors)}</p>
+                  {:else}
+                    <div class="tbl-wrap">
+                      <table class="tbl compact wl-offers">
+                        <thead><tr><th>Verdict</th><th class="right">Price</th><th>Listing</th><th>Why</th><th>History</th></tr></thead>
+                        <tbody>
+                          {#each row.offers as o (o.key)}
+                            <tr>
+                              <td class="nowrap"><span class="pill {VERDICT[o.verdict].tone}">{VERDICT[o.verdict].label}</span></td>
+                              <td class="right num nowrap">
+                                {formatPence(o.pricePence)}
+                                {#if o.inStock === false}<br /><small class="dim">out of stock</small>{/if}
+                              </td>
+                              <td class="cell-wrap">
+                                <a class="link" href={o.url} target="_blank" rel="noopener noreferrer">{o.title}</a>
+                                <br /><small class="dim">{o.merchant ? `${o.merchant} · ` : ''}{host(o.url)} · seen {WHEN.format(new Date(o.lastSeenAt))}</small>
+                                {#if o.sellers && o.sellers.length > 1}
+                                  <br /><small class="dim">{o.sellers.slice(0, 4).map((s) => `${s.merchant} ${formatPence(s.pricePence)}`).join(' · ')}</small>
+                                {/if}
+                              </td>
+                              <td class="cell-wrap"><small>{reasons(o)}</small></td>
+                              <td class="nowrap"><small class="dim">{history(o)}</small></td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  {/if}
                 {:else if i.lastCheckedAt}
                   <p class="card-body sm dim">Nothing worth a look yet{row.hidden ? ` — ${row.hidden} seen that do not fit` : ''}.</p>
                 {/if}
@@ -188,6 +288,10 @@
                       <button class="btn sm" type="submit" disabled={busyId === i.id}>{busyId === i.id ? 'Checking…' : 'Check now'}</button>
                     </form>
                   {/if}
+                  <form method="POST" action="?/reread" use:enhance={() => { busyId = i.id; return async ({ update }) => { await update(); busyId = null; }; }}>
+                    <input type="hidden" name="id" value={i.id} />
+                    <button class="btn sm" type="submit" disabled={busyId === i.id} title="Read the ask again — picks up sources added since">Re-read</button>
+                  </form>
                   {#each (i.status === 'watching' ? [['paused', 'Pause'], ['bought', 'Bought it'], ['dropped', 'Drop']] : [['watching', 'Watch again']]) as [status, label] (status)}
                     <form method="POST" action="?/status" use:enhance>
                       <input type="hidden" name="id" value={i.id} />
@@ -239,6 +343,42 @@
     gap: 0.375rem;
     margin: 0.5rem 0 0.75rem;
   }
+  .wl-viewbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    margin-bottom: 0.5rem;
+  }
+  .wl-sort {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    margin-left: auto;
+  }
+  .wl-viewbar :global(.btn[aria-pressed='true']) {
+    background: var(--text-primary);
+    color: var(--bg);
+  }
+  .wl-specline {
+    display: none;
+  }
+  .wl-meter {
+    display: inline-block;
+    width: 3.5rem;
+    height: 6px;
+    margin-left: 0.375rem;
+    vertical-align: middle;
+    background: var(--line-strong);
+    border-radius: 2px;
+  }
+  .wl-meter span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
   .card-actions form {
     display: inline;
   }
@@ -248,29 +388,43 @@
     overflow-wrap: anywhere;
   }
   /* A phone cannot hold five columns: each listing becomes a block — verdict
-     and price on one line, then the listing, why, and history in full width. */
+     and price on one line, then the listing, why, and history in full width.
+     The comparison stacks the same way, value and price first, its spec
+     columns folded into one line under the listing (`.wl-specline`). */
   @media (max-width: 640px) {
-    .wl-offers thead {
+    .wl-compare .wl-spec {
+      display: none;
+    }
+    .wl-specline {
+      display: inline;
+    }
+    .wl-offers thead,
+    .wl-compare thead {
       display: none;
     }
     .wl-offers,
-    .wl-offers tbody {
+    .wl-offers tbody,
+    .wl-compare,
+    .wl-compare tbody {
       display: block;
     }
-    .wl-offers tr {
+    .wl-offers tr,
+    .wl-compare tr {
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 0.25rem 0.75rem;
       padding: 0.75rem 0;
     }
-    .wl-offers td {
+    .wl-offers td,
+    .wl-compare td {
       display: block;
       padding: 0;
       border: 0;
       text-align: left;
       white-space: normal;
     }
-    .wl-offers td:nth-child(n + 3) {
+    .wl-offers td:nth-child(n + 3),
+    .wl-compare td:nth-child(3) {
       grid-column: 1 / -1;
     }
   }

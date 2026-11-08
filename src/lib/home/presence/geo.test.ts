@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { circlePolygon, clampRadius, destinationPoint, distanceM, validPlaceGeometry } from './geo';
+import { circlePolygon, clampRadius, destinationPoint, distanceM, enclosingCircle, validPlaceGeometry } from './geo';
 import { metresBetween } from './cluster';
 
 // Made-up coordinates only.
@@ -66,5 +66,30 @@ describe('validPlaceGeometry', () => {
     expect(validPlaceGeometry(Number.NaN, LON, 150)).toMatch(/latitude/i);
     expect(validPlaceGeometry(LAT, LON, 49)).toMatch(/radius/i);
     expect(validPlaceGeometry(LAT, LON, 2001)).toMatch(/radius/i);
+  });
+});
+
+describe('enclosingCircle', () => {
+  const A = { lat: 51.5, lon: -0.1, radiusM: 100 };
+  it('keeps a circle that already holds the rest exactly where it was drawn', () => {
+    const inside = { ...destinationPoint(A.lat, A.lon, 30, 90), radiusM: 50 };
+    expect(enclosingCircle([A, inside])).toEqual({ ...A, radiusM: 100 });
+  });
+  it('grows toward a circle outside and holds both', () => {
+    const B = { ...destinationPoint(A.lat, A.lon, 400, 45), radiusM: 60 };
+    const c = enclosingCircle([A, B]);
+    expect(c.radiusM).toBeGreaterThanOrEqual(280);
+    expect(c.radiusM).toBeLessThanOrEqual(281);
+    for (const x of [A, B]) expect(distanceM(c.lat, c.lon, x.lat, x.lon) + x.radiusM).toBeLessThanOrEqual(c.radiusM + 0.5);
+  });
+  it('holds every circle of a scattered group', () => {
+    const group = [A, ...[0, 120, 240].map((b) => ({ ...destinationPoint(A.lat, A.lon, 300, b), radiusM: 60 }))];
+    const c = enclosingCircle(group);
+    for (const x of group) expect(distanceM(c.lat, c.lon, x.lat, x.lon) + x.radiusM).toBeLessThanOrEqual(c.radiusM + 0.5);
+    expect(c.radiusM).toBeLessThan(500);
+  });
+  it('takes a bigger circle that swallows the first whole', () => {
+    const big = { ...destinationPoint(A.lat, A.lon, 50, 0), radiusM: 400 };
+    expect(enclosingCircle([A, big])).toEqual({ lat: big.lat, lon: big.lon, radiusM: 400 });
   });
 });

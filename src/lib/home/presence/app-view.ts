@@ -41,7 +41,7 @@ import type { HouseholdMember } from './members';
 import { nowStatus, nowSub, type NowStatus } from './now';
 import { ABSURD_SPEED_KMH, LOCAL_TZ, MAX_USABLE_ACCURACY_M, activeLabels, errMsg, localDayStart } from './types';
 import { peopleViewerForEmail, scopeHousehold, type PeopleViewer, type ScopedPresence } from './viewer';
-import { loadHoldContext } from './location-hold.server';
+import { loadHoldContext, ownerSubjects } from './location-hold.server';
 import { appAccessForEmail, type AppAccess } from '$lib/server/app-access';
 import { forgetPairingCode, pairingCode, resetPairingCodes, REUSE_FLOOR_MS } from '$lib/server/pair-codes';
 
@@ -395,6 +395,21 @@ function withWatch(view: AppPeopleView, watch: WatchedPlace[] | undefined): AppP
 
 /** How recent `sitePairWanted` must be for the push to answer it. */
 export const SITE_PAIR_WANTED_MS = 15 * 60_000;
+/**
+ * Who in a view the pilot may lay a live point over: companion phones the
+ * view shows, sharing, and not held (`location-hold`). PURE.
+ */
+export function liveSources(
+  members: readonly HouseholdMember[],
+  view: Pick<AppHouseholdView, 'people'>,
+  held: ReadonlySet<string>,
+): Array<{ subject: string; email: string }> {
+  return members
+    .filter((m) => m.source === 'companion' && !!m.email && !held.has(m.subject))
+    .filter((m) => view.people.some((p) => p.subject === m.subject && p.status !== 'off'))
+    .map((m) => ({ subject: m.subject, email: m.email as string }));
+}
+
 /** A held code with less life than this left is replaced, not re-sent (`pair-codes`). */
 export const SITE_PAIR_REUSE_FLOOR_MS = REUSE_FLOOR_MS;
 
@@ -661,6 +676,10 @@ export async function pushAppViews(
     const view: AppHouseholdView = { generatedAt: now.toISOString(), viewer: 'none', people: [], access: accessOf(email) };
     views.push({ email, view: household && watch ? { ...view, watch } : view });
   }
+  // Held people are never live sources: the pilot lays a source's newest
+  // point over its pin, and the point from just before a hold can be newer
+  // than the held pin's jittered "seen" time.
+  let held: ReadonlySet<string> = new Set();
   if (viewers.length) {
     const dayStart = localDayStart(now);
     const [{ members: presence }, positions, hold] = await Promise.all([
@@ -680,9 +699,10 @@ export async function pushAppViews(
     // The owner's location hold: everyone but the owner sees him at the held
     // point, fresh and still (`location-hold`). Built once; the owner's own
     // view — and so his phone's — reads the real trail.
-    const held = hold?.apply<TrailPoint>({ presence, positions, recent }) ?? null;
-    if (held) {
-      for (const v of scopedBy) if (v.viewer.kind !== 'owner') v.scoped = scopeHousehold(held.presence, v.viewer);
+    if (hold) held = new Set(ownerSubjects(members));
+    const heldView = hold?.apply<TrailPoint>({ presence, positions, recent }) ?? null;
+    if (heldView) {
+      for (const v of scopedBy) if (v.viewer.kind !== 'owner') v.scoped = scopeHousehold(heldView.presence, v.viewer);
     }
     const placeIds = [...new Set([...trails.values()].flat().map((p) => p.placeId).filter((x): x is string => !!x))];
     const labels = await loadLabels(placeIds);
@@ -697,9 +717,9 @@ export async function pushAppViews(
           self: members.find((m) => m.email === v.email)?.subject ?? null,
           scoped: v.scoped,
           names,
-          positions: held && v.viewer.kind !== 'owner' ? held.positions : positions,
+          positions: heldView && v.viewer.kind !== 'owner' ? heldView.positions : positions,
           trails,
-          recent: held && v.viewer.kind !== 'owner' ? held.recent : recent,
+          recent: heldView && v.viewer.kind !== 'owner' ? heldView.recent : recent,
           labels,
           history,
           dayStart,
@@ -719,7 +739,7 @@ export async function pushAppViews(
     const res = await fetchImpl(`${companionUrl()}/api/apple/household/views`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ views: withPreviews.map(v => ({ ...v, sources: members.filter(m => m.source === 'companion' && m.email && v.view.people.some(p => p.subject === m.subject && p.status !== 'off')).map(m => ({ subject: m.subject, email: m.email })) })), revision: snapshot.revision }),
+      body: JSON.stringify({ views: withPreviews.map((v) => ({ ...v, sources: liveSources(members, v.view, held) })), revision: snapshot.revision }),
       signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
     });
     if (!res.ok) return { stored: 0, refused, error: `views answered ${res.status}` };

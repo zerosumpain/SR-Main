@@ -2,16 +2,18 @@
   import { onMount } from 'svelte';
   import type { SharedLink } from '$lib/projects/shares';
   import type { ShareVisitor } from '$lib/projects/share-visitor';
+  import { sharePackLabel, type SharePack } from '$lib/projects/share-pack';
 
   interface Props {
     projectKey: string;
     href: string;        // the project's route path, e.g. /projects/policy-engine or /projects/terminal-descent/
     shareBase?: string;  // the project's own domain, when it has one (https://data-spine.com/)
     sharePassword?: boolean; // the project's app can ask a link's recipient for a password (the Spine)
+    sharePacks?: readonly SharePack[]; // the audience packs a link can open, default first (the Spine: DfE, schools)
     title?: string;
     onClose: () => void;
   }
-  let { projectKey, href, shareBase, sharePassword = false, title = '', onClose }: Props = $props();
+  let { projectKey, href, shareBase, sharePassword = false, sharePacks = [], title = '', onClose }: Props = $props();
 
   let shares = $state<SharedLink[]>([]);
   let loading = $state(true);
@@ -24,6 +26,11 @@
   let password = $state('');
   let showPassword = $state(false);
   let freshHasPassword = $state(false);
+  // The default pack (the first) unless the owner picks another: an unchanged
+  // form makes the same link it always did.
+  // svelte-ignore state_referenced_locally
+  let pack = $state(sharePacks[0]?.id ?? '');
+  let freshPack = $state<string | null>(null);
   const pwLen = $derived(password.trim().length);
   const pwOk = $derived(!askPassword || (pwLen >= 4 && pwLen <= 128));
   // Say the length rule only once something has been typed that breaks it
@@ -69,17 +76,20 @@
           label: label || undefined,
           expiresInDays: expiresInDays || undefined,
           password: withPassword ? password : undefined,
+          pack: sharePacks.length && pack ? pack : undefined,
         }),
       });
       const data = await res.json();
       if (res.ok && data.token) {
         freshUrl = shareUrl(data.token);
         freshHasPassword = withPassword;
+        freshPack = sharePacks.length > 1 ? sharePackLabel(sharePacks, data.pack ?? null) : null;
         label = '';
-        // The next link starts as this one did: no password unless asked for.
+        // The next link starts as this one did: no password unless asked for, the default pack.
         askPassword = false;
         password = '';
         showPassword = false;
+        pack = sharePacks[0]?.id ?? '';
         void copy(freshUrl);
         await load();
       } else {
@@ -186,6 +196,17 @@
         <option value={30}>30 days</option>
         <option value={90}>90 days</option>
       </select>
+      {#if sharePacks.length > 1}
+        <label class="sh-pack">
+          <span>Opens</span>
+          <select class="sh-sel" bind:value={pack} aria-label="Which pack the link opens">
+            {#each sharePacks as p (p.id)}
+              <option value={p.id}>{p.label}</option>
+            {/each}
+          </select>
+          <span class="sh-once">The recipient sees this pack only.</span>
+        </label>
+      {/if}
       {#if sharePassword}
         <div class="sh-pass">
           <label class="sh-pass-tog">
@@ -231,6 +252,7 @@
           <button class="sh-copy" onclick={() => copy(freshUrl ?? '')}>{copied ? '✓ Copied' : 'Copy'}</button>
         </div>
         {#if copyFailed}<span class="sh-err">Couldn't copy automatically — select the link above and copy it.</span>{/if}
+        {#if freshPack}<span class="sh-once sh-fresh-pw">Opens the {freshPack}.</span>{/if}
         {#if freshHasPassword}<span class="sh-once sh-fresh-pw">Asks for a password — send it separately, not with the link.</span>{/if}
         <span class="sh-once">Copy it now — the link itself is shown only once.</span>
       </div>
@@ -251,6 +273,7 @@
             <div class="sh-row-top">
               <span class="sh-row-label">{s.label || 'Untitled link'}</span>
               <span class="sh-badge sh-{st}">{st}</span>
+              {#if sharePacks.length > 1}<span class="sh-badge sh-pack-badge">{sharePackLabel(sharePacks, s.pack)}</span>{/if}
               {#if s.hasPassword}<span class="sh-badge sh-pw">password</span>{/if}
               {#if s.likelyForwarded}<span class="sh-badge sh-fwd">likely forwarded</span>{/if}
             </div>
@@ -299,6 +322,7 @@
   .sh-create-btn:hover { background: var(--accent-hover); }
   .sh-create-btn:disabled { opacity: 0.5; cursor: default; }
 
+  .sh-pack { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 2px 0; font-size: var(--fs-label); color: var(--text-primary); }
   .sh-pass { flex: 1 0 100%; margin: 2px 0; }
   .sh-pass-tog { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-label); color: var(--text-primary); cursor: pointer; }
   .sh-pass-tog input { accent-color: var(--accent); margin: 0; }
@@ -328,6 +352,7 @@
   .sh-revoked { background: var(--surface-overlay); color: var(--text-secondary); }
   .sh-expired { background: var(--warn-bg); color: var(--warn); }
   .sh-pw { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+  .sh-pack-badge { background: var(--surface-overlay); color: var(--text-primary); }
   .sh-fwd { background: var(--warn-bg); color: var(--warn); }
   .sh-row-meta { margin-top: 3px; font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-secondary); padding-right: 64px; }
   .sh-vis { margin-top: 5px; font-size: var(--fs-label-xs); color: var(--text-secondary); }

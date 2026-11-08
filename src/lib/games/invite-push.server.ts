@@ -25,7 +25,7 @@ export const TITLES: Record<GameId, string> = {
   'anagram-blitz': 'Anagram Blitz',
   'maths-sprint': 'Quick Maths Sprint',
   'sequence-memory': 'Sequence Memory',
-  boggle: 'Boggle',
+  boggle: 'Kelloggle',
   categories: 'Categories',
   'liars-dice': "Liar's Dice",
   'draw-guess': 'Draw & Guess',
@@ -39,6 +39,11 @@ export const TITLES: Record<GameId, string> = {
   manhunt: 'Manhunt',
   homestead: 'Homestead',
   hometowns: 'Hometowns',
+  azul: 'Azul',
+  codenames: 'Codenames',
+  'snap-happy': 'Snap Happy',
+  'biscuit-tower': 'Biscuit Tower',
+  'iron-roads': 'Iron Roads',
 };
 
 const LEVELS: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };

@@ -109,7 +109,31 @@ describe('every native route gates itself', () => {
         '/drive/+server.ts',
         '/drive/files/+server.ts',
         '/drive/files/[id]/+server.ts',
+        // jkai on a file (analyse, extract entities): the wrapper resolves the
+        // caller, then the relay 403s anyone but the owner (`requireOwner`).
+        '/drive/files/[id]/analyse/+server.ts',
+        '/drive/files/[id]/intel/+server.ts',
+        // Info screen: a member gets the file and nulls for jkai's fields.
+        '/drive/files/[id]/meta/+server.ts',
+        // Grid tiles and the viewer: a JPEG of a picture the download would serve.
+        '/drive/files/[id]/preview/+server.ts',
         '/drive/folders/+server.ts',
+        // Photo sync's "which of these do you have?" — fingerprints only, the caller's own space.
+        '/drive/have/+server.ts',
+        // Photo search in Drive: the wrapper resolves the caller, then each
+        // handler 403s anyone but the owner (`requirePhotoOwner`), as Drive's
+        // photo lane does — never a member, nor the owner viewing as one.
+        '/drive/photos/face/[id]/+server.ts',
+        '/drive/photos/people/+server.ts',
+        '/drive/photos/search/+server.ts',
+        '/drive/photos/thumb/[id]/+server.ts',
+        // Names in the caller's own space or the shared folder; contents hits owner-only.
+        '/drive/search/+server.ts',
+        // Resumable uploads for big videos and photos: the same two spaces,
+        // relayed to SR-Drive with the same `x-sr-app-for` naming as files.
+        '/drive/uploads/+server.ts',
+        '/drive/uploads/[id]/+server.ts',
+        '/drive/uploads/[id]/complete/+server.ts',
         // The family alarm: raise, stand down and list active alarms. The
         // forecast's audience (owner, or a family:circle/admin member via
         // `peopleViewerOf` + `familyCaller`); everyone else 403s. Standing one
@@ -163,6 +187,9 @@ describe('every native route gates itself', () => {
         // is filed for the caller alone (their own player id), and View as is
         // refused by the gate because it is a write.
         '/games/offline-results/+server.ts',
+        // Sitting down at a TV party from its QR (sr. tv): games:self, the
+        // member joins as themselves only (their own player id).
+        '/games/party/[code]/join/+server.ts',
         // Game ideas the family would like one day: games:self, then the
         // family (owner, circle or parent) in the handler; names only.
         '/games/suggestions/+server.ts',

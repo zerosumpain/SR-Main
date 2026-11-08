@@ -107,6 +107,11 @@ export async function deliver(
     console.warn(`[push] device ${t.id.slice(0, 8)} refused: ${result.status} ${result.reason ?? ''}`);
     if (isDeadToken(result)) await forget(t.id).catch(() => {});
   }
+  // One line per push, so "did it go?" is answerable from the journal.
+  if (list.length) {
+    const what = message.category ?? message.userInfo?.category ?? (message.background ? 'background' : 'alert');
+    console.log(`[push] ${what}: ${outcome.sent} sent, ${outcome.failed} refused, ${list.length} phone${list.length === 1 ? '' : 's'}`);
+  }
   return outcome;
 }
 
@@ -127,9 +132,22 @@ const ALARM_PRIVATE: Record<string, { title: string; body: string }> = {
   // the site which build when it opens.
   'app-update': { title: 'A new version of SR', body: 'Open SR to install it.' },
 };
-/** The Bat phone (a `family-alarm` of kind `quiet`): discreet, and still says it is urgent. */
+/**
+ * The Bat phone: a `family-msg` of kind `bat-phone` since 2026-10-27, a
+ * `family-alarm` of kind `quiet` before. Discreet, and still says it is urgent.
+ */
 const BAT_PHONE_PRIVATE = { title: 'Bat phone', body: 'Someone in the family needs you. Open the app to see who and where.' };
-const ALARM_KEYS = ['alarmId', 'kind', 'at', 'messageId'] as const;
+/**
+ * Game pushes: the invite must still arrive time-sensitive and for as long as
+ * its lobby is open, or a phone hiding details never hears it. The room id
+ * survives so a tap opens the lobby; who is playing does not.
+ */
+const GAME_PRIVATE: Record<string, { title: string; body: string }> = {
+  invite: { title: 'Game invite', body: 'Someone in the family invited you to a game. Tap to join.' },
+  turn: { title: 'Your move', body: 'It is your turn in a game. Open the app to play.' },
+  finished: { title: 'A game is over', body: 'Open the app to see who won.' },
+};
+const ALARM_KEYS = ['alarmId', 'kind', 'at', 'messageId', 'roomId', 'game'] as const;
 
 /** Keep names, counts, locations and arbitrary metadata off private previews. */
 export function privatePush(message: PushMessage): PushMessage {
@@ -139,8 +157,14 @@ export function privatePush(message: PushMessage): PushMessage {
   const userInfo: Record<string, string | number | null> = {};
   if (message.userInfo?.category) userInfo.category = message.userInfo.category;
   if (message.userInfo?.url) userInfo.url = message.userInfo.url;
-  const batPhone = message.category === 'family-alarm' && message.userInfo?.kind === 'quiet';
-  const alarm = batPhone ? BAT_PHONE_PRIVATE : message.category ? ALARM_PRIVATE[message.category] : undefined;
+  const kind = message.userInfo?.kind;
+  const batPhone =
+    (message.category === 'family-alarm' && kind === 'quiet') || (message.category === 'family-msg' && kind === 'bat-phone');
+  const alarm = batPhone
+    ? BAT_PHONE_PRIVATE
+    : message.category === 'game'
+      ? GAME_PRIVATE[typeof kind === 'string' ? kind : 'invite'] ?? GAME_PRIVATE.invite
+      : message.category ? ALARM_PRIVATE[message.category] : undefined;
   if (alarm) {
     for (const key of ALARM_KEYS) if (message.userInfo?.[key] != null) userInfo[key] = message.userInfo[key];
     return { ...alarm, category: message.category, threadId: message.threadId, collapseId: message.collapseId,
@@ -148,7 +172,9 @@ export function privatePush(message: PushMessage): PushMessage {
   }
   return { title: 'Strange Ramblings', body: 'You have an update. Open the app to view it.',
     category: message.category, threadId: message.threadId, collapseId: message.collapseId,
-    level: 'active', ttlSeconds: 0, userInfo };
+    // Only the words are private. How urgent it is and how long Apple keeps
+    // trying are not, and dropping them lost pushes to a sleeping phone.
+    level: message.level, sound: message.sound, relevance: message.relevance, ttlSeconds: message.ttlSeconds, userInfo };
 }
 
 export async function devicePushPrivacy(deviceId: string, update?: { notificationDetails: boolean; liveActivityEnabled: boolean }) {

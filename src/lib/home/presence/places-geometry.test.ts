@@ -38,7 +38,7 @@ vi.mock('$lib/db', () => {
 });
 vi.mock('$lib/jkai/memory/service.server', () => ({ writeMemory: async () => ({ id: 'm' }) }));
 
-const { createPlace, quietPlaceOutcome, refreshPlaces, refreshedGeometry, updatePlaceAlerts, updatePlaceGeometry } =
+const { createPlace, holderOf, quietPlaceOutcome, refreshPlaces, refreshedGeometry, updatePlaceAlerts, updatePlaceGeometry } =
   await import('./places');
 
 const LAT = 51.5;
@@ -132,6 +132,29 @@ describe('refreshPlaces with a pinned place', () => {
     const r = await refreshPlaces();
     expect(r.retired).toBe(1);
     expect(placeWrites()[0]).toMatchObject({ status: 'transit' });
+  });
+});
+
+describe('a cluster inside a named or drawn place', () => {
+  it('belongs to the nearest active named or pinned place whose circle holds it', () => {
+    const town = place({ id: 'town', source: 'confirmed', radiusM: 250 });
+    const inner = place({ id: 'cafe', source: 'confirmed', radiusM: 60, lat: LAT + 100 / M_PER_DEG_LAT });
+    const at = { lat: LAT + 110 / M_PER_DEG_LAT, lon: LON };
+    expect(holderOf(at, [town, inner])?.id).toBe('cafe');
+    expect(holderOf({ lat: LAT + 200 / M_PER_DEG_LAT, lon: LON }, [town, inner])?.id).toBe('town');
+    // An inferred, a merged, or a too-small place holds nothing.
+    expect(holderOf(at, [place({ radiusM: 250 })])).toBeUndefined();
+    expect(holderOf(at, [place({ source: 'confirmed', status: 'merged', radiusM: 250 })])).toBeUndefined();
+    expect(holderOf({ lat: LAT + 300 / M_PER_DEG_LAT, lon: LON }, [town])).toBeUndefined();
+    expect(holderOf(at, [place({ radiusPinned: true, radiusM: 250 })])?.id).toBe('p1');
+  });
+
+  it('never makes a new place of a second cluster inside a pinned place', async () => {
+    // Two stays 440 m apart (two clusters) inside one 500 m drawn circle.
+    h.selects = [[...fixes(220, 3), ...fixes(-220, 3).map((f) => ({ ...f, id: f.id + 10 }))], [place({ radiusPinned: true, radiusM: 500 })]];
+    const r = await refreshPlaces();
+    expect(h.inserts).toEqual([]);
+    expect(r).toMatchObject({ created: 0, updated: 1, absorbed: 1 });
   });
 });
 

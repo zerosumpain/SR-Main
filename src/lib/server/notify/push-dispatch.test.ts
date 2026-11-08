@@ -104,4 +104,40 @@ describe('messageFor', () => {
   it('carries the ledger id and category so a tap and "Mark read" still work', () => {
     expect(messageFor(row({ category: 'health' })).userInfo).toEqual({ id: row().id, category: 'health', url: '/jkai?c=conv-1' });
   });
+  describe('drive: attachments filed from mail (build map §2.5)', () => {
+    const drive = (extra: Record<string, unknown> = {}) => row({
+      category: 'drive', title: 'Saved invoice.pdf', body: 'From HMRC: Your statement.',
+      url: 'sr://drive?space=mine&folder=Mail%2Fimportant%2Fhmrc-gov-uk%2F2026-11&file=f-1',
+      data: { kind: 'mail-attachments', fileIds: ['f-1'], folder: 'Mail/important/hmrc-gov-uk/2026-11', space: 'mine',
+        ruleId: 'important', gmailMessageId: 'm1', gmailThreadId: 't1', webUrl: '/drive?path=x&file=f-1' },
+      ...extra,
+    });
+
+    it('wears sr.alert, groups under one drive thread, and routes on the url', () => {
+      const m = messageFor(drive());
+      expect(m.category).toBe('sr.alert');
+      expect(m.threadId).toBe('drive');
+      expect(m.collapseId).toBe(row().id);
+      expect(m.level).toBe('passive');
+      expect(m.userInfo).toEqual({
+        id: row().id, category: 'drive',
+        url: 'sr://drive?space=mine&folder=Mail%2Fimportant%2Fhmrc-gov-uk%2F2026-11&file=f-1',
+        fileId: 'f-1', folder: 'Mail/important/hmrc-gov-uk/2026-11',
+      });
+      // Nothing of the mail itself rides in userInfo.
+      expect(JSON.stringify(m.userInfo)).not.toMatch(/gmail|m1|t1|ruleId/);
+    });
+
+    it('is active only at alert severity; a warn (action needed) stays passive', () => {
+      expect(messageFor(drive({ severity: 'warn' })).level).toBe('passive');
+      expect(messageFor(drive({ severity: 'alert' })).level).toBe('active');
+    });
+
+    it('names no single file for a several-file email or a roll-up', () => {
+      const m = messageFor(drive({ url: 'sr://drive?space=mine&folder=Mail', data: { kind: 'mail-attachments', fileIds: ['a', 'b'], folder: 'Mail' } }));
+      expect(m.userInfo?.fileId).toBeUndefined();
+      expect(m.userInfo).toMatchObject({ folder: 'Mail', url: 'sr://drive?space=mine&folder=Mail' });
+      expect(messageFor(drive({ data: null })).userInfo).toEqual({ id: row().id, category: 'drive', url: drive().url });
+    });
+  });
 });

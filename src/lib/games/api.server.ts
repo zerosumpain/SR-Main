@@ -35,6 +35,7 @@ import {
   subscribe,
 } from './rooms.server';
 import { pushInvites } from './invite-push.server';
+import { pairScreen, screenGames } from './screens.server';
 import { GameError, isDifficulty, MAX_PLAYERS } from './tap-duel';
 import { GAMES, isGameId, type Pace } from './catalogue';
 import { cleanTopic, isAudience, isClean } from './quiz-night';
@@ -113,6 +114,8 @@ export async function lobbyFor(caller: GameCaller) {
     rooms: roomsFor(me.id),
     // The games a host may play over days: the app offers a pace picker for these.
     paces: gamePaces(),
+    // The games with a TV board at /games/<id>: the app offers "Show on TV" in their rooms.
+    screens: screenGames(),
     parent,
     ...(parent ? { openLobbies: openLobbies(me.id) } : {}),
     serverNow: Date.now(),
@@ -224,6 +227,8 @@ export async function startGame(
     pace: body.pace,
     deadlineHours: body.deadlineHours,
     island: body.island,
+    // Azul: 'tv' (a TV board is expected) or 'phones'; the phones show the whole table either way.
+    table: body.table,
     // Hometowns: the county's name, rivalry, Regional Day hour, mishaps and
     // (local stack only, behind HOMETOWNS_DEV_CLOCK) its dev tick; the game
     // reads and bounds each field itself.
@@ -248,7 +253,8 @@ export async function roomView(caller: GameCaller, id: string) {
 /**
  * `{ action, …the move's fields }`: a lobby verb (join | decline | leave |
  * start | again), `invite` {invite: [playerId]} from the host while the lobby
- * is open, `close` from a parent on any lobby not yet started, or the game's
+ * is open, `close` from a parent on any lobby not yet started, `screen`
+ * {code} from anybody in a room whose game has a TV board, or the game's
  * own move. Answers with the room after it; a `since`
  * in the body (Draw & Guess's drawing revision) is read by `act` and asks for
  * the drawing as the changes after it.
@@ -282,6 +288,13 @@ export async function roomAct(caller: GameCaller, id: string, body: Record<strin
     await flush(id);
     void pushInvites(id);
     return room;
+  }
+  if (action === 'screen') {
+    // Show this room on a TV: `{ code }`, the letters /games/<game> is showing.
+    // Anybody sitting in the room may; the TV is then sent a ticket for it.
+    asHttp(() => gameOf(id, me.id));
+    asHttp(() => pairScreen(body.code, id));
+    return asHttp(() => roomFor(id, me.id));
   }
   // Setting up a game whose host must be a parent is checked against the
   // caller's family role here, not only when the room was made: the host
