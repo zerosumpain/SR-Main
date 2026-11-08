@@ -65,10 +65,14 @@ export function measureRepository(root) {
 export function measureSource(root) {
   const main = measureRepository(root);
   let revision = null;
-  try { revision = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); }
+  let updatedAt = null;
+  try {
+    revision = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    updatedAt = execFileSync('git', ['-C', root, 'log', '-1', '--format=%cI', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null;
+  }
   catch { /* A fixture or source archive can have no .git directory. */ }
   const repositories = [
-    { id: 'main', name: 'SR-Main', url: 'https://github.com/zerosumpain/SR-Main', role: 'Site and shared platform services', revision, measuredAt: new Date().toISOString(), source: 'this build', ...main },
+    { id: 'main', name: 'SR-Main', url: 'https://github.com/zerosumpain/SR-Main', role: 'Site and shared platform services', revision, updatedAt, measuredAt: new Date().toISOString(), source: 'this build', ...main },
   ];
   return {
     lines: main.code.lines,

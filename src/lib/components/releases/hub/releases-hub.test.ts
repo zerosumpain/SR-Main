@@ -435,3 +435,18 @@ describe('weeklyCadence', () => {
    expect(owner).toContain('7 Sep');
    expect(html(publicData())).not.toContain('SR-Health');
  });
+
+ it('shows when each repository last moved, and offers the owner an archive button except on SR-Main', () => {
+   const repository = {
+     id: 'smashamole', name: 'smashamole', url: 'https://github.com/zerosumpain/smashamole',
+     role: 'Game', revision: 'abcdef1234567890', updatedAt: '2026-04-12T10:00:00Z',
+     measuredAt: '2026-11-08T03:40:00Z', source: 'revision snapshot', code: { lines: 10, files: 1 },
+     documentation: { lines: 0, files: 0 }, tests: { lines: 0, files: 0 },
+   };
+   const owner = html(ownerData({ sourceFootprint: { ...footprint, repositories: [repository] } }));
+   expect(owner).toContain('datetime="2026-04-12T10:00:00Z"');
+   expect(owner).toContain('Archive smashamole on GitHub');
+   const mainOnly = html(ownerData({ sourceFootprint: { ...footprint, repositories: [{ ...repository, id: 'main', name: 'SR-Main' }] } }));
+   expect(mainOnly).not.toContain('Archive SR-Main on GitHub');
+   expect(html(publicData())).not.toContain('on GitHub"');
+ });

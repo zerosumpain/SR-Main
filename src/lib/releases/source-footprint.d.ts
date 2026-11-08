@@ -10,6 +10,8 @@ declare module 'virtual:sr-source-footprint' {
       url: string;
       role: string;
       revision: string | null;
+      /** The measured commit's date. Absent in snapshots taken before 2026-11-08. */
+      updatedAt?: string | null;
       measuredAt: string;
       source: string;
       code: FootprintCount;

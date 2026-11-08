@@ -55,6 +55,29 @@
   // loop that ends in `effect_update_depth_exceeded`.
   let clearTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Archiving a footprint repository shares the same busy line: one action at
+  // a time on this band, and its outcome reads where the summariser's does.
+  async function archiveRepository(id: string, name: string) {
+    if (!confirm(`Archive ${name} on GitHub? It becomes read-only and leaves this list.`)) return;
+    busy = true;
+    busyMsg = `archiving ${name}…`;
+    try {
+      const res = await fetch('/api/releases/repositories/archive', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result?.error || result?.message || `HTTP ${res.status}`);
+      busyMsg = `${name} archived`;
+      await invalidateAll();
+    } catch (err) {
+      busyMsg = err instanceof Error ? err.message : 'failed';
+    } finally {
+      busy = false;
+    }
+  }
+
   async function summarise(body: Record<string, unknown>, label: string) {
     busy = true;
     busyMsg = label;
@@ -174,6 +197,7 @@
     {busy}
     {busyMsg}
     onSummarise={summarise}
+    onArchive={owner ? archiveRepository : undefined}
   />
 
   <section class="filters">
