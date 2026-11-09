@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { AnalyticsIdentity } from '$lib/analytics/umami';
-import type { Viewer } from './viewer';
+import type { Viewer } from '$lib/server/viewer';
 
 /**
  * The label a signed-in session carries into Umami: a role, and an id that is

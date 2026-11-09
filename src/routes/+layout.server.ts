@@ -3,7 +3,7 @@ import { isOwnerRequest } from '$lib/server/owner';
 import { reachablePages } from '$lib/access/catalogue';
 import { env } from '$env/dynamic/private';
 import { viewerOf } from '$lib/server/viewer';
-import { analyticsIdentity } from '$lib/server/analytics-identity';
+import { analyticsIdentity } from '$lib/analytics/identity.server';
 
 /**
  * One thing, sitewide: is this the owner?

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { classifyLink, isReplayablePath, redactPayload, redactUrl } from './umami';
-import { analyticsIdentity } from '$lib/server/analytics-identity';
+import { analyticsIdentity } from '$lib/analytics/identity.server';
 
 describe('redactUrl', () => {
   it('replaces capability tokens and UUIDs in the path, keeping its shape', () => {
