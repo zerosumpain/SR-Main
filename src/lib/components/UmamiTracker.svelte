@@ -17,8 +17,9 @@
    *    owner's and family's use can be filtered rather than mistaken for
    *    readers. Anonymous readers are never identified.
    *  - Outbound-link, download and HTTP-error events.
-   *  - Session replay, for anonymous visits to public pages only, inputs
-   *    masked. Leaving the public allow-list blocks the rest of the page.
+   *  - Session replay and heatmaps (Umami 3.4 recorder), for anonymous
+   *    visits to public pages only, inputs masked. Leaving the public
+   *    allow-list blocks the rest of the page.
    *
    * The script is injected on mount rather than rendered in <svelte:head>: the
    * before-send hook must exist on `window` before the tracker reads it.
@@ -110,6 +111,8 @@
         'data-domains': domains,
         'data-performance': 'true',
         'data-before-send': BEFORE_SEND,
+        // Labels the very first pageview too; identify() below adds the role.
+        ...(who ? { 'data-distinct-id': who.id } : {}),
       },
       () => {
         if (who) umami()?.identify(who.id, { role: who.role, app: tag });
@@ -119,13 +122,11 @@
 
     if (replay && !who && isReplayablePath(location.pathname)) {
       recording = true;
-      inject(scriptUrl.replace(/script\.js(\?.*)?$/, 'recorder.js'), {
-        'data-website-id': siteId,
-        'data-sample-rate': '1',
-        'data-mask-level': 'moderate',
-        'data-max-duration': String(15 * 60 * 1000),
-        'data-block-selector': `[${REPLAY_OFF}], [data-analytics-private]`,
-      });
+      // Umami 3.4 takes sampling, masking, duration and the block selector
+      // from the website's server-side recorder settings, not from attributes.
+      // Production's block selector must stay `[data-sr-replay-off],
+      // [data-analytics-private]` or the fence below stops working.
+      inject(scriptUrl.replace(/script\.js(\?.*)?$/, 'recorder.js'), { 'data-website-id': siteId });
     }
 
     document.addEventListener('click', onClick, { capture: true });
