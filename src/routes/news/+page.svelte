@@ -1,6 +1,6 @@
 <svelte:head>
   <title>News — Strange Ramblings</title>
-  <meta name="description" content="A live reading desk for the technical web and UK public-sector announcements." />
+  <meta name="description" content="A live reading desk for the technical web, UK public-sector announcements and the things John follows." />
 </svelte:head>
 
 <script lang="ts">
@@ -24,7 +24,19 @@
     NEWS_SOURCE_DEFS.filter((def) => lane === 'all' || def.lane === lane),
   );
 
-  const readKeys = $derived(new Set(data.readKeys));
+  // Opening the article from the row is a read too. Rows opened this visit are
+  // marked at once; the server records them for next time.
+  let openedKeys = $state<string[]>([]);
+  const readKeys = $derived(new Set([...data.readKeys, ...openedKeys]));
+
+  function markRead(story: { key: string; source: NewsSource; id: string }): void {
+    if (!openedKeys.includes(story.key)) openedKeys = [...openedKeys, story.key];
+    const body = JSON.stringify({ action: 'read', source: story.source, id: story.id });
+    // A beacon survives the tab switch the link causes; fetch is the fallback.
+    if (!navigator.sendBeacon?.('/api/news/actions', new Blob([body], { type: 'application/json' }))) {
+      void fetch('/api/news/actions', { method: 'POST', body, keepalive: true, headers: { 'content-type': 'application/json' } }).catch(() => {});
+    }
+  }
   const keptKeys = $derived(new Set(data.keptKeys));
   const correlatedCount = $derived(Object.keys(data.correlations).length);
 
@@ -129,10 +141,10 @@
   <section class="news-lede">
     <div class="lede-inner">
       <div class="lede-copy">
-        <p class="eyebrow">Live desk · technical and public sector</p>
+        <p class="eyebrow">Live desk · technical, public sector and interests</p>
         <h1>READ FIRST.<br /><span>DECIDE WHAT LASTS.</span></h1>
         <p class="standfirst">
-          The technical web, gathered in one place. Read a story, then keep what earns a place in your notes.
+          The technical web, the public sector and the things you follow, gathered in one place. Open a story, then keep what earns a place in your notes.
         </p>
       </div>
 
@@ -200,7 +212,7 @@
 
     <div class="desk-tools" data-sveltekit-noscroll>
       <div class="lanes" role="group" aria-label="Filter lane">
-        {#each [['all', 'Everything'], ['tech', 'Technical'], ['public', 'Public sector']] as const as [value, label] (value)}
+        {#each [['all', 'Everything'], ['tech', 'Technical'], ['public', 'Public sector'], ['interests', 'Interests']] as const as [value, label] (value)}
           <button
             type="button"
             aria-pressed={lane === value}
@@ -261,10 +273,16 @@
       <ol class="story-list">
         {#each stories as story, index (story.key)}
           <li class="story">
+            <!-- The row opens the article itself (John, 2026-11-09); the reader
+                 with its summary is the "Summary" action beside it. -->
             <a
               class="story-reader"
-              href="/news/{story.source}/{story.id}"
-              aria-label="Read and summarise: {story.title}"
+              href={story.url}
+              target="_blank"
+              rel="noopener"
+              aria-label="Open article: {story.title}"
+              onclick={() => markRead(story)}
+              onauxclick={(e) => { if (e.button === 1) markRead(story); }}
             >
               <span class="story-index">{String(index + 1).padStart(2, '0')}</span>
               <span class="story-source source-{story.source}">{sourceCode(story.source)}</span>
@@ -305,11 +323,9 @@
             <span class="story-actions">
               <a
                 class="story-action"
-                href={story.url}
-                target="_blank"
-                rel="noopener"
-                aria-label="Open original article: {story.title}"
-              >Article <span aria-hidden="true">↗</span></a>
+                href="/news/{story.source}/{story.id}"
+                aria-label="Read and summarise: {story.title}"
+              >Summary</a>
               <a
                 class="story-action"
                 href={story.discussionUrl}
@@ -473,6 +489,10 @@
     .filters button { padding-inline: 8px; }
     .filters > :last-child { border-right: 0; }
     .lanes button { flex: 1; padding-inline: 8px; }
+    /* Four lanes do not fit one phone row: two by two. */
+    .lanes { display: grid; grid-template-columns: 1fr 1fr; }
+    .lanes button:nth-child(2n) { border-right: 0; }
+    .lanes button:nth-child(-n + 2) { border-bottom: 1px solid var(--line-strong); }
     /* Full-bleed here, so the column seam it draws above would be a stray tick
        against the right-hand edge of the band — the same reason `.lanes` drops
        its own right border at 1200. */

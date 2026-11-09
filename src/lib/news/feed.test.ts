@@ -164,3 +164,16 @@ describe('feedStoryId', () => {
     expect(feedStoryId(bare, new URL('https://www.gov.uk/'))).toBeNull();
   });
 });
+
+describe('interest-lane story ids', () => {
+  const id = (source: Parameters<typeof newsSourceDef>[0], href: string) => feedStoryId(newsSourceDef(source), new URL(href));
+  it('reads each publisher\'s article shape and refuses index pages', () => {
+    expect(id('pinkbike', 'https://www.pinkbike.com/news/review-unno-horn-2026-xc-group-test.html')).toBe('review-unno-horn-2026-xc-group-test');
+    expect(id('claude-code-reddit', 'https://www.reddit.com/r/ClaudeCode/comments/1xs3sxq/i_built_a_site/')).toBe('1xs3sxq');
+    expect(id('mtb-reddit', 'https://www.reddit.com/r/MTB/comments/1xrzu2b/my_first_ever_stairs_gap/')).toBe('1xrzu2b');
+    expect(id('simon-willison', 'https://simonwillison.net/2026/Nov/9/hn-50421091/')).toBe('hn-50421091');
+    expect(id('latent-space', 'https://latent.space/p/handshake/')).toBe('handshake');
+    expect(id('simon-willison', 'https://simonwillison.net/tags/claude-code/')).toBeNull();
+    expect(id('mtb-reddit', 'https://www.reddit.com/r/ClaudeCode/comments/1xs3sxq/x/')).toBeNull();
+  });
+});

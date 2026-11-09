@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { getNewsStory, isNewsSource, isNewsStoryId } from '$lib/news/sources';
 import { newsOwnerKey, toggleNewsFavourite } from '$lib/news/favourites';
 import { runScopedNewsAction } from '$lib/news/actions.server';
+import { recordRead } from '$lib/news/store';
 
 export const POST: RequestHandler = async (event) => {
   const { request, locals } = event;
@@ -16,6 +17,13 @@ export const POST: RequestHandler = async (event) => {
   }
 
   try {
+    if (action === 'read') {
+      // The desk row opens the article itself now, so the click is the read
+      // the reader page used to record. Nothing to fetch: the key is the
+      // story's identity.
+      await recordRead(await newsOwnerKey(locals), `${source}:${id}`, source);
+      return json({ ok: true });
+    }
     if (action === 'favourite') {
       const [ownerKey, story] = await Promise.all([
         newsOwnerKey(locals),

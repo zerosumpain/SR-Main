@@ -127,7 +127,7 @@ async function readFeed(source: NewsSource, url: string): Promise<NewsStory[]> {
   const response = await fetch(url, {
     headers: {
       accept: 'application/rss+xml, application/atom+xml, application/xml;q=0.9',
-      'user-agent': 'StrangeRamblingsNews/1.0 (+https://strangeramblings.com/news)',
+      'user-agent': newsSourceDef(source).userAgent ?? 'StrangeRamblingsNews/1.0 (+https://strangeramblings.com/news)',
     },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
