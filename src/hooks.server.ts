@@ -635,6 +635,14 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
+  // The Umami dashboard's gate ($lib/server/analytics-gate), reached only
+  // through Caddy on analytics.strangeramblings.com. `enter` redeems a
+  // single-use 60 s HMAC ticket minted by the owner-only /analytics; `check`
+  // verifies the host-only pass cookie and answers yes or no. EXACT paths.
+  if (pathname === '/api/analytics-gate/enter' || pathname === '/api/analytics-gate/check') {
+    if (event.request.method === 'GET') return resolve(event);
+  }
+
   // /api/scraper/script is service-to-service when called on homeserv (the
   // host that owns the scrape scripts) and user-authenticated when called on
   // the VPS (the panel proxies through). Whitelist on homeserv only — its
