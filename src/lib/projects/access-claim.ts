@@ -71,9 +71,13 @@ export interface ShareAttribution {
   label: string | null;
 }
 
-export function shareAttribution(live: { id: string; label: string | null }): ShareAttribution {
-  const label = (live.label ?? '').replace(/[^\x20-\x7e\u00a0-\u024f]/g, '').trim().slice(0, 80);
-  return { ref: live.id.replace(/[^0-9a-f]/gi, '').slice(0, 8).toLowerCase(), label: label || null };
+export function shareAttribution(live: { id?: string | null; label?: string | null }): ShareAttribution | null {
+  // Attribution is a nicety: a row without a usable id is answered without it,
+  // never with an error that would refuse the page.
+  const ref = String(live.id ?? '').replace(/[^0-9a-f]/gi, '').slice(0, 8).toLowerCase();
+  if (ref.length !== 8) return null;
+  const label = String(live.label ?? '').replace(/[^\x20-\x7e\u00a0-\u024f]/g, '').trim().slice(0, 80);
+  return { ref, label: label || null };
 }
 
 export function projectKeyForAudience(audience: string): string | null {
