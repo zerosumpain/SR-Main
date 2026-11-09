@@ -153,6 +153,10 @@ export const HOOK_EXACT_BYPASSES: string[] = [
   '/oauth/jwks',
   '/oauth/token',
   '/oauth/userinfo',
+  // The Umami dashboard's gate, reached through Caddy on the analytics host
+  // ($lib/server/analytics-gate). GET only, exact.
+  '/api/analytics-gate/enter',
+  '/api/analytics-gate/check',
 ];
 
 /** Prefix bypasses at the page level. `/tools` is a genuine tree (static/tools/*). */
@@ -194,6 +198,8 @@ export const BYPASS_GUARDS: Record<string, string> = {
     "owner session OR owner's Bearer device token · a member's device token only as that member's session (jkai.chat:self), through the member gate",
   '/api/workflows/orchestrator/chat/stream':
     "owner session OR owner's Bearer device token · a member's device as that member · SSE for the turn above",
+  '/api/analytics-gate/enter': 'GET only · single-use 60 s HMAC ticket (AUTH_SECRET) minted by the owner-only /analytics',
+  '/api/analytics-gate/check': 'GET only · yes/no on a 12 h host-only pass cookie (HMAC, AUTH_SECRET); returns no data',
   '/api/scraper/script': 'homeserv-only + SCRAPER_SERVICE_TOKEN',
   '/api/mcp': 'Bearer SERVICE_BRIDGE_SECRET',
   '/api/claude-changelog': 'POST only · ingest secret',

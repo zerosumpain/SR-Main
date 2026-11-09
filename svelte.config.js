@@ -18,13 +18,15 @@ const config = {
 				'form-action': ['self'],
 				// 'wasm-unsafe-eval' lets a page compile WebAssembly (Biscuit Tower's
 				// physics on the TV, Rapier 2D) and nothing else — JavaScript eval stays shut.
-				'script-src': ['self', 'wasm-unsafe-eval', 'https://unpkg.com', 'https://static.cloudflareinsights.com', 'https://js-cdn.music.apple.com', 'https://analytics.strangeramblings.com'],
+				'script-src': ['self', 'wasm-unsafe-eval', 'https://unpkg.com', 'https://static.cloudflareinsights.com', 'https://js-cdn.music.apple.com', 'https://analytics.strangeramblings.com',
+					// A local stack's own Umami (plain http on the tailnet); unset in production.
+					...(process.env.UMAMI_DEV_ORIGIN ? [process.env.UMAMI_DEV_ORIGIN] : [])],
 				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com', 'https://unpkg.com'],
 				'font-src': ['self', 'data:', 'https://fonts.gstatic.com'],
 				'img-src': ['self', 'data:', 'blob:', 'https:'],
 				'media-src': ['self', 'data:', 'blob:', 'https:'],
 				// Browser workers may fetch cached assets held in IndexedDB.
-				'connect-src': ['self', 'blob:', 'https:', 'wss:'],
+				'connect-src': ['self', 'blob:', 'https:', 'wss:', ...(process.env.UMAMI_DEV_ORIGIN ? [process.env.UMAMI_DEV_ORIGIN] : [])],
 				'worker-src': ['self', 'blob:'],
 				'manifest-src': ['self'],
 				'frame-src': [...Array.from({ length: 8 }, (_, i) => `https://preview-${5281 + i}.strangeramblings.com`),

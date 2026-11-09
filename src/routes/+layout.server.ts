@@ -1,7 +1,9 @@
 import type { LayoutServerLoad } from './$types';
 import { isOwnerRequest } from '$lib/server/owner';
 import { reachablePages } from '$lib/access/catalogue';
+import { env } from '$env/dynamic/private';
 import { viewerOf } from '$lib/server/viewer';
+import { analyticsIdentity } from '$lib/analytics/identity.server';
 
 /**
  * One thing, sitewide: is this the owner?
@@ -26,8 +28,28 @@ export const load: LayoutServerLoad = async (event) => {
   // it: a signed-out visitor is shown none of the gated sections, so without a
   // "Sign in" there they have no route in.
   const signedIn = isOwner || !!(await locals.auth().catch(() => null))?.user;
-  return { isOwner, signedIn, navReach: isOwner ? [] : await memberReach(event), viewingAs };
+  return {
+    isOwner,
+    signedIn,
+    navReach: isOwner ? [] : await memberReach(event),
+    viewingAs,
+    analytics: signedIn ? await analyticsLabel(event, isOwner) : null,
+  };
 };
+
+/**
+ * The role label Umami carries for a signed-in session (never an email), so
+ * the owner's and family's use can be told apart from readers'. A lookup that
+ * fails labels nothing, which leaves the visit counted as an anonymous one.
+ */
+async function analyticsLabel(event: Parameters<LayoutServerLoad>[0], isOwner: boolean) {
+  if (isOwner) return analyticsIdentity({ kind: 'owner' }, env.AUTH_SECRET);
+  try {
+    return analyticsIdentity(await viewerOf(event), env.AUTH_SECRET);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The pages a member's permissions open, so the nav offers them (and only

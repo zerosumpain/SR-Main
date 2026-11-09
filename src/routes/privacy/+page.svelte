@@ -7,7 +7,7 @@
   <meta name="description" content="What strangeramblings.com collects, why, and what it does with it." />
 </svelte:head>
 
-<LegalPage title="Privacy" updated="1 November 2026">
+<LegalPage title="Privacy" updated="9 November 2026">
   <p>
     Strange Ramblings is my personal website, run by me, John Kelly, in the UK. It isn't a business and
     it doesn't sell anything, least of all you. This page says what the site collects, why, and what I do
@@ -18,9 +18,23 @@
   <h2>If you're just reading</h2>
   <p>
     You don't need an account to read anything public here. I count visits with Umami, which I host
-    myself at analytics.strangeramblings.com — it doesn't set cookies and doesn't know who you are, it
-    just tells me which pages get read. Blog posts also note how far down a page a read got, keyed on
-    an id that lives in your browser tab and dies with it, with no IP address and no identity attached.
+    myself at analytics.strangeramblings.com — it doesn't set cookies and doesn't know who you are. It
+    tells me which pages get read, how fast they load, which links out get followed and which files
+    get downloaded, and roughly where visits come from (country and city, worked out from your IP
+    address, which isn't stored). Share and sign-in links are stripped of their keys before they're
+    counted. Blog posts also note how far down a page a read got, keyed on an id that lives in your
+    browser tab and dies with it, with no IP address and no identity attached.
+  </p>
+  <p>
+    On public pages such as the home page, the blog and projects, Umami may also record how a
+    visit moves through the page (scrolling, clicks, what was on screen), so I can see where a page
+    confuses people. Anything typed into a form is masked before it's recorded, and nothing is recorded
+    once you're signed in or on a shared link.
+  </p>
+  <p>
+    If you're signed in, your visits are labelled with your role (owner, member or guest) and an id
+    scrambled from your account so it can't be turned back into it — enough to tell my own and my
+    family's use apart from everyone else's. Your email address is never sent.
   </p>
   <p>
     If you choose how the home page and the projects page read (sentence, place or notes), a one-word

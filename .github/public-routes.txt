@@ -15,6 +15,8 @@
 /.well-known/apple-app-site-association
 /.well-known/openid-configuration
 /api/admin/security
+/api/analytics-gate/check
+/api/analytics-gate/enter
 /api/blog/images/[postId]/[filename]
 /api/claude-changelog/ingest
 /api/claude-changelog/session/[id]
