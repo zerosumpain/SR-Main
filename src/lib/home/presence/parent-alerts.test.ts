@@ -58,6 +58,19 @@ describe('stopNotices', () => {
     expect(n.recipients).toEqual(['katie@example.test']);
     expect(stopNotices({ routes: [r], places, guardians, names, now, covered: new Map([[`rory-${arrived}`, ['john@example.test', 'katie@example.test']]]) })).toEqual([]);
   });
+  it('leaves out a guardian already pushed "arrived at" that place for the trip, and only that place and trip', () => {
+    const r = route('rory', 'school', '2026-11-04T08:20:00Z', 24);
+    const crossing = Date.parse('2026-11-04T08:41:00Z'); // the first fix inside, before the dwell ended the trip
+    const [n] = stopNotices({ routes: [r], places, guardians, names, now,
+      arrivals: [{ subject: 'rory', placeId: 'school', at: crossing, to: ['John@Example.test'] }] });
+    expect(n.recipients).toEqual(['katie@example.test']);
+    // Another place, or yesterday's arrival there, says nothing about this stop.
+    const other = stopNotices({ routes: [r], places, guardians, names, now, arrivals: [
+      { subject: 'rory', placeId: 'home', at: crossing, to: ['john@example.test'] },
+      { subject: 'rory', placeId: 'school', at: crossing - 86_400_000, to: ['john@example.test'] },
+    ] });
+    expect(other[0].recipients).toEqual(['john@example.test', 'katie@example.test']);
+  });
 });
 
 const routine = (over: Partial<Routine> = {}): Routine => ({

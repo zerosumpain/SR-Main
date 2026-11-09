@@ -112,6 +112,7 @@
 /api/native/family/messages
 /api/native/family/messages/[id]
 /api/native/family/messages/[id]/replies
+/api/native/family/movement
 /api/native/family/photo
 /api/native/family/photos
 /api/native/family/photos/[id]

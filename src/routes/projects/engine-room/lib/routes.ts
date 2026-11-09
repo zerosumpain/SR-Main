@@ -186,6 +186,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/api/native/family/alarm/cancel': phone('app/surfaces', 'Stand an alarm down'),
   '/api/native/family/forecast/feedback': phone('app/api', 'Say a forecast next move is wrong, so it learns'),
   '/api/native/family/forecast/history': phone('app/api', 'One person’s past moves: where, when, how long, and leaving on time'),
+  '/api/native/family/movement': phone('app/api', 'Your walking: pace, the journeys you repeat and how you get about'),
   '/api/native/family/hold': { hidden: 'A private setting on the owner’s own phone; it is not described anywhere public.' },
   '/api/native/family/messages': phone('app/surfaces', 'msg family: one line pushed to every other family phone'),
   '/api/native/family/messages/[id]': phone('app/api', 'Take back a family message, or a reply, that you sent'),

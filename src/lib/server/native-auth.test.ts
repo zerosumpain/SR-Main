@@ -171,6 +171,7 @@ describe('every native route gates itself', () => {
         '/family/messages/+server.ts',
         '/family/messages/[id]/+server.ts',
         '/family/messages/[id]/replies/+server.ts',
+        '/family/movement/+server.ts',
         // Family photos: the same audience, `familyCaller` in each handler;
         // a member sets or clears only their own (PUT/DELETE /family/photo).
         '/family/photo/+server.ts',

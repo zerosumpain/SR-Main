@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { db } from '$lib/db';
 import { appSettings } from '$lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { pilotRecipients, postToPilot, localClock, type PilotEvent } from './alerts';
+import { householdUserInfo, pilotRecipients, postToPilot, localClock, type PilotEvent } from './alerts';
 import { insightMembers, loadPresenceInsights } from './insights.server';
 import { type ArrivalInsight } from './insights';
 import { listMembers, type HouseholdMember } from './members';
@@ -48,7 +48,7 @@ export async function deliverArrivalEstimates(): Promise<{ sent: number }> {
       if (canPush) {
         const outcome = await pushToEmails(pending, { title: event.title, body: event.body,
           category: 'household', threadId: 'household', level: 'active', collapseId: event.id,
-          userInfo: { id: event.id, category: 'household', url: '/home/people' }, ttlSeconds: ttl });
+          userInfo: householdUserInfo(event.id, 'eta', a.subject), ttlSeconds: ttl });
         for (const r of pending) if (outcome.reached.has(r)) delivered.add(r);
       }
       // A phone reached by APNs is excluded from the pull queue to avoid two banners.

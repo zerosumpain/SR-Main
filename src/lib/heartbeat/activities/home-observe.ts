@@ -12,8 +12,6 @@ import {
   type SubjectEntity,
 } from '$lib/home/presence/types';
 import { lifeSubjects, listMembers, type HouseholdMember } from '$lib/home/presence/members';
-import { deliverAlerts, runCrossings } from '$lib/home/presence/alerts';
-import { runLiveJourneys } from '$lib/home/presence/live-journey';
 import type { ActivityHandler } from '../types';
 
 // The name is the heartbeat_actions row's identity: it stays 'daydream-observe'
@@ -55,7 +53,7 @@ const DEFAULTS: Required<Omit<ObserveConfig, 'subjects'>> = {
 export const homeObserve: ActivityHandler = {
   name: NAME,
   description:
-    'Poll floor for the household trail. Records where every Life360 member is in one Home Assistant round trip — the push stream only covers John — with an explicit per-subject gap row when it looks and cannot see, then raises arrive/leave alerts to the people who follow them (the iPhone app\'s fixes arrive through household-live). No LLM.',
+    'Poll floor for the household trail. Records where every Life360 member is in one Home Assistant round trip — the push stream only covers John — with an explicit per-subject gap row when it looks and cannot see, then tells guardians and the owner what the forecast sees (arrive/leave alerts and the iPhone app\'s fixes run in household-live). No LLM.',
   // Same constant coverage divides by. Written once so they cannot drift.
   defaultCadenceSeconds: OBSERVE_CADENCE_SECONDS,
   defaultEnabled: true,
@@ -149,55 +147,10 @@ export const homeObserve: ActivityHandler = {
 
     // The iPhone app's fixes are pulled by `household-live` every 30 s, not
     // here: two activities pulling one cursor would write every fix twice.
-    // The crossings below still see them — they read the trail, whoever wrote it.
-
-    // Arrivals and departures, from every trail row written since the last
-    // run — this run's poll and app fixes, and the push stream's, which never
-    // pass through here. Then delivery. Neither can fail the run: an alert
-    // that did not go stays owed and is retried while it is under two hours
-    // old.
-    try {
-      const crossings = await runCrossings(members);
-      details.crossings = crossings;
-      const c: string[] = [];
-      if (crossings.written) c.push(`${crossings.written} new`);
-      if (crossings.deduped) c.push(`${crossings.deduped} repeated`);
-      if (crossings.initialised.length) c.push(`started watching ${crossings.initialised.join(', ')}`);
-      if (crossings.errors.length) c.push(`failed: ${crossings.errors.join('; ').slice(0, 120)}`);
-      if (c.length) bits.push(`crossings: ${c.join(', ')}`);
-    } catch (err) {
-      details.crossingsError = errMsg(err).slice(0, 200);
-      bits.push(`crossings failed: ${errMsg(err).slice(0, 80)}`);
-    }
-    try {
-      const sent = await deliverAlerts(members);
-      details.alerts = sent;
-      const a: string[] = [];
-      if (sent.pushed) a.push(`${sent.pushed} pushed`);
-      if (sent.forwarded) a.push(`${sent.forwarded} to the app`);
-      if (sent.pilotError) a.push(`app queue failed: ${sent.pilotError.slice(0, 80)}`);
-      if (sent.whatsappSent.length) a.push(`WhatsApp to ${sent.whatsappSent.join(', ')}`);
-      if (sent.whatsappFailed.length) a.push(`WhatsApp failed to ${sent.whatsappFailed.join(', ')}`);
-      if (a.length) bits.push(`alerts: ${a.join(', ')}`);
-    } catch (err) {
-      details.alertsError = errMsg(err).slice(0, 200);
-      bits.push(`alerts failed: ${errMsg(err).slice(0, 80)}`);
-    }
-
-    // Journeys on the Lock Screen: started by the departures just delivered,
-    // moved on by the fixes just written. Never fails the run either.
-    try {
-      const live = await runLiveJourneys(members);
-      details.liveJourneys = live;
-      const l: string[] = [];
-      if (live.started) l.push(`${live.started} started`);
-      if (live.updated) l.push(`${live.updated} moved`);
-      if (live.ended) l.push(`${live.ended} ended`);
-      if (live.errors.length) l.push(`failed: ${live.errors.join('; ').slice(0, 120)}`);
-      if (l.length) bits.push(`journeys: ${l.join(', ')}`);
-    } catch (err) {
-      details.liveJourneysError = errMsg(err).slice(0, 200);
-    }
+    // Arrivals, departures and the Lock Screen journeys run there too, right
+    // after each pull — every 30 s rather than every 120 (review 2026-11-09).
+    // They read the trail whoever wrote it, so this run's polled fixes are
+    // seen on household-live's next tick.
 
     // Routes being walked: close the ones that went quiet or ran too long.
     try {
@@ -219,10 +172,6 @@ export const homeObserve: ActivityHandler = {
       const { discoverRecentStops } = await import('$lib/home/presence/stops.server');
       details.stops = await discoverRecentStops();
     } catch (err) { details.stopsError = errMsg(err).slice(0, 160); }
-    try {
-      const { deliverArrivalEstimates } = await import('$lib/home/presence/eta-alerts.server');
-      details.arrivals = await deliverArrivalEstimates();
-    } catch (err) { details.arrivalsError = errMsg(err).slice(0, 160); }
     try {
       // Off until the owner switches a kind on at /home/people; a no-op then.
       const { deliverWatchAlerts } = await import('$lib/home/presence/watch-alerts.server');

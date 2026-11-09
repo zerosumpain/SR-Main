@@ -150,8 +150,25 @@ describe('common trips', () => {
     const s = movementStats([a.j, b.j, c.j], [...a.v, ...b.v, ...c.v], OPTS);
     expect(s.commonTrips).toEqual([
       // 07:20 UTC is 08:20 BST: the departure is on the house's clock.
-      { fromLabel: 'Home', toLabel: 'Work', count: 3, usualDeparture: '08:20', medianSeconds: 1500, totalSeconds: 4500, mode: 'car' },
+      {
+        fromLabel: 'Home', toLabel: 'Work', count: 3, usualDeparture: '08:20', medianSeconds: 1500, totalSeconds: 4500, mode: 'car',
+        medianMetres: 8000, fastestSeconds: 1200, medianPaceSecPerKm: null, lastAt: '2026-10-22T07:30:00.000Z',
+      },
     ]);
+  });
+
+  it('gives a walked trip its pace: the median of each walk\'s own, inside the pace band', () => {
+    // 2 km walks: 24 min (12:00/km), 20 min (10:00/km), 30 min (15:00/km).
+    const walks = [
+      commute('2026-10-20', '07:10', 24, 'walking'),
+      commute('2026-10-21', '07:10', 20, 'walking'),
+      commute('2026-10-22', '07:10', 30, 'walking'),
+    ].map((t) => ({ ...t, j: { ...t.j, distanceKm: 2 } }));
+    const [t] = movementStats(walks.map((w) => w.j), walks.flatMap((w) => w.v), OPTS).commonTrips;
+    expect(t.mode).toBe('foot');
+    expect(t.medianMetres).toBe(2000);
+    expect(t.fastestSeconds).toBe(1200);
+    expect(t.medianPaceSecPerKm).toBe(720);
   });
 
   it('takes the usual departure on a clock: 23:50, 00:00 and 00:10 is midnight, not noon', () => {
