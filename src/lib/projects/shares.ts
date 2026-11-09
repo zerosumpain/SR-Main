@@ -29,6 +29,10 @@ export function shareCookieName(key: string): string {
 
 /** A live link, as the access decision needs it: whether it asks for a password, and which pack it opens. */
 export interface LiveShare {
+  /** The link's row id: the gateway reports visits under its first 8 characters, never under the token. */
+  id: string;
+  /** The owner's own note on the link ("DfE team"), for the analytics label. */
+  label: string | null;
   passwordHash: string | null;
   /** null: the app's default pack. */
   pack: string | null;
@@ -60,6 +64,7 @@ export async function validateProjectShare(
       revokedAt: projectShares.revokedAt,
       passwordHash: projectShares.passwordHash,
       pack: projectShares.pack,
+      label: projectShares.label,
     })
     .from(projectShares)
     .where(and(eq(projectShares.tokenHash, hash), eq(projectShares.projectKey, key)))
@@ -67,7 +72,7 @@ export async function validateProjectShare(
   if (!row) return null;
   if (row.revokedAt) return null;
   if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
-  const live: LiveShare = { passwordHash: row.passwordHash ?? null, pack: row.pack ?? null };
+  const live: LiveShare = { id: row.id, label: row.label ?? null, passwordHash: row.passwordHash ?? null, pack: row.pack ?? null };
   if (!count) return live;
   // Async last-used bump (do not await — keep the request hot path fast).
   // useCount counts page opens: a gateway that says which requests open a page

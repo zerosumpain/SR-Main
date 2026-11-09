@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   shareValid: false,
   sharePass: null as string | null,
   sharePack: null as string | null,
+  shareRow: null as { id: string; label: string | null } | null,
   shareCalls: [] as [string, string][],
   shareVisits: [] as unknown[],
   shareCounted: [] as boolean[],
@@ -80,7 +81,7 @@ vi.mock('$lib/projects/shares', () => ({
     state.shareCalls.push([key, token]);
     state.shareVisits.push(visit);
     state.shareCounted.push(count);
-    return state.shareValid ? { passwordHash: state.sharePass, pack: state.sharePack } : null;
+    return state.shareValid ? { ...(state.shareRow ?? {}), passwordHash: state.sharePass, pack: state.sharePack } : null;
   },
 }));
 vi.mock('$lib/access/catalogue', async (importOriginal) => {
@@ -122,6 +123,7 @@ beforeEach(() => {
   state.shareValid = false;
   state.sharePass = null;
   state.sharePack = null;
+  state.shareRow = null;
   state.shareCalls.length = 0;
   state.shareVisits.length = 0;
   state.shareCounted.length = 0;
@@ -330,6 +332,22 @@ describe('session authority claims', () => {
     state.queue.push([]);
     const owner = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
     expect(owner.claims.project).toEqual({ key: 'spine', access: 'owner' });
+  });
+
+  it('says which link it was for the gateway alone: outside the signed claims, never the token', async () => {
+    state.shareValid = true;
+    state.shareRow = { id: '3f9a2c1b-0000-4000-8000-000000000000', label: 'DfE team' };
+    state.queue.push([]);
+    const shared = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect(shared.analytics).toEqual({ share: { ref: '3f9a2c1b', label: 'DfE team' } });
+    expect(shared.claims.project).toEqual({ key: 'spine', access: 'share' });
+    expect(JSON.stringify(shared)).not.toContain('sp-token');
+
+    // Not a share, no attribution.
+    state.email = 'owner@x.test';
+    state.queue.push([]);
+    const owner = await (await call('sr-spine', 'n'.repeat(40), { 'x-sr-session-share': 'sp-token' })).json();
+    expect('analytics' in owner).toBe(false);
   });
 
   it('hands the gateway\'s visitor headers to the share check, hashed and labelled, never raw', async () => {

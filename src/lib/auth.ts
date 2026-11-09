@@ -22,6 +22,8 @@ const PUBLIC_PATHS = [
   '/auth',
   // Linked from Google's OAuth consent screen, which requires them to be public.
   '/privacy',
+  // The project-app tracker the gateways inject ($lib/analytics/project-tracker): public script, site id only.
+  '/sr-analytics.js',
   '/tos',
   '/api/vitals/state',
   '/api/health/apple',

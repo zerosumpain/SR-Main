@@ -4,7 +4,7 @@ import { sessionCaller, browserSessionEmail } from '$lib/server/session-introspe
 import { isOwnerEmail, isEmailAllowedToSignIn } from '$lib/server/access';
 import { verifyViewAs } from '$lib/server/view-as';
 import { DRIVE_AUDIENCE, driveClaimsFor } from '$lib/server/session-claims';
-import { projectAccessFor, projectKeyForAudience } from '$lib/projects/access-claim';
+import { projectAccessWithShare, projectKeyForAudience, type ShareAttribution } from '$lib/projects/access-claim';
 import { readShareVisit } from '$lib/projects/share-visitor';
 import { appWebSessionCookie, verifyAppWebSession } from '$lib/server/app-web-session';
 import { isDeviceLive } from '$lib/server/native-auth';
@@ -32,6 +32,8 @@ export const POST: RequestHandler = async ({ request }) => {
   // audience that serves it, decided from the authenticated audience.
   const effective = viewingAs ?? email;
   const claims: Record<string, unknown> = {};
+  // For the gateway's analytics tag alone, outside the claims it signs.
+  let share: ShareAttribution | null = null;
   const projectKey = projectKeyForAudience(audience as string);
   if (projectKey) {
     const fromUrl = request.headers.get('x-sr-session-share');
@@ -40,7 +42,9 @@ export const POST: RequestHandler = async ({ request }) => {
     const visit = readShareVisit(request.headers, env.AUTH_SECRET);
     const count = !(email && isOwnerEmail(email));
     try {
-      claims.project = await projectAccessFor(projectKey, effective, { fromUrl: fromUrl && fromUrl.length <= 512 ? fromUrl : null, cookie, visit, count });
+      const decided = await projectAccessWithShare(projectKey, effective, { fromUrl: fromUrl && fromUrl.length <= 512 ? fromUrl : null, cookie, visit, count });
+      claims.project = decided.claim;
+      share = decided.attribution;
     } catch (err) {
       // Not "none": a database outage must not read as "this project is private".
       console.warn(`[session] project access for ${projectKey} failed: ${(err as Error).message}`);
@@ -56,7 +60,11 @@ export const POST: RequestHandler = async ({ request }) => {
       console.warn(`[session] drive claims failed: ${(err as Error).message}`);
     }
   }
-  return json({ email, viewingAs, claims }, { headers });
+  // `analytics` is read by the gateway and never signed or forwarded: which
+  // link opened the page (its id prefix and the owner's label, never the
+  // token), so Umami can attribute the visit. A gateway that predates it
+  // ignores it.
+  return json({ email, viewingAs, claims, ...(share ? { analytics: { share } } : {}) }, { headers });
 };
 
 /**
