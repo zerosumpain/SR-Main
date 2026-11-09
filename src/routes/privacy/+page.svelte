@@ -29,7 +29,14 @@
     On public pages such as the home page, the blog and projects, Umami may also record how a
     visit moves through the page (scrolling, clicks, what was on screen), so I can see where a page
     confuses people. Anything typed into a form is masked before it's recorded, and nothing is recorded
-    once you're signed in or on a shared link.
+    once you're signed in.
+  </p>
+  <p>
+    If I've sent you a link to one of my projects, the same goes for that project's pages: Umami
+    records how the visit moves through them, with anything you type masked, and notes which of my
+    links you came in on (by the name I gave the link, never the link's key). That's how I learn
+    whether what I shared was useful. The key is taken out of the address bar as soon as the page
+    opens, so it isn't recorded anywhere.
   </p>
   <p>
     If you're signed in, your visits are labelled with your role (owner, member or guest) and an id

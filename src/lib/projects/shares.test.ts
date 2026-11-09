@@ -81,10 +81,10 @@ describe('share link rows', () => {
   it('a live link answers with its verifier; no live link answers null', async () => {
     const verifier = 'scrypt$' + 'a'.repeat(22) + '$' + 'b'.repeat(43);
     state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: verifier }]);
-    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: verifier, pack: null });
+    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ id: 's1', label: null, passwordHash: verifier, pack: null });
 
-    state.queue.push([{ id: 's2', expiresAt: null, revokedAt: null, passwordHash: null }]);
-    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: null, pack: null });
+    state.queue.push([{ id: 's2', expiresAt: null, revokedAt: null, passwordHash: null, label: 'DfE team' }]);
+    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ id: 's2', label: 'DfE team', passwordHash: null, pack: null });
 
     state.queue.push([{ id: 's3', expiresAt: null, revokedAt: new Date(), passwordHash: null }]);
     expect(await validateProjectShare('spine', 't'.repeat(43))).toBeNull();
@@ -101,10 +101,10 @@ describe('share link rows', () => {
     expect(state.inserted[1].pack).toBeNull();
 
     state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: null, pack: 'school' }]);
-    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ passwordHash: null, pack: 'school' });
+    expect(await validateProjectShare('spine', 't'.repeat(43))).toEqual({ id: 's1', label: null, passwordHash: null, pack: 'school' });
     // Checked for the owner behind view-as: the same answer, counted nowhere.
     state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: null, pack: 'school' }]);
-    expect(await validateProjectShare('spine', 't'.repeat(43), null, false)).toEqual({ passwordHash: null, pack: 'school' });
+    expect(await validateProjectShare('spine', 't'.repeat(43), null, false)).toEqual({ id: 's1', label: null, passwordHash: null, pack: 'school' });
   });
 
   it('lists each link with its pack, null for the default', async () => {
@@ -145,7 +145,7 @@ describe('share link rows', () => {
   it('a live link checked for the owner behind view-as counts nothing and records no one', async () => {
     state.queue.push([{ id: 's1', expiresAt: null, revokedAt: null, passwordHash: null }]);
     const visit = { open: true, visitorHash: 'h'.repeat(32), networkHash: '', agent: null, country: null };
-    expect(await validateProjectShare('spine', 't'.repeat(43), visit, false)).toEqual({ passwordHash: null, pack: null });
+    expect(await validateProjectShare('spine', 't'.repeat(43), visit, false)).toEqual({ id: 's1', label: null, passwordHash: null, pack: null });
     expect(state.sets).toHaveLength(0);
     expect(state.recorded).toHaveLength(0);
   });

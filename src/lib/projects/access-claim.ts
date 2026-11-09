@@ -60,6 +60,22 @@ export interface ProjectClaim {
   pack?: string;
 }
 
+/**
+ * Which share link a request came through, for the gateway's analytics tag
+ * only ($lib/analytics/project-tracker). Never part of the signed claim: an
+ * application is told whether it may serve the page, not who the link was
+ * for. `ref` is the first 8 characters of the link's row id, never the token.
+ */
+export interface ShareAttribution {
+  ref: string;
+  label: string | null;
+}
+
+export function shareAttribution(live: { id: string; label: string | null }): ShareAttribution {
+  const label = (live.label ?? '').replace(/[^\x20-\x7e\u00a0-\u024f]/g, '').trim().slice(0, 80);
+  return { ref: live.id.replace(/[^0-9a-f]/gi, '').slice(0, 8).toLowerCase(), label: label || null };
+}
+
 export function projectKeyForAudience(audience: string): string | null {
   return Object.hasOwn(PROJECT_AUDIENCES, audience) ? PROJECT_AUDIENCES[audience] : null;
 }
@@ -91,20 +107,30 @@ export async function projectAccessFor(
   email: string | null,
   share: { fromUrl: string | null; cookie: string; visit?: ShareVisit | null; count?: boolean },
 ): Promise<ProjectClaim> {
+  return (await projectAccessWithShare(key, email, share)).claim;
+}
+
+/** projectAccessFor, plus which link it was when the answer is a share. */
+export async function projectAccessWithShare(
+  key: string,
+  email: string | null,
+  share: { fromUrl: string | null; cookie: string; visit?: ShareVisit | null; count?: boolean },
+): Promise<{ claim: ProjectClaim; attribution: ShareAttribution | null }> {
+  const none = (claim: ProjectClaim) => ({ claim, attribution: null });
   const [vis] = await db
     .select({ projectKey: projectVisibility.projectKey, isPublic: projectVisibility.isPublic })
     .from(projectVisibility)
     .where(eq(projectVisibility.projectKey, key));
   const map = vis ? { [vis.projectKey]: vis.isPublic } : {};
-  if (isProjectPublic(map, key)) return { key, access: 'public' };
-  if (email && isOwnerEmail(email)) return { key, access: 'owner' };
+  if (isProjectPublic(map, key)) return none({ key, access: 'public' });
+  if (email && isOwnerEmail(email)) return none({ key, access: 'owner' });
   const token = share.fromUrl || cookieValue(share.cookie, shareCookieName(key));
   const live = token && token.length <= 512 ? await validateProjectShare(key, token, share.visit ?? null, share.count !== false) : null;
   if (live) {
     const claim: ProjectClaim = { key, access: 'share' };
     if (live.passwordHash) claim.pass = live.passwordHash;
     if (live.pack) claim.pack = live.pack;
-    return claim;
+    return { claim, attribution: shareAttribution(live) };
   }
-  return { key, access: 'none' };
+  return none({ key, access: 'none' });
 }

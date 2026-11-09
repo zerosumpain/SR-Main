@@ -257,6 +257,7 @@
 /rambler
 /rss.xml
 /sitemap.xml
+/sr-analytics.js
 /tos
 /tv
 /tv/get
