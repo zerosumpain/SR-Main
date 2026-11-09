@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseHukdFeed } from './sources/hukd';
+import { hukdThreadId, parseHukdExpired, parseHukdFeed } from './sources/hukd';
 import { isAllowedPricerunnerUrl, parseCategoryPayload, parseProductLd } from './sources/pricerunner';
 
 // Trimmed from the real hotukdeals gaming-pc tag feed, 2026-10-31.
@@ -64,5 +64,27 @@ describe('PriceRunner', () => {
     expect(p?.lowPence).toBe(99_900);
     expect(p?.offers.map((o) => o.merchant)).toEqual(['Argos', 'Currys', 'Joybuy']);
     expect(p?.offers[1].inStock).toBe(false);
+  });
+});
+
+describe('hotukdeals deal expiry', () => {
+  it('reads the thread id from a deal URL and refuses other origins', () => {
+    expect(hukdThreadId('https://www.hotukdeals.com/deals/awd-it-erebus-amd-ryzen-7-5015853')).toBe('5015853');
+    expect(hukdThreadId('https://evil.example/deals/x-5015853')).toBeNull();
+    expect(hukdThreadId('https://www.hotukdeals.com/tag/gaming-pc')).toBeNull();
+  });
+
+  // Shape trimmed from a real expired deal page, 2026-11-09: related-deal cards
+  // carry their own threadIds; the thread's own state follows its own id.
+  const page = (flag: string) =>
+    `{"threadId":"5020864","title":"other"}…{"threadId":5015853,"commentCount":16,"isExpired":${flag},"threadExpiryBanners":{}}`;
+
+  it('reads isExpired for this thread', () => {
+    expect(parseHukdExpired(page('true'), '5015853')).toBe(true);
+    expect(parseHukdExpired(page('false'), '5015853')).toBe(false);
+  });
+
+  it('is unknown, not expired, when the page does not say', () => {
+    expect(parseHukdExpired('<html>no state</html>', '5015853')).toBeNull();
   });
 });
