@@ -7,8 +7,9 @@
 //     (whatever wrote them: the push stream, the poll, the app), walks them
 //     through `stepCrossings`, and writes a `household_event` row per crossing,
 //     deduped on (subject, place, kind) within ten minutes.
-//  2. `deliverAlerts` PUSHES each departure to the followers whose phones
-//     can take one (APNs, time-sensitive), forwards what is left to the
+//  2. `deliverAlerts` PUSHES each crossing to the followers whose phones
+//     can take one (APNs; a departure time-sensitive, an arrival active),
+//     forwards what is left to the
 //     companion pilot's per-user alert queue (the app pulls it) and, for
 //     places the owner has flagged for WhatsApp, sends one to each follower
 //     who asked for it.
@@ -352,16 +353,22 @@ function collapseIdFor(id: string): string {
 }
 
 /**
- * The departures to push now. PURE.
+ * The crossings to push now — departures AND arrivals. PURE.
  *
- * A LEAVE only — "left school" is the one worth breaking a Focus for; an
- * arrival still reaches the app by its pull. Only while the event is owed,
- * only for a place (and direction) still switched on, never for a mover who
- * is silenced or held, and never twice to one recipient (`pushedTo`). The
- * recipients are the pilot's own — followers on the app — so a push replaces
- * exactly the notification the pull would have raised.
+ * A leave is TIME-SENSITIVE ("left school" is the one worth breaking a Focus
+ * for); an arrive is ACTIVE — reassurance, not an emergency. Arrivals used to
+ * go only to the pilot's queue, which a follower's phone drains on its own
+ * wake: a phone lying still at home heard "arrived at school" minutes or hours
+ * late (review 2026-11-09). Only while the event is owed, only for a place
+ * (and direction) still switched on, never for a mover who is silenced or
+ * held, and never twice to one recipient (`pushedTo`). The recipients are the
+ * pilot's own — followers on the app — so a push replaces exactly the
+ * notification the pull would have raised.
+ *
+ * Every household push carries the same userInfo: the event `id`, `kind`,
+ * the mover's `subject` and a `url`, so a tap opens that person.
  */
-export function planLeavePushes(
+export function planCrossingPushes(
   events: readonly AlertEvent[],
   places: ReadonlyMap<string, AlertPlace>,
   members: readonly HouseholdMember[],
@@ -370,9 +377,9 @@ export function planLeavePushes(
 ): PlannedPush[] {
   const out: PlannedPush[] = [];
   for (const ev of events) {
-    if (ev.kind !== 'leave' || !isDeliverable(ev, now) || quiet.has(ev.subject)) continue;
+    if (!isDeliverable(ev, now) || quiet.has(ev.subject)) continue;
     const place = places.get(ev.placeId);
-    if (!raisesCrossing(place, 'leave')) continue;
+    if (!raisesCrossing(place, ev.kind)) continue;
     const done = new Set(ev.pushedTo ?? []);
     const recipients = pilotRecipients(members, ev.subject)
       .map((r) => r.trim().toLowerCase())
@@ -387,16 +394,24 @@ export function planLeavePushes(
         body,
         category: 'household',
         threadId: 'household',
-        level: 'time-sensitive',
-        relevance: 1,
+        level: ev.kind === 'leave' ? 'time-sensitive' : 'active',
+        relevance: ev.kind === 'leave' ? 1 : 0.8,
         collapseId: collapseIdFor(ev.id),
-        userInfo: { id: ev.id.slice(0, 100), category: 'household' },
+        userInfo: householdUserInfo(ev.id.slice(0, 100), ev.kind, ev.subject),
         // Past the delivery window it is not news; Apple may stop trying.
         ttlSeconds: Math.max(60, Math.floor((ev.at.getTime() + DELIVERY_WINDOW_MS - now.getTime()) / 1000)),
       },
     });
   }
   return out;
+}
+
+/**
+ * The userInfo every household push carries: what the app needs to open the
+ * person it is about (Family → their page) and to tell kinds apart. PURE.
+ */
+export function householdUserInfo(id: string, kind: string, subject: string): Record<string, string> {
+  return { id, category: 'household', kind, subject, url: `/home/people?person=${encodeURIComponent(subject)}` };
 }
 
 // ── The pilot ────────────────────────────────────────────────────────────────
@@ -629,7 +644,7 @@ export async function runCrossings(members: readonly HouseholdMember[]): Promise
 // ── Delivery ─────────────────────────────────────────────────────────────────
 
 export interface DeliveryResult {
-  /** Departures pushed straight to a phone (one per recipient reached). */
+  /** Crossings pushed straight to a phone (one per recipient reached). */
   pushed: number;
   forwarded: number;
   /** Events nobody on the app follows, marked done with nothing sent. */
@@ -855,11 +870,11 @@ export async function deliverAlerts(
   const { silenced, held } = partitionMovers(events, members, users);
   const quiet = new Set([...silenced, ...held]);
 
-  // Departures, pushed. Before the pilot, so whoever a push reached is left
+  // Crossings, pushed. Before the pilot, so whoever a push reached is left
   // out of its queue and the app does not raise the same crossing twice.
   // Recorded per recipient as it goes: a run that dies half way pushes the
   // rest next time, and never the same person again.
-  for (const planned of planLeavePushes(events, places, members, now, quiet)) {
+  for (const planned of planCrossingPushes(events, places, members, now, quiet)) {
     const outcome = await push(planned.recipients, planned.message);
     const reached = planned.recipients.filter((r) => outcome.reached.has(r));
     if (!reached.length) continue;

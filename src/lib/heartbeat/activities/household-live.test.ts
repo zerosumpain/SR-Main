@@ -5,7 +5,37 @@ const h = vi.hoisted(() => ({
   views: 0,
   viewsFail: false,
   membersFail: false,
+  alertsFail: false,
+  calls: [] as string[],
 }));
+
+vi.mock('$lib/home/presence/alerts', () => ({
+  runCrossings: async () => {
+    h.calls.push('crossings');
+    if (h.alertsFail) throw new Error('events table missing');
+    return { written: 1, deduped: 0, initialised: [], errors: [] };
+  },
+  deliverAlerts: async () => {
+    h.calls.push('deliver');
+    if (h.alertsFail) throw new Error('pilot down');
+    return { pushed: 2, forwarded: 1, unfollowed: 0, whatsappSent: ['…000'], whatsappFailed: [] };
+  },
+}));
+vi.mock('$lib/home/presence/live-journey', () => ({
+  runLiveJourneys: async () => {
+    h.calls.push('journeys');
+    return { started: 0, updated: 0, ended: 0, errors: [] };
+  },
+}));
+vi.mock('$lib/home/presence/battery-alerts.server', () => ({
+  deliverBatteryAlerts: async () => {
+    h.calls.push('battery');
+    return { sent: 1, errors: [] };
+  },
+}));
+vi.mock('$lib/home/presence/stops.server', () => ({ discoverRecentStops: async () => ({}) }));
+vi.mock('$lib/home/presence/eta-alerts.server', () => ({ deliverArrivalEstimates: async () => ({ sent: 0 }) }));
+vi.mock('$lib/people/erase', () => ({ sweepAccountDeletions: async () => ({ deleted: 0, failed: 0 }) }));
 
 vi.mock('$lib/home/presence/members', () => ({
   listMembers: async () => {
@@ -32,6 +62,8 @@ beforeEach(() => {
   h.views = 0;
   h.viewsFail = false;
   h.membersFail = false;
+  h.alertsFail = false;
+  h.calls = [];
   resetHouseholdLive();
   vi.useRealTimers();
 });
@@ -75,5 +107,23 @@ describe('household-live', () => {
     const res = await householdLive.run(ctx);
     expect(res.outcome).toBe('ok');
     expect(h.views).toBe(0);
+  });
+
+  it('raises crossings straight after the pull, delivers them, moves journeys, then low battery', async () => {
+    h.written = 2;
+    const res = await householdLive.run(ctx);
+    expect(h.calls).toEqual(['crossings', 'deliver', 'journeys', 'battery']);
+    expect(res.summary).toContain('crossings: 1 new');
+    expect(res.summary).toContain('alerts: 2 pushed, 1 to the app, WhatsApp to …000');
+    expect(res.summary).toContain('low battery: 1 told');
+  });
+
+  it('never fails the run when crossings or delivery throw', async () => {
+    h.alertsFail = true;
+    const res = await householdLive.run(ctx);
+    expect(res.outcome).toBe('ok');
+    expect(res.summary).toContain('crossings failed');
+    expect(res.summary).toContain('alerts failed');
+    expect(h.views).toBe(1);
   });
 });

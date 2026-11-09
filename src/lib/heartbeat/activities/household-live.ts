@@ -2,6 +2,8 @@ import { errMsg } from '$lib/home/presence/types';
 import { ingestCompanion, loadCompanionUsers, type CompanionResult } from '$lib/home/presence/companion';
 import { listMembers, type HouseholdMember } from '$lib/home/presence/members';
 import { pushAppViews } from '$lib/home/presence/app-view';
+import { deliverAlerts, runCrossings } from '$lib/home/presence/alerts';
+import { runLiveJourneys } from '$lib/home/presence/live-journey';
 import type { ActivityHandler } from '../types';
 
 /** A view is rebuilt at least this often even when no app fix arrived, so a
@@ -30,12 +32,19 @@ export function resetHouseholdLive(): void {
  * write the same fixes twice (the engine runs different activities
  * concurrently, and the trail has no unique index).
  *
+ * Also the only runner of arrivals and departures (`runCrossings` →
+ * `deliverAlerts`), the Lock Screen journeys and the low-battery alert,
+ * straight after the pull: a crossing is pushed within one tick of the fix
+ * that made it, where `daydream-observe`'s 120 s cadence used to add up to
+ * two minutes (review 2026-11-09). The crossings read the whole trail, so
+ * Life360 fixes written by observe are seen on the next tick here.
+ *
  * No LLM. A quiet run is one loopback GET to the pilot.
  */
 export const householdLive: ActivityHandler = {
   name: 'household-live',
   description:
-    "Pulls the iPhone app's fixes from the pilot every 30 s and, when anything arrived (or every two minutes), rebuilds and files each app user's Family view. No LLM.",
+    "Pulls the iPhone app's fixes from the pilot every 30 s, raises and delivers arrive/leave alerts (and low battery, and Lock Screen journeys) from them, and, when anything arrived (or every two minutes), rebuilds and files each app user's Family view. No LLM.",
   defaultCadenceSeconds: 30,
   defaultEnabled: true,
   defaultConfig: {},
@@ -80,6 +89,8 @@ export const householdLive: ActivityHandler = {
       details.accountDeletionsError = errMsg(err).slice(0, 160);
     }
 
+    await runAlerts(members, bits, details);
+
     const due = (companion?.written ?? 0) > 0 || Date.now() - lastPush >= VIEW_REFRESH_S * 1000;
     if (due) {
       try {
@@ -110,3 +121,59 @@ export const householdLive: ActivityHandler = {
     return { outcome: 'ok', summary: bits.join(' · ') || 'nothing new', details };
   },
 };
+
+/**
+ * Arrivals and departures from every trail row written since the last run,
+ * then their delivery, then the Lock Screen journeys they start, end or move,
+ * then low battery. None of it can fail the run: an alert that did not go stays
+ * owed and is retried while it is under two hours old.
+ */
+async function runAlerts(members: HouseholdMember[], bits: string[], details: Record<string, unknown>): Promise<void> {
+  try {
+    const crossings = await runCrossings(members);
+    details.crossings = crossings;
+    const c: string[] = [];
+    if (crossings.written) c.push(`${crossings.written} new`);
+    if (crossings.deduped) c.push(`${crossings.deduped} repeated`);
+    if (crossings.initialised.length) c.push(`started watching ${crossings.initialised.join(', ')}`);
+    if (crossings.errors.length) c.push(`failed: ${crossings.errors.join('; ').slice(0, 120)}`);
+    if (c.length) bits.push(`crossings: ${c.join(', ')}`);
+  } catch (err) {
+    details.crossingsError = errMsg(err).slice(0, 200);
+    bits.push(`crossings failed: ${errMsg(err).slice(0, 80)}`);
+  }
+  try {
+    const sent = await deliverAlerts(members);
+    details.alerts = sent;
+    const a: string[] = [];
+    if (sent.pushed) a.push(`${sent.pushed} pushed`);
+    if (sent.forwarded) a.push(`${sent.forwarded} to the app`);
+    if (sent.pilotError) a.push(`app queue failed: ${sent.pilotError.slice(0, 80)}`);
+    if (sent.whatsappSent.length) a.push(`WhatsApp to ${sent.whatsappSent.join(', ')}`);
+    if (sent.whatsappFailed.length) a.push(`WhatsApp failed to ${sent.whatsappFailed.join(', ')}`);
+    if (a.length) bits.push(`alerts: ${a.join(', ')}`);
+  } catch (err) {
+    details.alertsError = errMsg(err).slice(0, 200);
+    bits.push(`alerts failed: ${errMsg(err).slice(0, 80)}`);
+  }
+  try {
+    const live = await runLiveJourneys(members);
+    details.liveJourneys = live;
+    const l: string[] = [];
+    if (live.started) l.push(`${live.started} started`);
+    if (live.updated) l.push(`${live.updated} moved`);
+    if (live.ended) l.push(`${live.ended} ended`);
+    if (live.errors.length) l.push(`failed: ${live.errors.join('; ').slice(0, 120)}`);
+    if (l.length) bits.push(`journeys: ${l.join(', ')}`);
+  } catch (err) {
+    details.liveJourneysError = errMsg(err).slice(0, 200);
+  }
+  try {
+    const { deliverBatteryAlerts } = await import('$lib/home/presence/battery-alerts.server');
+    const battery = await deliverBatteryAlerts(members);
+    if (battery.sent || battery.errors.length) details.battery = battery;
+    if (battery.sent) bits.push(`low battery: ${battery.sent} told`);
+  } catch (err) {
+    details.batteryError = errMsg(err).slice(0, 160);
+  }
+}

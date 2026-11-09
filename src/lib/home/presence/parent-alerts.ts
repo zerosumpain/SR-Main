@@ -92,6 +92,33 @@ function base(kind: ParentNotice['kind'], id: string, subject: string) {
   } satisfies Partial<PushMessage>;
 }
 
+/** An arrival crossing that was pushed, and to whom (lower-cased emails). */
+export interface ArrivalPushed {
+  subject: string;
+  placeId: string;
+  /** ms */
+  at: number;
+  to: readonly string[];
+}
+
+/** How long after a trip's computed end its arrival crossing may fall: the
+ *  crossing fires on the first fix inside the place, the trip ends on the
+ *  dwell, and the two can sit a few minutes apart. */
+export const ARRIVAL_MATCH_MINS = 20;
+
+/** Whoever an arrival push for this trip already reached. PURE. */
+export function arrivalTold(
+  arrivals: readonly ArrivalPushed[],
+  subject: string,
+  placeId: string,
+  left: number,
+  arrived: number,
+): string[] {
+  return arrivals
+    .filter((a) => a.subject === subject && a.placeId === placeId && a.at >= left && a.at <= arrived + ARRIVAL_MATCH_MINS * MINUTE)
+    .flatMap((a) => a.to.map((r) => r.trim().toLowerCase()));
+}
+
 /** Every trip a child completed in the last STOP_WINDOW_MINS, as a notice for their guardians. PURE. */
 export function stopNotices(input: {
   routes: readonly RouteInsight[];
@@ -102,6 +129,10 @@ export function stopNotices(input: {
   /** Trips (`<subject>-<arrived ms>`) an "arrived safely" already tells
    *  these recipients about (`journey-alerts`): they are not told twice. */
   covered?: ReadonlyMap<string, readonly string[]>;
+  /** Arrival pushes already sent (`household_event` arrive rows and who they
+   *  reached). A guardian pushed "arrived at School" for the trip is not also
+   *  told "stopped at School" ten minutes later (review 2026-11-09). */
+  arrivals?: readonly ArrivalPushed[];
 }): ParentNotice[] {
   const { routes, places, guardians, names, now } = input;
   const out: ParentNotice[] = [];
@@ -110,7 +141,10 @@ export function stopNotices(input: {
     for (const trip of route.trips) {
       const left = +new Date(trip.start), arrived = left + trip.minutes * MINUTE;
       if (arrived > +now || +now - arrived > STOP_WINDOW_MINS * MINUTE) continue;
-      const told = input.covered?.get(`${route.subject}-${arrived}`) ?? [];
+      const told = [
+        ...(input.covered?.get(`${route.subject}-${arrived}`) ?? []),
+        ...arrivalTold(input.arrivals ?? [], route.subject, route.toId, left, arrived),
+      ];
       const recipients = guardians.get(route.subject)!.filter((r) => !told.includes(r));
       if (!recipients.length) continue;
       const to = places.find((p) => p.id === route.toId);

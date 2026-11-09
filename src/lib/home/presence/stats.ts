@@ -63,6 +63,16 @@ export interface CommonTrip {
    *  between these two places over the window. */
   totalSeconds: number;
   mode: ModeBucket;
+  /** Median distance of the journeys, metres (the trail's own path length). */
+  medianMetres: number;
+  /** The quickest journey, seconds. */
+  fastestSeconds: number;
+  /** On foot only: the median of each walk's pace, seconds per km, over the
+   *  walks that pass the pace band (`paceJourneys`); null for other modes or
+   *  when none pass. A per-walk median, so one dawdle does not set it. */
+  medianPaceSecPerKm: number | null;
+  /** When the newest journey of the pair started, ISO. */
+  lastAt: string;
 }
 
 /** Journeys that left a named place and came back to it (a walk round the
@@ -396,6 +406,7 @@ function commonTrips(
       const n = modeCount.get(b) ?? 0;
       if (n > best) ((best = n), (mode = b));
     }
+    const paces = mode === 'foot' ? paceJourneys(g.journeys, bucketOf).map((w) => 1000 / w.mps) : [];
     trips.push({
       fromLabel: g.fromLabel,
       toLabel: g.toLabel,
@@ -404,6 +415,10 @@ function commonTrips(
       medianSeconds: Math.round(quantile(g.journeys.map(seconds), 0.5)),
       totalSeconds: Math.round(g.journeys.reduce((n, j) => n + seconds(j), 0)),
       mode,
+      medianMetres: Math.round(quantile(g.journeys.map((j) => j.distanceKm * 1000), 0.5)),
+      fastestSeconds: Math.round(Math.min(...g.journeys.map(seconds))),
+      medianPaceSecPerKm: paces.length ? Math.round(quantile(paces, 0.5)) : null,
+      lastAt: g.journeys[g.journeys.length - 1].startedAt.toISOString(),
     });
   }
   return {

@@ -9,7 +9,7 @@ vi.mock('$lib/db', () => {
 });
 vi.mock('./members', () => ({ listMembers: async () => [{ subject: 'alex' }, { subject: 'sam', source: 'companion' }] }));
 vi.mock('./insights.server', () => ({ insightMembers: async () => h.sharing ? [{ subject: 'alex' }] : [], loadPresenceInsights: async () => ({ arrivals: h.arrivals }) }));
-vi.mock('./alerts', () => ({ pilotRecipients: () => h.recipients, localClock: () => '08:40', postToPilot: async (events: any[]) => { h.calls.push(events); return h.accepted ? { accepted: events.map(e => e.id) } : { accepted: [], error: 'offline' }; } }));
+vi.mock('./alerts', () => ({ pilotRecipients: () => h.recipients, localClock: () => '08:40', householdUserInfo: (id: string, kind: string, subject: string) => ({ id, category: 'household', kind, subject }), postToPilot: async (events: any[]) => { h.calls.push(events); return h.accepted ? { accepted: events.map(e => e.id) } : { accepted: [], error: 'offline' }; } }));
 vi.mock('$lib/server/apns', () => ({ isApnsConfigured: () => h.apns }));
 vi.mock('$lib/server/push-devices', () => ({ pushToEmails: async (emails: string[], message: unknown) => { h.pushes.push({ emails, message }); return { reached: new Set(h.reached) }; } }));
 const { deliverArrivalEstimates } = await import('./eta-alerts.server');

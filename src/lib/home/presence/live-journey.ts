@@ -439,7 +439,10 @@ export async function runLiveJourneys(
 ): Promise<LiveJourneyResult> {
   const result: LiveJourneyResult = { started: 0, updated: 0, ended: 0, errors: [] };
   if (!deps.send && !isApnsConfigured()) return result;
-  const send = deps.send ?? ((t, aps, env) => sendLiveActivity(t, aps, env));
+  // Updates go at priority 5: since crossings run every 30 s (review
+  // 2026-11-09) a drive can move a bucket every tick, and Apple throttles a
+  // stream of priority-10 updates. Start and end stay immediate.
+  const send = deps.send ?? ((t, aps, env) => sendLiveActivity(t, aps, env, aps.event === 'update' ? 5 : 10));
   const now = deps.now ?? new Date();
 
   const places = new Map((await loadAlertPlaces()).map((p) => [p.id, p]));

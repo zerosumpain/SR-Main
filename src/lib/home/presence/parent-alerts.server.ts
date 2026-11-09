@@ -11,14 +11,14 @@
 // `home.presence.parents.<subject>`; one a phone did not take is retried each
 // run until its `until`.
 
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
-import { appSettings, daydreamPlaces, daydreamTrail } from '$lib/db/schema';
+import { appSettings, daydreamPlaces, daydreamTrail, householdEvent } from '$lib/db/schema';
 import { isApnsConfigured } from '$lib/server/apns';
 import { pushToEmails } from '$lib/server/push-devices';
 import { loadForecast } from './forecast.server';
 import { listMembers } from './members';
-import { guardiansByChild, schoolLateNotices, stopNotices, type ParentNotice } from './parent-alerts';
+import { guardiansByChild, schoolLateNotices, stopNotices, STOP_WINDOW_MINS, type ArrivalPushed, type ParentNotice } from './parent-alerts';
 import { journeyNotices } from './journey-alerts.server';
 import { getHold, ownerSubjects } from './location-hold.server';
 import type { JourneyNotice } from './journey-alerts';
@@ -50,9 +50,25 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
   const journeys = await journeyNotices({ routes: insights.routes.filter((r) => !held.has(r.subject)), places, members, names, now })
     .catch((err) => { console.warn('[parent-alerts] journeys:', (err as Error).message); return [] as JourneyNotice[]; });
   const covered = new Map(journeys.map((j) => [j.trip, j.recipients]));
+  // Children's arrivals already pushed (alerts.ts): a guardian told "arrived
+  // at School" is not told "stopped at School" for the same trip.
+  const children = [...guardians.keys()];
+  const arrivals: ArrivalPushed[] = children.length
+    ? (
+        await db
+          .select({ subject: householdEvent.subject, placeId: householdEvent.placeId, at: householdEvent.at, pushedTo: householdEvent.pushedTo })
+          .from(householdEvent)
+          .where(and(
+            inArray(householdEvent.subject, children),
+            eq(householdEvent.kind, 'arrive'),
+            // A trip's start can be well before its end; a day back covers the longest.
+            gte(householdEvent.at, new Date(+now - (STOP_WINDOW_MINS + 24 * 60) * 60_000)),
+          ))
+      ).map((r) => ({ subject: r.subject, placeId: r.placeId, at: +r.at, to: Array.isArray(r.pushedTo) ? (r.pushedTo as string[]) : [] }))
+    : [];
   const notices: Array<ParentNotice | JourneyNotice> = [
     ...journeys,
-    ...stopNotices({ routes: insights.routes, places, guardians, names, now, covered }),
+    ...stopNotices({ routes: insights.routes, places, guardians, names, now, covered, arrivals }),
     ...schoolLateNotices({ routines: forecast.routines, live: insights.live, places, guardians, names, cal, now, positions }),
   ];
   let sent = 0, owed = 0;

@@ -120,20 +120,10 @@ describe('home-observe', () => {
     expect(res.summary).toContain('push stream fresh');
   });
 
-  it('raises crossings after the fixes are written, then delivers them', async () => {
+  it('leaves arrivals and departures to household-live (30 s), never raising them itself', async () => {
     h.members = [member('p', 'life360'), member('q', 'companion')];
     const res = await homeObserve.run(ctx);
-    expect(h.alertCalls).toEqual(['crossings', 'deliver']);
-    expect(res.summary).toContain('crossings: 1 new');
-    expect(res.summary).toContain('alerts: 1 to the app, WhatsApp to …000');
-  });
-
-  it('never fails the run when crossings or delivery throw', async () => {
-    h.alertsFail = true;
-    h.members = [member('p', 'life360')];
-    const res = await homeObserve.run(ctx);
+    expect(h.alertCalls).toEqual([]);
     expect(res.outcome).toBe('ok');
-    expect(res.summary).toContain('crossings failed');
-    expect(res.summary).toContain('alerts failed');
   });
 });
