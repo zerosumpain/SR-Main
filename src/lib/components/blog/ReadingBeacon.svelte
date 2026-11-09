@@ -191,6 +191,16 @@
         (entries) => {
           for (const entry of entries) {
             if (entry.isIntersecting) {
+              if (!completed) {
+                // Mirrored into Umami so a finished read sits beside the
+                // pageview and referrer that brought it, not only in the
+                // first-party table.
+                accumulate();
+                (window as unknown as { umami?: { track: (n: string, d: object) => void } }).umami?.track(
+                  'blog-read-complete',
+                  { slug, seconds: Math.round(dwellMs / 1000) },
+                );
+              }
               completed = true;
               observer?.disconnect();
               observer = null;

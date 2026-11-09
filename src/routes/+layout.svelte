@@ -50,7 +50,7 @@
   }
 </script>
 
-<UmamiTracker />
+<UmamiTracker tag="main" identity={data.analytics ?? null} replay />
 
 <div class="relative z-10 min-h-screen">
   {@render children()}
