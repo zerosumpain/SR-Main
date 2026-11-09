@@ -91,3 +91,51 @@ export async function fetchHukdTag(slug: string, fetchFn: typeof fetch = fetch):
   if (!res.ok) throw new Error(`hotukdeals ${slug}: HTTP ${res.status}`);
   return parseHukdFeed(await res.text());
 }
+
+// ── Is the deal still live? ──────────────────────────────────────────────────
+//
+// A tag feed carries expired posts beside live ones and says nothing about
+// which is which, so a "match" could be a deal that ended last week (John,
+// 2026-11-09: "if it's expired don't show it, the deal is gone"). The deal page
+// itself embeds the thread's state as JSON — `"isExpired":true|false` — checked
+// 2026-11-09 on ten gaming-pc deals, four of them expired. Related-deal cards
+// on the same page carry `threadId`s but not `isExpired`, so the flag nearest
+// AFTER this thread's own id is the one we read; a page with no flag is
+// `null` (unknown), which the sweep treats as still showing rather than gone.
+
+const DEAL_PAGE_CHARS = 2_000_000;
+
+/** The numeric thread id at the end of a deal URL (`/deals/<slug>-5015853`). */
+export function hukdThreadId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.origin !== HUKD_ORIGIN) return null;
+    return /^\/deals\/[^/]*?-?(\d{5,})\/?$/.exec(u.pathname)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** PURE. `true` expired, `false` live, `null` the page did not say. */
+export function parseHukdExpired(html: string, threadId: string | null): boolean | null {
+  let from = 0;
+  if (threadId) {
+    const at = html.search(new RegExp(`"threadId":"?${threadId}"?[,}]`));
+    if (at >= 0) from = at;
+  }
+  const m = /"isExpired":(true|false)/.exec(html.slice(from)) ?? /"isExpired":(true|false)/.exec(html);
+  return m ? m[1] === 'true' : null;
+}
+
+export async function fetchHukdExpired(url: string, fetchFn: typeof fetch = fetch): Promise<boolean | null> {
+  const id = hukdThreadId(url);
+  if (!id) return null;
+  const res = await fetchFn(url, {
+    headers: { 'user-agent': 'Mozilla/5.0 (compatible; StrangeRamblings wish list; +https://strangeramblings.com)' },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  // A deal HUKD has deleted is as gone as an expired one.
+  if (res.status === 404 || res.status === 410) return true;
+  if (!res.ok) throw new Error(`hotukdeals deal page: HTTP ${res.status}`);
+  return parseHukdExpired((await res.text()).slice(0, DEAL_PAGE_CHARS), id);
+}

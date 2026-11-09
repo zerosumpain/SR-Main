@@ -162,6 +162,14 @@ export interface WishOffer {
   /** PriceRunner product pages: every seller, cheapest first. */
   sellers?: { merchant: string; pricePence: number; inStock: boolean | null }[];
   perPerson?: boolean;
+  /**
+   * HUKD only: the deal page says the deal has expired (or it was deleted).
+   * An expired offer is never shown or alerted — the deal is gone. Absent =
+   * not known to be expired. See `fetchHukdExpired`.
+   */
+  expired?: boolean;
+  /** When `expired` was last read from the deal page. */
+  expiryCheckedAt?: string;
 }
 
 /** What a source hands the sweep before it is judged. */

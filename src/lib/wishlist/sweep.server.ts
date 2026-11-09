@@ -10,7 +10,7 @@ import { notifyOwner } from '$lib/server/notify';
 import { eventFor, mergeOffer, offerKey, summarise, type AlertEvent } from './alerts';
 import { isDue } from './due';
 import { KEPT } from './match';
-import { fetchHukdTag } from './sources/hukd';
+import { fetchHukdExpired, fetchHukdTag } from './sources/hukd';
 import { fetchPageScripts, fetchScanCards } from './sources/fetch.server';
 import { ocukCategoryUrl, parseOcukItemList } from './sources/ocuk';
 import { fetchSubreddit } from './sources/reddit';
@@ -22,6 +22,11 @@ import { getItem, listItems, listOffers, saveItem, saveOffer } from './store.ser
 import type { Candidate, FeedRef, WishItem, WishOffer } from './types';
 
 const MAX_ITEMS_PER_RUN = 8;
+
+/** A live HUKD deal's page is re-read at most this often. */
+const EXPIRY_RECHECK_MS = 60 * 60_000;
+/** Deal pages read per item per check — stored offers that left the feed included. */
+const MAX_EXPIRY_CHECKS = 40;
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 200);
 
@@ -71,6 +76,24 @@ async function readFeed(feed: FeedRef): Promise<Candidate[]> {
   }
 }
 
+/**
+ * Read a HUKD offer's deal page and stamp `expired` on it. Mutates the offer.
+ * A page that cannot be read leaves the offer as it was (shown) and notes the
+ * failure — an unreachable page is not evidence the deal has gone.
+ */
+async function readExpiry(offer: WishOffer, now: Date, budget: { left: number }, errors: string[]): Promise<void> {
+  if (offer.expired) return;
+  if (offer.expiryCheckedAt && now.getTime() - Date.parse(offer.expiryCheckedAt) < EXPIRY_RECHECK_MS) return;
+  budget.left--;
+  try {
+    const expired = await fetchHukdExpired(offer.url);
+    offer.expiryCheckedAt = now.toISOString();
+    if (expired) offer.expired = true;
+  } catch (err) {
+    if (!errors.some((e) => e.startsWith('hukd expiry'))) errors.push(`hukd expiry: ${errMsg(err)}`);
+  }
+}
+
 export interface ItemCheck {
   itemId: string;
   candidates: number;
@@ -107,6 +130,7 @@ export async function checkItem(item: WishItem, now = new Date()): Promise<ItemC
 
   const stored = new Map((await listOffers(item.id)).map((o) => [o.key, o]));
   const events: AlertEvent[] = [];
+  const budget = { left: MAX_EXPIRY_CHECKS };
   let kept = 0;
   const seen = new Set<string>();
   for (const c of candidates) {
@@ -122,6 +146,12 @@ export async function checkItem(item: WishItem, now = new Date()): Promise<ItemC
     // category page is a hundred products; storing every one would bury the
     // few that matter.
     if (item.kind === 'hunt' && !prev && !KEPT.includes(next.verdict)) continue;
+    if (next.source === 'hukd' && budget.left > 0) await readExpiry(next, now, budget, errors);
+    if (next.expired) {
+      // The deal is gone: recorded so it is never re-alerted, never shown.
+      await saveOffer(next);
+      continue;
+    }
     const event = eventFor(item, prev, next, c.postedAt, now);
     if (event) {
       next.alertedPence = next.pricePence;
@@ -129,6 +159,15 @@ export async function checkItem(item: WishItem, now = new Date()): Promise<ItemC
     }
     await saveOffer(next);
     kept++;
+  }
+
+  // A HUKD post that has dropped off its tag feed is still on the page until
+  // someone says it has gone — and expiry is usually why it dropped off.
+  for (const o of stored.values()) {
+    if (budget.left <= 0) break;
+    if (o.source !== 'hukd' || o.expired || seen.has(o.key) || o.verdict === 'no') continue;
+    await readExpiry(o, now, budget, errors);
+    if (o.expired) await saveOffer(o);
   }
 
   let notified = false;
@@ -180,5 +219,6 @@ export async function sweepWishlist(now = new Date()): Promise<SweepResult> {
 /** Offers for the page, best first. */
 export function rankOffers(offers: WishOffer[]): WishOffer[] {
   const order = { match: 0, possible: 1, near: 2, over: 3, no: 4 } as const;
-  return [...offers].sort((a, b) => order[a.verdict] - order[b.verdict] || a.pricePence - b.pricePence);
+  // An expired deal is gone — it is kept in the store only so it never re-alerts.
+  return offers.filter((o) => !o.expired).sort((a, b) => order[a.verdict] - order[b.verdict] || a.pricePence - b.pricePence);
 }

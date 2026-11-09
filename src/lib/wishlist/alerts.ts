@@ -60,6 +60,10 @@ export function mergeOffer(item: WishItem, prev: WishOffer | null, c: Candidate 
     alertedPence: prev?.alertedPence ?? null,
     ...(c.sellers ? { sellers: c.sellers.slice(0, 12) } : {}),
     ...(c.perPerson ? { perPerson: true } : {}),
+    // Expiry is read from the deal page by the sweep, not from the feed, so it
+    // survives a re-sighting rather than being reset by every merge.
+    ...(prev?.expired ? { expired: true } : {}),
+    ...(prev?.expiryCheckedAt ? { expiryCheckedAt: prev.expiryCheckedAt } : {}),
   };
 }
 
