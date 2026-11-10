@@ -182,21 +182,28 @@
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "48512d5454d22f968abfc2331f3acbc7ec8ed95b6f69afb0db7c21e3b018794c"
+      "sha256": "90e60272f7113f6880a6c34bbcf29177c6ae75ab09712446335b71654490670c"
     },
     "src/lib/components/SiteHeader.svelte": {
       "peer": [
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "ba00e057a92341af26a26f4309972dfa83cc7f348fd64af19d7b204cbedab57e"
+      "sha256": "ce1496f3347f6664ebb1ec565b91f19afb0e0a4e7f0e30536bd840c8598cf179"
     },
     "src/lib/components/JkaiMenu.svelte": {
       "peer": [
         "zerosumpain/SR-Drive",
         "zerosumpain/SR-Health"
       ],
-      "sha256": "26f3ba311c3696d5a9384c4117553b8f7cb2692ee8fc8555af290a44b1dd3a17"
+      "sha256": "8d722f91e83c95eba3bd6ae61b21fc4e078af96bd66b78951a64686fe66831b8"
+    },
+    "src/lib/components/RoomMenu.svelte": {
+      "peer": [
+        "zerosumpain/SR-Drive",
+        "zerosumpain/SR-Health"
+      ],
+      "sha256": "bcabea7af41c91b965f24438dbc42540094ac78f21c5240cab0af1d91a1fc240"
     },
     "src/lib/nav/page-path.ts": {
       "peer": [

@@ -3,6 +3,7 @@
   import { getContext, onMount } from 'svelte';
   import HubTokenStrip from './HubTokenStrip.svelte';
   import JkaiMenu from '../JkaiMenu.svelte';
+  import RoomMenu from '../RoomMenu.svelte';
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/utils/cost-format';
@@ -281,6 +282,9 @@
           />
         </svg>
       </a>
+      <!-- The room cell every bar carries, second after the home icon: the
+           room this surface is in (Canvas is in Make), or all of them on chat. -->
+      <RoomMenu path={page.url.pathname} isOwner={!member} reach={memberReach} chip />
       <span class="hdr-divider" aria-hidden="true"></span>
       <!-- `.brand` is the site-wide mark: it supplies the accent `>` via
            ::before, so the word is all this needs to carry. -->
@@ -401,9 +405,8 @@
         {/if}
       </div>
       {#if jkaiCell}
-        <!-- The jkai cell every bar on the site carries (jkai, Daydreams,
-             Trips), at the right-hand end as on every other bar: its menu
-             drops from the right edge, so on the left it opened off-screen. -->
+        <!-- The jkai cell every bar on the site carries, at the right-hand end
+             as on every other bar. -->
         <span class="hub-jkai"><JkaiMenu item={jkaiCell} path={page.url.pathname} /></span>
       {/if}
     </div>

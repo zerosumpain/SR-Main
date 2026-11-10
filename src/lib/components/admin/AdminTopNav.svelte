@@ -3,6 +3,7 @@
 
   import { activeSection, isSectionActive, reachableSections } from './admin-nav';
   import JkaiMenu from '../JkaiMenu.svelte';
+  import RoomMenu from '../RoomMenu.svelte';
   import { JKAI_ITEM, visibleItems } from '$lib/nav/site-nav';
 
   const path = $derived(page.url.pathname);
@@ -76,6 +77,13 @@
       />
     </svg>
   </a>
+
+  <!-- The room this bar is in (Run), and the way to the other four. -->
+  <RoomMenu
+    {path}
+    isOwner={!!page.data.isOwner}
+    reach={(page.data.navReach as string[] | undefined) ?? []}
+  />
 
   {#if back}
     <a class="admin-back" href={back.href} title="Back to {back.label}">

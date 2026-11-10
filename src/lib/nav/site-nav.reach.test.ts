@@ -13,9 +13,9 @@ describe('a member is offered exactly what they can reach', () => {
     expect(byLabel.Drive).toBeUndefined();
   });
 
-  it('a Family Circle member reaches Home through People', () => {
+  it('a Family Circle member reaches the House through People', () => {
     const byLabel = Object.fromEntries(visibleItems(SITE_ITEMS, false, ['/home/people']).map((c) => [c.label, c.href]));
-    expect(byLabel.Home).toBe('/home/people');
+    expect(byLabel.House).toBe('/home/people');
   });
 
   it('inside an owner-only section, only the reachable cells', () => {

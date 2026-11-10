@@ -5,10 +5,9 @@
    * The strip is a row of CELLS divided by hairlines — the grammar
    * `.site-nav-bar` has always used — read left to right:
    *
-   *   [⌂] [← jkai] [ Intel ] [ MAIL NOTES REVIEW … ] ········· [ right slot ]
+   *   [⌂] [Know ▾] [← jkai] [ Intel ] [ MAIL NOTES REVIEW … ] ····· [jkai] [ right slot ]
    *
-   * The two new cells are the first two, and they are what the rest of the site
-   * was missing:
+   * The first three cells are what the rest of the site was missing:
    *
    *  * HOME is an icon, always first, on every page. It was previously a mono
    *    `HOME` cell sitting second, behind the title — present on the 58 pages
@@ -17,6 +16,12 @@
    *    the title cell as a link (`titleHref`), which made one cell mean both
    *    "you are here" and "go up" — legible on /blog/[slug], not legible
    *    anywhere else. Where it points is `parentHref()`; nothing here decides.
+   *  * ROOM is the second cell: which of the site's five rooms this page is in,
+   *    and a menu of that room with the other four across its top. It is the
+   *    one way to anywhere that every bar carries, which is what the site strip
+   *    stopped being the moment a section put its own cells in its place. A
+   *    page in no room (`/`) wears all five room cells instead; a viewer with
+   *    too few pages for rooms wears neither, only the flat strip.
    *
    * Everything is on the INK ground (`.site-nav-bar` is `background:
    * var(--text-primary)`), so every colour in here is written for a dark
@@ -26,6 +31,7 @@
    */
   import type { Snippet } from 'svelte';
   import JkaiMenu from './JkaiMenu.svelte';
+  import RoomMenu from './RoomMenu.svelte';
   import { currentPath } from '$lib/nav/page-path';
   import {
     activeSection,
@@ -34,7 +40,10 @@
     navCellsFor,
     parentHref,
     parentLabel,
+    roomFor,
     visibleItems,
+    visibleRooms,
+    wearsRooms,
     type NavItem,
   } from '$lib/nav/site-nav';
 
@@ -78,10 +87,17 @@
     items ? visibleItems(items, isOwner, reach) : navCellsFor(path, isOwner, reach),
   );
   /**
-   * The jkai menu is on every bar, not only where the site strip shows: on
-   * /health or /home the strip is that section's own pages, and jkai would
-   * otherwise vanish. It sits after the strip, outside its scroller, so the
-   * menu can drop below the bar. Null for anyone who can open none of it.
+   * Rooms, for a viewer with enough of the site to need them. In a room the
+   * bar wears that room's cell; in none, with no cells of its own to show, it
+   * wears one cell per room. Both sit outside the strip's scroller, so their
+   * menus can drop below the bar.
+   */
+  const rooms = $derived(wearsRooms(isOwner, reach) ? visibleRooms(isOwner, reach) : []);
+  const inRoom = $derived(rooms.length > 0 && !!roomFor(path));
+  const roomCells = $derived(!inRoom && !cells.length ? rooms : []);
+  /**
+   * The jkai cell is on every bar: the assistant is one press from anywhere.
+   * It sits after the strip. Null for anyone who cannot open it.
    */
   const jkaiCell = $derived(visibleItems([JKAI_ITEM], isOwner, reach)[0] ?? null);
 
@@ -142,6 +158,10 @@
     </a>
   {/if}
 
+  {#if inRoom}
+    <RoomMenu {path} {isOwner} {reach} />
+  {/if}
+
   {#if backHref}
     <a class="hdr-back" href={backHref} title="Back to {backLabel}">
       <span class="back-arrow" aria-hidden="true">←</span>
@@ -177,6 +197,9 @@
       </div>
     </nav>
   {:else}
+    {#each roomCells as room (room.id)}
+      <RoomMenu {path} {isOwner} {reach} only={room.id} />
+    {/each}
     <div class="hdr-spacer"></div>
   {/if}
 

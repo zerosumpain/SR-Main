@@ -117,43 +117,159 @@ export function wearsSharedChrome(path: string): boolean {
 }
 
 /**
- * The jkai cell: the assistant and the things it does without being asked to
- * chat — it notices (Daydreams), it plans (Trips) and it watches prices (Wish
- * list). Neither /trips nor /home/wishlist has a strip of its own on a site
- * page, so this menu is how they are reached from anywhere.
+ * The jkai cell: the assistant, one tap from every bar. It used to carry a
+ * menu (Daydreams, Trips, Wish list) because those had no cell of their own on
+ * a site page; they are filed in ROOMS now, so the cell is a plain link again.
  * Every nav bar renders it through `JkaiMenu.svelte`.
  */
 export const JKAI_ITEM: NavItem = {
   label: 'jkai',
   href: '/jkai',
   ownerOnly: true,
-  match: (p) => under('/jkai', p) || under('/trips', p),
-  children: [
-    { label: 'jkai', href: '/jkai', ownerOnly: true, meta: 'Ask, chat, run things', match: (p) => p === '/jkai' },
-    { label: 'Daydreams', href: '/jkai/daydreams', ownerOnly: true, meta: 'What it noticed while idle' },
-    { label: 'Trips', href: '/trips', ownerOnly: true, meta: 'Plan the days away' },
-    { label: 'Wish list', href: '/home/wishlist', ownerOnly: true, meta: 'Things to buy, watched for a price' },
-  ],
+  match: (p) => under('/jkai', p),
 };
 
 /**
- * The site strip — the destinations on offer from any page that is not inside a
- * section of its own. Home is NOT here: it is the icon cell, and offering it
- * twice was the old strip's tell. Nor is jkai: it is `JKAI_ITEM`, which every
- * bar renders on its own, strip or no strip.
+ * The rooms — every destination on the site, filed by what you came to do.
+ *
+ * The strip this replaces (`SITE_ITEMS` as a hand-kept list) was in arrival
+ * order: Projects, Writing, Health, Shipped, Home, News, Research, Drive, with
+ * Trips and the Wish list parked under the jkai cell and Admin on no bar at
+ * all. A room is not a page and has no URL; it is a cell that opens a menu.
+ *
+ * Both orders are FIXED — rooms run from the most public to the most internal,
+ * and a room's items never reorder — so a position can be learned.
+ *
+ * A path belongs to the FIRST room with an item that matches it, so an item
+ * whose prefix holds another room's item says so in its `match` (House is
+ * /home without the wish list; Admin is /admin without the editor).
  */
-export const SITE_ITEMS: NavItem[] = [
-  { label: 'Projects', href: '/projects' },
-  { label: 'Writing', href: '/blog' },
-  { label: 'Health', href: '/health' },
-  { label: 'Shipped', href: '/releases', ownerOnly: true },
-  { label: 'Home', href: '/home', ownerOnly: true },
-  // Owner-only from here. These used to render for everyone, so a signed-out
-  // reader was offered four destinations that each 302 back to /login.
-  { label: 'News', href: '/news', ownerOnly: true },
-  { label: 'Research', href: '/research', ownerOnly: true },
-  { label: 'Drive', href: '/drive', ownerOnly: true },
+export type NavRoom = {
+  id: string;
+  /** Four letters: five of them, the home icon and jkai fit a phone. */
+  label: string;
+  /** The line that heads the room's menu. */
+  blurb: string;
+  items: NavItem[];
+};
+
+export const ROOMS: NavRoom[] = [
+  {
+    id: 'show',
+    label: 'Show',
+    blurb: 'What the world sees',
+    items: [
+      { label: 'Projects', href: '/projects', meta: 'Studies and builds' },
+      { label: 'Writing', href: '/blog', meta: 'The blog' },
+      {
+        label: 'Editor',
+        href: '/admin/content/blog',
+        ownerOnly: true,
+        meta: 'Drafts, hero, voice',
+        match: (p) => under('/admin/content', p),
+      },
+    ],
+  },
+  {
+    id: 'life',
+    label: 'Life',
+    blurb: 'Body, house, plans',
+    items: [
+      { label: 'Health', href: '/health', meta: 'Training and recovery' },
+      {
+        label: 'House',
+        href: '/home',
+        ownerOnly: true,
+        meta: 'Who is in, what the house heard',
+        match: (p) => under('/home', p) && !under('/home/wishlist', p),
+      },
+      { label: 'Trips', href: '/trips', ownerOnly: true, meta: 'Plan the days away' },
+      { label: 'Wish list', href: '/home/wishlist', ownerOnly: true, meta: 'Things to buy, watched for a price' },
+    ],
+  },
+  {
+    id: 'know',
+    label: 'Know',
+    blurb: 'What came in, what is known',
+    items: [
+      { label: 'News', href: '/news', ownerOnly: true, meta: 'The feed' },
+      { label: 'Daydreams', href: '/jkai/daydreams', ownerOnly: true, meta: 'What it noticed while idle' },
+      {
+        label: 'Research',
+        href: '/research',
+        ownerOnly: true,
+        meta: 'Ask a long question',
+        match: (p) => under('/research', p) || under('/deepdive', p),
+      },
+      { label: 'Intel', href: '/jkai/intel', ownerOnly: true, meta: 'Search people and mail' },
+      { label: 'Notes', href: '/jkai/notes', ownerOnly: true, meta: 'Your own' },
+    ],
+  },
+  {
+    id: 'make',
+    label: 'Make',
+    blurb: 'Where things get built',
+    items: [
+      { label: 'Canvas', href: '/jkai/canvas', ownerOnly: true, meta: 'Workflows' },
+      {
+        label: 'Develop',
+        href: '/jkai/develop',
+        ownerOnly: true,
+        meta: 'Builds and backlog',
+        match: (p) => under('/jkai/develop', p) || under('/jkai/builds', p),
+      },
+      { label: 'Codegraph', href: '/jkai/codegraph', ownerOnly: true, meta: 'Build history' },
+      { label: 'Prompts', href: '/jkai/prompts', ownerOnly: true, meta: 'The prompt library' },
+      { label: 'Drive', href: '/drive', ownerOnly: true, meta: 'Files' },
+    ],
+  },
+  {
+    id: 'run',
+    label: 'Run',
+    blurb: 'The machine underneath',
+    items: [
+      {
+        label: 'Admin',
+        href: '/admin',
+        ownerOnly: true,
+        meta: 'Connections, AI, ops, access',
+        match: (p) => under('/admin', p) && !under('/admin/content', p),
+      },
+      { label: 'Sources', href: '/jkai/sources', ownerOnly: true, meta: 'Personal data feeds' },
+      { label: 'Activity', href: '/jkai/activity', ownerOnly: true, meta: 'Evidence audit' },
+      { label: 'Shipped', href: '/releases', ownerOnly: true, meta: 'The release log' },
+    ],
+  },
 ];
+
+/**
+ * Every room destination in bar order. Home is NOT here: it is the icon cell.
+ * Nor is jkai: it is `JKAI_ITEM`, which every bar renders on its own.
+ */
+export const SITE_ITEMS: NavItem[] = ROOMS.flatMap((r) => r.items);
+
+/**
+ * Below this many reachable destinations the rooms dissolve into one flat
+ * strip. A signed-out visitor can open three pages; five menus to hold them
+ * would be furniture.
+ */
+const ROOMS_FROM = 6;
+
+/** The rooms this viewer can open something in, each with only those items. */
+export function visibleRooms(isOwner: boolean, reach: readonly string[] = []): NavRoom[] {
+  if (isOwner) return ROOMS;
+  return ROOMS.map((r) => ({ ...r, items: visibleItems(r.items, false, reach) })).filter((r) => r.items.length);
+}
+
+/** Whether this viewer's bar is rooms, or the flat strip of everything they reach. */
+export function wearsRooms(isOwner: boolean, reach: readonly string[] = []): boolean {
+  return visibleRooms(isOwner, reach).reduce((n, r) => n + r.items.length, 0) >= ROOMS_FROM;
+}
+
+/** The room a path is filed in. None on `/`, on jkai chat, and on unfiled pages. */
+export function roomFor(path: string): NavRoom | undefined {
+  return ROOMS.find((r) => r.items.some((i) => isItemActive(i, path)));
+}
 
 /**
  * The sections. Order matters only for `activeSection`, which takes the first
@@ -237,13 +353,12 @@ export const SECTIONS: NavSection[] = [
     ],
   },
   {
-    // The trip planner is a jkai surface that lives at /trips, the way research
-    // lives at /research: its way up is jkai, not the home icon.
+    // Filed in the Life room. It used to walk up to jkai, when the jkai menu
+    // was the only way to reach it.
     id: 'trips',
     label: 'Trips',
     rootHref: '/trips',
     ownerOnly: true,
-    parent: '/jkai',
     match: (p) => under('/trips', p),
     items: [],
   },
@@ -268,11 +383,10 @@ export const SECTIONS: NavSection[] = [
     // The household: who is in (Life360 via Home Assistant), what the Echos
     // heard and sense, and whether the house's integrations are healthy. The
     // whole family's data, so owner-only top to bottom — nothing here is in
-    // PUBLIC_PATHS or the hook bypasses. Labelled "Home" by John's choice
-    // (2026-09-25) although the icon cell also means `/`: the section root has
-    // no back cell, and a child's "← Home" means this page, not the site root.
+    // PUBLIC_PATHS or the hook bypasses. Labelled "House" since the rooms
+    // (2026-11-10): "Home" was also the icon cell's name. The URL stays /home.
     id: 'home',
-    label: 'Home',
+    label: 'House',
     rootHref: '/home',
     ownerOnly: true,
     match: (p) => under('/home', p),
@@ -298,10 +412,7 @@ export const SECTIONS: NavSection[] = [
     label: 'Research',
     rootHref: '/research',
     ownerOnly: true,
-    // `/jkai/research` 308s here (it was consolidated into the single /research
-    // family in v3), and the brief names this exact journey: research goes back
-    // to jkai. The URL moved; where it belongs did not.
-    parent: '/jkai',
+    // Filed in the Know room; `/jkai/research` 308s here.
     match: (p) => under('/research', p) || under('/deepdive', p),
     items: [],
   },
@@ -467,25 +578,28 @@ export function subnavFor(path: string, isOwner = true, reach: readonly string[]
 }
 
 /**
- * What the bar actually shows.
+ * What the strip shows.
  *
- * A section with children of its own shows them — that is the sub-page strip
- * John pointed at on /jkai and /health. A section without children (or no
- * section at all, i.e. the landing page) shows the SITE strip instead, which is
- * the nav the main page has always had. Without this fallback the header
- * rendered an empty band on `/`, `/blog`, `/projects` and `/releases` —
- * every top-level page on the site.
+ * A section with children of its own shows them — the sub-page strip on
+ * /health and /jkai/intel. A page without (Trips, News, Writing) shows its
+ * ROOM-MATES: the neighbours are the related things, not the whole site. A
+ * viewer below `ROOMS_FROM` gets everything they reach, flat, on every such
+ * page. Empty only for a rooms viewer on an unfiled page (`/`, jkai chat),
+ * where the bar renders the room cells themselves.
  */
 export function navCellsFor(path: string, isOwner = true, reach: readonly string[] = []): NavItem[] {
   const own = subnavFor(path, isOwner, reach);
   if (own.length) return own;
-  return visibleItems(SITE_ITEMS, isOwner, reach);
+  const rooms = visibleRooms(isOwner, reach);
+  if (!wearsRooms(isOwner, reach)) return rooms.flatMap((r) => r.items);
+  const id = roomFor(path)?.id;
+  return rooms.find((r) => r.id === id)?.items ?? [];
 }
 
 /**
  * The "common way back": one level up, never home.
  *
- * `/jkai/research` → `/jkai`, `/jkai/intel/sources` → `/jkai/intel`,
+ * `/jkai/intel` → `/jkai`, `/jkai/intel/sources` → `/jkai/intel`,
  * `/blog/some-post` → `/blog`. Returns null on a section root and on `/`,
  * where the home icon is already the answer and a second one would be noise.
  *
