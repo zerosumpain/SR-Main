@@ -26,6 +26,7 @@
   import type { Snippet } from 'svelte';
   import SiteHeader from '$lib/components/SiteHeader.svelte';
   import JkaiMenu from '$lib/components/JkaiMenu.svelte';
+  import RoomMenu from '$lib/components/RoomMenu.svelte';
   import { currentIsOwner, currentPath } from '$lib/nav/page-path';
   import { currentReach } from '$lib/nav/reach';
   import { JKAI_ITEM, isItemActive, parentHref, parentLabel, subnavFor, visibleItems } from '$lib/nav/site-nav';
@@ -165,6 +166,8 @@
            `.site-nav-bar` uses (SiteHeader: home cell, back cell, title cell).
            The wordmark is this family's title cell; the way back belongs
            between it and the home icon, not trailing after it. -->
+      <!-- The room cell every bar carries, second after the home icon. -->
+      <RoomMenu path={here} {isOwner} {reach} chip />
       {#if backLink}
         <a class="hs-back" href={backLink.href}>{backLink.label}</a>
       {/if}

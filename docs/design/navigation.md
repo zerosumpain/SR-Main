@@ -10,12 +10,43 @@ a reader should never have to learn this page's particular answer.
 ## The bar
 
 ```
-[⌂] [← parent] [ Section ] [ sub-nav cells … ] ················· [ right slot ]
+[⌂] [Room ▾] [← parent] [ Section ] [ sub-nav cells … ] ········ [jkai] [ right slot ]
 ```
 
-The order does not vary. The home icon is always first, always `/`. The back cell
-is always one level up. The sub-nav is the section's own siblings — the pattern
-`/jkai` and `/health` already used, now everywhere.
+The order does not vary. The home icon is always first, always `/`. The room
+cell is second. The back cell is always one level up. The sub-nav is the
+section's own siblings — the pattern `/jkai` and `/health` already used, now
+everywhere. The jkai cell is the assistant, one press from any page; it is a
+plain link and holds nothing.
+
+## Rooms
+
+Added 2026-11-10. Every destination on the site is filed in one of five rooms,
+`ROOMS` in the manifest:
+
+| Room | Holds |
+|---|---|
+| Show | Projects, Writing, Editor |
+| Life | Health, House, Trips, Wish list |
+| Know | News, Daydreams, Research, Intel, Notes |
+| Make | Canvas, Develop, Codegraph, Prompts, Drive |
+| Run  | Admin, Sources, Activity, Shipped |
+
+A room is not a page and has no URL. The room cell (`RoomMenu.svelte`) is a
+button naming the room you are in; its menu lists that room and carries the
+other four across its top, so anywhere is one hover and one click from
+anywhere. Three consequences:
+
+- **A page with no sub-nav of its own shows its room-mates** (Trips shows
+  Health, House, Trips, Wish list), not the whole site.
+- **A page in no room** (`/`, jkai chat) has no strip; the bar wears one cell
+  per room instead.
+- **A viewer who reaches fewer than six destinations wears no rooms.** A
+  signed-out visitor gets Projects, Writing, Health as a flat strip.
+
+Adding a destination means adding one row to one room. A page's room is worked
+out from those rows (`roomFor`), so a section never declares it. Do not hang a
+destination under the jkai cell again: that drawer is what rooms replaced.
 
 ## Adding a page
 

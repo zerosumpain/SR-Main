@@ -43,8 +43,13 @@ Cream `--bg #ede4d4`; ink `--text-primary #1a1008` with `--text-secondary/muted/
 Full principle: `docs/design/navigation.md`. The short version:
 
 ```
-[⌂] [← parent] [ Section ] [ sub-nav cells … ] ················· [ right slot ]
+[⌂] [Room ▾] [← parent] [ Section ] [ sub-nav cells … ] ······· [jkai] [ right slot ]
 ```
+
+The room cell (`RoomMenu`) names which of the five rooms the page is in (Show,
+Life, Know, Make, Run; `ROOMS` in the manifest) and opens that room with the
+other four across the top. A new top-level destination is one row in one room;
+never a child of the jkai cell.
 
 Every page wears this, in this order. Building a new page:
 

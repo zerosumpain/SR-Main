@@ -4,15 +4,15 @@
    * so PageHeader, HealthShell, the welcome frame and the releases hub), the
    * admin bar and the jkai hub's own masthead.
    *
-   * jkai is not one more destination in a row: it is the assistant, and it
-   * holds things (Daydreams, Trips) that have no cell of their own on a site
-   * page. So it is the one cell filled with colour and wearing its wordmark,
-   * with a caret that says there is more under it.
+   * jkai is not one more destination in a row: it is the assistant. So it is
+   * the one cell filled with colour and wearing its wordmark.
    *
-   * A mouse opens the menu by hovering; the caret opens it for a touch screen
-   * or a keyboard. Leaving with the mouse closes it after a beat, so the trip
-   * from the cell down into the menu does not drop it. Escape, a click
-   * elsewhere, or moving to another page closes it.
+   * It used to be a spare drawer as well — Daydreams, Trips and the wish list
+   * hung under it for want of anywhere else. Those have rooms now (`ROOMS`,
+   * drawn by `RoomMenu`), `JKAI_ITEM` carries no children, and the cell is a
+   * plain link. The menu below stays for an item that does carry children:
+   * a mouse opens it by hovering, the caret opens it for a touch screen or a
+   * keyboard, and Escape, a click elsewhere or a change of page closes it.
    */
   import { isItemActive, type NavItem } from '$lib/nav/site-nav';
 
@@ -64,7 +64,12 @@
   onpointerenter={hoverOpen}
   onpointerleave={hoverClose}
 >
-  <a href={item.href} class="menu-cell" aria-current={path === item.href ? 'page' : undefined}>
+  <a
+    href={item.href}
+    class="menu-cell"
+    class:solo={!item.children?.length}
+    aria-current={path === item.href ? 'page' : undefined}
+  >
     {item.label}
   </a>
   {#if item.children?.length}
@@ -124,6 +129,10 @@
     letter-spacing: -0.01em;
     text-decoration: none;
     color: inherit;
+  }
+  /* No caret beside it: the cell is the whole block, so it is padded evenly. */
+  .menu-cell.solo {
+    padding: 0 18px;
   }
   .menu-caret {
     display: inline-flex;
@@ -224,6 +233,9 @@
   @media (max-width: 640px) {
     .menu-cell {
       padding: 0 4px 0 12px;
+    }
+    .menu-cell.solo {
+      padding: 0 12px;
     }
     .menu-caret {
       padding: 0 12px 0 4px;

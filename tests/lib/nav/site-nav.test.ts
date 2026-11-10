@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   JKAI_ITEM,
+  ROOMS,
   SECTIONS,
   SITE_ITEMS,
   activeSection,
@@ -8,8 +9,11 @@ import {
   parentHref,
   parentLabel,
   navCellsFor,
+  roomFor,
   subnavFor,
   visibleItems,
+  visibleRooms,
+  wearsRooms,
   wearsSharedChrome,
 } from '../../../src/lib/nav/site-nav';
 
@@ -51,11 +55,11 @@ describe('parentHref — the common way back', () => {
     expect(parentHref('/jkai/daydreams/feed')).toBe('/jkai/daydreams');
   });
 
-  it('answers the brief: research goes back to jkai', () => {
-    // John's own example. /jkai/research 308s to /research, but where it
-    // belongs did not move.
-    expect(parentHref('/research')).toBe('/jkai');
-    expect(parentLabel('/research')).toBe('jkai');
+  it('files research in a room rather than under jkai', () => {
+    // It used to walk up to /jkai, because the jkai strip was the only place
+    // that listed it. It is in Know now, and the room cell is the way up.
+    expect(parentHref('/research')).toBeNull();
+    expect(roomFor('/research')?.id).toBe('know');
     expect(parentHref('/research/abc123')).toBe('/research');
   });
 
@@ -166,15 +170,20 @@ describe('isItemActive', () => {
 });
 
 describe('the bar is never empty', () => {
-  it('shows the site strip on the main page and every top-level page', () => {
+  it('shows a page with no strip of its own its room-mates', () => {
     // The regression this guards: sections without children rendered an empty
-    // band, so /, /blog, /projects and /releases lost the nav the site
-    // has always had. The brief opens by naming that bar as the thing to keep.
-    for (const p of ['/', '/blog', '/projects', '/releases']) {
-      const cells = navCellsFor(p, true).map((i) => i.href);
-      expect(cells.length, `${p} rendered an empty nav bar`).toBeGreaterThan(3);
-      expect(cells).toContain('/projects');
-    }
+    // band, so /blog, /projects and /releases lost their nav.
+    expect(navCellsFor('/blog', true).map((i) => i.href)).toEqual(['/projects', '/blog', '/admin/content/blog']);
+    expect(navCellsFor('/projects', true).map((i) => i.href)).toContain('/blog');
+    expect(navCellsFor('/releases', true).map((i) => i.href)).toContain('/admin');
+    expect(navCellsFor('/trips', true).map((i) => i.href)).toContain('/health');
+  });
+
+  it('leaves the main page to the room cells', () => {
+    // No strip: SiteHeader draws one cell per room there instead, so the bar
+    // is five menus wide rather than twenty links long.
+    expect(navCellsFor('/', true)).toEqual([]);
+    expect(wearsRooms(true)).toBe(true);
   });
 
   it('shows the SECTION strip where a section has one', () => {
@@ -194,19 +203,21 @@ describe('the bar is never empty', () => {
   });
 });
 
-describe('the jkai menu anchors Trips', () => {
-  const jkai = JKAI_ITEM;
-
-  it('offers jkai, Daydreams, Trips and the Wish list under the jkai cell', () => {
-    expect(jkai.children?.map((c) => c.href)).toEqual(['/jkai', '/jkai/daydreams', '/trips', '/home/wishlist']);
+describe('the jkai cell is the assistant, not a drawer', () => {
+  it('carries no menu: what hung under it is filed in a room', () => {
+    expect(JKAI_ITEM.children).toBeUndefined();
+    expect(roomFor('/trips/abc')?.id).toBe('life');
+    expect(roomFor('/home/wishlist')?.id).toBe('life');
+    expect(roomFor('/jkai/daydreams/watches')?.id).toBe('know');
   });
 
-  it('lights the jkai cell on a trip and walks a trip up to jkai', () => {
-    expect(isItemActive(jkai, '/trips/abc')).toBe(true);
-    expect(isItemActive(jkai, '/tripsy')).toBe(false);
+  it('lights on jkai only, and a trip walks up to Trips and no further', () => {
+    expect(isItemActive(JKAI_ITEM, '/jkai/canvas')).toBe(true);
+    expect(isItemActive(JKAI_ITEM, '/trips/abc')).toBe(false);
     expect(activeSection('/trips/abc')?.id).toBe('trips');
-    expect(parentHref('/trips')).toBe('/jkai');
-    expect(parentLabel('/trips')).toBe('jkai');
+    // The room cell is the way up from a room's page; a back cell to jkai
+    // would say Trips lives under the assistant, which is the drawer again.
+    expect(parentHref('/trips')).toBeNull();
     expect(parentHref('/trips/abc')).toBe('/trips');
   });
 
@@ -215,12 +226,62 @@ describe('the jkai menu anchors Trips', () => {
     expect(navCellsFor('/health', true).map((c) => c.href)).not.toContain('/jkai');
   });
 
-  it('gives a member only the menu rows they can open, and none to a visitor', () => {
+  it('gives a member the cell where their grants reach under it, and none to a visitor', () => {
     expect(visibleItems([JKAI_ITEM], false)).toEqual([]);
-    const member = visibleItems([JKAI_ITEM], false, ['/jkai/daydreams/impact'])[0];
-    expect(member?.href).toBe('/jkai/daydreams/impact');
-    expect(member?.children?.map((c) => c.href)).toEqual(['/jkai/daydreams/impact']);
-    const noRows = visibleItems([JKAI_ITEM], false, ['/jkai/notes'])[0];
-    expect(noRows?.children).toBeUndefined();
+    expect(visibleItems([JKAI_ITEM], false, ['/jkai/daydreams/impact'])[0]?.href).toBe('/jkai/daydreams/impact');
+  });
+});
+
+describe('rooms', () => {
+  it('files every destination in exactly one room', () => {
+    // `roomFor` takes the first room with a matching item. If two rooms could
+    // claim a page, which cell the bar wears would depend on declaration order.
+    for (const room of ROOMS) {
+      for (const item of room.items) {
+        const claimed = ROOMS.filter((r) => r.items.some((i) => isItemActive(i, item.href)));
+        expect(claimed.map((r) => r.id), `${item.href} is claimed by more than one room`).toEqual([room.id]);
+        const lit = room.items.filter((i) => isItemActive(i, item.href));
+        expect(lit.length, `${item.href} lit ${lit.length} rows in ${room.id}`).toBe(1);
+      }
+    }
+  });
+
+  it('gives every section a room, bar the assistant itself', () => {
+    // A section outside every room has a bar with no way across the site.
+    for (const s of SECTIONS) {
+      if (s.id === 'jkai') continue;
+      expect(roomFor(s.rootHref), `${s.rootHref} is in no room`).toBeDefined();
+    }
+    expect(roomFor('/jkai')).toBeUndefined();
+    expect(roomFor('/')).toBeUndefined();
+  });
+
+  it('splits the two halves of /admin and of /home between rooms', () => {
+    expect(roomFor('/admin/ops/costs')?.id).toBe('run');
+    expect(roomFor('/admin/content/blog/new')?.id).toBe('show');
+    expect(roomFor('/home/people')?.id).toBe('life');
+    expect(roomFor('/jkai/canvas/abc')?.id).toBe('make');
+    expect(roomFor('/jkai/builds/42')?.id).toBe('make');
+    expect(roomFor('/deepdive/abc')?.id).toBe('know');
+  });
+
+  it('gives the owner five rooms and a visitor none', () => {
+    expect(wearsRooms(true)).toBe(true);
+    expect(visibleRooms(true).map((r) => r.id)).toEqual(['show', 'life', 'know', 'make', 'run']);
+    // Three pages do not need five menus.
+    expect(wearsRooms(false)).toBe(false);
+    expect(navCellsFor('/', false).map((i) => i.href)).toEqual(['/projects', '/blog', '/health']);
+    expect(navCellsFor('/blog', false).map((i) => i.href)).toEqual(['/projects', '/blog', '/health']);
+  });
+
+  it('offers a member only the rooms they can open something in', () => {
+    const reach = ['/jkai/notes', '/research', '/news', '/trips'];
+    expect(wearsRooms(false, reach)).toBe(true);
+    expect(visibleRooms(false, reach).map((r) => r.id)).toEqual(['show', 'life', 'know']);
+    expect(visibleRooms(false, reach).find((r) => r.id === 'know')?.items.map((i) => i.href)).toEqual([
+      '/news',
+      '/research',
+      '/jkai/notes',
+    ]);
   });
 });
