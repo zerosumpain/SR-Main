@@ -20,9 +20,25 @@
   // The desk carries two halves now. Filtering by lane is what stops twenty
   // government announcements burying the technical wire, or the reverse.
   const laneOf = new Map(NEWS_SOURCE_DEFS.map((def) => [def.id as NewsSource, def.lane]));
-  const visibleSources = $derived(
-    NEWS_SOURCE_DEFS.filter((def) => lane === 'all' || def.lane === lane),
-  );
+  const LANES = [['tech', 'Technical'], ['public', 'Public sector'], ['interests', 'Interests']] as const;
+
+  // Lane and source share ONE picker: a lane is just a coarser source. The
+  // toolbar used to spend a button on every lane and every source, which grew a
+  // cell per row added to `NEWS_SOURCE_DEFS` and buried the search box.
+  const scope = $derived(source !== 'all' ? source : lane !== 'all' ? `lane:${lane}` : 'all');
+
+  function pickScope(value: string) {
+    if (value.startsWith('lane:')) {
+      lane = value.slice(5) as NewsLane;
+      source = 'all';
+    } else if (value === 'all') {
+      lane = 'all';
+      source = 'all';
+    } else {
+      source = value as NewsSource;
+      lane = laneOf.get(source) ?? 'all';
+    }
+  }
 
   // Opening the article from the row is a read too. Rows opened this visit are
   // marked at once; the server records them for next time.
@@ -211,38 +227,30 @@
     </header>
 
     <div class="desk-tools" data-sveltekit-noscroll>
-      <div class="lanes" role="group" aria-label="Filter lane">
-        {#each [['all', 'Everything'], ['tech', 'Technical'], ['public', 'Public sector'], ['interests', 'Interests']] as const as [value, label] (value)}
-          <button
-            type="button"
-            aria-pressed={lane === value}
-            class:active={lane === value}
-            onclick={() => { lane = value; source = 'all'; }}
-          >{label}</button>
-        {/each}
-      </div>
-      <div class="filters" role="group" aria-label="Filter source">
-        <button type="button" aria-pressed={source === 'all'} class:active={source === 'all'} onclick={() => (source = 'all')}>All</button>
-        {#each visibleSources as def (def.id)}
-          <button
-            type="button"
-            aria-pressed={source === def.id}
-            class:active={source === def.id}
-            onclick={() => (source = def.id)}
-          >{def.label}</button>
-        {/each}
-      </div>
-      <nav class="sort-tabs" aria-label="Order stories">
-        <span>Order</span>
-        <a href={sortHref('time')} aria-current={data.sort === 'time' ? 'page' : undefined}>Time</a>
-        <a href={sortHref('heat')} aria-current={data.sort === 'heat' ? 'page' : undefined} title="Standing within each wire, blended with recency — comparable across sources">Heat</a>
-        <a href={sortHref('points')} aria-current={data.sort === 'points' ? 'page' : undefined} title="Raw votes. Ars Technica reports none.">Points</a>
-      </nav>
       <label class="search">
         <span>Find</span>
         <input type="search" bind:value={query} placeholder="title, tag, source…" />
       </label>
-      <a class="refresh" data-sveltekit-preload-data="off" href="/news?view={data.feed.view}&sort={data.sort}&limit={data.limit}&fresh=1" aria-label="Refresh news sources">Refresh ↻</a>
+      <label class="source-pick">
+        <span>From</span>
+        <select value={scope} onchange={(e) => pickScope(e.currentTarget.value)} aria-label="Filter by lane or source">
+          <option value="all">Everything</option>
+          {#each LANES as [laneId, laneLabel] (laneId)}
+            <optgroup label={laneLabel}>
+              <option value="lane:{laneId}">All {laneLabel.toLowerCase()}</option>
+              {#each NEWS_SOURCE_DEFS.filter((def) => def.lane === laneId) as def (def.id)}
+                <option value={def.id}>{def.label}</option>
+              {/each}
+            </optgroup>
+          {/each}
+        </select>
+      </label>
+      <nav class="sort-tabs" aria-label="Order stories">
+        <a href={sortHref('time')} aria-current={data.sort === 'time' ? 'page' : undefined}>Time</a>
+        <a href={sortHref('heat')} aria-current={data.sort === 'heat' ? 'page' : undefined} title="Standing within each wire, blended with recency — comparable across sources">Heat</a>
+        <a href={sortHref('points')} aria-current={data.sort === 'points' ? 'page' : undefined} title="Raw votes. Ars Technica reports none.">Points</a>
+      </nav>
+      <a class="refresh" data-sveltekit-preload-data="off" href="/news?view={data.feed.view}&sort={data.sort}&limit={data.limit}&fresh=1" aria-label="Refresh news sources" title="Refresh news sources">↻</a>
     </div>
 
     {#if data.feed.view === 'for-you'}
@@ -381,41 +389,24 @@
   .view-tabs a { padding: 9px 16px; border-right: 1px solid var(--line-strong); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); text-decoration: none; }
   .view-tabs a:last-child { border-right: 0; }
   .view-tabs a[aria-current='page'] { background: var(--accent); color: var(--bg); }
-  /* TWO rows at every width, and the single desktop row is not coming back.
-     The toolbar's cells are what the desk filters ON — three lanes, then one
-     button per registered source — followed by how it is ORDERED. With six
-     sources that row's own minimum is ~1490px against a `.desk` capped at
-     1368, so the five-track version overflowed at EVERY desktop width and
-     `.hs`'s `overflow-x: hidden` clipped the search box and Refresh off the
-     right-hand edge rather than scrolling to them. Below 1200 it reflowed and
-     looked fine, which is why this only ever reported as a desktop bug.
-     `max-content` is what made it unfixable by shrinking: a wrappable
-     `.filters` still reports its UNWRAPPED width to a max-content track, so
-     the cells could never fold. A source is a row in `NEWS_SOURCE_DEFS` and
-     that list is meant to grow, so the layout must not encode its length.
-
-     Column 1 holds `.lanes` over `.sort-tabs`, so its `max-content` is the
-     wider of the two and one hairline runs down both rows; `.filters` spans
-     the rest of row one and wraps inside its own cell as sources are added. */
-  .desk-tools { display: grid; grid-template-columns: max-content minmax(180px, 1fr) max-content; align-items: stretch; border-bottom: 1px solid var(--line-strong); }
-  .filters { display: flex; flex-wrap: wrap; align-items: stretch; min-width: 0; grid-column: 2 / -1; border-bottom: 1px solid var(--line-strong); }
-  .lanes { display: flex; align-items: stretch; border-right: 1px solid var(--line-strong); border-bottom: 1px solid var(--line-strong); }
-  .lanes button { padding: 13px 15px; border: 0; border-right: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; }
-  .lanes button:last-child { border-right: 0; }
-  .lanes button:hover, .lanes button.active { color: var(--accent-ink); background: var(--accent-tint-04); }
-  .filters button, .refresh, .sort-tabs a, .sort-tabs > span { padding: 13px 15px; border: 0; border-right: 1px solid var(--line-strong); background: transparent; color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; cursor: pointer; text-decoration: none; }
-  .filters button:hover, .filters button.active, .refresh:hover, .sort-tabs a:hover, .sort-tabs a[aria-current='page'] { color: var(--accent); background: var(--accent-tint-04); }
-  /* The seam between column one and the search cell is drawn ONCE, here, so it
-     lands on the column edge directly under `.lanes`' own right border. Left to
-     `.search` it would have sat at the end of `Points` instead, leaving two
-     hairlines a cell-width apart on a row that is meant to read as one band. */
-  .sort-tabs { display: flex; align-items: stretch; border-right: 1px solid var(--line-strong); }
-  .sort-tabs a:last-child { border-right: 0; }
-  .sort-tabs > span { display: flex; align-items: center; color: var(--text-ghost); cursor: default; }
-  .search { display: flex; align-items: center; gap: 9px; padding: 0 12px; border-right: 1px solid var(--line-strong); }
-  .search span { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-ghost); }
+  /* ONE row: search takes the slack, then the source picker, the order, and
+     refresh. Lanes and sources live in a single <select> so the row's width no
+     longer grows with `NEWS_SOURCE_DEFS` — the old two-row grid of a button per
+     lane and per source was the clutter. */
+  .desk-tools { display: flex; align-items: stretch; border-bottom: 1px solid var(--line-strong); }
+  .search { flex: 1; display: flex; align-items: center; gap: 9px; min-width: 0; padding: 0 12px 0 8px; border-right: 1px solid var(--line-strong); }
+  .search span, .source-pick span { font-family: var(--font-mono); font-size: var(--fs-label-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-ghost); }
   .search input { width: 100%; min-width: 0; padding: 11px 0; border: 0; outline: 0; background: transparent; color: var(--text-primary); font-family: var(--font-body); font-size: var(--fs-body); }
-  .refresh { display: flex; align-items: center; border-right: 0; }
+  .source-pick { display: flex; align-items: center; gap: 9px; padding: 0 0 0 12px; border-right: 1px solid var(--line-strong); }
+  .source-pick { position: relative; }
+  .source-pick::after { content: ''; position: absolute; right: 14px; top: 50%; width: 6px; height: 6px; border-right: 1.5px solid var(--accent); border-bottom: 1.5px solid var(--accent); transform: translateY(-70%) rotate(45deg); pointer-events: none; }
+  .source-pick select { align-self: stretch; padding: 0 34px 0 0; border: 0; border-radius: 0; background: transparent; appearance: none; color: var(--text-primary); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+  .source-pick select:hover { color: var(--accent); }
+  .sort-tabs { display: flex; align-items: stretch; border-right: 1px solid var(--line-strong); }
+  .sort-tabs a, .refresh { display: flex; align-items: center; padding: 13px 15px; border-right: 1px solid var(--line-strong); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--fs-label-xs); letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; text-decoration: none; }
+  .sort-tabs a:last-child, .refresh { border-right: 0; }
+  .refresh { font-size: var(--fs-body); }
+  .sort-tabs a:hover, .sort-tabs a[aria-current='page'], .refresh:hover { color: var(--accent); background: var(--accent-tint-04); }
   .story-list { margin: 0; padding: 0; list-style: none; }
   .story { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; border-bottom: 1px solid var(--line-hair); transition: background var(--t-fast) var(--ease-out); }
   .story:hover { background: var(--accent-tint-04); }
@@ -464,19 +455,8 @@
   .empty { padding: 54px 12px; border-bottom: 1px solid var(--line-strong); font-size: var(--fs-body); color: var(--text-muted); }
   @media (max-width: 1200px) {
     .desk-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .desk-tools { grid-template-columns: auto minmax(180px, 1fr) auto; }
-    .lanes, .filters { grid-column: 1 / -1; }
-    .lanes { border-right: 0; }
   }
   @media (max-width: 780px) {
-    /* The search cell is the only elastic one on this row, so its FLOOR decides
-       whether the row fits at all: `Order Time Heat Points` is 280 fixed pixels
-       and Refresh another 104, which against a 180px floor needs 564 in a band
-       that is only 560 wide at a 600px window. Those four pixels were clipped,
-       never scrolled — the same `overflow-x: hidden` that hid the desktop
-       toolbar. 110 is under the 137 the narrowest window using this row can
-       spare, so the floor never binds and the cell simply flexes. */
-    .desk-tools { grid-template-columns: auto minmax(110px, 1fr) auto; }
     .lede-inner { grid-template-columns: 1fr; gap: 24px; }
     .story { grid-template-columns: 1fr; }
     .story-reader { grid-template-columns: 32px 34px minmax(0, 1fr); gap: 10px; padding: 11px 4px 7px; }
@@ -485,19 +465,16 @@
     .story-action { min-height: 36px; }
   }
   @media (max-width: 560px) {
-    .desk-tools { grid-template-columns: minmax(0, 1fr) auto; }
-    .filters button { padding-inline: 8px; }
-    .filters > :last-child { border-right: 0; }
-    .lanes button { flex: 1; padding-inline: 8px; }
-    /* Four lanes do not fit one phone row: two by two. */
-    .lanes { display: grid; grid-template-columns: 1fr 1fr; }
-    .lanes button:nth-child(2n) { border-right: 0; }
-    .lanes button:nth-child(-n + 2) { border-bottom: 1px solid var(--line-strong); }
-    /* Full-bleed here, so the column seam it draws above would be a stray tick
-       against the right-hand edge of the band — the same reason `.lanes` drops
-       its own right border at 1200. */
-    .sort-tabs { grid-column: 1 / -1; border-right: 0; border-bottom: 1px solid var(--line-strong); }
-    .search { border-right: 1px solid var(--line-strong); }
+    /* Two rows: search + refresh, then the picker beside the order. Refresh moves
+       up so the picker keeps enough width to show its whole value. */
+    .desk-tools { flex-wrap: wrap; }
+    .search { order: 1; flex: 1 0 70%; border-bottom: 1px solid var(--line-strong); }
+    .refresh { order: 2; border-bottom: 1px solid var(--line-strong); }
+    .source-pick { order: 3; flex: 1 1 140px; min-width: 0; padding-left: 8px; }
+    .source-pick span { display: none; }
+    .source-pick select { flex: 1; min-width: 0; }
+    .sort-tabs { order: 4; border-right: 0; }
+    .sort-tabs a { padding-inline: 11px; }
   }
   /* The title and the five feed tabs stop sharing a line at 620, not 520, and
      the deciding word is FAVOURITES. Every other heading here is two or three
