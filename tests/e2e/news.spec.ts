@@ -8,9 +8,9 @@ test('news controls preserve the desk, filters and scroll without a page transit
   await expect(page.locator('.story').first()).toBeVisible();
   // SSR renders the controls before hydration attaches their handlers.
   await expect(async () => {
-    const filter = page.getByRole('button', { name: 'Hacker News', exact: true });
-    await filter.click();
-    await expect(filter).toHaveAttribute('aria-pressed', 'true', { timeout: 500 });
+    const picker = page.getByRole('combobox', { name: 'Filter by lane or source' });
+    await picker.selectOption('hacker-news');
+    await expect(page.locator('.story-source').first()).toHaveText('HN', { timeout: 500 });
   }).toPass();
   await page.getByRole('searchbox').fill('hacker');
   await page.locator('.desk').evaluate((element) => element.scrollIntoView({ behavior: 'instant' }));
@@ -32,7 +32,7 @@ test('news controls preserve the desk, filters and scroll without a page transit
     await expect(page).toHaveURL(new RegExp(`view=${view.toLowerCase()}`));
     await expect(page.locator('.desk')).toHaveAttribute('aria-busy', 'false');
     await expect(page.getByRole('searchbox')).toHaveValue('hacker');
-    await expect(page.getByRole('button', { name: 'Hacker News', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('combobox', { name: 'Filter by lane or source' })).toHaveValue('hacker-news');
     await expect(page.locator('.news-lede')).toHaveAttribute('data-preserved', 'yes');
     expect(Math.abs(await page.evaluate(() => window.scrollY) - scroll)).toBeLessThan(3);
   }
@@ -69,12 +69,11 @@ test('Ars stories open in the reader and retain their source when saved', async 
   test.setTimeout(120_000);
   await page.goto('/news');
   await expect(async () => {
-    const filter = page.getByRole('button', { name: 'Ars Technica', exact: true });
-    await filter.click();
-    await expect(filter).toHaveAttribute('aria-pressed', 'true', { timeout: 500 });
+    await page.getByRole('combobox', { name: 'Filter by lane or source' }).selectOption('ars-technica');
+    await expect(page.locator('.story-source').first()).toHaveText('ARS', { timeout: 500 });
   }).toPass();
   await expect(page.locator('.story').first()).toContainText('Unscored');
-  const reader = page.locator('.story-reader').first();
+  const reader = page.locator('.story').first().getByRole('link', { name: /^Read and summarise/ });
   const href = (await reader.getAttribute('href'))!;
   expect(href).toMatch(/^\/news\/ars-technica\//);
   await reader.click();
@@ -88,7 +87,7 @@ test('Ars stories open in the reader and retain their source when saved', async 
   }
   try {
     await page.goto('/news?view=favourites');
-    await expect(page.locator(`a.story-reader[href="${href}"]`)).toBeVisible();
+    await expect(page.locator(`a[href="${href}"]`)).toBeVisible();
   } finally {
     if (!wasSaved) {
       const restored = await page.request.post('/api/news/actions', {
