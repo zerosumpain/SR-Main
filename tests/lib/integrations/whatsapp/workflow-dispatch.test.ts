@@ -17,7 +17,7 @@ vi.mock('drizzle-orm', () => ({ eq: vi.fn() }));
 // The owner's number drives the owner-digit comparison. Stub it so
 // the real approval-notify import chain (db, run-notifications, tokens) stays
 // out of this unit test.
-vi.mock('$lib/integrations/whatsapp/approval-notify', () => ({ getOwnerPhone: () => '+447359228511' }));
+vi.mock('$lib/integrations/whatsapp/approval-notify', () => ({ getOwnerPhone: () => '+447700900123' }));
 
 // The run itself starts through the shared start path (start-run.ts, tested with
 // the event bus); here we only assert what this dispatcher hands it.
@@ -72,7 +72,7 @@ import {
   WA_RESERVED_KEYWORDS,
 } from '$lib/integrations/whatsapp/workflow-dispatch';
 
-const OWNER = '447359228511';
+const OWNER = '447700900123';
 const NON_OWNER = '19998887777';
 
 beforeEach(() => {
@@ -146,9 +146,9 @@ describe('reserved words + owner helpers', () => {
   });
 
   it('owner comparison is digit-normalised', () => {
-    expect(isOwnerSender('447359228511')).toBe(true);
-    expect(isOwnerSender('+44 7359 228511')).toBe(true);
-    expect(isOwnerSender('447359228511@s.whatsapp.net')).toBe(true);
+    expect(isOwnerSender('447700900123')).toBe(true);
+    expect(isOwnerSender('+44 7700 900123')).toBe(true);
+    expect(isOwnerSender('447700900123@s.whatsapp.net')).toBe(true);
     expect(isOwnerSender(NON_OWNER)).toBe(false);
   });
 });

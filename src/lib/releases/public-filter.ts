@@ -120,7 +120,7 @@ const API_PATH_RE = /\/api\//i;
  * Personal data quoted in a summary.
  *
  * Caught in production: a WhatsApp JID fix whose summary quoted the real
- * number it was failing on — "Panel-formatted numbers like '+44 7359228511'
+ * number it was failing on — "Panel-formatted numbers like '+44 7700900123'
  * retained the space". Nothing else in this module came close to catching it.
  * It is not a secret, an env var, a host or a path; it is simply a phone
  * number sitting in ordinary prose, and the only reason it was in the commit
