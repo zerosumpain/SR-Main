@@ -4,6 +4,7 @@
   import { activeSection, isSectionActive, reachableSections } from './admin-nav';
   import JkaiMenu from '../JkaiMenu.svelte';
   import RoomMenu from '../RoomMenu.svelte';
+  import { homeHoverOpen, mapHoverLeave } from '$lib/nav/nav-map.svelte';
   import { JKAI_ITEM, visibleItems } from '$lib/nav/site-nav';
 
   const path = $derived(page.url.pathname);
@@ -66,7 +67,14 @@
   <!-- Top-left on every page, sitewide. NOT token-threaded: it leaves admin for
        the public site, where a ?token= is meaningless and would only follow the
        reader around. -->
-  <a href="/" class="admin-home" aria-label="Home" title="Home">
+  <a
+    href="/"
+    class="admin-home"
+    aria-label="Home"
+    title="Home"
+    onpointerenter={homeHoverOpen}
+    onpointerleave={mapHoverLeave}
+  >
     <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
       <path
         d="M2 7.2 8 2.2l6 5M3.4 6v7.3h9.2V6"

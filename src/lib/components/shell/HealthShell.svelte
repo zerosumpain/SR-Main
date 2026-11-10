@@ -27,6 +27,7 @@
   import SiteHeader from '$lib/components/SiteHeader.svelte';
   import JkaiMenu from '$lib/components/JkaiMenu.svelte';
   import RoomMenu from '$lib/components/RoomMenu.svelte';
+  import { homeHoverOpen, mapHoverLeave } from '$lib/nav/nav-map.svelte';
   import { currentIsOwner, currentPath } from '$lib/nav/page-path';
   import { currentReach } from '$lib/nav/reach';
   import { JKAI_ITEM, isItemActive, parentHref, parentLabel, subnavFor, visibleItems } from '$lib/nav/site-nav';
@@ -151,7 +152,14 @@
       <div class="hs-head-left">
       <!-- Top-left on every page in the site, this family included. An icon,
            not a word: the one destination that never needs naming. -->
-      <a class="hs-home" href="/" aria-label="Home" title="Home">
+      <a
+        class="hs-home"
+        href="/"
+        aria-label="Home"
+        title="Home"
+        onpointerenter={homeHoverOpen}
+        onpointerleave={mapHoverLeave}
+      >
         <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
           <path
             d="M2 7.2 8 2.2l6 5M3.4 6v7.3h9.2V6"

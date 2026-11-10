@@ -51,6 +51,13 @@ Life, Know, Make, Run; `ROOMS` in the manifest) and opens that room with the
 other four across the top. A new top-level destination is one row in one room;
 never a child of the jkai cell.
 
+Beside it sits the map (`NavMap`): hover the home icon, press `/`, or take a
+room menu's last row. Empty it shows all five rooms and Lately; typed in, it
+goes to a matching nav row or hands the line to jkai. It indexes the manifest
+only (`src/lib/nav/go.ts`), so a page is findable once it has a nav row. A new
+bar wires its home icon with `homeHoverOpen` / `mapHoverLeave` from
+`$lib/nav/nav-map.svelte`.
+
 Every page wears this, in this order. Building a new page:
 
 1. `src/lib/nav/site-nav.ts` is the ONLY thing that decides where "up" is —
