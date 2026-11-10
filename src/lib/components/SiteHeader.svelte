@@ -32,6 +32,7 @@
   import type { Snippet } from 'svelte';
   import JkaiMenu from './JkaiMenu.svelte';
   import RoomMenu from './RoomMenu.svelte';
+  import { homeHoverOpen, mapHoverLeave } from '$lib/nav/nav-map.svelte';
   import { currentPath } from '$lib/nav/page-path';
   import {
     activeSection,
@@ -143,6 +144,8 @@
       href="/"
       class="hdr-home"
       aria-label="Home"
+      onpointerenter={homeHoverOpen}
+      onpointerleave={mapHoverLeave}
       aria-current={atHome ? 'page' : undefined}
       title="Home"
     >

@@ -48,6 +48,29 @@ Adding a destination means adding one row to one room. A page's room is worked
 out from those rows (`roomFor`), so a section never declares it. Do not hang a
 destination under the jkai cell again: that drawer is what rooms replaced.
 
+## The map, and go-or-ask
+
+Added 2026-11-10. Wherever the room cell is worn, the whole site is one sheet
+away (`NavMap.svelte`, drawn beside the room cell):
+
+- **Three ways in.** Rest a mouse on the home icon, press `/` anywhere outside
+  a field, or take the last row of any room menu ("Everywhere, or ask"). The
+  home icon is still a link home: hovering shows the map, clicking goes.
+- **Empty, it is the map**: the five rooms side by side (two abreast on a
+  phone), the current place cut out, and above them **Lately** — the last few
+  places this browser visited (`localStorage`, never sent anywhere).
+- **Typed in, it is go-or-ask.** Every word typed must begin a word of a
+  place's label, its room or section, or its address (`placesFor` and
+  `matchPlaces` in `src/lib/nav/go.ts`). Enter goes to the first match. For
+  the owner the last row hands the line to jkai as a question (`askHref`), so
+  a line that names no place is asked.
+- **A place is a nav row.** The box indexes the manifest (rooms, the jkai
+  cell, each section's sub-nav) and nothing else, so it can never reach what
+  the bar itself would not show that viewer. A route with no nav row is not a
+  place; give it a row and it is found.
+
+A viewer who wears no rooms has no map: three destinations need no index.
+
 ## Adding a page
 
 1. **Put it in the manifest.** `src/lib/nav/site-nav.ts` is the only thing that

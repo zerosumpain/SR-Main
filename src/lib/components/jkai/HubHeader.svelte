@@ -4,6 +4,7 @@
   import HubTokenStrip from './HubTokenStrip.svelte';
   import JkaiMenu from '../JkaiMenu.svelte';
   import RoomMenu from '../RoomMenu.svelte';
+  import { homeHoverOpen, mapHoverLeave } from '$lib/nav/nav-map.svelte';
   import { hub, setBpm, closeHubMenu, toggleHubMenu } from '$lib/jkai/hub-bus.svelte';
   import { openLauncher } from '$lib/jkai/launcher-bus.svelte';
   import { formatGbp } from '$lib/utils/cost-format';
@@ -271,7 +272,14 @@
       <!-- Top-left on every page of the site, this one included. The same house
            SiteHeader draws — path data copied verbatim so the two marks are the
            same shape, not two drawings of a house. -->
-      <a class="hdr-home" href="/" aria-label="Home" title="Home">
+      <a
+        class="hdr-home"
+        href="/"
+        aria-label="Home"
+        title="Home"
+        onpointerenter={homeHoverOpen}
+        onpointerleave={mapHoverLeave}
+      >
         <svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
           <path
             d="M2 7.2 8 2.2l6 5M3.4 6v7.3h9.2V6"

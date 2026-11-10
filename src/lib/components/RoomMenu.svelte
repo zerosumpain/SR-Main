@@ -18,10 +18,17 @@
    * It renders nothing for a viewer whose reach is too small for rooms (see
    * `wearsRooms`) — their bar is the flat strip.
    *
+   * The first one mounted on a page also draws the site map (`NavMap`), which
+   * the home icon and `/` open; the last row of every menu opens it too, for a
+   * touch screen that has neither a hover nor a key.
+   *
    * Opens like the jkai cell did: a mouse by hovering, a touch screen or a
    * keyboard by pressing the cell. Mount it OUTSIDE any scroller — a scroller
    * clips whatever drops below it.
    */
+  import { onDestroy } from 'svelte';
+  import NavMap from './NavMap.svelte';
+  import { navMap, openNavMap } from '$lib/nav/nav-map.svelte';
   import { isItemActive, roomFor, visibleRooms, wearsRooms } from '$lib/nav/site-nav';
 
   let {
@@ -98,6 +105,18 @@
     if (t?.closest('[data-room-menu]') !== root) close();
   }
   let root = $state<HTMLElement>();
+
+  // One map a page, drawn by whichever room cell got there first.
+  $effect(() => {
+    if (room && navMap.host === null) navMap.host = menuId;
+  });
+  onDestroy(() => {
+    if (navMap.host === menuId) navMap.host = null;
+  });
+  function showMap() {
+    close();
+    openNavMap();
+  }
 </script>
 
 <svelte:window onkeydown={onWindowKey} onpointerdown={onWindowPointer} />
@@ -161,9 +180,18 @@
             </li>
           {/each}
         </ul>
+        <button type="button" class="map-row" onclick={showMap}>
+          <span>Everywhere, or ask</span>
+          <kbd>/</kbd>
+        </button>
       </div>
     {/if}
   </nav>
+  <!-- Beside the cell, not in it: inside, resting on the map would count as
+       resting on the cell and open its menu over the top. -->
+  {#if navMap.host === menuId}
+    <NavMap {path} {isOwner} {reach} anchor={root} />
+  {/if}
 {/if}
 
 <style>
@@ -222,7 +250,8 @@
     background: none;
   }
   .room-cell:focus-visible,
-  .room-tab:focus-visible {
+  .room-tab:focus-visible,
+  .map-row:focus-visible {
     outline: 2px solid var(--accent-on-dark);
     outline-offset: -4px;
   }
@@ -329,6 +358,29 @@
   }
   .menu-row[aria-current='page'] .menu-meta {
     color: rgba(26, 16, 8, 0.6);
+  }
+  /* The way to the whole map: quieter than a destination, it is a tool. */
+  .map-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 11px 16px;
+    border: 0;
+    border-top: 1px solid rgba(237, 228, 212, 0.14);
+    background: rgba(237, 228, 212, 0.04);
+    cursor: pointer;
+    font-family: var(--font-code);
+    font-size: var(--fs-label-xs);
+    letter-spacing: 0.04em;
+    color: rgba(237, 228, 212, 0.62);
+  }
+  .map-row:hover {
+    color: var(--accent-on-dark);
+  }
+  .map-row kbd {
+    font: inherit;
+    color: var(--accent-on-dark);
   }
 
   /* Phone: the menu is a sheet the width of the bar, hung from the bar rather
