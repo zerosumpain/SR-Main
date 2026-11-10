@@ -254,7 +254,7 @@
 
   {#if n.act && (n.act.status === 'done' || n.act.status === 'undone' || n.act.status === 'sent')}
     <div class="did" class:undone={n.act.status === 'undone'} class:draft={!!n.act.draft && n.act.status === 'done'}>
-      <p class="did-k">{n.act.status === 'undone' ? 'Undone' : n.act.status === 'sent' ? 'Sent' : n.act.draft ? 'Drafted' : 'Done'}</p>
+      <p class="did-k">{n.act.status === 'undone' ? 'Undone' : n.act.status === 'sent' ? 'Sent' : n.act.draft ? (n.act.auto ? 'Drafted for you' : 'Drafted') : n.act.auto ? 'Done for you' : 'Done'}</p>
       <p class="did-v">{n.act.status === 'undone' ? `Taken back: ${n.act.label.replace(/^(Add|Remind you|Move|Draft|Hold) /, (m) => m.toLowerCase())}` : n.act.label}</p>
       {#if n.act.draft && n.act.status === 'done'}
         <div class="draft-view">
@@ -275,13 +275,13 @@
 
   {#if sol && sol.state !== 'ready'}
     <div class="did" class:undone={sol.state === 'undone'}>
-      <p class="did-k">{sol.state === 'undone' ? 'Taken back' : 'Done'}</p>
+      <p class="did-k">{sol.state === 'undone' ? 'Taken back' : sol.auto ? 'Done for you' : 'Done'}</p>
       <p class="did-v">
         {sol.state === 'undone' ? `Taken back: ${sol.label}` : (sol.message ?? sol.label)}
         {#if sol.href && sol.state === 'done'} · <a href={sol.href} target={sol.href.startsWith('/') ? undefined : '_blank'} rel={sol.href.startsWith('/') ? undefined : 'noopener noreferrer'}>{sol.kind === 'track' ? 'See it on Solutions' : sol.kind === 'build' ? 'Open in the backlog' : 'Open it'}</a>{/if}
       </p>
       {#if sol.undoable}
-        <button type="button" class="link-btn" disabled={acting} onclick={() => solve('unsolve')}>{acting ? 'Taking it back…' : sol.kind === 'track' ? 'Stop tracking' : 'Turn them back on'}</button>
+        <button type="button" class="link-btn" disabled={acting} onclick={() => solve('unsolve')}>{acting ? 'Taking it back…' : sol.kind === 'track' ? 'Stop tracking' : sol.kind === 'watch' ? 'Stop watching' : 'Turn them back on'}</button>
       {/if}
     </div>
   {/if}

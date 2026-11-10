@@ -43,6 +43,13 @@
     await invalidateAll();
     busy = null;
   }
+
+  async function setLevel(kind: string, level: 'ask' | 'do') {
+    busy = kind;
+    await postThought({ action: 'set_autonomy', kind, level });
+    await invalidateAll();
+    busy = null;
+  }
 </script>
 
 <svelte:head><title>Solutions — Daydream</title></svelte:head>
@@ -64,7 +71,52 @@
   <section class="band">
     <div class="inner">
       <SectionHead
-        kicker="B / Trackers"
+        kicker="B / What jkai does by itself"
+        title={['Done first,', 'told after']}
+        strap="These steps are carried out when the note is written, and the note says so with an Undo. Undo two of a kind inside thirty days and that kind goes back to asking. Everything else waits for your tap."
+      />
+      <ul class="ladder">
+        {#each data.autonomy.ladder as r (r.kind)}
+          <li class="rung">
+            <div class="t-head">
+              <span class="t-label">{r.label}</span>
+              <span class="t-state" class:s-running={r.level === 'do'}>{r.level === 'do' ? 'Does it' : 'Asks first'}</span>
+            </div>
+            <p class="t-line">{r.does} {r.undo}</p>
+            {#if r.note}<p class="t-line">{r.note}</p>{/if}
+            <p class="t-meta">
+              {r.acted} in 30 days{r.undone ? `, ${r.undone} undone` : ''}
+              · <button type="button" class="link-btn" disabled={busy === r.kind} onclick={() => setLevel(r.kind, r.level === 'do' ? 'ask' : 'do')}>{r.level === 'do' ? 'Ask me first' : 'Do it by itself'}</button>
+            </p>
+          </li>
+        {/each}
+      </ul>
+      <p class="l-head">Always your tap</p>
+      <ul class="asks">
+        {#each data.autonomy.askOnly as a (a.label)}
+          <li><span class="t-label">{a.label}</span> {a.why}</li>
+        {/each}
+      </ul>
+      {#if data.autonomy.recent.length}
+        <p class="l-head">Lately, by itself</p>
+        <ol class="reg">
+          {#each data.autonomy.recent as e (e.thoughtId)}
+            <li class="row">
+              <span class="r-when" title={stamp(e.at)}>{day(e.at.slice(0, 10))}</span>
+              <span class="r-kind">{data.autonomy.ladder.find((r) => r.kind === e.kind)?.label ?? e.kind}</span>
+              <span class="r-what"><a href={`/jkai/daydreams?note=${encodeURIComponent(e.thoughtId)}`}>{e.title}</a></span>
+              <span class="r-state">{e.undoneAt ? 'Taken back' : e.restoredAt ? 'Back on' : 'Done'}</span>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="inner">
+      <SectionHead
+        kicker="C / Trackers"
         title={['Measured,', 'every day']}
         strap="A tracker follows one reading against a daily target and compares it with the 28 days before it began. A day with no reading is missing, not a miss. The result comes to you when it ends."
       />
@@ -99,7 +151,7 @@
   <section class="band">
     <div class="inner">
       <SectionHead
-        kicker="C / The register"
+        kicker="D / The register"
         title={['Everything,', 'newest first']}
         strap="Solutions, “Do it for me” steps and the ways a note was taken further."
       />
@@ -130,6 +182,8 @@
     color: var(--text-muted);
   }
   .trackers,
+  .ladder,
+  .asks,
   .reg {
     list-style: none;
     margin: 0;
@@ -137,9 +191,24 @@
     display: flex;
     flex-direction: column;
   }
-  .trackers {
+  .trackers,
+  .ladder {
     gap: 14px;
   }
+  .asks {
+    gap: 6px;
+    font-size: var(--fs-body-sm);
+    color: var(--text-secondary);
+  }
+  .l-head {
+    margin: 22px 0 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .rung,
   .tracker {
     border: 1px solid var(--line-hair);
     padding: 12px 14px;

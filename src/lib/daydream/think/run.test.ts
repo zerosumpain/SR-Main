@@ -46,10 +46,10 @@ describe('systemPrompt', () => {
     const p = systemPrompt({ ...base, question: health, set: 'private', identity: 'SOUL TEXT\n\nSurface: a daydream note.' });
     expect(p.startsWith('SOUL TEXT')).toBe(true);
     expect(p).toMatch(/This is a daydream cycle/);
-    expect(p).not.toMatch(/You are the thinking half/);
+    expect(p).not.toMatch(/You are the acting half/);
     expect(p.indexOf('OUTCOMES')).toBeGreaterThan(p.indexOf('SOUL TEXT'));
     // Core down: the task's own sentence, exactly as before.
-    expect(systemPrompt({ ...base, question: health, set: 'private', identity: '' })).toMatch(/^You are the thinking half/);
+    expect(systemPrompt({ ...base, question: health, set: 'private', identity: '' })).toMatch(/^You are the acting half/);
   });
 
   it('gives a research cycle one interest and the so-what rule', () => {
@@ -80,9 +80,12 @@ describe('systemPrompt', () => {
     expect(p).not.toContain(health.brief);
   });
 
-  it('tells the model that silence is fine and generic notes are worthless', () => {
+  it('tells the model to lead with the step and that generic notes are worthless', () => {
     const p = systemPrompt({ ...base, question: health, set: 'private' });
-    expect(p).toMatch(/Silence is fine/);
+    expect(p).toMatch(/LEAD WITH THE STEP/);
+    expect(p).toMatch(/BY ITSELF/);
+    // A watch is never promised as automatic: it stays a tap (`autonomy.ts`).
+    expect(p).not.toMatch(/tracker or a watch/);
     expect(p).toMatch(/your day is busy/);
     expect(p).toMatch(/CITE OR DIE/);
   });

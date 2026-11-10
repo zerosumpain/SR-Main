@@ -40,6 +40,7 @@ register({
       severity: { type: 'string', enum: ['info', 'warn', 'alert'] },
       dedupeKey: { type: 'string', description: 'Collapse repeats with this key inside the category floor' },
       minIntervalSeconds: { type: 'number', description: 'Not more often than this (combined with the category floor)' },
+      phoneOnly: { type: 'boolean', description: 'Skip WhatsApp for this raise, whatever the category routes: the iPhone only.' },
     },
     required: ['title', 'body'],
   },
@@ -57,6 +58,7 @@ register({
       severity,
       dedupeKey: typeof args.dedupeKey === 'string' ? args.dedupeKey : null,
       minIntervalSeconds: Number(args.minIntervalSeconds) || undefined,
+      ...(args.phoneOnly === true ? { channels: { whatsapp: false } } : {}),
     });
     return { success: result.reason !== 'error', data: deliveryReport(result) };
   },

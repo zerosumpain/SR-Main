@@ -35,7 +35,7 @@ import { localDay } from '../features/build';
 import { OUTCOMES, OUTCOME_ASK, questionAt, type Outcome, type Question } from './questions';
 import { MAX_TOOL_CALLS, RESEARCH_SITE_TOOLS, createToolbox, toolSetFor, type ToolSet } from './tools';
 import { MAX_NOTES, MAX_BODY_CHARS, parseReply, validateThinkOutput } from './audit';
-import { DAILY_RAISE_CAP, noteHref } from './notes';
+import { DAILY_RAISE_CAP, DAYDREAM_CHANNELS, noteHref } from './notes';
 import { countRaisedToday, supersedeOnTopic } from './notes.server';
 import { dayToStored } from './shelf';
 import { decideOnSubject, subjectLabel, type SubjectDecision } from './subjects';
@@ -47,6 +47,8 @@ import type { LedgerSession } from './correlate';
 import { tasteLines } from '../reasons';
 import { SITUATION_RULES } from './situation';
 import { SOLVE_SHAPES } from '../act/solution';
+import { NO_STEP_REASON, openStep } from '../act/loops';
+import { splitNarrative } from './explain';
 import { siteBlock, sitePages } from './capability-lines';
 import { loadTaste } from '../reasons.server';
 
@@ -67,6 +69,12 @@ export interface ThinkResult {
   notes: PersistResult & { proposed: number };
   /** Notes that reached `notifyOwner` and were raised. */
   notified: number;
+  /** Steps it carried out by itself before telling him (`act/standing.server.ts`). */
+  acted: number;
+  /** Notes with nothing to do, kept for the feed and the weekly digest. */
+  quiet: number;
+  /** Carried out by itself, but the push did not go. */
+  untold: number;
   /** What the subject rule did (`subjects.ts`): repeats folded into an
    *  earlier note, revisions written, older notes they archived. */
   subjects: { folded: number; revised: number; superseded: number };
@@ -172,8 +180,8 @@ export function systemPrompt(opts: {
   return [
     ...(identity ? [identity, '', '---', ''] : []),
     identity
-      ? "This is a daydream cycle, the thinking half of John's second brain. On a spare cycle you investigate ONE question with tools, then write at most two notes — or none."
-      : "You are the thinking half of John's second brain. On a spare cycle you investigate ONE question with tools, then write at most two notes — or none.",
+      ? "This is a daydream cycle, the acting half of John's second brain. On a spare cycle you investigate ONE question with tools, then write at most two notes. A note exists to get something DONE: it says what you found and carries the step that deals with it."
+      : "You are the acting half of John's second brain. On a spare cycle you investigate ONE question with tools, then write at most two notes. A note exists to get something DONE: it says what you found and carries the step that deals with it.",
     `Today is ${opts.today} (Europe/London).`,
     '',
     opts.summary ? SUMMARY_BRIEF : opts.question.brief,
@@ -185,7 +193,9 @@ export function systemPrompt(opts: {
     'WHAT IS WORTH SAYING:',
     '- Concrete anomalies and specific actionable proposals beat summaries. A double charge, a date clash, a tax code that changed, a sensor that stopped reporting, a relationship that tested significant — with the figures.',
     '- Generic notes are worthless and will be rated so: "your day is busy", "September carries several admin loads", counts of security emails, the shape of a graph.',
-    '- Silence is fine. {"notes": []} is the right answer to most cycles that find nothing specific.',
+    '- LEAD WITH THE STEP. Before writing a note ask: what should happen next, and can jkai do it? Only a note with a step interrupts him; a finding with nothing to do waits on the feed for a weekly digest. So look for the step — a reminder before the deadline, a reply drafted, a tracker on the habit, lights left on in an empty house turned off.',
+    '- Some steps jkai carries out BY ITSELF and tells him after, with an Undo: turning off lights when nobody is home, setting a reminder, starting a tracker, drafting (never sending) an email. Propose those whenever the evidence supports one — and only then: he will be told it was done, so a step that was not worth doing costs more than no note.',
+    '- {"notes": []} is still right for a cycle that finds nothing specific. Do not pad: a vague note with a made-up step is worse than silence.',
     '- On health, read what /health has concluded before proposing anything, and build on it rather than contradict it.',
     '- On money, the bank statement is the truth. Only bank and PayPal lines are payments; an email is a heads-up or a receipt about one; a bank top-up of PayPal funds PayPal payments and is not a purchase. Before calling anything a duplicate or an overcharge, find a separate ledger line for EVERY payment you count — and ask yourself how the note could be wrong before you write it.',
     ...(opts.set === 'research'
@@ -238,12 +248,12 @@ export function systemPrompt(opts: {
     '   PLAIN ENGLISH: he reads this on a phone between other things. Lead the body with what it means for him, then the figures. A statistic is said in words first — "no real link between X and Y (r −0.04 over 62 days)", never a bare "r=-0.04, n=62, p=0.783". No internal names (tool names, card ids, entity ids) in the title, body or action.',
     '   do (optional): when the action is something jkai can do for him with one tap, give it as one of these, so he can have it done. Every date must be one the body or action states; time "HH:MM" only if stated. Otherwise null.',
     ...KIND_SHAPES.map((k) => `     ${k}`),
-    '   solve: THE SOLUTION — the one press that makes the action happen, when "do" cannot. Be solutions-led: a note that names a step should almost always carry a "do" or a "solve". If the site cannot do it yet and it is digital, propose a build; if the step is physical (change a battery), give a "do" reminder instead. One of:',
+    '   solve: THE SOLUTION — the one press that makes the action happen, when "do" cannot. Be solutions-led: every note that names a step carries a "do" or a "solve" unless nothing here can carry it out. If the site cannot do it yet and it is digital, propose a build; if the step is physical (change a battery), give a "do" reminder instead. One of:',
     ...SOLVE_SHAPES.map((k) => `     ${k}`),
     '   until (optional): the last day this note is worth acting on — the event, deadline or renewal it is about, or when the pattern will be stale. A date on or after today. null if it keeps.',
     '   subject: what the note is about, as "<type>:<name>" — type one of merchant, device, sender, event, thing; name as it appears in your cards (e.g. "merchant:Sky", "device:front door camera", "sender:GitHub"). Reuse the key from SUBJECTS ALREADY COVERED when it is the same thing. Plans and correlations are keyed by code; leave it null for those.',
     '   changed (only when returning to a covered subject): one clause saying what is new since the earlier note, with the figure. Lead the body with it too. null otherwise.',
-    `4. At most ${MAX_NOTES} notes. Fewer, sharper.`,
+    `4. At most ${MAX_NOTES} notes. Fewer, sharper, each with its step.`,
   ].join('\n');
 }
 
@@ -268,6 +278,9 @@ export async function runThink(
     cards: 0,
     notes: { created: 0, updated: 0, suppressed: 0, muted: 0, alreadyRefuted: 0, protectedSkipped: 0, merged: 0, createdKeys: [], proposed: 0 },
     notified: 0,
+    acted: 0,
+    quiet: 0,
+    untold: 0,
     subjects: { folded: 0, revised: 0, superseded: 0 },
     skipped: null,
     focus: null,
@@ -471,39 +484,70 @@ export async function runThink(
     });
 
     // ── New notes → the owner ──
+    //
+    // Three things can happen to a new note. One whose step is on the autonomy
+    // ladder is CARRIED OUT and he is told it was done (`standing.server.ts`).
+    // One with a step waiting for his tap interrupts him, inside the day's
+    // allowance. One with nothing to do does not: it waits on the feed for the
+    // weekly digest (`loops.ts`). Notes with a press go first, so a finding
+    // never spends the allowance a step needed.
     if (persisted.createdKeys.length) {
-      const rows = await db
+      const found = await db
         .select({
           id: daydreamThoughts.id,
           kind: daydreamThoughts.kind,
           title: daydreamThoughts.title,
           narrative: daydreamThoughts.narrative,
           dedupeKey: daydreamThoughts.dedupeKey,
+          actions: daydreamThoughts.proposedActions,
         })
         .from(daydreamThoughts)
         .where(and(inArray(daydreamThoughts.dedupeKey, persisted.createdKeys), eq(daydreamThoughts.status, 'new')));
-      let budget = DAILY_RAISE_CAP - (await countRaisedToday(now));
+      const rows = found
+        .map((row) => ({ ...row, press: openStep(row.actions), next: splitNarrative(row.narrative).next }))
+        .sort((a, b) => Number(!!b.press) - Number(!!a.press));
+      const { chasesToday } = await import('../act/loops.server');
+      let budget = DAILY_RAISE_CAP - (await countRaisedToday(now)) - (await chasesToday(now).catch(() => 0));
+      const feedOnly = (id: string, reason: string) =>
+        db
+          .update(daydreamThoughts)
+          .set({ status: 'suppressed', channel: 'silent', suppressedReason: reason, updatedAt: now })
+          .where(eq(daydreamThoughts.id, id));
       for (const row of rows) {
-        if (budget <= 0) {
+        // Nothing to do, by tap or by itself: the feed, and the digest.
+        if (!row.press && !row.next) {
+          await feedOnly(row.id, NO_STEP_REASON);
+          result.quiet++;
+          continue;
+        }
+        // A standing order runs whatever the allowance says — it has its own
+        // daily cap, and something done is always told.
+        const { actStanding, doneWords } = await import('../act/standing.server');
+        const standing = await actStanding({ id: row.id, title: row.title, actions: row.actions }, now);
+        if (standing.acted) result.acted++;
+        if (!standing.acted && budget <= 0) {
           // Over the day's cap: kept on the feed, never `new` (compose would
           // send it) and never reviewed (`pendingReview` skips think kinds).
-          await db
-            .update(daydreamThoughts)
-            .set({ status: 'suppressed', channel: 'silent', suppressedReason: 'feed_only: daily cap', updatedAt: now })
-            .where(eq(daydreamThoughts.id, row.id));
+          await feedOnly(row.id, 'feed_only: daily cap');
           continue;
         }
         const sent = await notifyOwner({
           category: 'daydream',
-          title: row.title,
-          body: row.narrative ?? row.title,
+          title: standing.acted ? `Done: ${row.title}`.slice(0, 120) : row.title,
+          body: standing.acted ? `${doneWords(standing.kind, standing.message)}\n\n${row.narrative ?? ''}`.trim() : (row.narrative ?? row.title),
           url: noteHref(row.id),
           dedupeKey: row.dedupeKey,
-          data: { thoughtId: row.id, kind: row.kind },
+          channels: DAYDREAM_CHANNELS,
+          data: { thoughtId: row.id, kind: row.kind, ...(standing.acted ? { auto: standing.kind } : {}) },
         });
         if (sent.raised) {
           result.notified++;
           budget--;
+        } else if (standing.acted) {
+          // Done but not told: the note still says "Done for you" with its
+          // Undo on the feed. Loud here, because nothing else will say so.
+          console.error(`[daydream] think: acted on ${row.id} (${standing.kind}) but the push was not raised: ${sent.reason ?? 'not raised'}`);
+          result.untold++;
         }
         // Stamped either way, as `deliver.ts` does: a note that went out is
         // `delivered` on `push`, and one the route held back is silent with the

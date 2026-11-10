@@ -176,4 +176,15 @@ async function runAlerts(members: HouseholdMember[], bits: string[], details: Re
   } catch (err) {
     details.batteryError = errMsg(err).slice(0, 160);
   }
+  // Lights daydream turned off in an empty house come back on when someone is
+  // home (`daydream/act/standing.server.ts`). Here because this is the tick
+  // that learns of an arrival; a quiet call is one small read a minute.
+  try {
+    const { restoreAwayLights } = await import('$lib/daydream/act/standing.server');
+    const lights = await restoreAwayLights();
+    if (lights.restored || lights.dropped) details.awayLights = lights;
+    if (lights.restored) bits.push(`lights back on: ${lights.restored} note${lights.restored === 1 ? '' : 's'}`);
+  } catch (err) {
+    details.awayLightsError = errMsg(err).slice(0, 160);
+  }
 }

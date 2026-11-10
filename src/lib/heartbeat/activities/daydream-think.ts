@@ -93,13 +93,26 @@ export const daydreamThink: ActivityHandler = {
       console.error(`[daydream] tracker results not sent: ${errMsg(err)}`);
     }
 
+    // Open loops are chased, and Sunday's digest sent, here for the same
+    // reason (`act/loops.server.ts`): no model call, and a chase held back by
+    // a busy evening can miss the date it was for.
+    let chased = 0;
+    try {
+      const { chaseOpenLoops, sendWeeklyDigest } = await import('$lib/daydream/act/loops.server');
+      chased = (await chaseOpenLoops(now)).chased;
+      await sendWeeklyDigest(now);
+    } catch (err) {
+      console.error(`[daydream] open loops not chased: ${errMsg(err)}`);
+    }
+    const chasedBit = chased ? ` · ${chased} chased` : '';
+
     // Spare cycles means spare — ponder's two gates, unchanged.
     const running = (await listChatJobs()).filter((j) => j.status === 'running');
     if (running.length > 0) {
-      return { outcome: 'skipped', summary: `${running.length} job(s) in flight — not spare` };
+      return { outcome: 'skipped', summary: `${running.length} job(s) in flight — not spare${chasedBit}` };
     }
     if (await isUserActive(cfg.idleWindowMinutes * 60_000)) {
-      return { outcome: 'skipped', summary: 'owner active in the last few minutes' };
+      return { outcome: 'skipped', summary: `owner active in the last few minutes${chasedBit}` };
     }
 
     const model = await resolveDaydreamModel();
@@ -151,6 +164,10 @@ export const daydreamThink: ActivityHandler = {
         : []),
       ...(result.focus ? [`on: ${result.focus.slice(0, 60)}`] : []),
       ...(result.notified ? [`${result.notified} sent`] : []),
+      ...(result.acted ? [`${result.acted} done by itself`] : []),
+      ...(result.quiet ? [`${result.quiet} kept for the digest`] : []),
+      ...(result.untold ? [`${result.untold} done but NOT told (push failed)`] : []),
+      ...(chased ? [`${chased} chased`] : []),
       ...(queued.added || queued.merged
         ? [`backlog +${queued.added}${queued.merged ? ` (${queued.merged} merged)` : ''}`]
         : []),

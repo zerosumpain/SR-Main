@@ -103,11 +103,10 @@ export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   {
     id: 'daydream',
     label: 'Daydream',
-    description: 'Something the engine noticed on its spare cycles — an anomaly, a proposal, a plan.',
-    // Phone AND WhatsApp, like every alert that reached WhatsApp before: the
-    // ponder musings this replaces went there, and the owner rates them by
-    // replying. Either is one switch away on the phone.
-    whatsapp: true,
+    description: 'Something the engine noticed on its spare cycles and what it did or can do about it. iPhone only.',
+    // The phone only (owner, 2026-11-10). Every daydream raise also passes
+    // `DAYDREAM_CHANNELS`, which closes WhatsApp whatever a stored route says.
+    whatsapp: false,
     native: true,
     // Per NOTE, not per category: the think loop passes each note's own dedupe
     // key, so this only stops the same note being raised twice in a day. The

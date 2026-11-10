@@ -2,10 +2,18 @@ import type { PageServerLoad } from './$types';
 import { errMsg } from '$lib/daydream/types';
 import { loadRegisterRoom } from '$lib/daydream/register.server';
 import { registerSummary } from '$lib/daydream/register';
+import { ASK_ONLY, EMPTY_AUTONOMY, ladderView } from '$lib/daydream/act/autonomy';
+import { loadAutonomy } from '$lib/daydream/act/autonomy.server';
 
 // Owner-gated by hooks (the whole /jkai area is owner-only).
 export const load: PageServerLoad = async () => {
   const now = new Date();
+  // The ladder is read apart from the register: one failing must not blank the other.
+  const state = await loadAutonomy().catch((err) => {
+    console.error('[daydream] autonomy not read:', errMsg(err));
+    return EMPTY_AUTONOMY;
+  });
+  const autonomy = { ladder: ladderView(state, now), askOnly: ASK_ONLY, recent: state.log.slice(-8).reverse() };
   try {
     const room = await loadRegisterRoom(now);
     // A build's progress lives on the backlog: look each slug up once.
@@ -24,9 +32,9 @@ export const load: PageServerLoad = async () => {
         console.error('[daydream] register: backlog not read:', errMsg(err));
       }
     }
-    return { ...room, summary: registerSummary(room.entries, now), error: null as string | null };
+    return { ...room, autonomy, summary: registerSummary(room.entries, now), error: null as string | null };
   } catch (err) {
     console.error('[daydream] register load failed:', errMsg(err));
-    return { entries: [], trackers: [], summary: registerSummary([], now), error: errMsg(err) };
+    return { entries: [], trackers: [], autonomy, summary: registerSummary([], now), error: errMsg(err) };
   }
 };

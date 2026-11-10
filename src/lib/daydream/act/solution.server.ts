@@ -9,7 +9,7 @@
 // and the follow-ups use. The backlog arrives as `BacklogPorts` from the
 // route, for the module-cycle reason `follow.server.ts` gives.
 
-import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
+import { ownerActionPrincipal, unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
@@ -19,6 +19,7 @@ import { recordFeedback } from '../thought-store';
 import type { BacklogPorts } from './follow.server';
 import { briefView, followEntry, withFollow, type BuildData } from './follow';
 import { readSolve, storeSolve, withSolve, type SolveDone, type SolvePlan } from './solution';
+import { AUTO_KINDS, type AutoKind } from './autonomy';
 
 export type SolveResult = { ok: true; message: string; href?: string; already?: boolean } | { ok: false; reason: string };
 
@@ -62,35 +63,64 @@ async function markDone(id: string, plan: SolvePlan, done: SolveDone, extra?: (a
   });
 }
 
-async function tool(name: string, args: Record<string, unknown>) {
+/**
+ * `standing`: nobody pressed anything — the autonomy ladder is acting
+ * (`standing.server.ts`). The call is then UNATTENDED and may reach only
+ * `ha_call_service`, where the tool contract lets an unattended caller drive
+ * lights and refuses it switches, locks and the rest whatever this list says.
+ */
+async function tool(name: string, args: Record<string, unknown>, standing = false) {
   const { executeTool } = await import('$lib/tools/registry');
-  return executeTool(name, args, { emit: () => {}, principal: ownerActionPrincipal('daydream-solve') });
+  const principal = standing ? unattendedPrincipal('daydream-standing', ['ha_call_service']) : ownerActionPrincipal('daydream-solve');
+  return executeTool(name, args, { emit: () => {}, principal });
+}
+
+/** A kind's ladder bookkeeping must never fail the press it follows. */
+async function ladder(fn: (m: typeof import('./autonomy.server')) => Promise<unknown>): Promise<void> {
+  try {
+    await fn(await import('./autonomy.server'));
+  } catch (err) {
+    console.error('[daydream] autonomy ladder not updated:', err instanceof Error ? err.message : err);
+  }
 }
 
 const inFlight = new Set<string>();
 
-/** One press: carry the solution out, and count the note as worth knowing. */
-export async function runSolution(thoughtId: string, ports: () => BacklogPorts, now = new Date()): Promise<SolveResult> {
+/**
+ * One press: carry the solution out, and count the note as worth knowing.
+ *
+ * `standing` is the same thing with no press behind it: it is not his verdict,
+ * so the note is not rated, and a build is refused outright.
+ */
+export async function runSolution(thoughtId: string, ports: () => BacklogPorts, now = new Date(), opts: { standing?: boolean } = {}): Promise<SolveResult> {
+  const standing = !!opts.standing;
   const row = await readRow(thoughtId);
   if (!row) return { ok: false, reason: 'That note no longer exists.' };
   if (row.feedback === 'not_useful' || row.feedback === 'never_kind') return { ok: false, reason: 'You turned this note down.' };
   const s = readSolve(row.actions);
   if (!s) return { ok: false, reason: 'This note has no solution to carry out.' };
+  // Held here as well as in `autoKindOf`: a tracker, or lights and nothing but lights.
+  if (standing && !(s.plan.kind === 'track' || (s.plan.kind === 'home' && s.plan.entities.every((e) => e.startsWith('light.'))))) return { ok: false, reason: 'That kind waits for a tap.' };
   if (s.stored.done && !s.stored.done.undoneAt) return { ok: true, already: true, message: s.stored.done.message ?? 'Already done.', href: s.stored.done.href };
   if (inFlight.has(thoughtId)) return { ok: false, reason: 'It is already doing this.' };
   inFlight.add(thoughtId);
   let out: SolveResult;
   try {
-    out = await carryOut(row, s.plan, ports, now);
+    out = await carryOut(row, s.plan, ports, now, standing);
   } finally {
     inFlight.delete(thoughtId);
   }
-  if (out.ok && !row.feedback) await recordFeedback(thoughtId, 'useful', undefined).catch(() => null);
+  if (out.ok && !standing) {
+    if (!row.feedback) await recordFeedback(thoughtId, 'useful', undefined).catch(() => null);
+    const kind = `solve:${s.plan.kind}`;
+    if ((AUTO_KINDS as readonly string[]).includes(kind)) await ladder((m) => m.recordTap(kind as AutoKind, now));
+  }
   return out;
 }
 
-async function carryOut(row: Row, plan: SolvePlan, ports: () => BacklogPorts, now: Date): Promise<SolveResult> {
+async function carryOut(row: Row, plan: SolvePlan, ports: () => BacklogPorts, now: Date, standing: boolean): Promise<SolveResult> {
   const at = now.toISOString();
+  const auto = standing ? { auto: true } : {};
   switch (plan.kind) {
     case 'track': {
       const { startTracker } = await import('./track.server');
@@ -98,7 +128,7 @@ async function carryOut(row: Row, plan: SolvePlan, ports: () => BacklogPorts, no
       if (!res.ok) return res;
       const href = `/jkai/daydreams/solutions#tracker-${res.tracker.id}`;
       const message = `Tracking until ${res.tracker.endDay}. The result comes to you when it ends.`;
-      await markDone(row.id, plan, { at, ref: res.tracker.id, href, message, undoneAt: null });
+      await markDone(row.id, plan, { at, ref: res.tracker.id, href, message, undoneAt: null, ...auto });
       return { ok: true, message, href };
     }
     case 'home': {
@@ -106,12 +136,12 @@ async function carryOut(row: Row, plan: SolvePlan, ports: () => BacklogPorts, no
       const refused: string[] = [];
       for (const id of plan.entities) {
         const domain = id.split('.')[0];
-        const res = await tool('ha_call_service', { domain, service: 'turn_off', entity_id: id });
+        const res = await tool('ha_call_service', { domain, service: 'turn_off', entity_id: id }, standing);
         (res?.success ? off : refused).push(id);
       }
       if (!off.length) return { ok: false, reason: 'Home Assistant turned none of them off. They may be unavailable.' };
       const message = refused.length ? `Turned off ${off.length}; Home Assistant refused ${refused.join(', ')}.` : `Turned off ${off.length === 1 ? off[0] : `${off.length} devices`}.`;
-      await markDone(row.id, plan, { at, entities: off, message, undoneAt: null });
+      await markDone(row.id, plan, { at, entities: off, message, undoneAt: null, ...auto });
       return { ok: true, message };
     }
     case 'open': {
@@ -123,7 +153,7 @@ async function carryOut(row: Row, plan: SolvePlan, ports: () => BacklogPorts, no
       const { startWatch } = await import('./follow.server');
       const res = await startWatch(row.id, plan.description, now);
       if (!res.ok) return res;
-      await markDone(row.id, plan, { at, href: res.href ?? '/jkai/daydreams/watches', message: res.message, undoneAt: null });
+      await markDone(row.id, plan, { at, href: res.href ?? '/jkai/daydreams/watches', message: res.message, undoneAt: null, ...auto });
       return res;
     }
     case 'build':
@@ -185,27 +215,57 @@ async function promoteOnly(id: string, slug: string, now: Date): Promise<void> {
   });
 }
 
-/** The second press: stop a tracker, or turn the lights back on. */
+/**
+ * The second press: stop a tracker or a watch, or turn the lights back on.
+ * Taking back something it did by itself counts against that kind on the
+ * ladder (`autonomy.ts`).
+ */
 export async function undoSolution(thoughtId: string, now = new Date()): Promise<SolveResult> {
+  const out = await takeBack(thoughtId, now);
+  if (out.ok && out.wasAuto) await ladder((m) => m.recordAutoUndo(thoughtId, now));
+  return out;
+}
+
+/**
+ * Someone came home to lights it turned off in an empty house: on again, with
+ * no press. The note reads as taken back, and says why. Not an Undo — nothing
+ * is held against the kind (`standing.server.ts`).
+ */
+export async function restoreHome(thoughtId: string, now = new Date()): Promise<SolveResult> {
+  return takeBack(thoughtId, now, { standing: true, message: 'Turned back on when someone came home.' });
+}
+
+async function takeBack(thoughtId: string, now: Date, opts: { standing?: boolean; message?: string } = {}): Promise<SolveResult & { wasAuto?: boolean }> {
   const row = await readRow(thoughtId);
   if (!row) return { ok: false, reason: 'That note no longer exists.' };
   const s = readSolve(row.actions);
   const done = s?.stored.done;
   if (!s || !done || done.undoneAt) return { ok: false, reason: 'There is nothing to undo.' };
+  const wasAuto = !!done.auto;
+  if (opts.standing && s.plan.kind !== 'home') return { ok: false, reason: 'Only lights are put back without a press.' };
+  if (s.plan.kind === 'watch') {
+    const { stopWatch } = await import('./follow.server');
+    const res = await stopWatch(thoughtId, now);
+    if (!res.ok) return res;
+    await markDone(row.id, s.plan, { ...done, undoneAt: now.toISOString(), message: 'Stopped.' });
+    return { ok: true, message: 'Watch stopped and removed.', wasAuto };
+  }
   if (s.plan.kind === 'track') {
     const { stopTracker } = await import('./track.server');
     if (done.ref) await stopTracker(done.ref, now);
     await markDone(row.id, s.plan, { ...done, undoneAt: now.toISOString(), message: 'Stopped.' });
-    return { ok: true, message: 'Tracker stopped.' };
+    return { ok: true, message: 'Tracker stopped.', wasAuto };
   }
   if (s.plan.kind === 'home') {
     const back: string[] = [];
     for (const id of done.entities ?? []) {
-      const res = await tool('ha_call_service', { domain: id.split('.')[0], service: 'turn_on', entity_id: id });
+      const res = await tool('ha_call_service', { domain: id.split('.')[0], service: 'turn_on', entity_id: id }, !!opts.standing);
       if (res?.success) back.push(id);
     }
-    await markDone(row.id, s.plan, { ...done, undoneAt: now.toISOString(), message: `Turned back on: ${back.length}.` });
-    return { ok: true, message: back.length ? `Turned ${back.length} back on.` : 'Home Assistant turned none back on.' };
+    // A restore that reached nothing is left as it was, to be tried again.
+    if (opts.standing && !back.length) return { ok: false, reason: 'Home Assistant turned none back on.' };
+    await markDone(row.id, s.plan, { ...done, undoneAt: now.toISOString(), message: opts.message ?? `Turned back on: ${back.length}.` });
+    return { ok: true, message: back.length ? `Turned ${back.length} back on.` : 'Home Assistant turned none back on.', wasAuto };
   }
   return { ok: false, reason: 'This one cannot be taken back here.' };
 }

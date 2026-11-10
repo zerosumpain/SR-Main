@@ -167,6 +167,20 @@ export const POST: RequestHandler = async ({ request }) => {
         return json(result, { status: result.ok ? 200 : 400 });
       }
 
+      case 'set_autonomy': {
+        // His own setting on the ladder: does jkai carry this kind of step out
+        // by itself, or wait for a tap. A kind HE sets to ask is never moved
+        // forward by the ladder.
+        const { AUTO_KINDS } = await import('$lib/daydream/act/autonomy');
+        const { setLevel } = await import('$lib/daydream/act/autonomy.server');
+        const kind = AUTO_KINDS.find((k) => k === str('kind'));
+        const level = str('level');
+        if (!kind) return json({ error: 'kind is not one that can act by itself' }, { status: 400 });
+        if (level !== 'ask' && level !== 'do') return json({ error: 'level must be ask or do' }, { status: 400 });
+        await setLevel(kind, level, new Date());
+        return json({ ok: true, kind, level });
+      }
+
       case 'set_enabled': {
         // The kill switch, finally a control rather than a banner naming a
         // settings key. Boolean set explicitly both ways — setSetting(k, null)
