@@ -127,6 +127,8 @@ export interface ActDone {
   sentAt?: string | null;
   /** calendar_batch: every entry written, for Undo. */
   batch?: Array<{ uid: string; eventId: string | null; date: string; title: string }>;
+  /** Carried out by itself, on the autonomy ladder (`autonomy.ts`), not by his tap. */
+  auto?: boolean;
 }
 
 /** The `proposed_actions` entry a think note carries. `payload` is the plan
@@ -486,6 +488,8 @@ export interface NoteAct {
   draft: { to: string; subject: string; body: string; gmailUrl: string } | null;
   /** Whether Undo is possible now. */
   undoable: boolean;
+  /** It did this by itself and told him after (`autonomy.ts`). */
+  auto?: boolean;
 }
 
 const MONTH_WORDS = `(?:${MONTHS.map((m) => `${m}|${m.slice(0, 3)}`).join('|')})`;
@@ -535,7 +539,7 @@ export function noteAct(actions: unknown, step: string | null, title = ''): Note
     if (d) {
       // A hold's diary entry can still come out after its reminder fired.
       const fired = plan.kind === 'reminder' && !!d.fireAt && Date.parse(d.fireAt) <= Date.now();
-      return { kind: plan.kind, status: 'done', label: doneLabel(stored, plan), doneAt: d.at, draft, undoable: !fired };
+      return { kind: plan.kind, status: 'done', label: doneLabel(stored, plan), doneAt: d.at, draft, undoable: !fired, ...(d.auto ? { auto: true } : {}) };
     }
     return { kind: plan.kind, status: 'ready', label: stored.label, ...(plan.kind === 'email_draft' ? { recipient: plan.domain } : {}), doneAt: null, draft: null, undoable: false };
   }

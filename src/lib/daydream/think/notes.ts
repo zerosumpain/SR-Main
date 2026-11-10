@@ -32,6 +32,16 @@ export const THINK_KIND_PREFIX = 'think_';
  *  importing the model gateway. */
 export const DAILY_RAISE_CAP = 4;
 
+/**
+ * Where daydream tells him things: the iPhone app, not WhatsApp (owner,
+ * 2026-11-10 — "move all daydream notifications to the apple-app and off
+ * whatsapp"). Passed on EVERY raise rather than left to the category's route,
+ * because a stored route row wins over the catalogue default and production
+ * has one saying WhatsApp. The phone switch is still his: this only closes
+ * WhatsApp.
+ */
+export const DAYDREAM_CHANNELS = { whatsapp: false } as const;
+
 /** The page every note links to, opened on that note. */
 export const FEED_PATH = '/jkai/daydreams';
 

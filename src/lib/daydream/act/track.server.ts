@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { getSetting, setSetting } from '$lib/server/models/settings';
 import { localDay } from '../features/build';
-import { noteHref } from '../think/notes';
+import { DAYDREAM_CHANNELS, noteHref } from '../think/notes';
 import type { TrackPlan } from './solution';
 import {
   BASELINE_DAYS,
@@ -114,6 +114,7 @@ export async function reportFinishedTrackers(now = new Date()): Promise<number> 
       body: text,
       url: noteHref(t.thoughtId),
       dedupeKey: `daydream-tracker:${t.id}`,
+      channels: DAYDREAM_CHANNELS,
       data: { thoughtId: t.thoughtId, trackerId: t.id },
     }).catch(() => null);
     await serial(async () => {

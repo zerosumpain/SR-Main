@@ -117,6 +117,8 @@ export interface SolveDone {
   /** home: the entities turned off, for Undo. */
   entities?: string[];
   message?: string;
+  /** Carried out by itself, on the autonomy ladder (`autonomy.ts`), not by his press. */
+  auto?: boolean;
 }
 
 export interface StoredSolve {
@@ -289,6 +291,8 @@ export interface SolutionView {
   message: string | null;
   /** Can a second press take it back? */
   undoable: boolean;
+  /** It did this by itself and told him after (`autonomy.ts`). */
+  auto: boolean;
 }
 
 export function solutionView(actions: unknown): SolutionView | null {
@@ -305,6 +309,7 @@ export function solutionView(actions: unknown): SolutionView | null {
     href,
     at: d?.at ?? null,
     message: d?.message ?? null,
-    undoable: state === 'done' && (s.plan.kind === 'track' || s.plan.kind === 'home'),
+    undoable: state === 'done' && (s.plan.kind === 'track' || s.plan.kind === 'home' || s.plan.kind === 'watch'),
+    auto: !!d?.auto,
   };
 }

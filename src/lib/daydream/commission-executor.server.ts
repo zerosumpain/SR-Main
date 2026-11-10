@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { notifyOwner } from '$lib/server/notify';
+import { DAYDREAM_CHANNELS } from './think/notes';
 import { invokeWorkflowRuntime } from '$lib/workflows-client/runtime-client';
 import { createToolbox } from './think/tools';
 import { DEFAULT_SUBJECT } from './types';
@@ -30,7 +31,7 @@ export async function flushCommissionOutbox(): Promise<{ delivered: number }> {
         const commission = await rowFor(String(item.commission_id), 'owner', tx, true);
         if (item.kind === 'notification') {
           const result = await notifyOwner({ eventId: String(item.event_id), category: 'daydream',
-            dedupeKey: `daydream-commission:${item.event_id}`,
+            dedupeKey: `daydream-commission:${item.event_id}`, channels: DAYDREAM_CHANNELS,
             title: String(payload.title), body: String(payload.body), url: String(payload.url),
             data: { schemaVersion: 1, destination: 'daydream_commission', commissionId: commission.id,
               eventId: item.event_id, thoughtId: commission.thought_id, milestone: payload.milestone, revision: payload.revision } });

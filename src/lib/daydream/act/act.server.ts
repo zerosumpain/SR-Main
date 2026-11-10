@@ -11,7 +11,7 @@
 // exists to stop a model writing on its own initiative, and here the owner
 // pressed the button.
 
-import { ownerActionPrincipal } from '$lib/tools/in-process-principal';
+import { ownerActionPrincipal, unattendedPrincipal } from '$lib/tools/in-process-principal';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { daydreamThoughts, gmailAccounts } from '$lib/db/schema';
@@ -44,6 +44,7 @@ import {
   type ReminderPlan,
   type StoredAction,
 } from './plan';
+import type { AutoKind } from './autonomy';
 
 /** Which of his calendars a new diary entry goes in. Chosen once. */
 export const ACT_CALENDAR_KEY = 'daydream.act.calendar';
@@ -57,13 +58,21 @@ export type ActResult =
 type Done = { done: ActDone; calendar?: string };
 type Outcome = Done | { ok: false; reason: string; needsCalendar?: boolean; calendars?: string[] };
 
-async function tool(name: string, args: Record<string, unknown>) {
+async function tool(name: string, args: Record<string, unknown>, standing = false) {
   // Dynamic for the reason `calendar/read.ts` gives: the registry boots
   // platform services on import.
   const { executeTool } = await import('$lib/tools/registry');
-  // The owner's own press on a sign-off: the press answers the gate.
-  return executeTool(name, args, { emit: () => {}, principal: ownerActionPrincipal('daydream-act') });
+  // The owner's own press on a sign-off: the press answers the gate. With no
+  // press behind it (`standing`, the autonomy ladder) the call is unattended
+  // and may reach only the reminder's scheduler — never his diary, which the
+  // tool contract refuses an unattended caller whatever this list says.
+  const principal = standing ? unattendedPrincipal('daydream-standing', ['schedule_tool_call_at', 'notify_owner']) : ownerActionPrincipal('daydream-act');
+  return executeTool(name, args, { emit: () => {}, principal });
 }
+
+/** Kinds the ladder may carry out with no tap (`autonomy.ts`): nothing that
+ *  writes to his diary, and a draft that stops short of sending. */
+const STANDING_KINDS: readonly string[] = ['reminder', 'email_draft'];
 
 const why = (res: { error?: unknown } | null | undefined) => String(res?.error ?? 'no reason given').slice(0, 200);
 
@@ -126,7 +135,7 @@ async function addEntry(plan: CalendarPlan, thoughtId: string, now: Date): Promi
 
 export const reminderName = (thoughtId: string) => `daydream-remind-${thoughtId}`;
 
-async function scheduleReminder(plan: ReminderPlan, thoughtId: string, now: Date): Promise<Outcome> {
+async function scheduleReminder(plan: ReminderPlan, thoughtId: string, now: Date, standing = false): Promise<Outcome> {
   const fireAt = londonToUtc(plan.date, plan.time ?? REMINDER_DEFAULT_TIME);
   if (Date.parse(fireAt) <= now.getTime() + 60_000) return { ok: false, reason: 'That time has already gone.' };
   const scheduled = await tool('schedule_tool_call_at', {
@@ -139,11 +148,13 @@ async function scheduleReminder(plan: ReminderPlan, thoughtId: string, now: Date
       url: noteHref(thoughtId),
       severity: 'info',
       dedupeKey: `daydream-remind:${thoughtId}`,
+      // Daydream tells him on the phone, not WhatsApp (owner, 2026-11-10).
+      phoneOnly: true,
     },
     fire_at_iso: fireAt,
     // The same note re-done after an Undo moves its own reminder.
     replace_existing: true,
-  });
+  }, standing);
   if (!scheduled?.success) return { ok: false, reason: `The reminder could not be set: ${why(scheduled)}` };
   return { done: { ...baseDone(now), callback: reminderName(thoughtId), fireAt } };
 }
@@ -303,8 +314,21 @@ async function loadRow(tx: DbExecutor, thoughtId: string) {
   return row ?? null;
 }
 
-/** "Do it for me". Idempotent: a second tap reports the first one's result. */
-export async function doIt(thoughtId: string, now = new Date(), expect: { step?: string; recipient?: string } = {}): Promise<ActResult> {
+/**
+ * "Do it for me". Idempotent: a second tap reports the first one's result.
+ *
+ * `standing` is the autonomy ladder acting with no tap (`standing.server.ts`):
+ * only a plan already stored and checked, only `STANDING_KINDS`, and the note
+ * is not rated — nobody has said it was worth knowing.
+ */
+export async function doIt(
+  thoughtId: string,
+  now = new Date(),
+  expect: { step?: string; recipient?: string } = {},
+  opts: { standing?: boolean } = {},
+): Promise<ActResult> {
+  const standing = !!opts.standing;
+  let did: ActPlan['kind'] | null = null;
   const result = await db.transaction(async (tx): Promise<ActResult> => {
     const row = await loadRow(tx, thoughtId);
     if (!row) return { ok: false, reason: 'That note no longer exists.' };
@@ -318,6 +342,7 @@ export async function doIt(thoughtId: string, now = new Date(), expect: { step?:
     const evidence = evidenceText(row.evidence);
     const today = localDay(now);
     let draft: unknown = existing?.plan;
+    if (standing && (!existing || !STANDING_KINDS.includes(existing.plan.kind))) return { ok: false, reason: 'That step waits for a tap.' };
     if (!draft) {
       const { draftPlan } = await import('./plan.server');
       try {
@@ -339,7 +364,7 @@ export async function doIt(thoughtId: string, now = new Date(), expect: { step?:
     let outcome: Outcome;
     switch (plan.kind) {
       case 'calendar_event': outcome = await addEntry(plan, thoughtId, now); break;
-      case 'reminder': outcome = await scheduleReminder(plan, thoughtId, now); break;
+      case 'reminder': outcome = await scheduleReminder(plan, thoughtId, now, standing); break;
       case 'calendar_move': outcome = await moveEntry(plan, now); break;
       case 'email_draft': outcome = await draftReply(plan, thoughtId, now); break;
       case 'event_hold': outcome = await holdEvent(plan, thoughtId, now); break;
@@ -350,21 +375,33 @@ export async function doIt(thoughtId: string, now = new Date(), expect: { step?:
         ? { ok: false, needsCalendar: true, reason: outcome.reason, calendars: outcome.calendars ?? [] }
         : { ok: false, reason: outcome.reason };
     }
-    const entry = storeAction(plan, outcome.calendar ?? null, outcome.done);
+    const entry = storeAction(plan, outcome.calendar ?? null, standing ? { ...outcome.done, auto: true } : outcome.done);
     await tx
       .update(daydreamThoughts)
       .set({ proposedActions: replaceAction(row.actions, entry), updatedAt: now })
       .where(eq(daydreamThoughts.id, thoughtId));
+    did = plan.kind;
     return { ok: true, status: 'done', label: doneLabel(entry, plan), calendar: outcome.calendar };
   });
 
   // Doing it is the strongest "worth knowing" there is. After the commit, and
   // only when this tap did the work.
-  if (result.ok && !result.already) {
+  if (result.ok && !result.already && !standing) {
     const { recordFeedback } = await import('../thought-store');
     await recordFeedback(thoughtId, 'useful', 'did it', 'explicit').catch(() => {});
+    const kind = did as ActPlan['kind'] | null;
+    if (kind && STANDING_KINDS.includes(kind)) await ladder((m) => m.recordTap(kind as AutoKind, now));
   }
   return result;
+}
+
+/** A kind's ladder bookkeeping must never fail the tap it follows. */
+async function ladder(fn: (m: typeof import('./autonomy.server')) => Promise<unknown>): Promise<void> {
+  try {
+    await fn(await import('./autonomy.server'));
+  } catch (err) {
+    console.error('[daydream] autonomy ladder not updated:', err instanceof Error ? err.message : err);
+  }
 }
 
 /** The guided kind's second tap: send the draft as it stands in Gmail. */
@@ -390,9 +427,12 @@ export async function sendIt(thoughtId: string, now = new Date()): Promise<ActRe
   });
 }
 
-/** Undo, by kind. A sent email and a reminder that has fired cannot be. */
+/** Undo, by kind. A sent email and a reminder that has fired cannot be.
+ *  Taking back something it did by itself counts against that kind on the
+ *  ladder (`autonomy.ts`). */
 export async function undoIt(thoughtId: string, now = new Date()): Promise<ActResult> {
-  return db.transaction(async (tx): Promise<ActResult> => {
+  let wasAuto = false;
+  const result = await db.transaction(async (tx): Promise<ActResult> => {
     const row = await loadRow(tx, thoughtId);
     const found = row ? readStored(row.actions) : null;
     const done = found?.stored.done;
@@ -464,6 +504,9 @@ export async function undoIt(thoughtId: string, now = new Date()): Promise<ActRe
       .update(daydreamThoughts)
       .set({ proposedActions: replaceAction(row!.actions, entry), updatedAt: now })
       .where(eq(daydreamThoughts.id, thoughtId));
+    wasAuto = !!done.auto;
     return { ok: true, status: 'undone', label: found.stored.label };
   });
+  if (result.ok && wasAuto) await ladder((m) => m.recordAutoUndo(thoughtId, now));
+  return result;
 }
