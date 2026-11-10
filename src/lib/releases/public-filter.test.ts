@@ -176,7 +176,7 @@ describe('isItemPublic — personal data quoted in prose', () => {
         item({
           title: 'Normalise WhatsApp JIDs for panel-formatted numbers',
           summary:
-            "The toJid function was only stripping the leading '+'. Panel-formatted numbers like '+44 7359228511' retained the space, resulting in an invalid JID.",
+            "The toJid function was only stripping the leading '+'. Panel-formatted numbers like '+44 7700900123' retained the space, resulting in an invalid JID.",
         }),
         VIS,
       ),
@@ -184,7 +184,7 @@ describe('isItemPublic — personal data quoted in prose', () => {
   });
 
   it('rejects phone numbers in any common form', () => {
-    for (const s of ['+447359228511', '+44 7359 228511', '07359228511', '07359 228511']) {
+    for (const s of ['+447700900123', '+44 7700 900123', '07700900123', '07700 900123']) {
       expect(isItemPublic(item({ summary: `Failed on ${s} in the panel.` }), VIS)).toBe(false);
     }
   });

@@ -47,16 +47,16 @@ describe('credentials', () => {
 describe('personal data', () => {
   it('catches the phone number that actually leaked', () => {
     const hits = findSensitive(
-      "Panel-formatted numbers like '+44 7359228511' retained the space.",
+      "Panel-formatted numbers like '+44 7700900123' retained the space.",
     );
     expect(hits[0].kind).toBe('phone');
-    expect(hits[0].value).toContain('7359228511');
+    expect(hits[0].value).toContain('7700900123');
   });
 
   it('catches phone numbers in national and unpunctuated form', () => {
-    expect(hasSensitive('called 07359228511 twice')).toBe(true);
-    expect(hasSensitive('jid 7359228511@s.whatsapp.net')).toBe(true);
-    expect(hasSensitive('+447359228511')).toBe(true);
+    expect(hasSensitive('called 07700900123 twice')).toBe(true);
+    expect(hasSensitive('jid 7700900123@s.whatsapp.net')).toBe(true);
+    expect(hasSensitive('+447700900123')).toBe(true);
   });
 
   it('catches emails, postcodes, coordinates and IPs', () => {
@@ -91,26 +91,26 @@ describe('exemptions', () => {
 
   it('does not let the date exemption shelter a real identifier', () => {
     expect(hasSensitive('account 20259999')).toBe(true); // month 99
-    expect(hasSensitive('id 7359228511')).toBe(true);
+    expect(hasSensitive('id 7700900123')).toBe(true);
   });
 });
 
 describe('span resolution', () => {
   it('reports a phone number as a phone, not as a digit run', () => {
-    const hits = findSensitive('+44 7359228511');
+    const hits = findSensitive('+44 7700900123');
     expect(hits).toHaveLength(1);
     expect(hits[0].kind).toBe('phone');
   });
 
   it('returns matches in document order', () => {
-    const hits = findSensitive('mail a@b.co then call 07359228511');
+    const hits = findSensitive('mail a@b.co then call 07700900123');
     expect(hits.map((h) => h.kind)).toEqual(['email', 'phone']);
   });
 });
 
 describe('redactSensitive', () => {
   it('replaces each span with a typed placeholder and keeps the rest', () => {
-    expect(redactSensitive("numbers like '+44 7359228511' retained the space")).toBe(
+    expect(redactSensitive("numbers like '+44 7700900123' retained the space")).toBe(
       "numbers like '[redacted:phone]' retained the space",
     );
   });
@@ -121,7 +121,7 @@ describe('redactSensitive', () => {
   });
 
   it('handles several matches in one string', () => {
-    const out = redactSensitive('mail john@example.com or call 07359228511');
+    const out = redactSensitive('mail john@example.com or call 07700900123');
     expect(out).toBe('mail [redacted:email] or call [redacted:phone]');
   });
 });
@@ -130,7 +130,7 @@ describe('redactDeep', () => {
   it('walks nested arrays and objects', () => {
     const input = {
       title: 'Fix JIDs',
-      includes: ['handles +44 7359228511', 'strips spaces'],
+      includes: ['handles +44 7700900123', 'strips spaces'],
       meta: { author: 'john@example.com', count: 3 },
     };
     expect(redactDeep(input)).toEqual({

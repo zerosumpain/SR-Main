@@ -2,8 +2,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 
 const ROOT = resolve(__dirname, '../../..');
+
+// SHA-256 of the owner's 10-digit national number (no leading 0 or +44).
+const OWNER_NUMBER_SHA256 = 'b3523aa313bfd4b052ca3a00fa0fd396f5e82a7df0a14285687a0a878329991d';
+
+function containsOwnerNumber(line: string): boolean {
+  const digits = line.replace(/[\s()+-]/g, '');
+  for (const run of digits.match(/\d{10,}/g) ?? []) {
+    for (let i = 0; i + 10 <= run.length; i++) {
+      if (createHash('sha256').update(run.slice(i, i + 10)).digest('hex') === OWNER_NUMBER_SHA256) return true;
+    }
+  }
+  return false;
+}
 
 const dyn = vi.hoisted(() => ({ env: {} as Record<string, string | undefined> }));
 vi.mock('$env/dynamic/private', () => dyn);
@@ -58,8 +72,11 @@ describe("the owner's number is not in the source tree", () => {
   // constants and ten documentation examples, and it reached a model on every
   // turn via the always-on capabilities prompt. Any new literal must fail here.
   //
-  // Test files are excluded deliberately — several of them assert that this
-  // exact number IS detected and redacted, so the real value is the fixture.
+  // Test files are INCLUDED. They used to be excluded because the leak-detection
+  // tests used the real number as their fixture, which put it in a public repo;
+  // they use Ofcom's drama range (07700 900xxx) now. The number itself is never
+  // written here: every 10-digit run in a line, formatting stripped, is hashed
+  // and compared, so "+44 (0) 7xxx xxxxxx" and "7xxx-xxxxxx" are caught too.
   //
   // SCOPED TO WHAT GIT WOULD PUBLISH, not to what is on the disk. This used to
   // be a plain `grep -r` over src and packages, which also read ignored build
@@ -75,11 +92,11 @@ describe("the owner's number is not in the source tree", () => {
   it('appears in no non-test source file', () => {
     const files = execFileSync(
       'git',
-      ['ls-files', '--cached', '--others', '--exclude-standard', 'src', 'packages'],
+      ['ls-files', '--cached', '--others', '--exclude-standard', 'src', 'packages', 'tests'],
       { cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 },
     )
       .split('\n')
-      .filter((f) => /\.(ts|svelte|js)$/.test(f) && !/\.test\.ts$/.test(f));
+      .filter((f) => /\.(ts|svelte|js)$/.test(f));
 
     // The file list is what is most likely to silently become empty — a bad
     // pathspec, a git that errors — and an empty list passes while checking
@@ -90,7 +107,7 @@ describe("the owner's number is not in the source tree", () => {
       .flatMap((f) => {
         const lines = readFileSync(resolve(ROOT, f), 'utf8').split('\n');
         return lines
-          .map((line, i) => (line.includes('447359228511') ? `${f}:${i + 1}: ${line.trim()}` : null))
+          .map((line, i) => (containsOwnerNumber(line) ? `${f}:${i + 1}: ${line.trim()}` : null))
           .filter(Boolean);
       })
       .join('\n');
