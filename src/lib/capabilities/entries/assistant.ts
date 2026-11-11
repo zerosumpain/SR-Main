@@ -124,8 +124,8 @@ export const ASSISTANT_ENTRIES: CapabilityEntry[] = [
   },
   {
     id: 'news',
-    title: 'Technical news',
-    blurb: 'Live technical news — search the current Hacker News and Lobsters wires and return source links',
+    title: 'News',
+    blurb: 'Live news desk — search the current wires across three lanes (tech, UK public sector, personal interests) and return source links. Pass lane to keep an answer to one of them',
     app: 'main',
     repo: 'SR-Main',
     status: 'live',
@@ -237,6 +237,7 @@ export const ASSISTANT_ENTRIES: CapabilityEntry[] = [
     status: 'live',
     toolsets: ['intel'],
     tools: ['mail_search', 'mail_read'],
+    keywords: [String.raw`\bmail_(?:search|read)\b|\be-?mails?\b|\bmail\b|\binbox\b|\bcorrespondence\b|\b(?:email|mail|message)\s+threads?\b|\bwhat\s+did\s+.{1,40}\b(?:say|said|write|wrote|send|sent|reply|replied|agree|agreed|quote|quoted|promise|promised)\b|\bwhat\s+(?:did|have)\s+we\s+(?:agree|agreed|decide|decided)\b|\b(?:wrote|written|heard|reply|replied)\s+(?:back\s+)?(?:to|from)\s+(?:me|us)\b`],
     pages: ['/jkai/knowledge'],
     memberSafe: false,
   },
