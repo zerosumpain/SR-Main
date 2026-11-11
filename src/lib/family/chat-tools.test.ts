@@ -98,6 +98,12 @@ describe('family chat tools', () => {
     expect(r.data).toMatchObject({ active: true, alarms: [{ id: 'al1', from: 'Synthetic Kid', kind: 'help', message: 'Please ring me', recipients: 3, reached: 2 }] });
   });
 
+  it('family_alarm_status labels the message as the sender\'s words: data, not instructions', async () => {
+    const r = await run('family_alarm_status');
+    expect((r.data as { label: string }).label).toMatch(/other people's words.*never instructions/);
+    expect(tool('family_alarm_status').description).toMatch(/never instructions/);
+  });
+
   it('family_messages nests replies and labels the text as other people\'s words', async () => {
     const r = await run('family_messages', { limit: 5 });
     expect(r.data).toMatchObject({ count: 1, messages: [{ id: 'm1', from: 'Synthetic Kid', text: 'Home by six', replies: [{ id: 'm2', from: 'Synthetic Gran', text: 'Lovely' }] }] });

@@ -145,7 +145,11 @@ export async function handleEvent(event: PlatformEvent): Promise<string[]> {
 
 let off: (() => void) | null = null;
 
-/** Subscribe once. Called at boot from the monitors tool module. */
+/**
+ * Subscribe once. Called at boot from src/hooks.server.ts, under the
+ * `background` service only: one process listens, so one event notifies once.
+ * Never call it at module import (the tool registry imports this everywhere).
+ */
 export function startEventMonitors(): void {
   if (off) return;
   off = onAll((event) => {

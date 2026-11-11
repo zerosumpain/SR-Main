@@ -5,8 +5,9 @@ import type { CapabilityEntry } from '../types';
 //
 // A surface is a phone route family (the first path segment under
 // `/api/native/`), a notification category or a platform event type. Each one
-// is either covered by a capability row (its `native` screen, its id, or the
-// row or tool named in COVERED_BY) or listed in PAGE_ONLY with the reason it
+// is either covered by a LIVE capability row (its `native` screen, its id, or
+// the row or tool named in COVERED_BY; a row that is only `planned` covers
+// nothing) or listed in PAGE_ONLY with the reason it
 // has no tool. `surface-guard.test.ts` fails when a surface has neither, so a
 // new feature cannot ship without somebody deciding which it is.
 //
@@ -50,12 +51,15 @@ export const PAGE_ONLY: readonly PageOnlyEntry[] = [
   { key: 'native:route-session', reason: 'Live route sharing is somebody\'s live location; it is held out of chat with people-location.' },
   { key: 'native:session', reason: 'The phone signing in and out; credentials are never handled by a tool.' },
 
+  // Not built yet. A `planned` row covers nothing, so each of these says so here.
+  { key: 'native:wildmind', reason: 'Wildmind is its own app and the phone draws its valley, chronicle and whispers from it directly; no chat tool has been built for it yet (the wildmind row is only planned), so it is the phone and the Wildmind page for now.' },
+
   { key: 'notify:access', reason: 'Somebody asking to join the site; approving changes who can sign in and stays on the access page.' },
   { key: 'notify:chat', reason: 'jkai\'s own reply-ready notifications; the thread is the feature, and it is already where the owner is.' },
 ];
 
 /**
- * A surface → the capability row id, or the tool of a live row, that covers it,
+ * A surface → the live capability row id, or the tool of a live row, that covers it,
  * where the row's `native` screen or id does not already say so.
  */
 export const COVERED_BY: Readonly<Record<string, string>> = {
@@ -104,8 +108,12 @@ export function surfaceProblems(
 ): string[] {
   const problems: string[] = [];
   const known = new Set(surfaces);
-  const rowIds = new Set(rows.map((r) => r.id));
-  const liveTools = new Set(rows.filter((r) => r.status !== 'planned').flatMap((r) => r.tools));
+  // Only a LIVE row covers a surface. A row with status 'planned' is a note
+  // that nothing exists yet: counting it let a surface pass as decided when it
+  // had no tool and no stated reason for having none.
+  const live = rows.filter((r) => r.status !== 'planned');
+  const rowIds = new Set(live.map((r) => r.id));
+  const liveTools = new Set(live.flatMap((r) => r.tools));
   const held = new Map<string, string>();
   for (const e of pageOnly) {
     if (held.has(e.key)) problems.push(`${e.key}: listed page-only twice`);
@@ -117,14 +125,14 @@ export function surfaceProblems(
   }
   for (const [key, target] of Object.entries(coveredBy)) {
     if (!known.has(key)) problems.push(`${key}: covered by ${target}, but there is no such surface any more`);
-    if (!rowIds.has(target) && !liveTools.has(target)) problems.push(`${key}: covered by ${target}, which is neither a capability row nor a tool of a live row`);
+    if (!rowIds.has(target) && !liveTools.has(target)) problems.push(`${key}: covered by ${target}, which is neither a live capability row nor a tool of a live row`);
     if (held.has(key)) problems.push(`${key}: both covered by ${target} and page-only`);
   }
   for (const key of surfaces) {
     if (held.has(key) || key in coveredBy) continue;
     const name = key.slice(key.indexOf(':') + 1);
-    const direct = key.startsWith('native:') ? rows.some((r) => r.native === name || r.id === name) : rowIds.has(name);
-    if (!direct) problems.push(`${key}: has neither a capability row nor a page-only entry — give it a tool and a row, or say in page-only.ts why it has none`);
+    const direct = key.startsWith('native:') ? live.some((r) => r.native === name || r.id === name) : rowIds.has(name);
+    if (!direct) problems.push(`${key}: has neither a live capability row nor a page-only entry — give it a tool and a row, or say in page-only.ts why it has none`);
   }
   return problems;
 }

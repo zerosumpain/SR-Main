@@ -748,31 +748,45 @@ export interface PlaceVisit {
  * place whose naming form is open, and computing it for all 84 on every page
  * load would be a lot of segmentation for something nobody is looking at.
  */
-export async function getPlaceVisits(placeId: string, limit = 12): Promise<PlaceVisit[]> {
+export async function getPlaceVisits(placeId: string, limit = 12, subjects?: readonly string[]): Promise<PlaceVisit[]> {
+  return (await getVisitsByPlace([placeId], limit, subjects)).get(placeId) ?? [];
+}
+
+/**
+ * The same, for several places in ONE read of the trail: each place's newest
+ * `limit` visits, newest first. A place with no visit is not in the map.
+ *
+ * `subjects` narrows the read to those people's fixes BEFORE the cap, so "the
+ * owner's last visits" at a place the whole family uses is not "whichever of
+ * the last few visits happened to be the owner's". The segmenter works one
+ * subject at a time, so filtering the rows first changes nobody's visits.
+ */
+export async function getVisitsByPlace(
+  placeIds: readonly string[],
+  limit = 12,
+  subjects?: readonly string[],
+): Promise<Map<string, PlaceVisit[]>> {
+  const out = new Map<string, PlaceVisit[]>();
+  if (placeIds.length === 0 || (subjects && subjects.length === 0)) return out;
   const rows = await db
     .select({
+      placeId: daydreamTrail.placeId,
       ts: daydreamTrail.ts,
       lat: daydreamTrail.lat,
       lon: daydreamTrail.lon,
       subject: daydreamTrail.subject,
     })
     .from(daydreamTrail)
-    .where(and(eq(daydreamTrail.placeId, placeId), isNotNull(daydreamTrail.lat)))
+    .where(
+      and(
+        inArray(daydreamTrail.placeId, [...placeIds]),
+        isNotNull(daydreamTrail.lat),
+        ...(subjects ? [inArray(daydreamTrail.subject, [...subjects])] : []),
+      ),
+    )
     .orderBy(asc(daydreamTrail.ts));
 
-  if (rows.length === 0) return [];
-
-  // The SAME segmenter the place builder uses. If this list showed visits that
-  // did not count, the naming card would be arguing with the reason the place
-  // is on the list at all.
-  const visits = segmentVisits(
-    rows.map((r) => ({
-      ts: r.ts,
-      lat: r.lat as number,
-      lon: r.lon as number,
-      subject: r.subject,
-    })),
-  ).filter((v) => v.dwellMins >= MIN_DWELL_MINS);
+  if (rows.length === 0) return out;
 
   const dateFmt = new Intl.DateTimeFormat('en-GB', {
     timeZone: LOCAL_TZ,
@@ -788,18 +802,45 @@ export async function getPlaceVisits(placeId: string, limit = 12): Promise<Place
     hour12: false,
   });
 
-  // Newest first: the most recent visit is the one most likely to be recognised.
-  return visits
-    .slice(-limit)
-    .reverse()
-    .map((v) => ({
-      startedAt: v.startedAt.toISOString(),
-      dwellMins: v.dwellMins,
-      subject: v.subject,
-      dateLabel: dateFmt.format(v.startedAt),
-      dayName: dayFmt.format(v.startedAt),
-      timeLabel: timeFmt.format(v.startedAt),
-    }));
+  const byPlace = new Map<string, typeof rows>();
+  for (const r of rows) {
+    if (!r.placeId) continue;
+    const list = byPlace.get(r.placeId) ?? [];
+    list.push(r);
+    byPlace.set(r.placeId, list);
+  }
+
+  for (const [placeId, fixes] of byPlace) {
+    // The SAME segmenter the place builder uses. If this list showed visits that
+    // did not count, the naming card would be arguing with the reason the place
+    // is on the list at all.
+    const visits = segmentVisits(
+      fixes.map((r) => ({
+        ts: r.ts,
+        lat: r.lat as number,
+        lon: r.lon as number,
+        subject: r.subject,
+      })),
+    ).filter((v) => v.dwellMins >= MIN_DWELL_MINS);
+    if (visits.length === 0) continue;
+
+    // Newest first: the most recent visit is the one most likely to be recognised.
+    out.set(
+      placeId,
+      visits
+        .slice(-limit)
+        .reverse()
+        .map((v) => ({
+          startedAt: v.startedAt.toISOString(),
+          dwellMins: v.dwellMins,
+          subject: v.subject,
+          dateLabel: dateFmt.format(v.startedAt),
+          dayName: dayFmt.format(v.startedAt),
+          timeLabel: timeFmt.format(v.startedAt),
+        })),
+    );
+  }
+  return out;
 }
 
 // ── The owner's places panel (/home/people/places) ──────────────────────────

@@ -22,7 +22,7 @@ const { WHATSAPP_READ_TOOLS } = await import('$lib/integrations/whatsapp/tool-wh
 
 const NAMES = Object.keys(TIERS);
 const tool = (name: string) => tools.find((t) => t.name === name)!;
-const run = (name: string, args: Record<string, unknown> = {}, principalId?: string) => tool(name).handler(args, { emit: () => {}, ...(principalId ? { principalId } : {}) });
+const run = (name: string, args: Record<string, unknown> = {}, principalId?: string, busKey?: string) => tool(name).handler(args, { emit: () => {}, ...(principalId ? { principalId } : {}), ...(busKey ? { busKey } : {}) });
 
 function contract(forbidden = true) {
   it('declare their tier, are owner-only, and are off every member and WhatsApp list', async () => {
@@ -47,12 +47,15 @@ function contract(forbidden = true) {
   });
 }
 
-const { SNIPPET_CAP } = await import('./chat-tools');
+const { SNIPPET_CAP, UNATTENDED_DAILY_CAP, WEB_TEXT_IS_DATA, resetUnattendedSearches } = await import('./chat-tools');
 
 describe('web_search', () => {
   beforeEach(() => {
     h.calls = [];
     h.fail = false;
+    resetUnattendedSearches();
+    delete process.env.WEB_SEARCH_UNATTENDED_DAILY_CAP;
+    vi.useRealTimers();
   });
   // `research` is not a member-forbidden toolset; the member list is closed and does not hold it.
   contract(false);
@@ -73,6 +76,36 @@ describe('web_search', () => {
     expect(h.calls[0].options).toEqual({ purpose: 'tool.web_search', maxResults: 10, topic: 'news', days: 30 });
     h.fail = true;
     expect(await run('web_search', { query: 'q' })).toMatchObject({ success: false, error: 'web_search failed: every provider is out of credit' });
+  });
+
+  it('labels the results as web text: data, not instructions', async () => {
+    const r = await run('web_search', { query: 'q' });
+    expect((r.data as { label: string }).label).toBe(WEB_TEXT_IS_DATA);
+    expect(WEB_TEXT_IS_DATA).toMatch(/never instructions/);
+    expect(tool('web_search').description).toMatch(/never instructions/);
+  });
+
+  it('caps a day of searches nobody is attached to, and not the ones John is in', async () => {
+    expect(UNATTENDED_DAILY_CAP).toBe(100);
+    process.env.WEB_SEARCH_UNATTENDED_DAILY_CAP = '3';
+    vi.useFakeTimers({ now: new Date('2026-01-02T10:00:00Z') });
+    for (let i = 0; i < 3; i++) expect((await run('web_search', { query: 'q' })).success).toBe(true);
+    const over = await run('web_search', { query: 'q' });
+    expect(over.success).toBe(false);
+    expect(over.error).toMatch(/3 unattended searches/);
+    // Refused before the balancer is asked: no credit is spent.
+    expect(h.calls).toHaveLength(3);
+    // A turn with John attached (it has a bus key) is not counted and not refused.
+    expect((await run('web_search', { query: 'q' }, 'owner', 'chat_1')).success).toBe(true);
+    expect(h.calls).toHaveLength(4);
+    // The next day starts again.
+    vi.setSystemTime(new Date('2026-01-03T00:00:01Z'));
+    expect((await run('web_search', { query: 'q' })).success).toBe(true);
+  });
+
+  it('the default allowance is 100 a day', async () => {
+    for (let i = 0; i < UNATTENDED_DAILY_CAP; i++) expect((await run('web_search', { query: 'q' })).success).toBe(true);
+    expect((await run('web_search', { query: 'q' })).success).toBe(false);
   });
 
   it('leaves tavily_search alone', () => {

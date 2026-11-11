@@ -98,7 +98,7 @@ const TIERS: Record<string, [string, string, string]> = {
   solutions_register: ['read', 'never', 'daydream'],
   solution_run: ['mutate', 'always', 'daydream'],
   capture_followup_decide: ['mutate', 'always', 'captures'],
-  capture_speaker_rename: ['mutate', 'light', 'captures'],
+  capture_speaker_rename: ['mutate', 'always', 'captures'],
   event_monitor_create: ['mutate', 'light', 'monitors'],
   event_monitor_list: ['read', 'never', 'monitors'],
   event_monitor_remove: ['mutate', 'light', 'monitors'],
@@ -154,6 +154,9 @@ describe('workflow knit additions to existing tool modules', () => {
     expect(d.offers[0].factors).toHaveLength(8);
     expect(d.offers[0]).not.toHaveProperty('when');
     expect(JSON.stringify(r.data)).not.toMatch(/SECRET_VALUE/);
+    // Listing titles are a seller's page: labelled as data, like family messages and captures.
+    expect((r.data as { label: string }).label).toMatch(/sellers' text.*never instructions/);
+    expect(tool('wishlist_offers').description).toMatch(/never instructions/);
   });
 
   it('wishlist_sweep runs the sweep once and reports counts', async () => {
@@ -218,8 +221,9 @@ describe('workflow knit additions to existing tool modules', () => {
     expect(h.patched[1]).toEqual(['owner', 'cap_abc', { speakers: [{ label: 'Speaker 1', confirmed: null }] }]);
   });
 
-  it('the event monitor tools start the subscription, create, list with the catalogue, and remove by id', async () => {
-    expect(h.started).toBe(1);
+  it('the event monitor tools do not subscribe at import, and create, list with the catalogue, and remove by id', async () => {
+    // Importing the tools is not starting the listener: hooks.server.ts does that, in one process.
+    expect(h.started).toBe(0);
     expect((await run('event_monitor_create', { event: 'nope' })).success).toBe(false);
     const made = await run('event_monitor_create', { event: 'release.live', filter: [{ key: 'repo', value: 'x' }], label: 'L', everyMinutes: 5 });
     expect(made.data).toMatchObject({ monitor: { id: 'em_abc' } });

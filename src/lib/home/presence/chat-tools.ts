@@ -10,7 +10,10 @@
 //
 // THE RULE: John's own places and visits only, and never a coordinate or an
 // address. A place row carries its centre, radius and a looked-up address;
-// none is picked. Visits are segmented from EVERYONE's trail, so they are
+// none is picked. Its visit count and last-seen time are counted over the
+// whole family's trail ("School, last seen 15:12" is a child's whereabouts),
+// so neither is returned, and a looked-up guess is given only when it is a
+// venue's name, never a street. Visits are segmented from EVERYONE's trail, so they are
 // filtered to the owner's household subjects before anything is returned, and
 // an unnamed stop that only somebody else made is not listed at all: it would
 // say where they had been.
@@ -32,7 +35,7 @@ import {
   PLACE_KINDS,
   PLACE_LABEL_MAX,
   confirmPlace,
-  getPlaceVisits,
+  getVisitsByPlace,
   isPlaceKind,
   listNamingQueue,
   listPanelPlaces,
@@ -46,11 +49,18 @@ const QUEUE_CHECKED = 15;
 const PLACE_ID = /^[A-Za-z0-9_-]{1,80}$/;
 const NAMEABLE_KINDS = PLACE_KINDS.filter((k) => k !== 'unknown');
 
-const iso = (d: unknown): string | null => (d instanceof Date ? d.toISOString() : typeof d === 'string' ? d : null);
 const int = (raw: unknown, min: number, max: number, fallback: number) =>
   typeof raw === 'number' && Number.isFinite(raw) ? Math.max(min, Math.min(max, Math.trunc(raw))) : fallback;
 const idOf = (raw: unknown): string | null => (typeof raw === 'string' && PLACE_ID.test(raw.trim()) ? raw.trim() : null);
 const failed = (name: string, err: unknown) => ({ success: false as const, error: `${name} failed: ${err instanceof Error ? err.message : String(err)}`.slice(0, 300) });
+
+/**
+ * The looked-up guess for an unnamed stop, only when the geocoder matched a
+ * VENUE ("a cafe's name"). At any other precision the label is the nearest
+ * street or house (`geocode.ts`), which is an address, and is not given.
+ */
+const venueGuess = (p: { suggestedLabel?: string | null; suggestedPrecision?: string | null }): string | null =>
+  p.suggestedPrecision === 'venue' ? p.suggestedLabel ?? null : null;
 
 /** The owner's trail subjects: his household rows, else the default subject. */
 async function mySubjects(): Promise<Set<string>> {
@@ -58,19 +68,32 @@ async function mySubjects(): Promise<Set<string>> {
   return new Set(mine.length ? mine : [DEFAULT_SUBJECT]);
 }
 
-/** One place's visits by the owner alone, newest first, with no subject on them. */
-async function myVisits(placeId: string, limit: number, subjects: Set<string>) {
-  const visits = await getPlaceVisits(placeId, 60);
-  return visits
-    .filter((v) => subjects.has(v.subject))
-    .slice(0, limit)
-    .map((v) => ({ date: v.dateLabel, day: v.dayName, time: v.timeLabel, minutes: v.dwellMins, startedAt: v.startedAt }));
+type OwnVisit = { date: string; day: string; time: string; minutes: number; startedAt: string };
+
+/**
+ * Several places' visits by the owner alone, newest first, with no subject on
+ * them, in one read of the trail. The subject filter goes INTO the read, ahead
+ * of the cap: at a place the whole family uses, the newest visits are mostly
+ * somebody else's, and capping first lost the owner's own. The filter here is
+ * the belt to that brace: a visit that is not the owner's never leaves.
+ */
+async function myVisitsAt(placeIds: string[], limit: number, subjects: Set<string>): Promise<Map<string, OwnVisit[]>> {
+  const out = new Map<string, OwnVisit[]>();
+  if (!placeIds.length || !subjects.size) return out;
+  for (const [placeId, visits] of await getVisitsByPlace(placeIds, limit, [...subjects])) {
+    const mine = visits
+      .filter((v) => subjects.has(v.subject))
+      .slice(0, limit)
+      .map((v) => ({ date: v.dateLabel, day: v.dayName, time: v.timeLabel, minutes: v.dwellMins, startedAt: v.startedAt }));
+    if (mine.length) out.set(placeId, mine);
+  }
+  return out;
 }
 
 register({
   name: 'places_list',
   description:
-    "John's saved places (/home/people/places): each named place with its kind, how often it is visited and when it was last seen, and the unnamed stops John himself made that are waiting for a name, with the looked-up guess. Names only: never a coordinate or an address. Read one place's visits with place_visits; name one with place_name. Read-only.",
+    "John's saved places (/home/people/places): each named place with its kind, and the unnamed stops John himself made that are waiting for a name, with the looked-up guess when it is a venue's name. Names only: never a coordinate or an address, and nothing about who else goes there or when. Read one place's visits with place_visits; name one with place_name. Read-only.",
   parameters: {
     type: 'object',
     properties: {
@@ -91,14 +114,15 @@ register({
       const named = all
         .filter((p) => p.label)
         .slice(0, int(args.limit, 1, 60, 30))
-        .map((p) => ({ id: p.id, name: p.label, kind: p.kind, home: p.isHome, visits: p.visitCount, lastSeenAt: iso(p.lastSeenAt), alerts: p.alerts }));
+        .map((p) => ({ id: p.id, name: p.label, kind: p.kind, home: p.isHome, alerts: p.alerts }));
       const waiting: Array<Record<string, unknown>> = [];
       if (args.unnamed !== false) {
-        const subjects = await mySubjects();
-        for (const p of (await listNamingQueue(QUEUE_CHECKED)).slice(0, QUEUE_CHECKED)) {
-          const [last] = await myVisits(p.id, 1, subjects);
-          if (!last) continue;
-          waiting.push({ id: p.id, guess: p.suggestedLabel ?? null, guessKind: p.suggestedKind ?? null, lastVisit: `${last.day} ${last.date}, ${last.time}` });
+        const queue = (await listNamingQueue(QUEUE_CHECKED)).slice(0, QUEUE_CHECKED);
+        const last = await myVisitsAt(queue.map((p) => p.id), 1, await mySubjects());
+        for (const p of queue) {
+          const visit = last.get(p.id)?.[0];
+          if (!visit) continue;
+          waiting.push({ id: p.id, guess: venueGuess(p), guessKind: p.suggestedKind ?? null, lastVisit: `${visit.day} ${visit.date}, ${visit.time}` });
         }
       }
       return { success: true, data: { named, unnamed: waiting, url: PAGE } };
@@ -130,7 +154,7 @@ register({
     const placeId = idOf(args.placeId);
     if (!placeId) return { success: false, error: 'placeId is required: the place id from places_list.' };
     try {
-      const visits = await myVisits(placeId, int(args.limit, 1, 30, 12), await mySubjects());
+      const visits = (await myVisitsAt([placeId], int(args.limit, 1, 30, 12), await mySubjects())).get(placeId) ?? [];
       return { success: true, data: { placeId, count: visits.length, visits, message: visits.length ? undefined : 'No visit of yours is recorded at this place.' } };
     } catch (err) {
       return failed('place_visits', err);

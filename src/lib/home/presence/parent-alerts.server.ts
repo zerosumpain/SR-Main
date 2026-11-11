@@ -105,7 +105,9 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
     if (first && person && firstInWindow(`family.alert:${n.id}`, 24 * 60 * 60_000)) {
       emitPlatformEvent(
         'family.alert',
-        familyAlertPayload({ kind: n.kind, person, place: n.place, title: n.push.title }),
+        // The notice's own event wording, never the push title: that one may
+        // name a looked-up label (a street), which is for the family's phones only.
+        familyAlertPayload({ kind: n.kind, person, place: n.place, title: n.eventTitle || `${person}: ${n.kind}` }),
         { source: 'family-alerts' },
       );
     }

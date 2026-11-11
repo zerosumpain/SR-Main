@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // scorecard. Nobody else's visits, no coordinate and no address may come out.
 // Fixtures are synthetic.
 
-const h = vi.hoisted(() => ({ named: [] as unknown[], confirmed: [] as unknown[], merged: [] as unknown[], confirmFails: false }));
+const h = vi.hoisted(() => ({ reads: [] as unknown[][], named: [] as unknown[], confirmed: [] as unknown[], merged: [] as unknown[], confirmFails: false }));
 const WHERE = { lat: 12.345678, lon: -98.765432, radiusM: 80, address: '1 Synthetic Street', suggestedAddress: '2 Synthetic Street' };
 const visit = (subject: string, n: number) => ({ subject, dateLabel: `${n} Jan`, dayName: 'Someday', timeLabel: 'morning', dwellMins: 30 + n, startedAt: `2026-01-0${n}T09:00:00Z`, ...WHERE });
 
@@ -33,10 +33,27 @@ vi.mock('./places', () => ({
     { id: 'pl2', label: null, kind: 'unknown', isHome: false, visitCount: 1, lastSeenAt: null, alerts: false, ...WHERE },
   ],
   listNamingQueue: async () => [
-    { id: 'q-mine', suggestedLabel: 'Synthetic Cafe', suggestedKind: 'shop', ...WHERE },
-    { id: 'q-theirs', suggestedLabel: 'Synthetic School', suggestedKind: 'school', ...WHERE },
+    { id: 'q-mine', suggestedLabel: 'Synthetic Cafe', suggestedKind: 'shop', suggestedPrecision: 'venue', ...WHERE },
+    { id: 'q-theirs', suggestedLabel: 'Synthetic School', suggestedKind: 'school', suggestedPrecision: 'venue', ...WHERE },
+    { id: 'q-road', suggestedLabel: 'Synthetic Rise', suggestedKind: 'other', suggestedPrecision: 'street', ...WHERE },
+    { id: 'q-old', suggestedLabel: 'Synthetic Close', suggestedKind: 'other', suggestedPrecision: null, ...WHERE },
   ],
-  getPlaceVisits: async (id: string) => (id === 'q-theirs' ? [visit('kid-phone', 1)] : [visit('kid-phone', 1), visit('owner-phone', 2), visit('owner-phone', 3)]),
+  // The trail as the real reader gives it: newest first, capped AFTER the
+  // subject filter. 'busy' is a place the family uses far more than the owner:
+  // 80 newer visits by a child, then the owner's two.
+  getVisitsByPlace: async (ids: string[], limit: number, subjects?: string[]) => {
+    h.reads.push([ids, limit, subjects]);
+    const trail = (id: string) =>
+      id === 'q-theirs' ? [visit('kid-phone', 1)]
+      : id === 'busy' ? [...Array.from({ length: 80 }, () => visit('kid-phone', 9)), visit('owner-phone', 2), visit('owner-phone', 3)]
+      : [visit('kid-phone', 1), visit('owner-phone', 2), visit('owner-phone', 3)];
+    const out = new Map<string, unknown[]>();
+    for (const id of ids) {
+      const v = trail(id).filter((x) => !subjects || subjects.includes(x.subject)).slice(0, limit);
+      if (v.length) out.set(id, v);
+    }
+    return out;
+  },
   namePlace: async (...a: unknown[]) => (a[0] === 'missing' ? null : (h.named.push(a), { id: a[0] })),
   confirmPlace: async (...a: unknown[]) => {
     if (h.confirmFails) throw new Error('memory is down');
@@ -90,6 +107,7 @@ const LEAKS = /12\.345678|98\.765432|Synthetic Street|"lat"|"lon"|radiusM|"addre
 
 describe('places chat tools', () => {
   beforeEach(() => {
+    h.reads = [];
     h.named = [];
     h.confirmed = [];
     h.merged = [];
@@ -100,13 +118,48 @@ describe('places chat tools', () => {
   it('places_list names places without where they are, and queues only stops the owner himself made', async () => {
     const r = await run('places_list');
     expect(r.success, r.error).toBe(true);
-    expect(r.data).toMatchObject({ named: [{ id: 'pl1', name: 'Synthetic Gym', kind: 'other', visits: 12 }], unnamed: [{ id: 'q-mine', guess: 'Synthetic Cafe', guessKind: 'shop' }] });
-    expect((r.data as { named: unknown[]; unnamed: unknown[] }).named).toHaveLength(1);
-    expect((r.data as { unnamed: unknown[] }).unnamed).toHaveLength(1);
+    const data = r.data as { named: Array<Record<string, unknown>>; unnamed: Array<Record<string, unknown>> };
+    expect(data.named).toEqual([{ id: 'pl1', name: 'Synthetic Gym', kind: 'other', home: false, alerts: false }]);
+    expect(data.unnamed.map((u) => u.id)).toEqual(['q-mine', 'q-road', 'q-old']);
+    expect(data.unnamed[0]).toMatchObject({ id: 'q-mine', guess: 'Synthetic Cafe', guessKind: 'shop' });
     const out = JSON.stringify(r.data);
     expect(out).not.toMatch(LEAKS);
     expect(out).not.toMatch(/Synthetic School/);
     expect(((await run('places_list', { unnamed: false })).data as { unnamed: unknown[] }).unnamed).toEqual([]);
+  });
+
+  it('places_list says nothing counted over the whole family\'s trail: no visit count, no last-seen time', async () => {
+    const r = await run('places_list');
+    for (const place of (r.data as { named: Array<Record<string, unknown>> }).named) {
+      expect(place).not.toHaveProperty('visits');
+      expect(place).not.toHaveProperty('lastSeenAt');
+    }
+    // The fixture's count (12) and last-seen stamp belong to everyone who went there.
+    expect(JSON.stringify(r.data)).not.toMatch(/2026-01-02T03:04:05|"visits"|lastSeen|:12[,}]/);
+    expect(tool('places_list').description).not.toMatch(/how often|last seen/i);
+  });
+
+  it('places_list gives a looked-up guess only when it is a venue, never a street or an unclassified label', async () => {
+    const r = await run('places_list');
+    const byId = new Map((r.data as { unnamed: Array<{ id: string; guess: unknown }> }).unnamed.map((u) => [u.id, u.guess]));
+    expect(byId.get('q-mine')).toBe('Synthetic Cafe');
+    expect(byId.get('q-road')).toBeNull();
+    expect(byId.get('q-old')).toBeNull();
+    expect(JSON.stringify(r.data)).not.toMatch(/Synthetic Rise|Synthetic Close/);
+  });
+
+  it('places_list reads the trail once for the whole queue, already narrowed to the owner', async () => {
+    await run('places_list');
+    expect(h.reads).toEqual([[['q-mine', 'q-theirs', 'q-road', 'q-old'], 1, ['owner-phone']]]);
+    h.reads = [];
+    await run('places_list', { unnamed: false });
+    expect(h.reads).toEqual([]);
+  });
+
+  it('place_visits finds the owner\'s visits at a place where everybody else\'s are newer', async () => {
+    const r = await run('place_visits', { placeId: 'busy' });
+    expect(r.data).toMatchObject({ placeId: 'busy', count: 2, visits: [{ date: '2 Jan' }, { date: '3 Jan' }] });
+    expect(h.reads).toEqual([[['busy'], 12, ['owner-phone']]]);
   });
 
   it('place_visits returns the owner\'s visits only, with no subject on them', async () => {

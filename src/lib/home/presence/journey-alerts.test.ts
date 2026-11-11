@@ -55,6 +55,15 @@ describe('journeyNotice', () => {
     expect(n.push.body).toBe('18 min drive from Home, 5.8 mi, arrived 08:48. Top speed 52 mph. 1 harsh brake.');
     expect(n.recipients).toEqual(['katie@example.test']);
     expect(n.trip).toBe(`rory-${trip.arrived}`);
+    expect(n).toMatchObject({ place: places[1].label, eventTitle: `Rory arrived safely at ${places[1].label}` });
+  });
+
+  it('keeps a looked-up label out of the event: the push names it, the event does not', () => {
+    const looked = places.map((p) => (p.id === 'school' ? { ...p, label: null, suggestedLabel: 'Synthetic Rise' } : p));
+    const n = journeyNotice({ trip, stats: { mode: 'drive', km: 9.4, topKmh: 84 }, places: looked, name: 'Rory', recipients: ['k@e.t'], events: [] })!;
+    expect(n.push.title).toBe('Rory arrived safely at Synthetic Rise');
+    expect(n.place).toBeUndefined();
+    expect(n.eventTitle).toBe('Rory arrived safely');
   });
 
   it('a train says so and carries no driving line; nothing for a non-journey or nobody to tell', () => {

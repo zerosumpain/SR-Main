@@ -31,7 +31,7 @@ describe('surface guard', () => {
 
   it('bites: a new route family, category or event with no row and no reason', () => {
     for (const fresh of ['native:brand-new', 'notify:brand-new', 'event:brand.new']) {
-      expect(surfaceProblems([...surfaces(), fresh], CAPABILITIES)).toEqual([expect.stringContaining(`${fresh}: has neither a capability row nor a page-only entry`)]);
+      expect(surfaceProblems([...surfaces(), fresh], CAPABILITIES)).toEqual([expect.stringContaining(`${fresh}: has neither a live capability row nor a page-only entry`)]);
     }
   });
 
@@ -42,13 +42,29 @@ describe('surface guard', () => {
     const { 'event:release.live': _gone, ...rest } = COVERED_BY;
     expect(surfaceProblems(all, CAPABILITIES, PAGE_ONLY, rest)).toEqual([expect.stringContaining('event:release.live: has neither')]);
     // A covering tool that is renamed away, or only planned, no longer covers.
-    expect(surfaceProblems(all, CAPABILITIES, PAGE_ONLY, { ...COVERED_BY, 'event:release.live': 'no_such_tool' })).toEqual([expect.stringContaining('neither a capability row nor a tool of a live row')]);
+    expect(surfaceProblems(all, CAPABILITIES, PAGE_ONLY, { ...COVERED_BY, 'event:release.live': 'no_such_tool' })).toEqual([expect.stringContaining('neither a live capability row nor a tool of a live row')]);
     expect(surfaceProblems(all, CAPABILITIES, PAGE_ONLY, { ...COVERED_BY, 'event:release.live': 'people_location' })).toHaveLength(1);
     expect(surfaceProblems(all, CAPABILITIES.filter((c) => c.id !== 'trips'), PAGE_ONLY).some((p) => p.startsWith('native:trips: has neither'))).toBe(true);
     expect(surfaceProblems(all, CAPABILITIES, [...PAGE_ONLY, { key: 'native:long-gone', reason: 'A reason long enough to count as a sentence.' }])).toEqual([expect.stringContaining('no such surface any more')]);
     expect(surfaceProblems(all, CAPABILITIES, [...without, { key: 'native:pair', reason: 'n/a' }])).toEqual([expect.stringContaining('states its reason')]);
     expect(surfaceProblems(all, CAPABILITIES, [...PAGE_ONLY, { key: 'native:family', reason: 'A reason long enough to count as a sentence.' }])).toEqual([]);
     expect(surfaceProblems(all, CAPABILITIES, [...PAGE_ONLY, { key: 'event:release.live', reason: 'A reason long enough to count as a sentence.' }])).toEqual([expect.stringContaining('both covered by')]);
+  });
+
+  it('bites: a planned row covers nothing, by its screen, by its id or as a COVERED_BY target', () => {
+    const all = surfaces();
+    // The wildmind row exists and names the screen, but it is planned: only the page-only reason decides it.
+    expect(CAPABILITIES.find((c) => c.native === 'wildmind')).toMatchObject({ status: 'planned' });
+    expect(surfaceProblems(all, CAPABILITIES, PAGE_ONLY.filter((e) => e.key !== 'native:wildmind'))).toEqual([expect.stringContaining('native:wildmind: has neither a live capability row')]);
+    // A live row turned planned stops covering its screen.
+    const trips = CAPABILITIES.find((c) => c.id === 'trips')!;
+    expect(trips.status).not.toBe('planned');
+    const planned = CAPABILITIES.map((c) => (c.id === 'trips' ? { ...c, status: 'planned' as const } : c));
+    expect(surfaceProblems(all, planned, PAGE_ONLY).some((p) => p.startsWith('native:trips: has neither a live capability row'))).toBe(true);
+    // ...and so does one named in COVERED_BY, by row id or by tool.
+    expect(surfaceProblems(all, CAPABILITIES, PAGE_ONLY, { ...COVERED_BY, 'event:release.live': 'people-location' })).toEqual([expect.stringContaining('neither a live capability row nor a tool of a live row')]);
+    const news = CAPABILITIES.map((c) => (c.id === 'news' ? { ...c, status: 'planned' as const } : c));
+    expect(surfaceProblems(all, news, PAGE_ONLY).filter((p) => p.includes('covered by news'))).toHaveLength(2);
   });
 
   it('holds the decided page-only actions, and none of them has a tool in the manifest', () => {

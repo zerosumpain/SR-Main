@@ -17,8 +17,10 @@
 // slice 4) are the phone card's own: `capture_followup_decide` approves or
 // dismisses one proposed follow-up through `decideAction`, and
 // `capture_speaker_rename` names a speaker through `patchCapture`. The
-// decision confirms every time, so it runs only with John attached to the turn;
-// the rename confirms lightly.
+// Both confirm every time, so they run only with John attached to the turn:
+// the decision acts on something proposed from recorded speech, and the rename
+// re-extracts the capture (model spend) and writes a name that was heard in a
+// recording into the intel graph.
 //
 // Registered from here (src/hooks.server.ts imports this module at boot).
 
@@ -246,7 +248,11 @@ register({
   category: 'Captures',
   toolset: 'captures',
   effect: 'mutate',
-  confirm: 'light',
+  // Always, not light: naming a speaker re-extracts the capture (an LLM call
+  // that costs money) and files what was said under that name in the intel
+  // graph, and the name usually comes from the transcript itself, which is
+  // other people's words. John sees the name and says yes each time.
+  confirm: 'always',
   surfaces: ['chat', 'app'],
   handler: async (args, ctx) => {
     const refused = refuseUnlessOwner('capture_speaker_rename', ctx);

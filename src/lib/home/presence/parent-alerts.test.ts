@@ -42,6 +42,15 @@ describe('stopNotices', () => {
     const [n] = stopNotices({ routes: [route('rory', 'spot', '2026-11-04T08:30:00Z', 12)], places, guardians, names, now });
     expect(n.push.title).toBe('Rory stopped somewhere new');
   });
+  it('keeps a looked-up label out of the event: the push names it, the event does not', () => {
+    const looked = [...places, { ...place('looked', null), suggestedLabel: 'Synthetic Rise' }];
+    const [n] = stopNotices({ routes: [route('rory', 'looked', '2026-11-04T08:30:00Z', 12)], places: looked, guardians, names, now });
+    expect(n.push.title).toBe('Rory stopped at Synthetic Rise');
+    expect(n.place).toBeUndefined();
+    expect(n.eventTitle).toBe('Rory stopped somewhere');
+    const [own] = stopNotices({ routes: [route('rory', 'school', '2026-11-04T08:20:00Z', 24)], places, guardians, names, now });
+    expect(own).toMatchObject({ place: 'Hillside School', eventTitle: 'Rory stopped at Hillside School' });
+  });
   it('ignores old trips, and anyone who is not somebody\'s child', () => {
     expect(stopNotices({ routes: [route('rory', 'school', '2026-11-04T07:30:00Z', 20)], places, guardians, names, now })).toEqual([]);
     expect(stopNotices({ routes: [route('john', 'school', '2026-11-04T08:40:00Z', 10)], places, guardians, names, now })).toEqual([]);
@@ -89,6 +98,14 @@ describe('schoolLateNotices', () => {
     expect(n).toMatchObject({ kind: 'school-late', recipients: ['john@example.test', 'katie@example.test'] });
     expect(n.push).toMatchObject({ title: "Rory isn't at Hillside School yet", level: 'time-sensitive' });
     expect(n.push.body).toBe('Usually there by 08:40 (14 of 16 weekdays). At Home at 08:58.');
+    expect(n).toMatchObject({ place: 'Hillside School', eventTitle: "Rory isn't at Hillside School yet" });
+  });
+  it('keeps a looked-up school label out of the event', () => {
+    const looked = places.map((p) => (p.id === 'school' ? { ...p, label: null, suggestedLabel: 'Synthetic Rise' } : p));
+    const [n] = schoolLateNotices({ routines: [routine()], live: live(), places: looked, guardians, names, cal, now });
+    expect(n.push.title).toBe("Rory isn't at Synthetic Rise yet");
+    expect(n.place).toBeUndefined();
+    expect(n.eventTitle).toBe("Rory isn't at school yet");
   });
   it(`waits out the tolerance (${LATE_TOLERANCE_MINS} min)`, () => {
     expect(schoolLateNotices({ routines: [routine()], live: live(), places, guardians, names, cal, now: new Date('2026-11-04T08:50:00Z') })).toEqual([]);

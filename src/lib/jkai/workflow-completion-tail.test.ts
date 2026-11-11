@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // here reaches a database: the tail's read and the fan-out are both handed in.
 vi.mock('$lib/db', () => ({ db: {} }));
 
-const { createCompletionTail, TAIL_PAGE, TAIL_OVERLAP_MS } = await import('./workflow-completion-tail');
+const { createCompletionTail, TAIL_PAGE, TAIL_OVERLAP_MS, TAIL_START_LOOKBACK_MS } = await import('./workflow-completion-tail');
 const { deliverCompletionOnce, resetDeliveredCompletions } = await import('./workflow-deliveries');
 type CompletionRow = import('./workflow-completion-tail').CompletionRow;
 type TailCursor = import('./workflow-completion-tail').TailCursor;
@@ -46,13 +46,40 @@ function fanOut() {
 beforeEach(() => resetDeliveredCompletions());
 
 describe('the workflow.completed tail', () => {
-  it('starts at process start: a run finished before it is never delivered', async () => {
-    const t = table([row(1, -30), row(2, 5)]);
+  it('starts a few minutes before process start: a run that finished during the restart is delivered, older history is not', async () => {
+    expect(TAIL_START_LOOKBACK_MS).toBe(5 * 60_000);
+    // Ten minutes before the start, 30 s before it (the process was down), and after it.
+    const t = table([row(1, -600), row(2, -30), row(3, 5)]);
     const out = fanOut();
     const tail = createCompletionTail(START, { read: t.read, deliver: out.deliver });
+    expect(await tail.pass()).toBe(2);
+    expect(out.calls).toEqual(['wf_2:run_2', 'wf_3:run_3']);
+    expect(t.reads[0]).toEqual({ at: new Date(+START - TAIL_START_LOOKBACK_MS).toISOString(), id: '00000000-0000-0000-0000-000000000000' });
+  });
+
+  it('with no lookback it starts at process start', async () => {
+    const t = table([row(1, -30), row(2, 5)]);
+    const out = fanOut();
+    const tail = createCompletionTail(START, { read: t.read, deliver: out.deliver }, 0);
     expect(await tail.pass()).toBe(1);
     expect(out.calls).toEqual(['wf_2:run_2']);
-    expect(t.reads[0]).toEqual({ at: START.toISOString(), id: '00000000-0000-0000-0000-000000000000' });
+  });
+
+  it('tries a run again on the next pass when its fan-out failed', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = table([row(1, 5)]);
+    const calls: string[] = [];
+    let fail = true;
+    const tail = createCompletionTail(START, {
+      read: t.read,
+      deliver: (w, r) => deliverCompletionOnce(w, r, async () => { calls.push(r); if (fail) throw new Error('subscriber table away'); return 1; }),
+    });
+    await tail.pass();
+    fail = false;
+    await tail.pass();
+    await tail.pass();
+    expect(calls).toEqual(['run_1', 'run_1']);
+    errors.mockRestore();
   });
 
   it('delivers each run once across passes, though every pass re-reads the overlap', async () => {
@@ -80,12 +107,12 @@ describe('the workflow.completed tail', () => {
     expect(tail.cursor().id).toBe(uuid(2));
   });
 
-  it('looks back no further than the overlap, and never before the start', async () => {
+  it('looks back no further than the overlap, and never before where it began', async () => {
     const t = table([row(1, 10), row(2, 600)]);
     const tail = createCompletionTail(START, { read: t.read, deliver: fanOut().deliver });
     await tail.pass();
     await tail.pass();
-    expect(Date.parse(t.reads[0].at)).toBe(+START);
+    expect(Date.parse(t.reads[0].at)).toBe(+START - TAIL_START_LOOKBACK_MS);
     expect(Date.parse(t.reads.at(-1)!.at)).toBe(+START + 600_000 - TAIL_OVERLAP_MS);
   });
 
@@ -115,7 +142,7 @@ describe('the workflow.completed tail', () => {
     let fail = true;
     const tail = createCompletionTail(START, { read: async (a, l) => { if (fail) throw new Error('database away'); return t.read(a, l); }, deliver: out.deliver });
     await expect(tail.pass()).rejects.toThrow('database away');
-    expect(tail.cursor().at).toBe(START.toISOString());
+    expect(tail.cursor().at).toBe(new Date(+START - TAIL_START_LOOKBACK_MS).toISOString());
     fail = false;
     await tail.pass();
     expect(out.calls).toEqual(['wf_1:run_1']);
@@ -150,12 +177,27 @@ describe('deliverCompletionOnce', () => {
     expect(calls).toEqual(['wf_1:run_1', 'wf_1:run_2']);
   });
 
-  it('does not throw, and does not try again, when the fan-out fails', async () => {
+  it('does not throw when the fan-out fails, and forgets the run so it is tried again', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const deliver = vi.fn(async () => { throw new Error('away'); });
-    expect(await deliverCompletionOnce('wf_9', 'run_9', deliver)).toBe(true);
+    let fail = true;
+    const deliver = vi.fn(async () => { if (fail) throw new Error('away'); return 1; });
     expect(await deliverCompletionOnce('wf_9', 'run_9', deliver)).toBe(false);
-    expect(deliver).toHaveBeenCalledTimes(1);
+    fail = false;
+    expect(await deliverCompletionOnce('wf_9', 'run_9', deliver)).toBe(true);
+    // Delivered now: a third hearing is not a third fan-out.
+    expect(await deliverCompletionOnce('wf_9', 'run_9', deliver)).toBe(false);
+    expect(deliver).toHaveBeenCalledTimes(2);
     errors.mockRestore();
+  });
+
+  it('holds the run while a fan-out is in flight, so the other road cannot double it', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const deliver = vi.fn(async () => { await gate; return 1; });
+    const first = deliverCompletionOnce('wf_8', 'run_8', deliver);
+    expect(await deliverCompletionOnce('wf_8', 'run_8', deliver)).toBe(false);
+    release();
+    expect(await first).toBe(true);
+    expect(deliver).toHaveBeenCalledTimes(1);
   });
 });

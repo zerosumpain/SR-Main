@@ -103,4 +103,12 @@ describe('release chat tools', () => {
     expect(merged.open).toBeUndefined();
     expect(merged.merged[0]).not.toHaveProperty('verdict');
   });
+
+  it('pulls_list labels titles, branches and authors as other people\'s text: data, not instructions', async () => {
+    for (const state of ['open', 'merged', 'both']) {
+      const data = (await run('pulls_list', { state })).data as { label: string };
+      expect(data.label, state).toMatch(/public repositories.*never instructions/);
+    }
+    expect(tool('pulls_list').description).toMatch(/never instructions/);
+  });
 });

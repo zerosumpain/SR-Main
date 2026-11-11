@@ -111,6 +111,17 @@ describe('event monitors', () => {
     expect(m.eventLine({ type: 'release.live', payload: {} }).length).toBeGreaterThan(0);
   });
 
+  it('is started by the server hooks under the background service, never by importing the tools', async () => {
+    const { readFileSync } = await import('node:fs');
+    const code = (path: string) => readFileSync(path, 'utf8').replace(/^\s*\/\/.*$/gm, '');
+    expect(code('src/lib/tools/tools/monitors.ts')).not.toMatch(/startEventMonitors/);
+    const hooks = code('src/hooks.server.ts');
+    expect(hooks.match(/startEventMonitors\(\)/g)).toHaveLength(1);
+    expect(hooks).toMatch(/if \(runsService\('background'\)\) startEventMonitors\(\);/);
+    // Nothing else in the source tree starts it.
+    expect(h.handlers).toHaveLength(0);
+  });
+
   it('subscribes once and unsubscribes', async () => {
     m.startEventMonitors();
     m.startEventMonitors();

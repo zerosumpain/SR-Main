@@ -19,7 +19,7 @@ const { deliverParentAlerts } = await import('./parent-alerts.server');
 
 const now = new Date('2026-11-04T09:00:00Z');
 const notice = { id: 'stop-rory-1', kind: 'stopped', subject: 'rory', recipients: ['john@example.test', 'katie@example.test'],
-  until: +now + 30 * 60_000, push: { title: 'Rory stopped at School', body: 'Since 08:44.', category: 'household', level: 'active', ttlSeconds: 2700 } };
+  until: +now + 30 * 60_000, eventTitle: 'Rory stopped at School', push: { title: 'Rory stopped at School', body: 'Since 08:44.', category: 'household', level: 'active', ttlSeconds: 2700 } };
 
 beforeEach(() => { h.people.length = 0; h.value = null; h.apns = true; h.reached = []; h.pushes = []; h.notices = [notice]; });
 afterEach(() => vi.restoreAllMocks());
@@ -57,8 +57,11 @@ it('raises family.alert once for a notice, with the place as a name and no posit
   const off = on('family.alert', (e) => said.push(e.payload));
   h.people.push({ subject: 'kid', displayName: 'Kid' });
   h.notices = [
-    { ...notice, id: 'stop-kid-1', subject: 'kid', place: 'School', push: { ...notice.push, title: 'Kid stopped at School' } },
-    { ...notice, id: 'stop-kid-2', subject: 'kid', place: '12 Example Road', push: { ...notice.push, title: 'Kid stopped at 12 Example Road' } },
+    { ...notice, id: 'stop-kid-1', subject: 'kid', place: 'School', eventTitle: 'Kid stopped at School', push: { ...notice.push, title: 'Kid stopped at School' } },
+    { ...notice, id: 'stop-kid-2', subject: 'kid', place: '12 Example Road', eventTitle: 'Kid stopped at 12 Example Road', push: { ...notice.push, title: 'Kid stopped at 12 Example Road' } },
+    // A looked-up label the address patterns do not catch: it is in the push
+    // title for the family's phones, and nowhere in the event.
+    { ...notice, id: 'stop-kid-4', subject: 'kid', eventTitle: 'Kid stopped somewhere', push: { ...notice.push, title: 'Kid stopped at Synthetic Rise' } },
   ];
   h.reached = ['john@example.test'];
   await deliverParentAlerts(now);
@@ -69,7 +72,10 @@ it('raises family.alert once for a notice, with the place as a name and no posit
   expect(said).toEqual([
     { kind: 'stopped', person: 'Kid', place: 'School', title: 'Kid stopped at School' },
     { kind: 'stopped', person: 'Kid', title: 'Kid stopped at a place' },
+    { kind: 'stopped', person: 'Kid', title: 'Kid stopped somewhere' },
   ]);
+  expect(JSON.stringify(said)).not.toMatch(/Synthetic Rise/);
+  expect(h.pushes.some((p) => p.message.title === 'Kid stopped at Synthetic Rise')).toBe(true);
 });
 it('raises nothing when no phone took the notice', async () => {
   const { on } = await import('$lib/events/platform-bus');

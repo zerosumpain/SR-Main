@@ -371,6 +371,13 @@ if (runsService('background')) registerDeliveryListener();
 import { startWorkflowCompletionTail, stopWorkflowCompletionTail } from '$lib/jkai/workflow-completion-tail';
 if (runsService('background')) startWorkflowCompletionTail();
 
+// Event monitors ("tell me when <event> happens"): one process listens, the
+// same one as the tail above. The monitors tool module used to start this at
+// import, so every role (and every test) subscribed and one event could
+// notify more than once.
+import { startEventMonitors } from '$lib/monitors/event-monitors.server';
+if (runsService('background')) startEventMonitors();
+
 // Sign-in gating (owners env + guest allow-list) lives in $lib/server/access.
 
 // Auth.js handler.

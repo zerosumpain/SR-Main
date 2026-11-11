@@ -19,7 +19,7 @@
 import type { PushMessage } from '$lib/server/apns';
 import type { HouseholdMember } from './members';
 import type { InsightPlace, LiveState, RouteInsight } from './insights';
-import { placeTitle } from './insights';
+import { ownPlaceName, placeTitle } from './insights';
 import { metresBetween } from './cluster';
 import {
   clockDeltaMinutes,
@@ -58,8 +58,12 @@ export interface ParentNotice {
   push: PushMessage;
   /** Until when it is still worth sending. */
   until: number;
-  /** The place's name, when it has one: what the `family.alert` event says. */
+  /** The name the OWNER gave the place, when he gave one: what the
+   *  `family.alert` event says. Never a looked-up label (`ownPlaceName`). */
   place?: string;
+  /** The event's title, worded round `place` alone. The push title may name a
+   *  looked-up label for the family's phones; this one never does. */
+  eventTitle: string;
 }
 
 /** Each child's guardians' emails: the members whose `guardianOf` names them. PURE. */
@@ -151,11 +155,13 @@ export function stopNotices(input: {
       if (!recipients.length) continue;
       const to = places.find((p) => p.id === route.toId);
       const where = to?.label || to?.suggestedLabel || (to?.kind === 'home' ? 'Home' : null);
+      const named = ownPlaceName(to);
       const name = names.get(route.subject) ?? route.person;
       const id = `stop-${route.subject}-${arrived}`;
       out.push({
         id, kind: 'stopped', subject: route.subject, recipients, until: arrived + STOP_WINDOW_MINS * MINUTE,
-        ...(where ? { place: where } : {}),
+        ...(named ? { place: named } : {}),
+        eventTitle: named ? `${name} stopped at ${named}` : `${name} stopped somewhere`,
         push: {
           ...base('stopped', id, route.subject),
           title: where ? `${name} stopped at ${where}` : `${name} stopped somewhere new`,
@@ -211,7 +217,7 @@ export function schoolLateNotices(input: {
     const late = clockDeltaMinutes(today.minute, latest);
     if (late < LATE_TOLERANCE_MINS || late > LATE_GIVE_UP_MINS) continue;
     const name = names.get(r.subject) ?? r.person;
-    const schoolName = placeTitle(school);
+    const schoolName = placeTitle(school), schoolNamed = ownPlaceName(school);
     const id = `late-${r.subject}-${r.toId}-${today.date}`;
     const seen = state?.lastSeen ? +new Date(state.lastSeen) : null;
     const quiet = seen == null || +now - seen > 30 * MINUTE;
@@ -222,7 +228,9 @@ export function schoolLateNotices(input: {
         ? `No location since ${clock(seen)}${at ? ` (${at})` : ''}: a flat battery or no signal reads the same.`
         : state?.moving ? `On the move at ${clock(seen)}.` : `At ${at ?? 'an unnamed place'} at ${clock(seen)}.`;
     out.push({
-      id, kind: 'school-late', subject: r.subject, recipients: guardians.get(r.subject)!, place: schoolName,
+      id, kind: 'school-late', subject: r.subject, recipients: guardians.get(r.subject)!,
+      ...(schoolNamed ? { place: schoolNamed } : {}),
+      eventTitle: `${name} isn't at ${schoolNamed ?? 'school'} yet`,
       until: +now + (LATE_GIVE_UP_MINS - late) * MINUTE,
       push: {
         ...base('school-late', id, r.subject),

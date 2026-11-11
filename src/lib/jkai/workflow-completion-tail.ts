@@ -14,8 +14,13 @@
  * dispatched it, and a second dispatch would start every listening workflow
  * twice.
  *
- * The cursor is `(created_at, id)` and starts at process start, so a restart
- * never replays history. Each pass re-reads a short overlap behind the cursor:
+ * The cursor is `(created_at, id)` and starts a few minutes BEFORE process
+ * start (`TAIL_START_LOOKBACK_MS`): a run that finished while this process was
+ * restarting is a row nobody was listening for, and starting at the restart
+ * itself lost it for good. Nothing older is ever read, so a restart still does
+ * not replay history, and a run that WAS delivered just before the restart is
+ * not delivered twice: `deliverRunToSubscribers` passes over a build that
+ * already holds it. Each pass re-reads a short overlap behind the cursor:
  * `created_at` is stamped when a row is written, not when it becomes visible,
  * so a row can appear behind one already read. `deliverCompletionOnce`
  * remembers what it has fanned out, which is what makes the overlap (and an
@@ -34,6 +39,9 @@ export const TAIL_PAGE = 50;
 export const TAIL_MAX_PAGES = 10;
 /** How far behind the cursor each pass looks again. */
 export const TAIL_OVERLAP_MS = 60_000;
+
+/** How far before process start the first pass reads: the length of a restart, with room. */
+export const TAIL_START_LOOKBACK_MS = 5 * 60_000;
 
 const ZERO_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -79,13 +87,13 @@ const defaultDeps: TailDeps = { read: readCompletions, deliver: (workflowId, run
  * The tail's state and one pass over it. Separate from the timer so the cursor
  * can be tested without a clock or a database.
  */
-export function createCompletionTail(startedAt: Date, deps: TailDeps = defaultDeps) {
-  const floor = startedAt.getTime();
-  let cursor: TailCursor = { at: startedAt.toISOString(), id: ZERO_ID };
+export function createCompletionTail(startedAt: Date, deps: TailDeps = defaultDeps, lookbackMs = TAIL_START_LOOKBACK_MS) {
+  const floor = startedAt.getTime() - Math.max(0, lookbackMs);
+  let cursor: TailCursor = { at: new Date(floor).toISOString(), id: ZERO_ID };
 
   /** One pass. Returns how many rows it handed on. A failed read moves nothing. */
   async function pass(): Promise<number> {
-    // Look again a little behind the cursor, but never behind the start.
+    // Look again a little behind the cursor, but never behind where the tail began.
     const back = Math.max(floor, Date.parse(cursor.at) - TAIL_OVERLAP_MS);
     let from: TailCursor = { at: new Date(back).toISOString(), id: ZERO_ID };
     let handed = 0;

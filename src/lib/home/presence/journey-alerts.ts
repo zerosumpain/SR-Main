@@ -14,7 +14,7 @@
 
 import type { PushMessage } from '$lib/server/apns';
 import type { InsightPlace, RouteInsight } from './insights';
-import { placeTitle } from './insights';
+import { ownPlaceName, placeTitle } from './insights';
 import { metresBetween } from './cluster';
 import { railJourney } from './movement';
 import type { DriveEvent } from './drive';
@@ -78,8 +78,11 @@ export interface JourneyNotice {
   until: number;
   /** The trip it reports, `<subject>-<arrived ms>`: the "stopped" notice it replaces. */
   trip: string;
-  /** The destination's name, when it has one: what the `family.alert` event says. */
+  /** The name the OWNER gave the destination, when he gave one: what the
+   *  `family.alert` event says. Never a looked-up label (`ownPlaceName`). */
   place?: string;
+  /** The event's title, worded round `place` alone; the push title may say more. */
+  eventTitle: string;
 }
 
 /** A completed trip: who, from where to where, when it began and ended. */
@@ -141,6 +144,7 @@ export function journeyNotice(input: {
   const { route, left, arrived } = trip;
   const to = places.find((p) => p.id === route.toId);
   const where = to ? placeTitle(to) : null;
+  const named = ownPlaceName(to);
   const from = route.from || 'where they were';
   const how = stats.mode === 'train' ? `${duration((arrived - left) / MINUTE)} by train` : `${duration((arrived - left) / MINUTE)} drive`;
   const lines = [
@@ -151,7 +155,8 @@ export function journeyNotice(input: {
   const id = `journey-${route.subject}-${arrived}`;
   return {
     id, kind: 'journey', subject: route.subject, trip: `${route.subject}-${arrived}`,
-    ...(where ? { place: where } : {}),
+    ...(named ? { place: named } : {}),
+    eventTitle: named ? `${name} arrived safely at ${named}` : `${name} arrived safely`,
     recipients: [...new Set(recipients.map((r) => r.trim().toLowerCase()))],
     until: arrived + STOP_WINDOW_MINS * MINUTE,
     push: {

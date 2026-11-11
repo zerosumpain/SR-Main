@@ -3,7 +3,7 @@
 // Management (pause/resume/delete) is on the /jkai/daydreams/watches page.
 import { register } from '../registry-internal';
 import { createMonitor, listMonitors } from '$lib/monitors/monitors.server';
-import { createEventMonitor, listEventMonitors, removeEventMonitor, startEventMonitors } from '$lib/monitors/event-monitors.server';
+import { createEventMonitor, listEventMonitors, removeEventMonitor } from '$lib/monitors/event-monitors.server';
 import { EVENT_CATALOGUE } from '$lib/events/catalogue';
 import { refuseUnlessOwner } from './owner-only';
 
@@ -58,7 +58,11 @@ register({
 // happens". A platform event type, an optional filter on the payload, and a
 // notification to John when one matches. Kept in a setting, no workflow is
 // generated. See `$lib/monitors/event-monitors.server`.
-startEventMonitors();
+//
+// The subscription is NOT started here. This module is imported by the tool
+// registry, so by every process role and every test; started at import, each
+// of them listened and one event could notify more than once. One process
+// listens: src/hooks.server.ts starts it under the `background` service.
 
 const eventTypes = () => (EVENT_CATALOGUE as readonly { type: string; label: string }[]).map((e) => ({ type: e.type, label: e.label }));
 
