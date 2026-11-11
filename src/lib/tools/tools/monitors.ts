@@ -3,6 +3,9 @@
 // Management (pause/resume/delete) is on the /jkai/daydreams/watches page.
 import { register } from '../registry-internal';
 import { createMonitor, listMonitors } from '$lib/monitors/monitors.server';
+import { createEventMonitor, listEventMonitors, removeEventMonitor, startEventMonitors } from '$lib/monitors/event-monitors.server';
+import { EVENT_CATALOGUE } from '$lib/events/catalogue';
+import { refuseUnlessOwner } from './owner-only';
 
 register({
   name: 'monitor_create',
@@ -47,6 +50,96 @@ register({
       return { success: true, data: { count: monitors.length, monitors } };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'monitor_list failed' };
+    }
+  },
+});
+
+// Event monitors (workflow knit 2026-11-11, slice 5): "tell me when <event>
+// happens". A platform event type, an optional filter on the payload, and a
+// notification to John when one matches. Kept in a setting, no workflow is
+// generated. See `$lib/monitors/event-monitors.server`.
+startEventMonitors();
+
+const eventTypes = () => (EVENT_CATALOGUE as readonly { type: string; label: string }[]).map((e) => ({ type: e.type, label: e.label }));
+
+register({
+  name: 'event_monitor_create',
+  effect: 'mutate',
+  description:
+    'Tell John when a site event happens: pick an event type from the catalogue (a release going live, a connector breaking, a capture being ready, a wish-list offer, a workflow finishing) and he gets a notification each time one is raised. Optional filter clauses match top-level payload fields ({ key, op: equals | contains, value }). Use for "tell me when <event> happens"; for watching a web page or a price over time use monitor_create instead. Notifies at most once per `everyMinutes` per monitor.',
+  parameters: {
+    type: 'object',
+    properties: {
+      event: { type: 'string', description: 'The event type, e.g. "release.live". event_monitor_list names them all.' },
+      filter: {
+        type: 'array',
+        description: 'Optional: every clause must match the event payload.',
+        items: {
+          type: 'object',
+          properties: { key: { type: 'string' }, op: { type: 'string', enum: ['equals', 'contains'] }, value: { type: 'string' } },
+          required: ['key', 'value'],
+        },
+      },
+      label: { type: 'string', description: 'Optional: the notification title, in a few words.' },
+      everyMinutes: { type: 'number', minimum: 1, maximum: 1440, description: 'Least minutes between two notifications from this monitor. Default 10.' },
+    },
+    required: ['event'],
+  },
+  category: 'Monitors',
+  toolset: 'monitors',
+  surfaces: ['chat', 'app'],
+  handler: async (args, ctx) => {
+    const refused = refuseUnlessOwner('event_monitor_create', ctx);
+    if (refused) return refused;
+    try {
+      const out = await createEventMonitor({ eventType: args.event, filter: args.filter, label: args.label, minMinutes: args.everyMinutes });
+      if (!out.ok) return { success: false, error: out.error };
+      return { success: true, data: { monitor: out.monitor, message: `John will be told when ${out.monitor.eventType} happens.` } };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'event_monitor_create failed' };
+    }
+  },
+});
+
+register({
+  name: 'event_monitor_list',
+  effect: 'read',
+  description: 'List the event monitors ("tell me when <event> happens") with their event type, filter and notification gap, and the event types a monitor can be made for. Read-only.',
+  parameters: { type: 'object', properties: {} },
+  category: 'Monitors',
+  toolset: 'monitors',
+  surfaces: ['chat', 'app'],
+  handler: async (_args, ctx) => {
+    const refused = refuseUnlessOwner('event_monitor_list', ctx);
+    if (refused) return refused;
+    try {
+      const monitors = await listEventMonitors();
+      return { success: true, data: { count: monitors.length, monitors, eventTypes: eventTypes() } };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'event_monitor_list failed' };
+    }
+  },
+});
+
+register({
+  name: 'event_monitor_remove',
+  effect: 'mutate',
+  confirm: 'light',
+  description: 'Remove one event monitor by its id (from event_monitor_list), so John is no longer told about that event.',
+  parameters: { type: 'object', properties: { id: { type: 'string', description: 'The monitor id, em_….' } }, required: ['id'] },
+  category: 'Monitors',
+  toolset: 'monitors',
+  surfaces: ['chat', 'app'],
+  handler: async (args, ctx) => {
+    const refused = refuseUnlessOwner('event_monitor_remove', ctx);
+    if (refused) return refused;
+    const id = typeof args.id === 'string' ? args.id.trim() : '';
+    if (!/^em_[a-f0-9]{1,32}$/.test(id)) return { success: false, error: 'id must be an em_… monitor id.' };
+    try {
+      const gone = await removeEventMonitor(id);
+      return gone ? { success: true, data: { removed: gone.id, eventType: gone.eventType } } : { success: false, error: `No event monitor ${id}.` };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'event_monitor_remove failed' };
     }
   },
 });
