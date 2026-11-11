@@ -1,4 +1,4 @@
-// src/lib/deepdive/chat-tools.ts
+// src/lib/tools/tools/web-search.ts
 //
 // `web_search` (workflow knit 2026-11-11, slice 3): a plain web search through
 // the search balancer (`./web-search`), which picks the provider with credit
@@ -15,10 +15,10 @@
 // is attached to is not. Titles and snippets are web pages' text: every result
 // says they are data, never instructions.
 //
-// Registered from here (src/hooks.server.ts imports this module at boot).
+// Registered through the registry (src/lib/tools/registry.ts imports this module).
 
-import { register } from '$lib/tools/registry-internal';
-import { refuseUnlessOwner } from '$lib/tools/tools/owner-only';
+import { register } from '../registry-internal';
+import { refuseUnlessOwner } from './owner-only';
 
 export const SNIPPET_CAP = 400;
 
@@ -88,7 +88,7 @@ register({
       return { success: false, error: `web_search has used today's ${dailyCap()} unattended searches. It is available again tomorrow, or in a chat John is in.` };
     }
     try {
-      const { search } = await import('./web-search');
+      const { search } = await import('$lib/deepdive/web-search');
       const out = await search(query, { purpose: 'tool.web_search', maxResults: limit, ...(news ? { topic: 'news' as const, ...(days ? { days } : {}) } : {}) });
       return {
         success: true,

@@ -1,4 +1,4 @@
-// src/lib/projects/chat-tools.ts
+// src/lib/tools/tools/shares.ts
 //
 // jkai's share-link read (workflow knit 2026-11-11, slice 3).
 //
@@ -12,13 +12,13 @@
 // Creating or revoking a link and setting its password are NOT tools: they
 // stay on the page, by decision.
 //
-// Owner-only, not member-safe. Registered from here (src/hooks.server.ts
-// imports this module at boot).
+// Owner-only, not member-safe. Registered through the registry
+// (src/lib/tools/registry.ts imports this module).
 
-import { register } from '$lib/tools/registry-internal';
-import { refuseUnlessOwner } from '$lib/tools/tools/owner-only';
-import { getAllowedProjectKeys } from './registry';
-import { listSharesWithVisits, type SharedLink } from './shares';
+import { register } from '../registry-internal';
+import { refuseUnlessOwner } from './owner-only';
+import { getAllowedProjectKeys } from '$lib/projects/registry';
+import { listSharesWithVisits, type SharedLink } from '$lib/projects/shares';
 
 const iso = (d: Date | null | undefined): string | null => (d instanceof Date ? d.toISOString() : null);
 

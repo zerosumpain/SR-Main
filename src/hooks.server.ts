@@ -14,10 +14,8 @@ import '$lib/games/chat-tools';
 import '$lib/home/presence/chat-tools';
 import '$lib/daydream/notebook/chat-tools';
 import '$lib/releases/chat-tools';
-import '$lib/projects/chat-tools';
 import '$lib/estate/chat-tools';
 import '$lib/nav/chat-tools';
-import '$lib/deepdive/chat-tools';
 // Commissioning's quota reader and backlog intake, registered by the domains
 // that own them so $lib/jkai never imports them back (see $lib/jkai/commission/ports).
 import { registerCommissionQuota } from '$lib/daydream/commission-port';

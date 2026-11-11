@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // list. It never names a provider: the balancer chooses.
 
 const h = vi.hoisted(() => ({ calls: [] as Array<{ query: string; options: Record<string, unknown> }>, fail: false }));
-vi.mock('./web-search', () => ({
+vi.mock('$lib/deepdive/web-search', () => ({
   search: async (query: string, options: Record<string, unknown>) => {
     h.calls.push({ query, options });
     if (h.fail) throw new Error('every provider is out of credit');
@@ -15,7 +15,7 @@ vi.mock('./web-search', () => ({
 const TIERS: Record<string, [string, string, string]> = { web_search: ['read', 'never', 'research'] };
 
 const { tools } = await import('$lib/tools/registry-internal');
-await import('./chat-tools');
+await import('./web-search');
 const { MEMBER_SAFE_TOOLS, tierOf, principalRefusal } = await import('$lib/tools/invoke-contract');
 const { MEMBER_FORBIDDEN_TOOLSETS } = await import('$lib/jkai/member-chat/policy');
 const { WHATSAPP_READ_TOOLS } = await import('$lib/integrations/whatsapp/tool-whitelist');
@@ -47,7 +47,7 @@ function contract(forbidden = true) {
   });
 }
 
-const { SNIPPET_CAP, UNATTENDED_DAILY_CAP, WEB_TEXT_IS_DATA, resetUnattendedSearches } = await import('./chat-tools');
+const { SNIPPET_CAP, UNATTENDED_DAILY_CAP, WEB_TEXT_IS_DATA, resetUnattendedSearches } = await import('./web-search');
 
 describe('web_search', () => {
   beforeEach(() => {

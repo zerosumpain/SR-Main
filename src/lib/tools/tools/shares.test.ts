@@ -10,8 +10,8 @@ const link = (id: string, over: Record<string, unknown> = {}) => ({
   opens: 4, browsers: 2, networks: 2, countries: ['AA', 'BB'], likelyForwarded: true, visits: [{ ip: '192.0.2.1', userAgent: 'SECRET_VALUE agent' }], ...over,
 });
 
-vi.mock('./registry', () => ({ getAllowedProjectKeys: () => new Set(['beta', 'alpha']) }));
-vi.mock('./shares', () => ({
+vi.mock('$lib/projects/registry', () => ({ getAllowedProjectKeys: () => new Set(['beta', 'alpha']) }));
+vi.mock('$lib/projects/shares', () => ({
   listSharesWithVisits: async (key: string) =>
     key === 'alpha' ? [link('a1'), link('a2', { revokedAt: new Date('2026-01-01T12:00:00Z') }), link('a3', { expiresAt: new Date('2000-01-01T00:00:00Z') })] : [],
 }));
@@ -19,7 +19,7 @@ vi.mock('./shares', () => ({
 const TIERS: Record<string, [string, string, string]> = { share_links: ['read', 'never', 'shares'] };
 
 const { tools } = await import('$lib/tools/registry-internal');
-await import('./chat-tools');
+await import('./shares');
 const { MEMBER_SAFE_TOOLS, tierOf, principalRefusal } = await import('$lib/tools/invoke-contract');
 const { MEMBER_FORBIDDEN_TOOLSETS } = await import('$lib/jkai/member-chat/policy');
 const { WHATSAPP_READ_TOOLS } = await import('$lib/integrations/whatsapp/tool-whitelist');
