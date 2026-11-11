@@ -8,23 +8,25 @@ import type { CapabilityEntry } from '../types';
 // `manifest.test.ts` fails while a planned row names a registered tool.
 //
 // These are the gaps the 2026-10-28 overhaul audit found (point 2, P2-7 to
-// P2-11): no demand recorded yet, so they are rows, not tools.
+// P2-11): no demand recorded yet, so they are rows, not tools. The workflow
+// knit (2026-11-11) shipped the family, games, Hometowns and notebook tools,
+// so those rows are live in `owner.ts`; `people-location` is held by decision.
 
 export const PLANNED_ENTRIES: CapabilityEntry[] = [
   {
-    id: 'family',
-    title: 'Family features from chat',
-    blurb: 'The family side of the app from chat: the family alarm, photos, holds, the digest and family messages.',
+    id: 'family-photos',
+    title: 'Family photos, holds and the digest',
+    blurb: 'The rest of the family side of the app from chat: family photos, holds and the family digest.',
     app: 'main',
     repo: 'SR-Main',
     status: 'planned',
     toolsets: [],
-    tools: ['family_digest', 'family_photos', 'family_alarm_status'],
-    keywords: [String.raw`\bfamily\s+(?:alarm|photos?|digest|messages?|hold)\b`],
+    tools: ['family_digest', 'family_photos'],
+    keywords: [String.raw`\bfamily\s+(?:photos?|pictures?|digest|holds?)\b`],
     pages: ['/home'],
     native: 'family',
     memberSafe: false,
-    notes: 'Use the phone app for family features; jkai cannot read or change them yet.',
+    notes: 'Use the phone app for family photos, holds and the digest; jkai cannot read or change them yet.',
   },
   {
     id: 'people-location',
@@ -41,35 +43,6 @@ export const PLANNED_ENTRIES: CapabilityEntry[] = [
     notes: 'The most sensitive data the site holds; it stays out of chat until John asks for it.',
   },
   {
-    id: 'games',
-    title: 'Family games',
-    blurb: 'The family games (word games, boards and races) from chat: whose turn it is, scores and starting a game.',
-    app: 'main',
-    repo: 'SR-Main',
-    status: 'planned',
-    toolsets: [],
-    tools: ['games_list', 'game_state'],
-    keywords: [String.raw`\b(?:family\s+)?games?\s+(?:room|score|scores|turn)\b|\bwhose\s+turn\b`],
-    pages: ['/app'],
-    native: 'games',
-    memberSafe: false,
-    notes: 'Play in the phone app; jkai cannot see or move in a game.',
-  },
-  {
-    id: 'hometowns',
-    title: 'Hometowns',
-    blurb: 'The Hometowns game from chat: progress, towns claimed and the leaderboard.',
-    app: 'main',
-    repo: 'SR-Main',
-    status: 'planned',
-    toolsets: [],
-    tools: ['hometowns_status'],
-    keywords: [String.raw`\bhometowns?\b`],
-    pages: ['/app'],
-    native: 'games',
-    memberSafe: false,
-  },
-  {
     id: 'wildmind',
     title: 'Wildmind',
     blurb: 'Wildmind from chat: the creatures, the world and what changed.',
@@ -81,19 +54,6 @@ export const PLANNED_ENTRIES: CapabilityEntry[] = [
     keywords: [String.raw`\bwildmind\b`],
     pages: ['/wildmind'],
     native: 'wildmind',
-    memberSafe: false,
-  },
-  {
-    id: 'notebook',
-    title: 'Notebook',
-    blurb: 'Reading and adding to the jkai notebook from chat.',
-    app: 'main',
-    repo: 'SR-Main',
-    status: 'planned',
-    toolsets: [],
-    tools: ['notebook_search', 'notebook_add'],
-    keywords: [String.raw`\bnotebook\b|\bmy\s+notes\b`],
-    pages: ['/jkai/notes'],
     memberSafe: false,
   },
 ];

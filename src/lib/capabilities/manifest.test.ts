@@ -12,14 +12,18 @@ import { MEMBER_SAFE_TOOLS, tierOf } from '$lib/tools/invoke-contract';
 
 async function registrySnapshot(): Promise<RegistryTool[]> {
   const reg = await import('$lib/tools/registry');
-  // The domains that register their chat tools from hooks.server.ts.
-  await import('$lib/daydream/chat-tools');
-  await import('$lib/owner-data/chat-tools');
-  await import('$lib/trips/chat-tools');
-  await import('$lib/captures/chat-tools');
+  // The domains that register their chat tools from hooks.server.ts, read off
+  // that file so a new one cannot be wired there and forgotten here.
+  for (const path of hookChatToolModules()) await import(/* @vite-ignore */ path);
   return reg.getTools().map((t) => ({ name: t.name, toolset: t.toolset, ...tierOf(t) }));
 }
 
+/** Every `$lib/…/chat-tools` side-effect import in hooks.server.ts, as a file URL. */
+export function hookChatToolModules(source = readFileSync(HOOKS, 'utf8')): string[] {
+  return [...source.matchAll(/^import\s+['"]\$lib\/([\w/-]+\/chat-tools)['"];?\s*$/gm)].map((m) => new URL(`../${m[1]}.ts`, import.meta.url).href);
+}
+
+const HOOKS = fileURLToPath(new URL('../../hooks.server.ts', import.meta.url));
 const GENERATED = fileURLToPath(new URL('./capabilities.generated.json', import.meta.url));
 
 describe('capability manifest drift guards', () => {
@@ -53,6 +57,13 @@ describe('capability manifest drift guards', () => {
     expect(manifestDrift(dated, registry, MEMBER_SAFE_TOOLS).some((p) => p.startsWith('news: blurb'))).toBe(true);
   }, 120_000);
 
+  it('reads the chat-tool modules off hooks.server.ts', () => {
+    const found = hookChatToolModules().map((u) => u.replace(/^.*\/src\/lib\//, ''));
+    expect(found).toEqual(expect.arrayContaining(['daydream/chat-tools.ts', 'owner-data/chat-tools.ts', 'trips/chat-tools.ts', 'captures/chat-tools.ts', 'family/chat-tools.ts', 'home/presence/chat-tools.ts']));
+    for (const u of hookChatToolModules()) expect(() => readFileSync(fileURLToPath(u)), u).not.toThrow();
+    expect(hookChatToolModules("import '$lib/a-b/chat-tools';\n// import '$lib/x/chat-tools';\nimport { y } from '$lib/y/chat-tools';")).toHaveLength(1);
+  });
+
   it('keeps the custom prefix reserved and maps it to the custom row', () => {
     for (const row of CAPABILITIES) for (const ts of row.toolsets) expect(ts.startsWith(CUSTOM_TOOLSET_PREFIX)).toBe(false);
     expect(capabilityForToolset('custom:sports')?.id).toBe('custom');
@@ -61,7 +72,7 @@ describe('capability manifest drift guards', () => {
 
   it('seeds the planned gaps the audit found', () => {
     const planned = CAPABILITIES.filter((c) => c.status === 'planned').map((c) => c.id);
-    expect(planned).toEqual(expect.arrayContaining(['family', 'people-location', 'games', 'hometowns', 'wildmind', 'notebook']));
+    expect(planned).toEqual(expect.arrayContaining(['family-photos', 'people-location', 'wildmind']));
   });
 
   it('tells a member only of live, member-safe rows', () => {
@@ -72,7 +83,9 @@ describe('capability manifest drift guards', () => {
   });
 
   it('ranks a planned ask to its row and a live ask above a planned one', () => {
-    expect(rankCapabilities('can you show me the family photos')[0]?.entry.id).toBe('family');
+    expect(rankCapabilities('can you show me the family photos')[0]?.entry.id).toBe('family-photos');
+    expect(rankCapabilities('is the family alarm raised')[0]?.entry.id).toBe('family');
+    expect(rankCapabilities('where is my son right now')[0]?.entry).toMatchObject({ id: 'people-location', status: 'planned' });
     expect(rankCapabilities('what is on my trip on day 2')[0]?.entry.id).toBe('trips');
     expect(rankCapabilities('hometowns leaderboard')[0]?.entry.id).toBe('hometowns');
     expect(rankCapabilities('')).toEqual([]);

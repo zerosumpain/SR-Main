@@ -83,6 +83,15 @@ export const MEMBER_FORBIDDEN_TOOLSETS = [
   // The owner's wish list names who each gift is for — the people most likely
   // to be on the other end of a member turn.
   'wishlist',
+  // The knit's owner lanes (2026-11-11): where the household goes, its games,
+  // the release desk, share links, the estate and the site's own analytics.
+  'places',
+  'games',
+  'hometowns',
+  'releases',
+  'shares',
+  'estate',
+  'site',
 ] as const;
 
 /** A turn restricted to one principal and a closed tool list. */

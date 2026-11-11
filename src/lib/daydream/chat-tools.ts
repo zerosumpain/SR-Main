@@ -289,3 +289,85 @@ register({
     }
   },
 });
+
+// Workflow knit 2026-11-11: the solutions register, and the one press that
+// carries a note's solution out. `runSolution` is the service the web card and
+// the phone use; nothing is sent to anyone by it (`sendIt` stays unexposed).
+register({
+  name: 'solutions_register',
+  effect: 'read',
+  description:
+    'The solutions register: what has been carried out on daydream notes (a tracker started, lights turned off, a diary entry, a build queued), newest first, each with its state (done, running, stopped, undone), the outcome where there is one and a link. Use for "what has jkai done for me", "which trackers are running". Read-only.',
+  parameters: {
+    type: 'object',
+    properties: {
+      state: { type: 'string', enum: ['done', 'undone', 'stopped', 'running'], description: 'Optional: only entries in this state.' },
+      limit: { type: 'number', minimum: 1, maximum: 40, description: 'Most entries. Default 15.' },
+    },
+    required: [],
+  },
+  category: 'Daydream',
+  toolset: 'daydream',
+  surfaces: ['chat', 'app'],
+  handler: async (args, ctx) => {
+    const refused = refuseUnlessOwner('solutions_register', ctx);
+    if (refused) return refused;
+    const limit = typeof args.limit === 'number' && Number.isFinite(args.limit) ? Math.max(1, Math.min(40, Math.trunc(args.limit))) : 15;
+    const state = typeof args.state === 'string' && ['done', 'undone', 'stopped', 'running'].includes(args.state) ? args.state : null;
+    try {
+      const { loadRegisterRoom } = await import('$lib/daydream/register.server');
+      const room = await loadRegisterRoom();
+      const entries = room.entries.filter((e) => !state || e.state === state);
+      return {
+        success: true,
+        data: {
+          total: entries.length,
+          entries: entries.slice(0, limit).map((e) => ({
+            at: e.at,
+            noteId: e.thoughtId,
+            note: e.noteTitle.slice(0, 160),
+            kind: e.kind,
+            what: e.what.slice(0, 200),
+            state: e.state,
+            ...(e.result ? { result: e.result.slice(0, 300) } : {}),
+            ...(e.href ? { url: e.href } : {}),
+          })),
+          page: '/jkai/daydreams/solutions',
+        },
+      };
+    } catch (err) {
+      return failed(err, 'The register could not be read.');
+    }
+  },
+});
+
+register({
+  name: 'solution_run',
+  effect: 'mutate',
+  confirm: 'light',
+  description:
+    'Carry out a daydream note\'s one-press solution, as the button on the note does: start the tracker, queue the build or run the fix the note proposes. Takes the note id; daydream_note_get shows whether the note has a solution. Nothing is sent to anyone. Use only when John asks for it.',
+  parameters: { type: 'object', properties: { ...idParam }, required: ['id'] },
+  category: 'Daydream',
+  toolset: 'daydream',
+  surfaces: ['chat', 'app'],
+  handler: async (args, ctx) => {
+    const refused = refuseUnlessOwner('solution_run', ctx);
+    if (refused) return refused;
+    const id = noteId(args);
+    if (!id) return { success: false, error: 'id is required' };
+    try {
+      const [{ thinkNoteKind }, { runSolution }, { backlogPorts }] = await Promise.all([
+        import('$lib/daydream/think/notes.server'),
+        import('$lib/daydream/act/solution.server'),
+        import('$lib/selfimprove/follow-ports.server'),
+      ]);
+      if (!(await thinkNoteKind(id))) return { success: false, error: 'No such note' };
+      const out = await runSolution(id, backlogPorts);
+      if (!out.ok) return { success: false, error: (out.reason ?? 'That solution could not be run.').slice(0, 300) };
+      return { success: true, data: { id, message: out.message ?? 'Done.', ...(out.href ? { url: out.href } : {}), ...(out.already ? { already: true } : {}) } };
+    } catch (err) {
+      return failed(err, 'That solution could not be run.');
+    }
+  },
+});
