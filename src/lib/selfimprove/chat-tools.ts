@@ -1,11 +1,12 @@
-// src/lib/tools/tools/solutions.ts
+// src/lib/selfimprove/chat-tools.ts
 //
 // `solution_run` (workflow knit 2026-11-11): the one-press solution on a
 // daydream note. It lives here rather than in $lib/daydream/chat-tools because
 // it needs the backlog ports from $lib/selfimprove, which daydream may not
 // import (selfimprove already imports daydream).
-import { register } from '../registry-internal';
-import { refuseUnlessOwner } from './owner-only';
+import { register } from '$lib/tools/registry-internal';
+// Registered from here (src/hooks.server.ts imports this module at boot).
+import { refuseUnlessOwner } from '$lib/tools/tools/owner-only';
 
 const idParam = { id: { type: 'string', description: 'The note id, from daydream_inbox or a /jkai/daydreams?note= link.' } };
 const noteId = (args: Record<string, unknown>) => (typeof args.id === 'string' ? args.id.trim().slice(0, 200) : '');

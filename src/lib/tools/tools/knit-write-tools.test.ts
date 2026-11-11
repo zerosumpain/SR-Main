@@ -86,7 +86,7 @@ await import('./wishlist');
 await import('./briefing');
 await import('./monitors');
 await import('$lib/daydream/chat-tools');
-await import('./solutions');
+await import('$lib/selfimprove/chat-tools');
 await import('$lib/captures/chat-tools');
 const { MEMBER_SAFE_TOOLS, tierOf, principalRefusal } = await import('../invoke-contract');
 const { WHATSAPP_READ_TOOLS } = await import('$lib/integrations/whatsapp/tool-whitelist');
