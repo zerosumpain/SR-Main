@@ -29,7 +29,7 @@ const DEAD_VERBS = [
   'execute_code',
   'read_file',
   'search_files',
-  'web_search',
+  // web_search left this list on 2026-11-11: it is a registered tool now (src/lib/tools/tools/web-search.ts).
   'web_extract',
   'delegate_task',
   'workflow_create',
