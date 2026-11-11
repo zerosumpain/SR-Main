@@ -381,12 +381,12 @@ describe('pushes', () => {
     // Earlier tests asked this trip questions on the same pinned day.
     (await import('$lib/events/payloads')).resetSaid();
     const said: Array<Record<string, unknown> | undefined> = [];
-    const off = on('trip.needs_you', (e) => said.push(e.payload));
+    const off = on('trip.needs_you', (e) => void said.push(e.payload));
     expect(await qs.pushQuestions(trip(), [q], { push, now: new Date('2026-10-21T08:00:00Z') })).toBe(2);
     // The owner is in the audience: the bus hears it once, with the trip and the reason only.
     expect(said).toHaveLength(1);
     expect(Object.keys(said[0]!).sort()).toEqual(['reason', 'title', 'tripId']);
-    expect(said[0]).toMatchObject({ tripId: trip().id, reason: 'question' });
+    expect(said[0]).toMatchObject({ tripId: h.trip.id, reason: 'question' });
     expect(push.mock.calls[0][0]).toEqual(['owner@example.test', 'parent@example.test']);
     expect(push.mock.calls[0][1]).toMatchObject({ category: 'trip-q-q9', userInfo: { answers: [{ id: 'a0', label: 'Yes' }, { id: 'a1', label: 'No' }], prompt: 'Keep it?' } });
     expect(await qs.pushQuestions(trip(), [q], { push, now: new Date('2026-10-21T18:00:00Z') })).toBe(0);

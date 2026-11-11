@@ -61,7 +61,7 @@ register({
   handler: async (args, ctx) => {
     const refused = refuseUnlessOwner('share_links', ctx);
     if (refused) return refused;
-    const keys = [...getAllowedProjectKeys()].sort();
+    const keys = [...(await getAllowedProjectKeys())].sort();
     const asked = typeof args.project === 'string' ? args.project.trim() : '';
     if (asked && !keys.includes(asked)) return { success: false, error: `No project "${asked.slice(0, 60)}". Projects: ${keys.slice(0, 30).join(', ')}.` };
     try {

@@ -46,10 +46,10 @@ async function run(args: Record<string, unknown>, ctx: ToolExecContext): Promise
 describe('tool_search and the capability manifest', () => {
   it('says a planned capability is not built yet, files it once, and merges a repeat', async () => {
     const first = await run({ query: 'show me the family photos', requested: true }, ctxFor(owner));
-    expect(first.notBuiltYet).toMatchObject({ capability: 'family', backlog: 'queued' });
-    expect(first.notBuiltYet?.answer).toBe("Family features from chat is not built yet (today: /home) — it's on the backlog. Want me to commission it?");
+    expect(first.notBuiltYet).toMatchObject({ capability: 'family-photos', backlog: 'queued' });
+    expect(first.notBuiltYet?.answer).toBe("Family photos, holds and the digest is not built yet (today: /home) — it's on the backlog. Want me to commission it?");
     expect(queued).toHaveLength(1);
-    expect(queued[0]).toMatchObject({ capabilityId: 'family', title: 'jkai capability: Family features from chat', conversationId: 'conv-1' });
+    expect(queued[0]).toMatchObject({ capabilityId: 'family-photos', title: 'jkai capability: Family photos, holds and the digest', conversationId: 'conv-1' });
     const again = await run({ query: 'family photos please', requested: true }, ctxFor(owner));
     expect(again.notBuiltYet?.backlog).toBe('already-queued');
     expect(queued).toHaveLength(1);
