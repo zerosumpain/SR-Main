@@ -21,12 +21,46 @@ export function registerDeliveryListener(): void {
   onPlatformEvent('workflow.completed', async (event) => {
     const payload = event.payload as { workflowId?: string; runId?: string } | undefined;
     if (!payload?.workflowId || !payload.runId) return;
-    try {
-      await deliverRunToSubscribers(payload.workflowId, payload.runId, 'subscription');
-    } catch (err) {
-      console.error('[workflow-deliveries] failed to fan out run', payload.runId, err);
-    }
+    await deliverCompletionOnce(payload.workflowId, payload.runId);
   });
+}
+
+/**
+ * A finished run reaches its subscribers by two roads: the in-process bus
+ * (above), when this process raised `workflow.completed`, and the tail of
+ * `platform_events` (./workflow-completion-tail), which is how a run finished
+ * by the Workflows process is heard at all. An event this process raised is
+ * also a row the tail will read, and the tail re-reads a short overlap, so
+ * both roads end here: a run is fanned out once, whoever says it first.
+ *
+ * In memory. `deliverRunToSubscribers` inserts a delivery per subscriber and
+ * is not itself idempotent; a restart forgets these keys, and the tail starts
+ * from the restart, so nothing from before it is read again.
+ */
+const delivered = new Set<string>();
+const MAX_REMEMBERED = 5_000;
+
+export async function deliverCompletionOnce(
+  workflowId: string,
+  runId: string,
+  deliver: (workflowId: string, runId: string, source: 'subscription') => Promise<number> = deliverRunToSubscribers,
+): Promise<boolean> {
+  const key = `${workflowId}:${runId}`;
+  if (delivered.has(key)) return false;
+  if (delivered.size >= MAX_REMEMBERED) delivered.delete(delivered.values().next().value as string);
+  // Marked before the first await, so the other road cannot slip in between.
+  delivered.add(key);
+  try {
+    await deliver(workflowId, runId, 'subscription');
+  } catch (err) {
+    console.error('[workflow-deliveries] failed to fan out run', runId, err);
+  }
+  return true;
+}
+
+/** For tests. */
+export function resetDeliveredCompletions(): void {
+  delivered.clear();
 }
 
 export async function deliverRunToSubscribers(workflowId: string, runId: string, source: 'subscription' | 'manual'): Promise<number> {

@@ -325,6 +325,7 @@ async function gracefulShutdown() {
   stopDependencyMonitor();
   stopHealthWatch();
   stopPushDispatch();
+  stopWorkflowCompletionTail();
   stopDatastoreReaper();
   stopWorkflowDoctor();
   stopBriefingEngine();
@@ -351,6 +352,13 @@ process.on('SIGINT', () => void gracefulShutdown());
 // Subscribe build orchestrator to workflow_completed events for push-back delivery
 import { registerDeliveryListener } from '$lib/jkai/workflow-deliveries';
 if (runsService('background')) registerDeliveryListener();
+
+// …and hear the runs SR-Workflows finishes. Its `workflow.completed` reaches
+// this process only as a `platform_events` row, so the listener above never
+// fired for a real run; the tail reads those rows and hands them to the same
+// once-only delivery. One process: the same service as the listener.
+import { startWorkflowCompletionTail, stopWorkflowCompletionTail } from '$lib/jkai/workflow-completion-tail';
+if (runsService('background')) startWorkflowCompletionTail();
 
 // Sign-in gating (owners env + guest allow-list) lives in $lib/server/access.
 
