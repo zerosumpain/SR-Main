@@ -101,7 +101,7 @@ describe('GET /api/platform/tools/catalogue', () => {
     expect(body.capabilitiesVersion).toMatch(/^c1-[0-9a-f]{8}$/);
     const ids = body.capabilities.map((c: { id: string }) => c.id);
     expect(ids).toEqual(expect.arrayContaining(['trips', 'family', 'custom']));
-    expect(body.capabilities.find((c: { id: string }) => c.id === 'family')).toMatchObject({ status: 'planned', tools: expect.any(Array), pages: ['/home'] });
+    expect(body.capabilities.find((c: { id: string }) => c.id === 'people-location')).toMatchObject({ status: 'planned', tools: expect.any(Array), pages: ['/home/people'] });
   });
 
   it('leaves custom tools out of the unattended audience', async () => {

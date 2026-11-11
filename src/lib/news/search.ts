@@ -1,4 +1,5 @@
 import type { NewsSource, NewsStory } from './types';
+import { isNewsSource, newsSourceDef, type NewsLane } from '$lib/constants/news-sources';
 
 const SEARCH_FILLER = new Set([
   'ars',
@@ -55,7 +56,14 @@ const SEARCH_FILLER = new Set([
 export interface NewsSearchOptions {
   query?: string;
   source?: NewsSource | 'all';
+  /** Keep to one lane of the desk. A named source already implies its lane. */
+  lane?: NewsLane | 'all';
   limit?: number;
+}
+
+/** The lane a story's source sits in, or null for a source the desk no longer lists. */
+export function newsStoryLane(story: Pick<NewsStory, 'source'>): NewsLane | null {
+  return isNewsSource(story.source) ? newsSourceDef(story.source).lane : null;
 }
 
 export interface NewsSearchMatch {
@@ -126,11 +134,13 @@ export function searchNewsStories(
   options: NewsSearchOptions = {},
 ): NewsSearchMatch[] {
   const source = options.source ?? 'all';
+  const lane = options.lane ?? 'all';
   const limit = Math.max(1, Math.min(20, Math.trunc(options.limit ?? 8)));
   const terms = newsQueryTerms(options.query ?? '');
   const candidates = stories
     .map((story, index) => ({ story, index }))
-    .filter(({ story }) => source === 'all' || story.source === source);
+    .filter(({ story }) => source === 'all' || story.source === source)
+    .filter(({ story }) => lane === 'all' || newsStoryLane(story) === lane);
 
   if (terms.length === 0) {
     return candidates.slice(0, limit).map(({ story }) => ({ story, relevance: 0 }));

@@ -62,6 +62,8 @@ import './tools/recall';
 import './tools/browser';
 import './tools/monitors';
 import './tools/wishlist';
+import './tools/shares';
+import './tools/web-search';
 import './tools/gmail';
 import './tools/apple-calendar';
 import './tools/node-call';

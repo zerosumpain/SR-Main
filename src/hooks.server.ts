@@ -7,6 +7,16 @@ import '$lib/daydream/chat-tools';
 import '$lib/owner-data/chat-tools';
 import '$lib/trips/chat-tools';
 import '$lib/captures/chat-tools';
+// The knit's read and light-write tools, each registered by the domain that
+// owns the service it wraps (workflow knit 2026-11-11, slices 3 and 4).
+import '$lib/family/chat-tools';
+import '$lib/games/chat-tools';
+import '$lib/home/presence/chat-tools';
+import '$lib/daydream/notebook/chat-tools';
+import '$lib/releases/chat-tools';
+import '$lib/estate/chat-tools';
+import '$lib/nav/chat-tools';
+import '$lib/selfimprove/chat-tools';
 // Commissioning's quota reader and backlog intake, registered by the domains
 // that own them so $lib/jkai never imports them back (see $lib/jkai/commission/ports).
 import { registerCommissionQuota } from '$lib/daydream/commission-port';
@@ -325,6 +335,7 @@ async function gracefulShutdown() {
   stopDependencyMonitor();
   stopHealthWatch();
   stopPushDispatch();
+  stopWorkflowCompletionTail();
   stopDatastoreReaper();
   stopWorkflowDoctor();
   stopBriefingEngine();
@@ -351,6 +362,20 @@ process.on('SIGINT', () => void gracefulShutdown());
 // Subscribe build orchestrator to workflow_completed events for push-back delivery
 import { registerDeliveryListener } from '$lib/jkai/workflow-deliveries';
 if (runsService('background')) registerDeliveryListener();
+
+// …and hear the runs SR-Workflows finishes. Its `workflow.completed` reaches
+// this process only as a `platform_events` row, so the listener above never
+// fired for a real run; the tail reads those rows and hands them to the same
+// once-only delivery. One process: the same service as the listener.
+import { startWorkflowCompletionTail, stopWorkflowCompletionTail } from '$lib/jkai/workflow-completion-tail';
+if (runsService('background')) startWorkflowCompletionTail();
+
+// Event monitors ("tell me when <event> happens"): one process listens, the
+// same one as the tail above. The monitors tool module used to start this at
+// import, so every role (and every test) subscribed and one event could
+// notify more than once.
+import { startEventMonitors } from '$lib/monitors/event-monitors.server';
+if (runsService('background')) startEventMonitors();
 
 // Sign-in gating (owners env + guest allow-list) lives in $lib/server/access.
 

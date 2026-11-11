@@ -25,13 +25,13 @@ beforeEach(() => {
 describe('platform event bus', () => {
   it('delivers an emitted event to a subscriber, with its payload', () => {
     const seen: Array<Record<string, unknown>> = [];
-    const off = on('whoop_recovery_updated', (event) => seen.push(event as unknown as Record<string, unknown>));
-    emit('whoop_recovery_updated', { recordsSynced: 3 });
+    const off = on('health.summary_changed', (event) => seen.push(event as unknown as Record<string, unknown>));
+    emit('health.summary_changed', { readiness: 72 });
     off();
     expect(seen).toHaveLength(1);
     expect(seen[0]).toMatchObject({
-      type: 'whoop_recovery_updated',
-      payload: { recordsSynced: 3 },
+      type: 'health.summary_changed',
+      payload: { readiness: 72 },
       chainDepth: 0,
       originWorkflowId: null,
     });

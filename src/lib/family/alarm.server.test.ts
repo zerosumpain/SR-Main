@@ -150,3 +150,30 @@ describe('raiseAlarm — the Bat phone', () => {
     expect(h.recorded).toEqual([]);
   });
 });
+
+describe('raiseAlarm — the family.alert event', () => {
+  it('says who and what kind, and never the position, the place or the message', async () => {
+    const { on } = await import('$lib/events/platform-bus');
+    const said: Array<Record<string, unknown> | undefined> = [];
+    const off = on('family.alert', (e) => said.push(e.payload));
+    await raiseAlarm('kid@example.test', false, quietInput, NOW, pusher().push);
+    h.latest = null;
+    await raiseAlarm('kid@example.test', false, { kind: 'siren', message: 'Help', position: { lat: 54.5, lon: -1.55, accuracy: 10 }, battery: null, place: null }, NOW, pusher().push);
+    off();
+    expect(said).toEqual([
+      { kind: 'bat-phone', person: 'Kid', title: 'Kid used the Bat phone' },
+      { kind: 'alarm', person: 'Kid', title: 'Kid raised the alarm' },
+    ]);
+    expect(JSON.stringify(said)).not.toMatch(/54\.5|1\.55|Come now|Help|Parade|example\.test/);
+  });
+
+  it('says nothing when the press only answered with the active alarm', async () => {
+    const { on } = await import('$lib/events/platform-bus');
+    const said: unknown[] = [];
+    const off = on('family.alert', (e) => said.push(e.payload));
+    h.latest = activeQuiet();
+    await raiseAlarm('kid@example.test', false, quietInput, NOW, pusher().push);
+    off();
+    expect(said).toEqual([]);
+  });
+});

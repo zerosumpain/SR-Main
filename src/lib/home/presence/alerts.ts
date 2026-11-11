@@ -25,6 +25,8 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, lte, max, ne, sql } from '
 import { db, type DbExecutor } from '$lib/db';
 import { daydreamPlaces, daydreamTrail, householdEvent } from '$lib/db/schema';
 import { getSetting, setSetting } from '$lib/server/models/settings';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { familyAlertPayload, firstInWindow } from '$lib/events/payloads';
 import { followers, type HouseholdMember } from './members';
 import { getHomePlace } from './places';
 import {
@@ -181,6 +183,24 @@ export function alertText(
 ): { title: string; body: string } {
   const title = kind === 'arrive' ? `${who} arrived at ${place}` : `${who} left ${place}`;
   return { title: title.slice(0, 120), body: `at ${localClock(at)}`.slice(0, 300) };
+}
+
+/**
+ * What `family.alert` says of a crossing: who, which way, and the place's
+ * NAME. The place row has a position and a radius; neither is read. PURE.
+ */
+export function crossingEventPayload(
+  ev: Pick<AlertEvent, 'kind' | 'subject'>,
+  place: Pick<AlertPlace, 'label' | 'isHome'> | undefined,
+  members: readonly HouseholdMember[],
+  title: string,
+): Record<string, unknown> {
+  return familyAlertPayload({
+    kind: ev.kind,
+    person: displayNameOf(members, ev.subject),
+    place: place?.label || (place?.isHome ? 'home' : null),
+    title,
+  });
 }
 
 export function displayNameOf(members: readonly HouseholdMember[], subject: string): string {
@@ -880,6 +900,11 @@ export async function deliverAlerts(
     if (!reached.length) continue;
     result.pushed += reached.length;
     const ev = events.find((e) => e.id === planned.eventId);
+    // Said once per crossing, the first time it reaches anyone: a later run
+    // that reaches the rest of its followers is the same alert.
+    if (ev && !ev.pushedTo?.length && firstInWindow(`family.alert:${ev.id}`, DELIVERY_WINDOW_MS)) {
+      emitPlatformEvent('family.alert', crossingEventPayload(ev, places.get(ev.placeId), members, planned.message.title), { source: 'family-alerts' });
+    }
     if (ev) ev.pushedTo = [...(ev.pushedTo ?? []), ...reached];
     try {
       await db

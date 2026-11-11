@@ -9,6 +9,8 @@
 import { and, gte, isNotNull, ne, or, sql, eq } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { gameResults } from '$lib/db/schema';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { gameFinishedPayload } from '$lib/events/payloads';
 import { GAME_IDS } from './catalogue';
 import { TITLES } from './invite-push.server';
 import {
@@ -26,7 +28,7 @@ import {
  */
 export async function recordRound(rows: readonly RoundRow[], now = Date.now()): Promise<Record<string, Window>> {
   if (!rows.length) return {};
-  await db
+  const written = await db
     .insert(gameResults)
     .values(
       rows.map((r) => ({
@@ -44,7 +46,17 @@ export async function recordRound(rows: readonly RoundRow[], now = Date.now()): 
         finishedAt: r.finishedAt,
       })),
     )
-    .onConflictDoNothing({ target: [gameResults.roomId, gameResults.round, gameResults.playerId] });
+    .onConflictDoNothing({ target: [gameResults.roomId, gameResults.round, gameResults.playerId] })
+    .returning({ playerId: gameResults.playerId });
+  // Said once: a round replayed (a phone re-sending its offline results) writes nothing, and says nothing.
+  if (written.length) {
+    const winners = rows.filter((r) => r.won).map((r) => r.playerName);
+    emitPlatformEvent(
+      'game.finished',
+      gameFinishedPayload({ game: rows[0].game, roomId: rows[0].roomId, winner: winners.join(' & ') }),
+      { source: 'game-results' },
+    );
+  }
 
   if (!rows.some((r) => r.score !== null)) return {};
   const { game, roomId, round } = rows[0];

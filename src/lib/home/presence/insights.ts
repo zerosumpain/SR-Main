@@ -68,6 +68,14 @@ export interface PresenceInsights {
 const dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: LOCAL_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 const clockFmt = new Intl.DateTimeFormat('en-GB', { timeZone: LOCAL_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const dayFmt = new Intl.DateTimeFormat('en-GB', { timeZone: LOCAL_TZ, weekday: 'short' });
+/**
+ * What the OWNER called a place, or null: the name he typed, or "Home" for the
+ * place he made home. Never the looked-up `suggestedLabel`: a geocoder's label
+ * is often the nearest street, and a street name is where somebody is. This is
+ * the only place name a platform event may carry (`family.alert`); the pushes
+ * to the family's own phones still use `placeTitle`.
+ */
+export const ownPlaceName = (p: Pick<InsightPlace, 'label' | 'kind'> | undefined): string | null => p?.label?.trim() || (p?.kind === 'home' ? 'Home' : null);
 export const placeTitle = (p: InsightPlace | undefined): string => p?.label || p?.suggestedLabel || (p?.kind === 'home' ? 'Home' : 'Unnamed stop');
 const round = (n: number) => Math.round(n * 10) / 10;
 /** The local date, formatted once per UTC hour — the minute loop asks ~200k times. */

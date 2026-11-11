@@ -16,6 +16,8 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { db, type DbExecutor } from '$lib/db';
 import { daydreamThoughts, gmailAccounts } from '$lib/db/schema';
 import { getSetting, setSetting } from '$lib/server/models/settings';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { daydreamActedPayload } from '$lib/events/payloads';
 import { localDay } from '../features/build';
 import { splitNarrative } from '../think/explain';
 import { noteHref } from '../think/notes';
@@ -329,9 +331,11 @@ export async function doIt(
 ): Promise<ActResult> {
   const standing = !!opts.standing;
   let did: ActPlan['kind'] | null = null;
+  let title = '';
   const result = await db.transaction(async (tx): Promise<ActResult> => {
     const row = await loadRow(tx, thoughtId);
     if (!row) return { ok: false, reason: 'That note no longer exists.' };
+    title = row.title ?? '';
 
     const existing = readStored(row.actions);
     if (existing?.stored.done && !existing.stored.done.undoneAt) {
@@ -383,6 +387,12 @@ export async function doIt(
     did = plan.kind;
     return { ok: true, status: 'done', label: doneLabel(entry, plan), calendar: outcome.calendar };
   });
+
+  // Which note and what kind of step, by tap or standing. Not what the step said.
+  const acted = did as ActPlan['kind'] | null;
+  if (result.ok && !result.already && acted) {
+    emitPlatformEvent('daydream.acted', daydreamActedPayload({ daydreamId: thoughtId, title, action: acted }), { source: 'daydream' });
+  }
 
   // Doing it is the strongest "worth knowing" there is. After the commit, and
   // only when this tap did the work.

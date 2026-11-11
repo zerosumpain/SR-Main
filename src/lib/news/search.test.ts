@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { matchesNewsQuery, newsQueryTerms } from './search';
+import { matchesNewsQuery, newsQueryTerms, searchNewsStories } from './search';
+import { NEWS_SOURCE_DEFS } from '$lib/constants/news-sources';
 import type { NewsStory } from './types';
 
 function story(partial: Partial<NewsStory> & { title: string }): NewsStory {
   return {
-    key: 'k', source: 'hacker-news', sourceLabel: 'Hacker News', id: '1',
+    key: 'k', source: partial.source ?? 'hacker-news', sourceLabel: 'Hacker News', id: '1',
     title: partial.title, url: 'https://example.com/a', canonicalUrl: 'example.com/a',
     discussionUrl: 'https://example.com/d', domain: partial.domain ?? 'example.com',
     author: partial.author ?? null, publishedAt: '2026-09-15T09:00:00.000Z',
@@ -46,5 +47,34 @@ describe('matchesNewsQuery — the desk and the tool share one definition', () =
     const s = story({ title: 'Untitled', tags: ['compilers'], domain: 'lwn.net' });
     expect(matchesNewsQuery(s, newsQueryTerms('compilers'))).toBe(true);
     expect(matchesNewsQuery(s, newsQueryTerms('lwn'))).toBe(true);
+  });
+});
+
+describe('searchNewsStories — one lane of the desk', () => {
+  const tech = NEWS_SOURCE_DEFS.find((d) => d.lane === 'tech')!.id;
+  const pub = NEWS_SOURCE_DEFS.find((d) => d.lane === 'public')!.id;
+  const wire = [
+    story({ title: 'A compiler release', source: tech }),
+    story({ title: 'A schools funding release', source: pub }),
+    story({ title: 'A second compiler note', source: tech }),
+  ];
+
+  it('returns every lane when none is asked for', () => {
+    expect(searchNewsStories(wire)).toHaveLength(3);
+    expect(searchNewsStories(wire, { lane: 'all' })).toHaveLength(3);
+  });
+
+  it('keeps to the lane asked for, in the wire order', () => {
+    expect(searchNewsStories(wire, { lane: 'public' }).map((m) => m.story.title)).toEqual(['A schools funding release']);
+    expect(searchNewsStories(wire, { lane: 'tech' }).map((m) => m.story.title)).toEqual(['A compiler release', 'A second compiler note']);
+  });
+
+  it('applies the lane together with the query', () => {
+    expect(searchNewsStories(wire, { lane: 'public', query: 'release' })).toHaveLength(1);
+    expect(searchNewsStories(wire, { lane: 'public', query: 'compiler' })).toEqual([]);
+  });
+
+  it('finds nothing where the source and the lane disagree', () => {
+    expect(searchNewsStories(wire, { source: tech, lane: 'public' })).toEqual([]);
   });
 });

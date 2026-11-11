@@ -7,6 +7,8 @@
 // as `lastError`, where the page shows it.
 
 import { notifyOwner } from '$lib/server/notify';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { wishlistOfferPayload } from '$lib/events/payloads';
 import { eventFor, mergeOffer, offerKey, summarise, type AlertEvent } from './alerts';
 import { isDue } from './due';
 import { KEPT } from './match';
@@ -27,6 +29,8 @@ const MAX_ITEMS_PER_RUN = 8;
 const EXPIRY_RECHECK_MS = 60 * 60_000;
 /** Deal pages read per item per check — stored offers that left the feed included. */
 const MAX_EXPIRY_CHECKS = 40;
+/** `wishlist.offer` events one check may raise. */
+const MAX_OFFER_EVENTS = 10;
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 200);
 
@@ -182,6 +186,15 @@ export async function checkItem(item: WishItem, now = new Date()): Promise<ItemC
       dedupeKey: `wishlist:${item.id}:${now.toISOString().slice(0, 13)}`,
     });
     notified = res.raised;
+    // One event per offer worth telling, so a workflow can filter on price.
+    // Capped: a hunt's first sweep can turn up a page of them.
+    for (const e of events.slice(0, MAX_OFFER_EVENTS)) {
+      emitPlatformEvent(
+        'wishlist.offer',
+        wishlistOfferPayload({ wishId: item.id, title: e.offer.title, pricePence: e.offer.pricePence, url: e.offer.url }),
+        { source: 'wishlist-sweep' },
+      );
+    }
   }
 
   item.lastCheckedAt = now.toISOString();

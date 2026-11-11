@@ -85,7 +85,7 @@ export async function validateProjectShare(
     .where(eq(projectShares.id, row.id))
     .catch(() => {});
   if (visit?.visitorHash) {
-    void recordShareVisit(row.id, visit).catch((err: Error) => {
+    void recordShareVisit(row.id, visit, { project: key, label: row.label }).catch((err: Error) => {
       // Once a minute at most: a missing runtime grant would fail every request.
       if (Date.now() - visitWarnedAt < 60_000) return;
       visitWarnedAt = Date.now();

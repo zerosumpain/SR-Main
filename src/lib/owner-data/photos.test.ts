@@ -287,6 +287,6 @@ describe('the capability row', () => {
     for (const q of ['who is in my photos', 'photos of Sam in Lisbon last summer', 'where was I on 14 July', 'find the photo of the receipt', 'how many pictures from 2019']) {
       expect(hits(q), q).toBe(true);
     }
-    expect(rankCapabilities('can you show me the family photos')[0]?.entry.id).toBe('family');
+    expect(rankCapabilities('can you show me the family photos')[0]?.entry.id).toBe('family-photos');
   });
 });
