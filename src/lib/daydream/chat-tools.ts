@@ -344,7 +344,9 @@ register({
 register({
   name: 'solution_run',
   effect: 'mutate',
-  confirm: 'light',
+  // Always: a press is the owner's verdict and acts with the owner's reach
+  // (a build, the house), so nothing unattended may make it.
+  confirm: 'always',
   description:
     'Carry out a daydream note\'s one-press solution, as the button on the note does: start the tracker, queue the build or run the fix the note proposes. Takes the note id; daydream_note_get shows whether the note has a solution. Nothing is sent to anyone. Use only when John asks for it.',
   parameters: { type: 'object', properties: { ...idParam }, required: ['id'] },

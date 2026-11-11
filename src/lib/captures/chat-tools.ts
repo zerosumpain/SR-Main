@@ -16,8 +16,9 @@
 // Owner-only, not member-safe. The two writes (workflow knit 2026-11-11,
 // slice 4) are the phone card's own: `capture_followup_decide` approves or
 // dismisses one proposed follow-up through `decideAction`, and
-// `capture_speaker_rename` names a speaker through `patchCapture`. Both
-// confirm lightly, so they run only with John attached to the turn.
+// `capture_speaker_rename` names a speaker through `patchCapture`. The
+// decision confirms every time, so it runs only with John attached to the turn;
+// the rename confirms lightly.
 //
 // Registered from here (src/hooks.server.ts imports this module at boot).
 
@@ -205,7 +206,9 @@ register({
   category: 'Captures',
   toolset: 'captures',
   effect: 'mutate',
-  confirm: 'light',
+  // Always, not light: the follow-up was proposed from recorded speech, so it
+  // must never be carried out by a turn or workflow nobody is attached to.
+  confirm: 'always',
   surfaces: ['chat', 'app'],
   handler: async (args, ctx) => {
     const refused = refuseUnlessOwner('capture_followup_decide', ctx);
