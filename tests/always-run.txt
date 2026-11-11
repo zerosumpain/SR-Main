@@ -41,6 +41,7 @@ src/lib/landing/wildmind-words.test.ts
 src/lib/llm/keys.test.ts
 src/lib/llm/model-service-client.test.ts
 src/lib/models/workloads.test.ts
+src/lib/monitors/event-monitors.server.test.ts
 src/lib/selfimprove/board.test.ts
 src/lib/selfimprove/narrative.probe.test.ts
 src/lib/selfimprove/verify.test.ts
