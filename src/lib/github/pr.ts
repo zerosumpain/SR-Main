@@ -9,6 +9,8 @@
 // call it with their own repo and token.
 
 import { REPO_SLUG, githubToken } from './issues';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { pullOpenedPayload } from '$lib/events/payloads';
 import { redactGitHubSecrets } from './redact';
 
 const API = 'https://api.github.com';
@@ -112,6 +114,8 @@ export async function openPullRequest(args: OpenPullRequestArgs): Promise<PullRe
   if (created.ok) {
     const json = (await created.json().catch(() => ({}))) as { html_url?: unknown; number?: unknown };
     if (typeof json.html_url === 'string' && typeof json.number === 'number') {
+      // Opened just now by the site. One GitHub already had for the head (below) is not news.
+      emitPlatformEvent('pull.opened', pullOpenedPayload({ repo, number: json.number, title: args.title }), { source: 'github-client' });
       return { number: json.number, url: json.html_url, reused: false };
     }
     throw new Error('GitHub accepted the pull request but returned no url.');

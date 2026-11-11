@@ -14,6 +14,8 @@ import type { NativeIdentity } from '$lib/server/native-auth';
 import type { NativeRole } from '$lib/server/native-handler';
 import { getOwnerEmails, isOwnerEmail } from '$lib/server/access';
 import { pushToEmails } from '$lib/server/push-devices';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { firstInWindow, tripNeedsYouPayload } from '$lib/events/payloads';
 import type { PushMessage } from '$lib/server/apns';
 import { dayLabel } from './changes';
 import { applyAndReplan, logEdit } from './converse.server';
@@ -89,6 +91,10 @@ export async function notifySuggested(trip: TripRecord, s: SuggestionRecord, opt
   try {
     const to = await parentEmails(s.byEmail);
     if (!to.length) return 0;
+    // The owner has something to approve. Which trip and why; the suggestion's words stay in the trip.
+    if (to.some((e) => isOwnerEmail(e)) && firstInWindow(`trip.needs_you:suggestion:${s.id}`, 24 * 60 * 60_000)) {
+      emitPlatformEvent('trip.needs_you', tripNeedsYouPayload({ tripId: trip.id, title: trip.title, reason: 'suggestion' }), { source: 'trips' });
+    }
     const msg = tripPush({ title: trip.title, body: `${s.byName} suggested ${s.wish.title} for ${slotName(s)}` }, trip, s.id, `trip-sugg-${s.id}`);
     return (await (opts.push ?? pushToEmails)(to, msg)).sent;
   } catch (err) {

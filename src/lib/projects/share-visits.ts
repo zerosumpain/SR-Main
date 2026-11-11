@@ -5,9 +5,12 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { projectShareVisits } from '$lib/db/schema';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { firstInWindow, shareOpenedPayload } from '$lib/events/payloads';
 import {
   BOT_LABEL,
   PREVIEW_LABEL,
+  isAutomated,
   visitStats,
   type ShareVisit,
   type ShareVisitStats,
@@ -20,6 +23,9 @@ export const VISITOR_ROW_CAP = 500;
 /** Visitor rows the Share panel lists per link, latest first. */
 export const VISITORS_SHOWN = 50;
 
+/** A link says `share.opened` at most once in this long, however many pages are opened through it. */
+export const SHARE_OPENED_EVERY_MS = 10 * 60_000;
+
 const t = projectShareVisits;
 
 /**
@@ -27,9 +33,19 @@ const t = projectShareVisits;
  * a row; anything else only updates the row it belongs to, so a page's own data
  * requests never add a visitor on their own. Awaited by nobody on the request
  * path (see validateProjectShare).
+ *
+ * A page opened by a person (not a link previewer or a bot) also raises
+ * `share.opened`, saying which link (`about`) and nothing of who.
  */
-export async function recordShareVisit(shareId: string, visit: ShareVisit): Promise<void> {
+export async function recordShareVisit(
+  shareId: string,
+  visit: ShareVisit,
+  about: { project?: string | null; label?: string | null } = {},
+): Promise<void> {
   if (!visit.visitorHash) return;
+  if (visit.open !== false && !isAutomated(visit.agent ?? null) && firstInWindow(`share.opened:${shareId}`, SHARE_OPENED_EVERY_MS)) {
+    emitPlatformEvent('share.opened', shareOpenedPayload({ shareId, project: about.project, label: about.label }), { source: 'project-shares' });
+  }
   const opens = visit.open === false ? 0 : 1;
   const latest = {
     ...(visit.agent ? { agent: visit.agent } : {}),

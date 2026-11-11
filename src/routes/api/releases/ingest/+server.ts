@@ -21,11 +21,16 @@ import { env } from '$env/dynamic/private';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { releases } from '$lib/db/schema';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { releaseLivePayload } from '$lib/events/payloads';
 import { nextVersionLabel, summariseRelease } from '$lib/releases/summarise';
 import { isOwnerRequest } from '$lib/server/owner';
 import { redactSensitive } from '$lib/security/sensitive';
 import { RELEASE_VIA, type CommitFact, type FileFact, type ReleaseIngestPayload, type ReleaseVia } from '$lib/releases/types';
 import type { RequestEvent, RequestHandler } from './$types';
+
+/** How old a deploy can be and still be said as `release.live`. */
+const RELEASE_NEWS_MS = 24 * 60 * 60_000;
 
 async function authorized(event: RequestEvent): Promise<boolean> {
   const secret = env.RELEASE_LOG_SECRET;
@@ -159,6 +164,11 @@ export const POST: RequestHandler = async (event) => {
       .returning({ id: releases.id, version: releases.version });
     id = inserted.id;
     version = inserted.version;
+    // A deploy seen for the first time, and a fresh one: the backfill and a
+    // collector catching up on last week are history, not news.
+    if (via !== 'backfill' && Date.now() - deployedAt.getTime() < RELEASE_NEWS_MS) {
+      emitPlatformEvent('release.live', releaseLivePayload({ app: repo.split('/')[1], sha: row.shortSha }), { source: 'release-ledger' });
+    }
   }
 
   // Summarise out of band: the deploy step must never wait on (or fail

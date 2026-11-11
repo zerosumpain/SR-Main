@@ -17,11 +17,21 @@
  * offers — filters match TOP-LEVEL keys only, so an example with its interesting
  * fields buried in an object is an example nobody can filter on.
  *
- * Names are `<domain>.<what>`, except `whoop_recovery_updated`, which predates
- * the convention and has a producer outside this repo's control. The old
- * `workflow_completed` is kept as an ALIAS of `workflow.completed`: a stored
- * schedule naming it still fires (production had no event schedules when this
- * changed, so the alias is cheap insurance rather than a migration).
+ * Names are `<domain>.<what>`. The old `workflow_completed` is kept as an ALIAS
+ * of `workflow.completed`: a stored schedule naming it still fires (production
+ * had no event schedules when this changed, so the alias is cheap insurance
+ * rather than a migration).
+ *
+ * Every entry has a producer in this repo. `intel.alert` and
+ * `whoop_recovery_updated` were listed here with none — the intel engine and
+ * the Whoop sync run in other applications and never raised them — so they
+ * were removed rather than left pickable and silent. A stored schedule that
+ * still names one keeps resolving (`canonicalEventType` passes an unknown name
+ * through) and waits for an event that never comes, exactly as it did before.
+ *
+ * The feature events below (`family.alert` onward) build their payloads in
+ * `./payloads`, which is the allow-list: names and ids, never a position, an
+ * address, an email, a phone number or a visitor's network.
  */
 
 export interface EventCatalogueEntry {
@@ -80,13 +90,6 @@ export const EVENT_CATALOGUE = [
     },
   },
   {
-    type: 'intel.alert',
-    label: 'High-significance intel alert',
-    description: 'The intelligence engine raised a high-significance alert inside your scope.',
-    source: 'intel engine',
-    payloadExample: { alertId: 'uuid', noteId: 'uuid', type: 'risk_change', title: 'Risk moved', content: '…' },
-  },
-  {
     type: 'health.summary_changed',
     label: 'Health figures moved',
     description: 'The health watcher saw your headline figures change (checked every 15 minutes).',
@@ -141,11 +144,67 @@ export const EVENT_CATALOGUE = [
     },
   },
   {
-    type: 'whoop_recovery_updated',
-    label: 'Whoop recovery synced',
-    description: 'A health sync stored new Whoop recovery records.',
-    source: 'health sync',
-    payloadExample: { recordsSynced: 1, syncedAt: '2026-09-25T07:00:00.000Z' },
+    type: 'family.alert',
+    label: 'A family alert went out',
+    description: 'A family alert was delivered: someone arrived at or left a place, stopped somewhere new, is late for school, finished a journey, has a low phone battery, or raised the alarm. Filter on kind or person. Carries names only, never a position.',
+    source: 'family alerts',
+    payloadExample: { kind: 'arrive', person: 'Sam', place: 'School', title: 'Sam arrived at School' },
+  },
+  {
+    type: 'wishlist.offer',
+    label: 'A wishlist offer was found',
+    description: 'The wishlist sweep found something worth telling you about for a wish: a first offer, a better price, or a price under your target.',
+    source: 'wishlist sweep',
+    payloadExample: { wishId: 'uuid', title: 'Example kettle 1.7L', price: 24.99, currency: 'GBP', url: 'https://shop.example.com/kettle' },
+  },
+  {
+    type: 'trip.needs_you',
+    label: 'A trip needs a decision',
+    description: 'A trip plan is waiting on you: a planning question only you can answer (reason question) or a suggestion from the family to approve (reason suggestion).',
+    source: 'trips',
+    payloadExample: { tripId: 'uuid', title: 'Summer week away', reason: 'question' },
+  },
+  {
+    type: 'share.opened',
+    label: 'A share link was opened',
+    description: 'Somebody opened a page through one of your project share links. At most one event per link every ten minutes; says which link, never who.',
+    source: 'project shares',
+    payloadExample: { shareId: 'uuid', project: 'example-project', label: 'For the review group' },
+  },
+  {
+    type: 'capture.ready',
+    label: 'A capture is ready',
+    description: 'A recording or photo you captured has been analysed and filed. followUps is how many follow-up actions it found; the transcript is not carried.',
+    source: 'captures',
+    payloadExample: { captureId: 'uuid', title: 'Planning call', followUps: 2 },
+  },
+  {
+    type: 'release.live',
+    label: 'A release went live',
+    description: 'A production release of one of the site\'s applications was recorded as live (reported by its release pipeline after the public check).',
+    source: 'release ledger',
+    payloadExample: { app: 'example-app', sha: '0123abc' },
+  },
+  {
+    type: 'pull.opened',
+    label: 'A pull request was opened',
+    description: 'The site opened a pull request on GitHub (a build, a change request or a repair). Pull requests opened by hand elsewhere are not seen.',
+    source: 'GitHub client',
+    payloadExample: { repo: 'example-org/example-repo', number: 123, title: 'Add the example feature' },
+  },
+  {
+    type: 'game.finished',
+    label: 'A game round finished',
+    description: 'A round of one of the multiplayer games was scored. winner is the display name of whoever won, and is absent when nobody did.',
+    source: 'game results',
+    payloadExample: { game: 'example-game', roomId: 'ABCD', winner: 'Sam' },
+  },
+  {
+    type: 'daydream.acted',
+    label: 'A daydream note was acted on',
+    description: 'An action was carried out from a daydream note: its proposed action was done, or a worked solution was applied. action names what was done.',
+    source: 'daydream',
+    payloadExample: { daydreamId: 'uuid', title: 'Tidy the example backlog', action: 'reminder' },
   },
 ] as const satisfies readonly EventCatalogueEntry[];
 

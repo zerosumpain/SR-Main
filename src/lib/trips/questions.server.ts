@@ -20,6 +20,8 @@
 
 import { getOwnerEmails } from '$lib/server/access';
 import { pushToEmails } from '$lib/server/push-devices';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { firstInWindow, tripNeedsYouPayload } from '$lib/events/payloads';
 import type { PushMessage } from '$lib/server/apns';
 import { solveTrip } from '$lib/trips/solver';
 import { dayLabel } from './changes';
@@ -553,6 +555,11 @@ export async function pushQuestions(trip: TripRecord, added: Question[], opts: {
     const off = new Set(await (opts.mutedFor ?? questionPushOff)(trip.id).catch(() => [] as string[]));
     const to = (await audienceEmails(trip, q.audience)).filter((e) => !off.has(e));
     if (!to.length) return 0;
+    // A question the owner is asked: once per trip per day, like the push, whether or not a phone took it.
+    const owners = new Set(getOwnerEmails().map((e) => e.trim().toLowerCase()));
+    if (to.some((e) => owners.has(e.trim().toLowerCase())) && firstInWindow(`trip.needs_you:question:${trip.id}:${today}`, 24 * 60 * 60_000)) {
+      emitPlatformEvent('trip.needs_you', tripNeedsYouPayload({ tripId: trip.id, title: trip.title, reason: 'question' }), { source: 'trips' });
+    }
     const sent = (await (opts.push ?? pushToEmails)(to, questionPush(trip, q))).sent;
     if (sent) await markQuestionPushed(trip.id, q.id);
     return sent;

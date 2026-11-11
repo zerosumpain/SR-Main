@@ -15,6 +15,8 @@ import { db } from '$lib/db';
 import { daydreamTrail } from '$lib/db/schema';
 import { getSetting, setSetting } from '$lib/server/models/settings';
 import { isApnsConfigured } from '$lib/server/apns';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { familyAlertPayload, firstInWindow } from '$lib/events/payloads';
 import { pushToEmails, type PushOutcome } from '$lib/server/push-devices';
 import type { PushMessage } from '$lib/server/apns';
 import { displayNameOf, pilotRecipients, silencedMovers } from './alerts';
@@ -70,6 +72,14 @@ export async function deliverBatteryAlerts(
         const outcome = await push(step.notice.recipients, step.notice.push);
         const reached = step.notice.recipients.filter((r) => outcome.reached.has(r));
         if (reached.length) result.sent++;
+        // Once per low spell, however many runs it takes to reach every follower.
+        if (reached.length && firstInWindow(`family.alert:${step.notice.id}`, 6 * 60 * 60_000)) {
+          emitPlatformEvent(
+            'family.alert',
+            familyAlertPayload({ kind: 'battery', person: displayNameOf(members, m.subject), title: step.notice.push.title }),
+            { source: 'family-alerts' },
+          );
+        }
         state = recordBatterySent(state, reached);
       }
       if (JSON.stringify(state) !== JSON.stringify(stored)) await setSetting(key, state);

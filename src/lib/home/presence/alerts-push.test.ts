@@ -5,7 +5,7 @@ vi.mock('$lib/db', () => ({ db: {} }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null, setSetting: async () => {} }));
 vi.mock('$lib/server/push-devices', () => ({ pushToEmails: async () => ({ reached: new Set(), sent: 0, failed: 0 }) }));
 
-const { planCrossingPushes, buildPilotEvents, DELIVERY_WINDOW_MS } = await import('./alerts');
+const { planCrossingPushes, buildPilotEvents, crossingEventPayload, DELIVERY_WINDOW_MS } = await import('./alerts');
 type AlertEvent = import('./alerts').AlertEvent;
 type AlertPlace = import('./alerts').AlertPlace;
 type HouseholdMember = import('./members').HouseholdMember;
@@ -94,5 +94,19 @@ describe('the pilot after a push', () => {
     const members = [...MEMBERS, member('robin')];
     const { send } = buildPilotEvents([ev('e1', { pushedTo: ['alex@example.test'] })], PLACES, members);
     expect(send[0].recipients).toEqual(['robin@example.test']);
+  });
+});
+
+describe('crossingEventPayload', () => {
+  it('says who crossed which named place, and nothing of where it is', () => {
+    const [plan] = planCrossingPushes([ev('e1')], PLACES, MEMBERS, NOW);
+    const payload = crossingEventPayload(ev('e1'), PLACES.get('school'), MEMBERS, plan.message.title);
+    expect(payload).toEqual({ kind: 'leave', person: 'Sam', place: 'School', title: 'Sam left School' });
+    expect(JSON.stringify(payload)).not.toMatch(/51|-1|radius|example\.test/);
+  });
+
+  it('leaves out a place with no name', () => {
+    const payload = crossingEventPayload(ev('e2', { kind: 'arrive' }), { label: null as never, isHome: false }, MEMBERS, 'Sam arrived at a place');
+    expect(payload).toEqual({ kind: 'arrive', person: 'Sam', title: 'Sam arrived at a place' });
   });
 });

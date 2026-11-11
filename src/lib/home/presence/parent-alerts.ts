@@ -58,6 +58,8 @@ export interface ParentNotice {
   push: PushMessage;
   /** Until when it is still worth sending. */
   until: number;
+  /** The place's name, when it has one: what the `family.alert` event says. */
+  place?: string;
 }
 
 /** Each child's guardians' emails: the members whose `guardianOf` names them. PURE. */
@@ -153,6 +155,7 @@ export function stopNotices(input: {
       const id = `stop-${route.subject}-${arrived}`;
       out.push({
         id, kind: 'stopped', subject: route.subject, recipients, until: arrived + STOP_WINDOW_MINS * MINUTE,
+        ...(where ? { place: where } : {}),
         push: {
           ...base('stopped', id, route.subject),
           title: where ? `${name} stopped at ${where}` : `${name} stopped somewhere new`,
@@ -219,7 +222,7 @@ export function schoolLateNotices(input: {
         ? `No location since ${clock(seen)}${at ? ` (${at})` : ''}: a flat battery or no signal reads the same.`
         : state?.moving ? `On the move at ${clock(seen)}.` : `At ${at ?? 'an unnamed place'} at ${clock(seen)}.`;
     out.push({
-      id, kind: 'school-late', subject: r.subject, recipients: guardians.get(r.subject)!,
+      id, kind: 'school-late', subject: r.subject, recipients: guardians.get(r.subject)!, place: schoolName,
       until: +now + (LATE_GIVE_UP_MINS - late) * MINUTE,
       push: {
         ...base('school-late', id, r.subject),

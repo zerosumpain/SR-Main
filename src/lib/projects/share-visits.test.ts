@@ -129,3 +129,24 @@ describe('reading the stats', () => {
     expect(state.executed).toHaveLength(0);
   });
 });
+
+describe('the share.opened event', () => {
+  it('is raised for a person opening a page, once per link per ten minutes, without who they are', async () => {
+    const { on } = await import('$lib/events/platform-bus');
+    const said: Array<Record<string, unknown> | undefined> = [];
+    const off = on('share.opened', (e) => said.push(e.payload));
+    const about = { project: 'example-project', label: 'For the review group' };
+    await recordShareVisit('share-a', visit({ open: false }), about);
+    await recordShareVisit('share-a', visit({ agent: 'Bot' }), about);
+    await recordShareVisit('share-a', visit({ agent: 'Preview · Chat app' }), about);
+    expect(said).toEqual([]);
+    await recordShareVisit('share-a', visit(), about);
+    await recordShareVisit('share-a', visit({ visitorHash: 'j'.repeat(32) }), about);
+    await recordShareVisit('share-b', visit());
+    off();
+    expect(said).toEqual([
+      { shareId: 'share-a', project: 'example-project', label: 'For the review group' },
+      { shareId: 'share-b' },
+    ]);
+  });
+});

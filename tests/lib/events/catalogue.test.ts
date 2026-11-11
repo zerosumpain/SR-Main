@@ -23,14 +23,21 @@ describe('event catalogue', () => {
     expect([...PLATFORM_EVENT_TYPES].sort()).toEqual(
       [
         'alexa.utterance',
+        'capture.ready',
         'connector.broken',
         'connector.recovered',
+        'daydream.acted',
+        'family.alert',
+        'game.finished',
         'health.summary_changed',
-        'intel.alert',
         'news.item',
         'notification.raised',
+        'pull.opened',
+        'release.live',
+        'share.opened',
+        'trip.needs_you',
         'whatsapp.inbound',
-        'whoop_recovery_updated',
+        'wishlist.offer',
         'workflow.completed',
       ].sort(),
     );
@@ -40,6 +47,23 @@ describe('event catalogue', () => {
     expect(canonicalEventType('workflow_completed')).toBe('workflow.completed');
     expect(isKnownEventType('workflow_completed')).toBe(true);
     expect(eventEntry('workflow_completed')?.type).toBe('workflow.completed');
+  });
+
+  it('lets a schedule that names a removed event keep resolving, to nothing', () => {
+    for (const gone of ['intel.alert', 'whoop_recovery_updated']) {
+      expect(isKnownEventType(gone)).toBe(false);
+      expect(canonicalEventType(gone)).toBe(gone);
+    }
+  });
+
+  it('keeps every example payload flat enough to filter on and free of positions', () => {
+    const banned = /^(lat|lon|lng|latitude|longitude|coords?|accuracy|address|email|phone|ip|userAgent)$/i;
+    for (const e of EVENT_CATALOGUE.filter((x) => /^(family|wishlist|trip|share|capture|release|pull|game|daydream)\./.test(x.type))) {
+      for (const [key, value] of Object.entries(e.payloadExample)) {
+        expect(key, e.type).not.toMatch(banned);
+        expect(typeof value === 'object', `${e.type}.${key}`).toBe(false);
+      }
+    }
   });
 
   it('does not invent an unknown type', () => {

@@ -15,6 +15,8 @@ import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { appSettings, daydreamPlaces, daydreamTrail, householdEvent } from '$lib/db/schema';
 import { isApnsConfigured } from '$lib/server/apns';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { familyAlertPayload, firstInWindow } from '$lib/events/payloads';
 import { pushToEmails } from '$lib/server/push-devices';
 import { loadForecast } from './forecast.server';
 import { listMembers } from './members';
@@ -74,6 +76,7 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
   let sent = 0, owed = 0;
   for (const n of notices) {
     if (+now > n.until) continue;
+    let first = false;
     await db.transaction(async (tx) => {
       const key = `home.presence.parents.${n.subject}`;
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
@@ -88,6 +91,8 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
       if (pending.some((r) => !done.has(r))) owed++;
       if (!pending.some((r) => done.has(r))) return;
       sent++;
+      // The first run to reach anyone; a later one reaching the rest is the same alert.
+      first = !record[n.id]?.to?.length;
       record[n.id] = { to: [...done], until: n.until };
       // Oldest out: a child's record never grows past a few days of stops.
       const kept = Object.entries(record).sort((a, b) => b[1].until - a[1].until).slice(0, KEEP);
@@ -95,6 +100,15 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
       await tx.insert(appSettings).values({ key, value })
         .onConflictDoUpdate({ target: appSettings.key, set: { value, updatedAt: new Date() } });
     });
+    // After the record commits, and once: an event for an alert that rolled back would be a lie.
+    const person = names.get(n.subject) ?? members.find((m) => m.subject === n.subject)?.displayName;
+    if (first && person && firstInWindow(`family.alert:${n.id}`, 24 * 60 * 60_000)) {
+      emitPlatformEvent(
+        'family.alert',
+        familyAlertPayload({ kind: n.kind, person, place: n.place, title: n.push.title }),
+        { source: 'family-alerts' },
+      );
+    }
   }
   return { sent, owed };
 }

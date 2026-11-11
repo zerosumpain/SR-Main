@@ -78,6 +78,8 @@ export interface JourneyNotice {
   until: number;
   /** The trip it reports, `<subject>-<arrived ms>`: the "stopped" notice it replaces. */
   trip: string;
+  /** The destination's name, when it has one: what the `family.alert` event says. */
+  place?: string;
 }
 
 /** A completed trip: who, from where to where, when it began and ended. */
@@ -149,6 +151,7 @@ export function journeyNotice(input: {
   const id = `journey-${route.subject}-${arrived}`;
   return {
     id, kind: 'journey', subject: route.subject, trip: `${route.subject}-${arrived}`,
+    ...(where ? { place: where } : {}),
     recipients: [...new Set(recipients.map((r) => r.trim().toLowerCase()))],
     until: arrived + STOP_WINDOW_MINS * MINUTE,
     push: {

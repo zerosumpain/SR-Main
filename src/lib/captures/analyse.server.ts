@@ -15,6 +15,8 @@
 import type { Capture } from '$lib/db/schema';
 import { getLLMClient } from '$lib/llm/client';
 import { withActivity } from '$lib/context/activity';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { captureReadyPayload } from '$lib/events/payloads';
 import { priceFor, computeCost } from '$lib/llm/pricing';
 import { resolveExtractionModel, resolveVisionModel } from '$lib/server/models/workload-settings';
 import { getModelCapabilities } from '$lib/server/models/capabilities';
@@ -150,6 +152,7 @@ export async function runCaptureAnalysis(id: string): Promise<void> {
   let c = await getCaptureById(id);
   if (!c) return;
   let cost: number | null = 0;
+  let followUps = 0;
   const addCost = (n: number | null) => {
     cost = cost === null || n === null ? null : cost + n;
   };
@@ -225,6 +228,7 @@ export async function runCaptureAnalysis(id: string): Promise<void> {
         speakers: analysis.speakers,
       })) ?? c;
     await replaceProposedActions(c, analysis.actions);
+    followUps = analysis.actions.length;
   } else {
     c = (await updateCapture(c.id, { title: c.title || 'Capture (no speech)', summary: '' })) ?? c;
   }
@@ -237,6 +241,8 @@ export async function runCaptureAnalysis(id: string): Promise<void> {
   const prior = c.analysisCostUsd == null ? null : Number(c.analysisCostUsd);
   const total: number | null = cost === null ? null : (prior ?? 0) + cost;
   await updateCapture(c.id, { status: 'ready', error: null, analysisCostUsd: total === null ? null : total.toFixed(6) });
+  // What it is called and how much it asks of you. Not what was said.
+  emitPlatformEvent('capture.ready', captureReadyPayload({ captureId: c.id, title: c.title, followUps }), { source: 'captures' });
   await notifyReady(c).catch(() => {});
 }
 

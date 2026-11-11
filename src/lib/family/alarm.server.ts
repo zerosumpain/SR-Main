@@ -6,6 +6,8 @@ import { db } from '$lib/db';
 import { familyAlarm } from '$lib/db/schema';
 import { getOwnerEmails, isOwnerEmail } from '$lib/server/access';
 import { pushToEmails } from '$lib/server/push-devices';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { familyAlertPayload } from '$lib/events/payloads';
 import { livePositions } from '$lib/home/presence/household';
 import { familyId, familyPersonFor, familyRoster } from './roster.server';
 import { recordMessage, senderSubjects } from './messages.server';
@@ -157,6 +159,18 @@ export async function raiseAlarm(
     );
   }
   console.warn(`[family] alarm ${alarm.id} raised (${alarm.kind}): ${people} people, ${pushed} phones`);
+  // Who and what kind. Never the position, never the phone's "At …" (a street,
+  // not a saved place's name), and never the message: that was written for the family.
+  const quiet = alarm.kind === 'quiet';
+  emitPlatformEvent(
+    'family.alert',
+    familyAlertPayload({
+      kind: quiet ? 'bat-phone' : 'alarm',
+      person: alarm.fromName,
+      title: quiet ? `${alarm.fromName} used the Bat phone` : `${alarm.fromName} raised the alarm`,
+    }),
+    { source: 'family-alarm' },
+  );
   return { kind: 'new', alarm: { ...alarm, pushedCount: pushed }, pushed, recipients: people };
 }
 

@@ -13,6 +13,8 @@ import { ownerActionPrincipal, unattendedPrincipal } from '$lib/tools/in-process
 import { eq, sql } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { daydreamThoughts } from '$lib/db/schema';
+import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
+import { daydreamActedPayload } from '$lib/events/payloads';
 import { splitNarrative } from '../think/explain';
 import { noteHref } from '../think/notes';
 import { recordFeedback } from '../thought-store';
@@ -109,6 +111,9 @@ export async function runSolution(thoughtId: string, ports: () => BacklogPorts, 
     out = await carryOut(row, s.plan, ports, now, standing);
   } finally {
     inFlight.delete(thoughtId);
+  }
+  if (out.ok && !out.already) {
+    emitPlatformEvent('daydream.acted', daydreamActedPayload({ daydreamId: thoughtId, title: row.title, action: `solve:${s.plan.kind}` }), { source: 'daydream' });
   }
   if (out.ok && !standing) {
     if (!row.feedback) await recordFeedback(thoughtId, 'useful', undefined).catch(() => null);
