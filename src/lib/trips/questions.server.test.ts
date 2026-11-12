@@ -376,7 +376,7 @@ describe('pushes', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-21T08:00:00Z'));
     h.questions.push({ ...q, key: 'k', status: 'open' } as never);
-    const push = vi.fn(async (to: readonly string[], _msg: unknown) => ({ sent: to.length, failed: 0, reached: new Set<string>() }));
+    const push = vi.fn(async (to: readonly string[], _msg: unknown) => ({ sent: to.length, failed: 0, muted: 0, reached: new Set<string>() }));
     const { on } = await import('$lib/events/platform-bus');
     // Earlier tests asked this trip questions on the same pinned day.
     (await import('$lib/events/payloads')).resetSaid();

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('$lib/db', () => ({ db: {} }));
-vi.mock('../push-devices', () => ({ pushToOwner: async () => ({ reached: new Set(), sent: 0, failed: 0 }) }));
+vi.mock('../push-devices', () => ({ pushToOwner: async () => ({ reached: new Set(), sent: 0, failed: 0, muted: 0 }) }));
 
-const { messageFor } = await import('./push-dispatch');
+const { messageFor, tierFor } = await import('./push-dispatch');
 
 const row = (extra: Record<string, unknown> = {}) => ({
   id: '11111111-1111-4111-8111-111111111111',
@@ -14,6 +14,22 @@ const row = (extra: Record<string, unknown> = {}) => ({
   severity: 'info',
   data: null,
   ...extra,
+});
+
+describe('which level hears a ledger row', () => {
+  it('an alert or a lapsed connection reaches every level, a warning needs Normal, information needs Verbose', () => {
+    expect(tierFor('alert')).toBe('minimal');
+    expect(tierFor('info', true)).toBe('minimal');
+    expect(tierFor('warn')).toBe('normal');
+    expect(tierFor('info')).toBe('verbose');
+    expect(messageFor(row({ category: 'daydream', severity: 'info' })).tier).toBe('verbose');
+    expect(messageFor(row({ category: 'connections', severity: 'info' })).tier).toBe('minimal');
+  });
+  it('a stalled chat gate reaches every level; a finished reply needs Normal', () => {
+    expect(messageFor(row({ data: { gate: 'confirm', jobId: 'j1', confirmId: 'c1', effect: 'mutate' } })).tier).toBe('minimal');
+    expect(messageFor(row({ data: { gate: 'confirm', jobId: 'j1', confirmId: 'c1' } })).tier).toBe('minimal');
+    expect(messageFor(row({ data: { kind: 'reply', conversationId: 'conv-9' } })).tier).toBe('normal');
+  });
 });
 
 describe('messageFor', () => {

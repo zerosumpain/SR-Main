@@ -50,9 +50,21 @@ export type InterruptionLevel = 'passive' | 'active' | 'time-sensitive' | 'criti
 /** A sound file bundled in the app, or a critical alert's sound (`critical: 1`, volume 0–1). */
 export type PushSound = string | { critical: 1; name: string; volume: number };
 
+/**
+ * How much a person has asked to hear (`$lib/server/push-devices`), quietest
+ * first. A message's `tier` is the quietest setting that still gets it.
+ */
+export type NotifyLevel = 'minimal' | 'normal' | 'verbose';
+
 export interface PushMessage {
   title: string;
   body: string;
+  /**
+   * Who hears it: `minimal` reaches everyone (a person asking for you, safety,
+   * something only you can unblock), `normal` those who chose Normal or
+   * Verbose, `verbose` only Verbose. Unset is `normal`. Never serialized.
+   */
+  tier?: NotifyLevel;
   /** The app's `UNNotificationCategory` identifier — which buttons it wears. */
   category?: string;
   /** Groups notifications in Notification Centre. */

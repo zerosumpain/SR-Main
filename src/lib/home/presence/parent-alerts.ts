@@ -125,6 +125,66 @@ export function arrivalTold(
     .flatMap((a) => a.to.map((r) => r.trim().toLowerCase()));
 }
 
+/**
+ * How far a trip's computed end may move between runs and still be the same
+ * trip. The end is re-derived from the trail every run, and fixes that land
+ * late shift it by seconds or minutes — which, with the end in the notice's
+ * id, sent "arrived safely" twice (Katie, 2026-11-02 12:47:24 and 12:48:00).
+ */
+export const SAME_TRIP_MINS = 15;
+
+/** A sent record: notice id → who it reached. */
+export type SentRecord = Readonly<Record<string, { to: readonly string[] } | undefined>>;
+
+const TRIP_ID = /^(?:stop|journey)-.+-(\d+)$/;
+
+/**
+ * Who has already been told about the trip `id` reports, under this id or
+ * under another whose arrival is within SAME_TRIP_MINS: the same trip seen
+ * with a slightly different end, or its "stopped" after its "arrived safely".
+ * `record` is one person's, so every trip id in it is theirs. PURE.
+ */
+export function toldForTrip(record: SentRecord, id: string): string[] {
+  const out = new Set(record[id]?.to ?? []);
+  const at = TRIP_ID.exec(id)?.[1];
+  if (at) {
+    for (const [other, entry] of Object.entries(record)) {
+      const t = TRIP_ID.exec(other)?.[1];
+      if (t && Math.abs(+t - +at) <= SAME_TRIP_MINS * MINUTE) for (const r of entry?.to ?? []) out.add(r);
+    }
+  }
+  return [...out];
+}
+
+/** How close two people's arrivals at one place must be to have come together. */
+export const TOGETHER_MINS = 10;
+
+/**
+ * The other people on a trip: anyone whose own trip ended at the same place
+ * within TOGETHER_MINS, or whom the trail has at that place since then (a
+ * phone whose trip has not closed yet). Nobody needs telling that the person
+ * in the next seat arrived — five phones in one car each heard about the
+ * other four (2026-11-07 22:02–22:05). PURE.
+ */
+export function travelledWith(
+  routes: readonly RouteInsight[],
+  live: readonly LiveState[],
+  subject: string,
+  toId: string,
+  arrived: number,
+): Set<string> {
+  const near = (t: number) => Math.abs(t - arrived) <= TOGETHER_MINS * MINUTE;
+  const out = new Set<string>();
+  for (const route of routes) {
+    if (route.subject === subject || route.toId !== toId) continue;
+    if (route.trips.some((trip) => near(+new Date(trip.start) + trip.minutes * MINUTE))) out.add(route.subject);
+  }
+  for (const l of live) {
+    if (l.subject !== subject && l.placeId === toId && l.since && near(+new Date(l.since))) out.add(l.subject);
+  }
+  return out;
+}
+
 /** Every trip a child completed in the last STOP_WINDOW_MINS, as a notice for their guardians. PURE. */
 export function stopNotices(input: {
   routes: readonly RouteInsight[];
@@ -164,6 +224,7 @@ export function stopNotices(input: {
         eventTitle: named ? `${name} stopped at ${named}` : `${name} stopped somewhere`,
         push: {
           ...base('stopped', id, route.subject),
+          tier: 'normal',
           title: where ? `${name} stopped at ${where}` : `${name} stopped somewhere new`,
           body: `Since ${clock(arrived)}, ${Math.round(trip.minutes)} min after leaving ${route.from}.`
             + (where ? '' : ' Not a place they have been before; open the map to see where.'),
@@ -234,6 +295,8 @@ export function schoolLateNotices(input: {
       until: +now + (LATE_GIVE_UP_MINS - late) * MINUTE,
       push: {
         ...base('school-late', id, r.subject),
+        // The one a guardian must hear whatever they have turned down.
+        tier: 'minimal',
         title: `${name} isn't at ${schoolName} yet`,
         body: `Usually there by ${hhmm(latest)} (${r.days} of ${r.of} ${r.dayType}s). ${lastly}`,
         level: 'time-sensitive',

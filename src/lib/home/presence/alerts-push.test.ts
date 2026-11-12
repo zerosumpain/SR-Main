@@ -3,9 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 // The departure push: planning is pure, nothing here reaches a database or Apple.
 vi.mock('$lib/db', () => ({ db: {} }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null, setSetting: async () => {} }));
-vi.mock('$lib/server/push-devices', () => ({ pushToEmails: async () => ({ reached: new Set(), sent: 0, failed: 0 }) }));
+vi.mock('$lib/server/push-devices', () => ({ pushToEmails: async () => ({ reached: new Set(), sent: 0, failed: 0, muted: 0 }) }));
 
-const { planCrossingPushes, buildPilotEvents, crossingEventPayload, DELIVERY_WINDOW_MS } = await import('./alerts');
+const { planCrossingPushes, buildPilotEvents, crossingEventPayload, crossedAlongside, DELIVERY_WINDOW_MS } = await import('./alerts');
 type AlertEvent = import('./alerts').AlertEvent;
 type AlertPlace = import('./alerts').AlertPlace;
 type HouseholdMember = import('./members').HouseholdMember;
@@ -94,6 +94,26 @@ describe('the pilot after a push', () => {
     const members = [...MEMBERS, member('robin')];
     const { send } = buildPilotEvents([ev('e1', { pushedTo: ['alex@example.test'] })], PLACES, members);
     expect(send[0].recipients).toEqual(['robin@example.test']);
+  });
+});
+
+describe('people who crossed together', () => {
+  const members = [...MEMBERS, member('robin')];
+  const pair = [ev('e1'), ev('e2', { subject: 'alex', at: new Date(AT.getTime() + 2 * 60_000) })];
+
+  it('finds a follower who made the same crossing within five minutes, and only that crossing', () => {
+    expect([...crossedAlongside(pair[0], pair, members)]).toEqual(['alex@example.test']);
+    expect(crossedAlongside(pair[0], [pair[0], ev('e2', { subject: 'alex', kind: 'arrive' })], members).size).toBe(0);
+    expect(crossedAlongside(pair[0], [pair[0], ev('e2', { subject: 'alex', placeId: 'gym' })], members).size).toBe(0);
+    expect(crossedAlongside(pair[0], [pair[0], ev('e2', { subject: 'alex', at: new Date(AT.getTime() + 6 * 60_000) })], members).size).toBe(0);
+  });
+  it('does not push either of them about the other, and still tells whoever was not there', () => {
+    const plans = planCrossingPushes(pair, PLACES, members, NOW);
+    expect(plans.map((p) => p.recipients)).toEqual([['robin@example.test'], ['robin@example.test']]);
+  });
+  it('keeps them out of the pull queue too', () => {
+    const { send } = buildPilotEvents(pair, PLACES, members);
+    expect(send.map((e) => e.recipients)).toEqual([['robin@example.test'], ['robin@example.test']]);
   });
 });
 

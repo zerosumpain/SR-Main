@@ -162,6 +162,7 @@ export function journeyNotice(input: {
     push: {
       title: where ? `${name} arrived safely at ${where}` : `${name} arrived safely`,
       body: lines.join(' '),
+      tier: 'normal',
       category: 'household',
       threadId: 'household',
       level: 'active',

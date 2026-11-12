@@ -66,7 +66,7 @@ function pusher() {
   const sent: Array<{ emails: readonly string[]; message: PushMessage }> = [];
   const push = vi.fn(async (emails: readonly string[], message: PushMessage) => {
     sent.push({ emails, message });
-    return { reached: new Set<string>(), sent: emails.length, failed: 0 };
+    return { reached: new Set<string>(), sent: emails.length, failed: 0, muted: 0 };
   });
   return { push, sent };
 }

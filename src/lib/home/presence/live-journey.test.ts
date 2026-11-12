@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('$lib/db', () => ({ db: {} }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null, setSetting: async () => {} }));
-vi.mock('$lib/server/push-devices', () => ({ pushToEmails: async () => ({ reached: new Set(), sent: 0, failed: 0 }) }));
+vi.mock('$lib/server/push-devices', () => ({ pushToEmails: async () => ({ reached: new Set(), sent: 0, failed: 0, muted: 0 }) }));
 
 const { distanceText, endAps, endContent, modeText, movingContent, startAps, updateAps, worthPushing } = await import('./live-journey');
 type JourneyContent = import('./live-journey').JourneyContent;

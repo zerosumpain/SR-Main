@@ -2,10 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('$lib/db', () => ({ db: {} }));
 
-const { deliver, privatePush } = await import('./push-devices');
+const { deliver, privatePush, hears, isNotifyLevel } = await import('./push-devices');
 
 const target = (id: string, email: string, env: string | null = 'production') => ({
   id,
+  notifyLevel: 'normal' as 'minimal' | 'normal' | 'verbose' | undefined,
   ownerEmail: email,
   apnsToken: id.padEnd(64, '0'),
   apnsEnv: env,
@@ -41,6 +42,49 @@ describe('deliver', () => {
     expect(out).toMatchObject({ sent: 1, failed: 2 });
     expect(forgotten).toEqual(['b1']);
     expect(send.mock.calls[2][2]).toBe('sandbox');
+  });
+});
+
+describe('notification levels', () => {
+  const send = () => vi.fn(async (_token: string, _message: unknown, _env?: string | null) => ({ ok: true, status: 200 }));
+
+  it('a phone with no level set is on Minimal: it hears only what is tagged minimal', () => {
+    expect(hears(undefined, { tier: 'minimal' })).toBe(true);
+    expect(hears(undefined, {})).toBe(false);
+    expect(hears(undefined, { tier: 'normal' })).toBe(false);
+    expect(hears(undefined, { tier: 'verbose' })).toBe(false);
+  });
+  it('Normal hears untagged and normal pushes, Verbose hears everything', () => {
+    expect(hears('normal', {})).toBe(true);
+    expect(hears('normal', { tier: 'normal' })).toBe(true);
+    expect(hears('normal', { tier: 'verbose' })).toBe(false);
+    expect(hears('verbose', { tier: 'verbose' })).toBe(true);
+    expect(hears('minimal', { tier: 'minimal' })).toBe(true);
+  });
+  it('a silent background push is not a notification, so every level takes it', () => {
+    expect(hears('minimal', { tier: 'verbose', background: true })).toBe(true);
+  });
+  it('knows the three levels and nothing else', () => {
+    expect(['minimal', 'normal', 'verbose'].every(isNotifyLevel)).toBe(true);
+    expect([undefined, null, '', 'loud', 1].some(isNotifyLevel)).toBe(false);
+  });
+  it('does not send to a phone whose level does not hear it, and counts that person as finished with', async () => {
+    const s = send();
+    const out = await deliver(
+      [{ ...target('a', 'sam@example.test'), notifyLevel: undefined }, target('b', 'alex@example.test'), { ...target('c', 'robin@example.test'), notifyLevel: 'verbose' as const }],
+      { title: 't', body: 'b', tier: 'normal' },
+      s,
+      async () => {},
+    );
+    expect(s).toHaveBeenCalledTimes(2);
+    expect(out).toMatchObject({ sent: 2, failed: 0, muted: 1 });
+    // Muted is finished with: no retry, no pull queue, no second banner.
+    expect([...out.reached].sort()).toEqual(['alex@example.test', 'robin@example.test', 'sam@example.test']);
+  });
+  it('never puts the tier on the wire', async () => {
+    const s = send();
+    await deliver([{ ...target('a', 'sam@example.test'), notificationDetails: true }], { title: 't', body: 'b', tier: 'minimal' }, s, async () => {});
+    expect(s).toHaveBeenCalledTimes(1);
   });
 });
 

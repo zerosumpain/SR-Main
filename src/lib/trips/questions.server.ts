@@ -522,6 +522,7 @@ export function questionPush(trip: Pick<TripRecord, 'id' | 'title'>, q: Pick<Que
     // answers as buttons when it loads the bundle (one category per open
     // question); unregistered, iOS shows it plainly and a tap opens the
     // question by `url`. The buttons answer through POST …/questions/:qid.
+    tier: 'normal',
     category: `trip-q-${q.id}`,
     threadId: `trip-${trip.id}`,
     level: 'active',

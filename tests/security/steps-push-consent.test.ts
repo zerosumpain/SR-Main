@@ -25,10 +25,18 @@ beforeEach(() => {
 describe('steps push consent at delivery', () => {
   it('sends only when recipient and disclosed person still consent', async () => {
     const send = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    // The steps push is heard on Verbose only; the second read is the levels.
+    const device = state.select();
+    state.select.mockReturnValueOnce(device).mockReturnValueOnce({ from: () => ({ where: async () => [{ key: 'notify.level.reader@example.invalid', value: 'verbose' }] }) });
     expect((await pushToEmails(['reader@example.invalid'], message, send)).sent).toBe(1);
     expect(send).toHaveBeenCalledOnce();
     expect(buildPayload(message)).not.toContain('example.invalid');
     expect(buildPayload(message)).not.toContain('authorizeTargets');
+  });
+  it('is not sent to a phone left on the default level, and that is not a failure', async () => {
+    const send = vi.fn();
+    expect(await pushToEmails(['reader@example.invalid'], message, send)).toMatchObject({ sent: 0, failed: 0, muted: 1 });
+    expect(send).not.toHaveBeenCalled();
   });
   it('suppresses a prepared message when the disclosed person opts out', async () => {
     state.roster.mockResolvedValue([{ email: 'reader@example.invalid', stepsSharing: true }]);

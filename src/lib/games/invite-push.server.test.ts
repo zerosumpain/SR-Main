@@ -23,6 +23,7 @@ const reaching = (...phones: string[]) =>
     reached: new Set(emails.filter((e) => phones.includes(e))),
     sent: 0,
     failed: 0,
+    muted: 0,
   }));
 
 beforeEach(() => {

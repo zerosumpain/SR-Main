@@ -68,6 +68,7 @@ const TRIP_CATEGORY = 'trip-suggestion';
 function tripPush(text: { title: string; body: string }, trip: TripRecord, suggestionId: string, collapse: string): PushMessage {
   return {
     ...text,
+    tier: 'normal',
     category: TRIP_CATEGORY,
     threadId: `trip-${trip.id}`,
     level: 'active',

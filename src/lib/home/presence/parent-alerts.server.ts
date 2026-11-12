@@ -20,8 +20,9 @@ import { familyAlertPayload, firstInWindow } from '$lib/events/payloads';
 import { pushToEmails } from '$lib/server/push-devices';
 import { loadForecast } from './forecast.server';
 import { listMembers } from './members';
-import { guardiansByChild, schoolLateNotices, stopNotices, STOP_WINDOW_MINS, type ArrivalPushed, type ParentNotice } from './parent-alerts';
+import { arrivalTold, guardiansByChild, schoolLateNotices, stopNotices, STOP_WINDOW_MINS, toldForTrip, travelledWith, type ArrivalPushed, type ParentNotice } from './parent-alerts';
 import { journeyNotices } from './journey-alerts.server';
+import { recentTrips } from './journey-alerts';
 import { getHold, ownerSubjects } from './location-hold.server';
 import type { JourneyNotice } from './journey-alerts';
 
@@ -51,10 +52,10 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
   const held = (await getHold(now)) ? new Set(ownerSubjects(members)) : new Set<string>();
   const journeys = await journeyNotices({ routes: insights.routes.filter((r) => !held.has(r.subject)), places, members, names, now })
     .catch((err) => { console.warn('[parent-alerts] journeys:', (err as Error).message); return [] as JourneyNotice[]; });
-  const covered = new Map(journeys.map((j) => [j.trip, j.recipients]));
-  // Children's arrivals already pushed (alerts.ts): a guardian told "arrived
-  // at School" is not told "stopped at School" for the same trip.
-  const children = [...guardians.keys()];
+  // Arrivals already pushed (alerts.ts): somebody told "arrived at School"
+  // is not told "stopped at School" or "arrived safely at School" for the
+  // same trip.
+  const children = [...new Set([...guardians.keys(), ...journeys.map((j) => j.subject)])];
   const arrivals: ArrivalPushed[] = children.length
     ? (
         await db
@@ -68,11 +69,30 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
           ))
       ).map((r) => ({ subject: r.subject, placeId: r.placeId, at: +r.at, to: Array.isArray(r.pushedTo) ? (r.pushedTo as string[]) : [] }))
     : [];
+  // One notice per arrival, and none to whoever was on the trip.
+  const trips = new Map(recentTrips(insights.routes, now).map((t) => [`${t.route.subject}-${t.arrived}`, t]));
+  const subjectOf = new Map(members.filter((m) => m.email).map((m) => [m.email!.trim().toLowerCase(), m.subject]));
+  const withoutCompanions = <N extends ParentNotice | JourneyNotice>(n: N, tripKey: string): N => {
+    const trip = trips.get(tripKey);
+    if (!trip) return n;
+    const along = travelledWith(insights.routes, insights.live, n.subject, trip.route.toId, trip.arrived);
+    return { ...n, recipients: n.recipients.filter((r) => !along.has(subjectOf.get(r) ?? '')) };
+  };
+  const told = journeys
+    .map((j) => {
+      const trip = trips.get(j.trip);
+      const heard = trip ? arrivalTold(arrivals, j.subject, trip.route.toId, trip.left, trip.arrived) : [];
+      return withoutCompanions({ ...j, recipients: j.recipients.filter((r) => !heard.includes(r)) }, j.trip);
+    });
+  // What the journeys cover is everyone they were FOR, companions and those
+  // an arrival reached included: none of them is owed a "stopped" instead.
+  const covered = new Map(journeys.map((j) => [j.trip, j.recipients]));
   const notices: Array<ParentNotice | JourneyNotice> = [
-    ...journeys,
-    ...stopNotices({ routes: insights.routes, places, guardians, names, now, covered, arrivals }),
+    ...told,
+    ...stopNotices({ routes: insights.routes, places, guardians, names, now, covered, arrivals })
+      .map((n) => withoutCompanions(n, n.id.slice('stop-'.length))),
     ...schoolLateNotices({ routines: forecast.routines, live: insights.live, places, guardians, names, cal, now, positions }),
-  ];
+  ].filter((n) => n.recipients.length > 0);
   let sent = 0, owed = 0;
   for (const n of notices) {
     if (+now > n.until) continue;
@@ -82,7 +102,8 @@ export async function deliverParentAlerts(now = new Date(), push = pushToEmails)
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
       const [row] = await tx.select().from(appSettings).where(eq(appSettings.key, key));
       const record: Sent = (row?.value as Sent | undefined) ?? {};
-      const done = new Set(record[n.id]?.to ?? []);
+      // Under this id, or the same trip's under an end that has since moved.
+      const done = new Set(toldForTrip(record, n.id));
       const pending = n.recipients.filter((r) => !done.has(r));
       if (!pending.length) return;
       const ttl = Math.max(60, Math.min(n.push.ttlSeconds ?? 1800, Math.floor((n.until - +now) / 1000)));

@@ -22,7 +22,7 @@ function harness(sent = 2) {
   const pushes: Array<{ emails: readonly string[]; message: PushMessage }> = [];
   const push = vi.fn(async (emails: readonly string[], message: PushMessage) => {
     pushes.push({ emails, message });
-    return { reached: new Set<string>(), sent, failed: 0 };
+    return { reached: new Set<string>(), sent, failed: 0, muted: 0 };
   });
   const later: number[] = [];
   return { push, pushes, later, schedule: (ms: number) => void later.push(ms) };

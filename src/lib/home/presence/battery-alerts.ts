@@ -88,6 +88,7 @@ function notice(id: string, subject: string, name: string, reading: BatteryReadi
   const push: PushMessage = {
     title: `${name}'s phone is on ${Math.round(reading.pct)}%`,
     body: `At ${clockFmt.format(reading.at)}. Their location may stop updating soon.`,
+    tier: 'normal',
     category: 'household',
     threadId: 'household',
     level: 'active',

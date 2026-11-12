@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { HouseholdMember } from './members';
 import type { InsightPlace, LiveState, RouteInsight } from './insights';
 import type { Routine, SchoolCalendar } from './forecast';
-import { guardiansByChild, LATE_TOLERANCE_MINS, schoolLateNotices, stopNotices } from './parent-alerts';
+import { guardiansByChild, LATE_TOLERANCE_MINS, schoolLateNotices, stopNotices, toldForTrip, travelledWith } from './parent-alerts';
 
 const member = (subject: string, email: string | null, guardianOf: string[] = []): HouseholdMember => ({
   subject, email, displayName: subject[0].toUpperCase() + subject.slice(1), source: 'companion',
@@ -91,6 +91,35 @@ const routine = (over: Partial<Routine> = {}): Routine => ({
 });
 const cal: SchoolCalendar = { holidays: [], schoolIds: new Set(['school']) };
 const live = (over: Partial<LiveState> = {}): LiveState[] => [{ subject: 'rory', placeId: 'home', since: '2026-11-04T07:00:00Z', lastSeen: '2026-11-04T08:58:00Z', moving: null, ...over }];
+
+describe('toldForTrip', () => {
+  const at = Date.parse('2026-11-02T12:47:24Z');
+  it('counts a notice whose arrival moved by seconds as the same trip (Katie, 2026-11-02)', () => {
+    const record = { [`journey-katie-${at}`]: { to: ['john@example.test'] } };
+    expect(toldForTrip(record, `journey-katie-${at + 36_000}`)).toEqual(['john@example.test']);
+  });
+  it('counts the "stopped" of a trip whose "arrived safely" went out', () => {
+    const record = { [`journey-rory-${at}`]: { to: ['john@example.test'] }, [`stop-rory-${at - 120_000}`]: { to: ['katie@example.test'] } };
+    expect(toldForTrip(record, `stop-rory-${at + 60_000}`).sort()).toEqual(['john@example.test', 'katie@example.test']);
+  });
+  it('leaves a later trip, and a notice that is not about a trip, alone', () => {
+    const record = { [`journey-katie-${at}`]: { to: ['john@example.test'] }, 'school-late-rory-school-2026-11-02': { to: ['katie@example.test'] } };
+    expect(toldForTrip(record, `journey-katie-${at + 16 * 60_000}`)).toEqual([]);
+    expect(toldForTrip(record, 'school-late-rory-school-2026-11-02')).toEqual(['katie@example.test']);
+  });
+});
+
+describe('travelledWith', () => {
+  const arrived = Date.parse('2026-11-04T08:44:00Z');
+  const live = (subject: string, placeId: string | null, since: string | null): LiveState => ({ subject, placeId, since, lastSeen: since, moving: null });
+  it('finds whoever ended a trip at the same place within ten minutes', () => {
+    const routes = [route('rory', 'school', '2026-11-04T08:20:00Z', 24), route('john', 'school', '2026-11-04T08:21:00Z', 25), route('katie', 'home', '2026-11-04T08:20:00Z', 24)];
+    expect([...travelledWith(routes, [], 'rory', 'school', arrived)]).toEqual(['john']);
+  });
+  it('finds a phone the trail has at that place since then, before its own trip closes', () => {
+    expect([...travelledWith([], [live('john', 'school', '2026-11-04T08:46:00Z'), live('katie', 'school', '2026-11-04T07:00:00Z'), live('rory', 'school', '2026-11-04T08:44:00Z')], 'rory', 'school', arrived)]).toEqual(['john']);
+  });
+});
 
 describe('schoolLateNotices', () => {
   it('is time-sensitive when a dependable school routine is well past its usual arrival', () => {
