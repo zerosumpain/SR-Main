@@ -13,7 +13,7 @@ vi.mock('$lib/server/native-auth', () => ({
 vi.mock('$lib/server/grants', () => ({ loadMember: async () => ({ principalId: 'u_friend', grants: new Set(['news:self']) }) }));
 vi.mock('$lib/server/models/settings', () => ({ getSetting: async () => null, setSetting: async () => {} }));
 vi.mock('$lib/server/push-devices', () => ({
-  pushToEmails: async () => ({ reached: new Set(), sent: 0, failed: 0 }),
+  pushToEmails: async () => ({ reached: new Set(), sent: 0, failed: 0, muted: 0 }),
   clearPushToken: async () => {}, registerPushToken: async () => {}, pushTestTo: async () => null,
 }));
 const { POST } = await import('../../src/routes/api/native/push/+server');

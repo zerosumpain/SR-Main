@@ -77,6 +77,8 @@ export function inviteMessage(invite: {
     category: 'game',
     threadId: 'game',
     level: 'time-sensitive',
+    // Somebody is waiting in a lobby for you.
+    tier: 'minimal',
     relevance: 1,
     // The app's local banner uses the same id, so a push and a poll for one
     // room can never stack two notifications.
@@ -139,6 +141,7 @@ export function turnMessage(
     level: 'active',
     // One banner per room: the next move's push replaces this one.
     collapseId: `game-${t.roomId}`,
+    tier: 'normal',
     userInfo: { roomId: t.roomId, game: t.game, category: 'game', kind: 'turn' },
     // Useless once the move has been made for them.
     ttlSeconds: left === null ? 24 * 3600 : Math.max(60, Math.floor(left / 1000)),
@@ -154,6 +157,7 @@ export function finishMessage(f: { roomId: string; game: GameId; winners: readon
     threadId: 'game',
     level: 'active',
     collapseId: `game-${f.roomId}`,
+    tier: 'verbose',
     userInfo: { roomId: f.roomId, game: f.game, category: 'game', kind: 'finished' },
     ttlSeconds: 24 * 3600,
   };

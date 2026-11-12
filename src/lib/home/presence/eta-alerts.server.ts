@@ -47,6 +47,7 @@ export async function deliverArrivalEstimates(): Promise<{ sent: number }> {
       if (!pending.length) return;
       if (canPush) {
         const outcome = await pushToEmails(pending, { title: event.title, body: event.body,
+          tier: 'verbose',
           category: 'household', threadId: 'household', level: 'active', collapseId: event.id,
           userInfo: householdUserInfo(event.id, 'eta', a.subject), ttlSeconds: ttl });
         for (const r of pending) if (outcome.reached.has(r)) delivered.add(r);

@@ -31,6 +31,15 @@ it('pushes each guardian once, however many runs see the stop', async () => {
   expect(h.pushes).toHaveLength(1);
   expect(h.pushes[0].emails).toEqual(['john@example.test', 'katie@example.test']);
 });
+it('does not tell a trip twice when its computed end moves between runs', async () => {
+  const at = Date.parse('2026-11-04T08:44:00Z');
+  h.reached = ['john@example.test', 'katie@example.test'];
+  h.notices = [{ ...notice, id: `stop-rory-${at}` }];
+  expect(await deliverParentAlerts(now)).toEqual({ sent: 1, owed: 0 });
+  h.notices = [{ ...notice, id: `stop-rory-${at + 36_000}` }];
+  expect(await deliverParentAlerts(new Date(+now + 120_000))).toEqual({ sent: 0, owed: 0 });
+  expect(h.pushes).toHaveLength(1);
+});
 it('retries only the guardian a phone did not take, and caps the TTL at what is left', async () => {
   h.reached = ['john@example.test'];
   expect(await deliverParentAlerts(now)).toEqual({ sent: 1, owed: 1 });
@@ -58,10 +67,10 @@ it('raises family.alert once for a notice, with the place as a name and no posit
   h.people.push({ subject: 'kid', displayName: 'Kid' });
   h.notices = [
     { ...notice, id: 'stop-kid-1', subject: 'kid', place: 'School', eventTitle: 'Kid stopped at School', push: { ...notice.push, title: 'Kid stopped at School' } },
-    { ...notice, id: 'stop-kid-2', subject: 'kid', place: '12 Example Road', eventTitle: 'Kid stopped at 12 Example Road', push: { ...notice.push, title: 'Kid stopped at 12 Example Road' } },
+    { ...notice, id: 'stop-kid-2000000', subject: 'kid', place: '12 Example Road', eventTitle: 'Kid stopped at 12 Example Road', push: { ...notice.push, title: 'Kid stopped at 12 Example Road' } },
     // A looked-up label the address patterns do not catch: it is in the push
     // title for the family's phones, and nowhere in the event.
-    { ...notice, id: 'stop-kid-4', subject: 'kid', eventTitle: 'Kid stopped somewhere', push: { ...notice.push, title: 'Kid stopped at Synthetic Rise' } },
+    { ...notice, id: 'stop-kid-4000000', subject: 'kid', eventTitle: 'Kid stopped somewhere', push: { ...notice.push, title: 'Kid stopped at Synthetic Rise' } },
   ];
   h.reached = ['john@example.test'];
   await deliverParentAlerts(now);

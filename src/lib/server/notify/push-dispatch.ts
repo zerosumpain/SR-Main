@@ -8,6 +8,9 @@
  * seconds this takes the rows routed to the phone that nobody has pushed, and
  * pushes them.
  *
+ * A row the owner's level does not hear (`tier`, `push-devices`) counts as
+ * delivered too: it is stamped and stays in the inbox, and is not raised.
+ *
  * Each row is CLAIMED with a conditional update before it is sent, so two
  * processes running this (or a kick racing the timer) push it once. A push
  * Apple accepted for at least one of the owner's phones stamps `nativeAt`,
@@ -24,7 +27,7 @@
 import { and, asc, eq, gt, isNull } from 'drizzle-orm';
 import { db } from '$lib/db';
 import { notificationEvents } from '$lib/db/schema';
-import { isApnsConfigured, type InterruptionLevel, type PushMessage } from '../apns';
+import { isApnsConfigured, type InterruptionLevel, type NotifyLevel, type PushMessage } from '../apns';
 import { pushToOwner, type PushOutcome } from '../push-devices';
 
 const DEFAULT_POLL_MS = 3_000;
@@ -93,6 +96,7 @@ export function messageFor(row: LedgerRow): PushMessage {
     return {
       title: row.title,
       body: `${VIEW_ONLY_PREFIX} ${row.body}`.trim(),
+      tier: 'minimal',
       category: 'sr.alert',
       threadId: 'chat',
       level: 'time-sensitive',
@@ -111,6 +115,8 @@ export function messageFor(row: LedgerRow): PushMessage {
     return {
       title: row.title,
       body: row.body,
+      // The turn is stalled until somebody answers: heard on every level.
+      tier: 'minimal',
       category: `sr.gate.${gate}`,
       threadId: 'chat',
       level: 'time-sensitive',
@@ -133,6 +139,7 @@ export function messageFor(row: LedgerRow): PushMessage {
     return {
       title: row.title,
       body: row.body,
+      tier: 'normal',
       category: 'sr.alert',
       threadId: `chat:${replyConversation}`,
       level: 'active',
@@ -158,6 +165,7 @@ export function messageFor(row: LedgerRow): PushMessage {
     return {
       title: row.title,
       body: row.body,
+      tier: loudDrive ? 'normal' : 'verbose',
       category: 'sr.alert',
       threadId: 'drive',
       level: loudDrive ? 'active' : 'passive',
@@ -184,6 +192,7 @@ export function messageFor(row: LedgerRow): PushMessage {
   return {
     title: row.title,
     body: row.body,
+    tier: tierFor(row.severity, connections),
     category: connections ? 'sr.connections' : 'sr.alert',
     threadId: commissionId ? `commission:${commissionId}` : buildId ? `delivery:${buildId}` : row.category,
     level,
@@ -191,6 +200,19 @@ export function messageFor(row: LedgerRow): PushMessage {
     collapseId: row.id,
     userInfo,
   };
+}
+
+/**
+ * Which setting hears an ordinary ledger row. PURE.
+ *
+ * Something is wrong or lapsed and only the owner can put it right (`alert`,
+ * a connection) reaches every level; a warning needs Normal; the day's
+ * information (briefings, readiness, what a build or a daydream did) needs
+ * Verbose. All of it is still in the app's inbox whatever the level.
+ */
+export function tierFor(severity: string, connections = false): NotifyLevel {
+  if (connections || severity === 'alert') return 'minimal';
+  return severity === 'warn' ? 'normal' : 'verbose';
 }
 
 export interface DispatchDeps {

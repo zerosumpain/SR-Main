@@ -231,9 +231,10 @@ async function nameOf(email: string): Promise<string> {
   return p?.name ?? nameFromEmail(email);
 }
 
-function backlogPush(text: { title: string; body: string }, collapseId: string, itemId?: string): PushMessage {
+function backlogPush(text: { title: string; body: string }, collapseId: string, tier: NonNullable<PushMessage['tier']>, itemId?: string): PushMessage {
   return {
     ...text,
+    tier,
     category: BACKLOG_CATEGORY,
     threadId: BACKLOG_CATEGORY,
     level: 'active',
@@ -248,7 +249,7 @@ export async function notifyForYou(item: BacklogRecord, opts: { push?: typeof pu
   const push = opts.push ?? pushToEmails;
   try {
     if (!item.forEmail || item.forEmail === item.addedByEmail) return 0;
-    const message = backlogPush(forYouText(await nameOf(item.addedByEmail), item), `backlog-${item.id}`, item.id);
+    const message = backlogPush(forYouText(await nameOf(item.addedByEmail), item), `backlog-${item.id}`, 'normal', item.id);
     return (await push([item.forEmail], message)).sent;
   } catch (err) {
     console.warn('[backlog] for-you push failed', err);
@@ -261,7 +262,7 @@ export async function notifyReaction(item: BacklogRecord, reactorEmail: string, 
   const push = opts.push ?? pushToEmails;
   try {
     if (item.addedByEmail === reactorEmail) return 0;
-    const message = backlogPush(reactionText(await nameOf(reactorEmail), emoji, item), `backlog-react-${item.id}`, item.id);
+    const message = backlogPush(reactionText(await nameOf(reactorEmail), emoji, item), `backlog-react-${item.id}`, 'verbose', item.id);
     return (await push([item.addedByEmail], message)).sent;
   } catch (err) {
     console.warn('[backlog] reaction push failed', err);
@@ -295,7 +296,7 @@ export interface DigestRun {
  * added in the last 24 hours that is still on the list. A person is CLAIMED
  * for the day before anything is sent (`digest_sent_on`), so two ticks in the
  * window — or two processes — send it once; one with nothing new is claimed
- * and sent nothing.
+ * and sent nothing. They asked for it by name, so it is heard on every level.
  */
 export async function runDigest(now = new Date(), opts: { push?: typeof pushToEmails } = {}): Promise<DigestRun> {
   const push = opts.push ?? pushToEmails;
@@ -314,7 +315,7 @@ export async function runDigest(now = new Date(), opts: { push?: typeof pushToEm
     const text = digestText(digestItems(items, email, since));
     if (!text) continue;
     try {
-      run.pushed += (await push([email], backlogPush(text, `backlog-digest-${day}`))).sent > 0 ? 1 : 0;
+      run.pushed += (await push([email], backlogPush(text, `backlog-digest-${day}`, 'minimal'))).sent > 0 ? 1 : 0;
     } catch (err) {
       console.warn('[backlog] digest push failed', err);
     }

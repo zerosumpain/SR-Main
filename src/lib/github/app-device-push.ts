@@ -98,6 +98,8 @@ export function buildPushMessage(build: number, version: string) {
   return {
     title: `SR ${version} is ready`,
     body: 'Sent to this phone. Open SR to install it.',
+    // The owner sent this phone a build: that is the whole point of the push.
+    tier: 'minimal' as const,
     category: 'app-update',
     threadId: 'app-update',
     // A second send replaces the first on the Lock Screen.

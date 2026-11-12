@@ -146,6 +146,7 @@ export function messagePush(message: MessageRecord): PushMessage {
     return {
       title: `Bat phone — ${message.fromName}`,
       body: message.body.slice(BAT_PHONE_OPENING.length).replace(/^\s*—\s*/u, '').trim() || 'I need you.',
+      tier: 'minimal',
       category: MESSAGE_CATEGORY,
       threadId: MESSAGE_CATEGORY,
       level: 'time-sensitive',
@@ -159,6 +160,8 @@ export function messagePush(message: MessageRecord): PushMessage {
   return {
     title: `${message.fromName} · Family`,
     body: message.body,
+    // Somebody in the family wrote to you: heard on every setting.
+    tier: 'minimal',
     category: MESSAGE_CATEGORY,
     threadId: MESSAGE_CATEGORY,
     level: 'active',
@@ -175,6 +178,8 @@ export function replyPush(reply: MessageRecord, message: Pick<MessageRecord, 'id
   return {
     title: reaction ? `${reply.fromName} ${reply.body}` : `${reply.fromName} replied`,
     body: reaction ? `to “${quote(message.body)}”` : reply.body,
+    // A reply in words is a message; an emoji on yours can wait for the app.
+    tier: reaction ? 'normal' : 'minimal',
     category: REPLY_CATEGORY,
     threadId: MESSAGE_CATEGORY,
     level: 'active',

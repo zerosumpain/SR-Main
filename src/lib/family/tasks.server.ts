@@ -81,10 +81,11 @@ export async function applyTransition(id: string, t: Transition, now = new Date(
   return row ?? null;
 }
 
-function taskPush(title: string, body: string, taskId: string): PushMessage {
+function taskPush(title: string, body: string, taskId: string, tier: NonNullable<PushMessage['tier']>): PushMessage {
   return {
     title,
     body,
+    tier,
     category: TASKS_CATEGORY,
     threadId: TASKS_CATEGORY,
     level: 'active',
@@ -121,18 +122,18 @@ export async function notifyTaskChange(
     if (kind === 'assigned') {
       if (!task.assigneeEmail || task.assigneeEmail === actorEmail) return 0;
       to = [task.assigneeEmail];
-      message = taskPush('New task', assignedText(await nameOf(actorEmail), task.title), task.id);
+      message = taskPush('New task', assignedText(await nameOf(actorEmail), task.title), task.id, 'minimal');
     } else if (kind === 'done') {
       to = (await familyRoster()).filter((p) => p.parent && p.email !== actorEmail).map((p) => p.email);
-      message = taskPush('Task done', doneText(await nameOf(actorEmail), task.title), task.id);
+      message = taskPush('Task done', doneText(await nameOf(actorEmail), task.title), task.id, 'normal');
     } else {
       const doer = opts.doerEmail ?? null;
       if (!doer || doer === actorEmail) return 0;
       to = [doer];
       message =
         kind === 'confirmed'
-          ? taskPush('Task confirmed', confirmedText(task), task.id)
-          : taskPush('Task sent back', sentBackText(task.title, task.sentBackNote ?? ''), task.id);
+          ? taskPush('Task confirmed', confirmedText(task), task.id, 'normal')
+          : taskPush('Task sent back', sentBackText(task.title, task.sentBackNote ?? ''), task.id, 'minimal');
     }
     if (!to.length || !message) return 0;
     const outcome = await push(to, message);

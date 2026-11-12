@@ -117,6 +117,8 @@ export function stepsPush(body: string, collapse: string, consentEmails: readonl
   return {
     title: 'Family steps',
     body,
+    // Banter about the board: only for those who asked to hear everything.
+    tier: 'verbose',
     category: STEPS_CATEGORY,
     threadId: STEPS_CATEGORY,
     level: 'active',

@@ -347,10 +347,11 @@ export function buildPilotEvents(
     // crossing is not announced; the event is marked done, not kept owed.
     // Same for a direction the place has stopped announcing since.
     const pushed = new Set(ev.pushedTo ?? []);
+    const along = crossedAlongside(ev, events, members);
     const recipients =
       silenced.has(ev.subject) || !raisesCrossing(places.get(ev.placeId), ev.kind)
         ? []
-        : pilotRecipients(members, ev.subject).filter((r) => !pushed.has(r.trim().toLowerCase()));
+        : pilotRecipients(members, ev.subject).filter((r) => !pushed.has(r.trim().toLowerCase()) && !along.has(r.trim().toLowerCase()));
     if (!recipients.length) {
       nobody.push(ev.id);
       continue;
@@ -359,6 +360,26 @@ export function buildPilotEvents(
     send.push({ id: ev.id.slice(0, 100), recipients, title, body, at: ev.at.toISOString() });
   }
   return { send, nobody };
+}
+
+/** How close two people's crossings of one place must be to have made them together. */
+export const ALONGSIDE_MS = 5 * 60_000;
+
+/**
+ * The followers who made this crossing too: the same place, the same
+ * direction, within ALONGSIDE_MS. They were there; they are not told. PURE.
+ */
+export function crossedAlongside(
+  ev: Pick<AlertEvent, 'subject' | 'placeId' | 'kind' | 'at'>,
+  events: readonly Pick<AlertEvent, 'subject' | 'placeId' | 'kind' | 'at'>[],
+  members: readonly HouseholdMember[],
+): Set<string> {
+  const subjects = new Set(
+    events
+      .filter((o) => o.subject !== ev.subject && o.placeId === ev.placeId && o.kind === ev.kind && Math.abs(o.at.getTime() - ev.at.getTime()) <= ALONGSIDE_MS)
+      .map((o) => o.subject),
+  );
+  return new Set(members.filter((m) => m.email && subjects.has(m.subject)).map((m) => m.email!.trim().toLowerCase()));
 }
 
 export interface PlannedPush {
@@ -401,9 +422,10 @@ export function planCrossingPushes(
     const place = places.get(ev.placeId);
     if (!raisesCrossing(place, ev.kind)) continue;
     const done = new Set(ev.pushedTo ?? []);
+    const along = crossedAlongside(ev, events, members);
     const recipients = pilotRecipients(members, ev.subject)
       .map((r) => r.trim().toLowerCase())
-      .filter((r) => !done.has(r));
+      .filter((r) => !done.has(r) && !along.has(r));
     if (!recipients.length) continue;
     const { title, body } = alertText(displayNameOf(members, ev.subject), ev.kind, placeName(place), ev.at);
     out.push({
@@ -412,6 +434,7 @@ export function planCrossingPushes(
       message: {
         title,
         body,
+        tier: 'normal',
         category: 'household',
         threadId: 'household',
         level: ev.kind === 'leave' ? 'time-sensitive' : 'active',

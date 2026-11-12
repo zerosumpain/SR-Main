@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { withNativeAccess } from '$lib/server/native-handler';
 import { isApnsConfigured, isDeviceToken } from '$lib/server/apns';
-import { clearPushToken, pushTestTo, registerPushToken, devicePushPrivacy } from '$lib/server/push-devices';
+import { clearPushToken, pushTestTo, registerPushToken, devicePushPrivacy, isNotifyLevel, setNotifyLevel } from '$lib/server/push-devices';
 import { registerJourneyToken, registerLiveStartToken, startTestJourney } from '$lib/home/presence/live-journey';
 
 /**
@@ -70,12 +70,23 @@ export const DELETE: RequestHandler = withNativeAccess('any', async (_event, ide
   return { ok: true };
 });
 
-/** The choice belongs to this device, including non-owner family phones. */
+/**
+ * The choice belongs to this device, including non-owner family phones — bar
+ * `notifyLevel` (minimal | normal | verbose: how much is pushed at all), which
+ * is the PERSON's and so the same on every phone they hold. PATCH takes the
+ * level alone, the two switches alone (older builds), or all three.
+ */
 export const GET: RequestHandler = withNativeAccess('any', async (_event, identity) => devicePushPrivacy(identity.id));
 export const PATCH: RequestHandler = withNativeAccess('any', async (event, identity) => {
   const body = await event.request.json().catch(() => null);
-  if (!body || typeof body.notificationDetails !== 'boolean' || typeof body.liveActivityEnabled !== 'boolean') {
-    return json({ error: 'Choose notification details and Live Activities.' }, { status: 400 });
+  const switches = !!body && typeof body.notificationDetails === 'boolean' && typeof body.liveActivityEnabled === 'boolean';
+  const level = body?.notifyLevel;
+  if (level !== undefined && !isNotifyLevel(level)) {
+    return json({ error: 'The level is minimal, normal or verbose.' }, { status: 400 });
   }
-  return devicePushPrivacy(identity.id, { notificationDetails: body.notificationDetails, liveActivityEnabled: body.liveActivityEnabled });
+  if (!switches && level === undefined) {
+    return json({ error: 'Choose notification details and Live Activities, or a level.' }, { status: 400 });
+  }
+  if (level !== undefined) await setNotifyLevel(identity.ownerEmail, level);
+  return devicePushPrivacy(identity.id, switches ? { notificationDetails: body.notificationDetails, liveActivityEnabled: body.liveActivityEnabled } : undefined);
 });
