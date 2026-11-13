@@ -8,7 +8,7 @@ import { resolveShareToken } from '$lib/projects/guard';
 import { isOwnerEmail } from '$lib/server/access';
 import { open, realpath, type FileHandle } from 'fs/promises';
 import { join, extname, resolve, sep } from 'path';
-import { safeGeneratedResponseHeaders } from '$lib/server/generated-content';
+import { rendersAsDocument, safeGeneratedResponseHeaders } from '$lib/server/generated-content';
 
 // Relocated static bundles use relative ./assets/ paths across multiple HTML
 // files, so the trailing slash must be preserved — never let SvelteKit strip it
@@ -198,6 +198,20 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
           path: responseFile.path,
         };
       }
+    }
+  } else if (isStaticProjectKey(params.slug)) {
+    // Non-HTML files of a hand-built bundle keep today's policy-free headers
+    // (its JS/CSS/images are subresources). An SVG or XML file can be opened as
+    // a document, so it only counts as first-party when no build has claimed
+    // the slug — the same proof the HTML branch above asks for.
+    if (rendersAsDocument(responseFile.mime)) {
+      const claims = await db
+        .select({ origin: jkaiBuilds.origin })
+        .from(jkaiBuilds)
+        .where(eq(jkaiBuilds.publishedSlug, params.slug));
+      firstParty = claims.length === 0;
+    } else {
+      firstParty = true;
     }
   }
 

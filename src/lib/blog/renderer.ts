@@ -39,6 +39,34 @@ const marked = new Marked({
   },
 });
 
+/**
+ * Every embed is sandboxed. The project embeds keep `allow-same-origin`: they
+ * are this site's own /projects pages (a SvelteKit route such as the Engine
+ * Room, or a bundle like terminal-descent whose leaderboard calls /api), and an
+ * opaque origin fails both — module scripts from /_app need CORS headers that
+ * are not sent, and same-origin fetches become cross-origin. Untrusted builder
+ * output under /projects already carries its own sandbox CSP, so the attribute
+ * here is about what an embed may do to the article (no top navigation), not
+ * about origin: top navigation is the one capability withheld. YouTube and
+ * Vimeo are cross-origin anyway and need the same set to play.
+ */
+const IFRAME_SANDBOX = [
+  'allow-scripts', 'allow-same-origin', 'allow-forms', 'allow-modals', 'allow-pointer-lock',
+  'allow-presentation', 'allow-downloads', 'allow-popups', 'allow-popups-to-escape-sandbox',
+].join(' ');
+
+/**
+ * A relative embed must stay under /projects/. `..` segments, encoded dots or
+ * slashes, backslashes and protocol-relative forms all let a path that starts
+ * with /projects/ resolve somewhere else, so any of them disqualifies it.
+ */
+function isProjectEmbedPath(src: string): boolean {
+  if (!src.startsWith('/projects/')) return false;
+  if (/%2e|%2f|%5c|\\/i.test(src)) return false;
+  const path = src.split(/[?#]/, 1)[0];
+  return !path.split('/').some((segment) => segment === '..' || segment === '.');
+}
+
 const SANITIZE_OPTIONS: sanitize.IOptions = {
   allowedTags: sanitize.defaults.allowedTags.concat([
     'img', 'figure', 'figcaption', 'video', 'source', 'iframe',
@@ -72,7 +100,9 @@ const SANITIZE_OPTIONS: sanitize.IOptions = {
     source: ['src', 'type', 'srcset', 'media'],
     aside: ['class'],
     section: ['class'],
-    iframe: ['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'title', 'loading'],
+    // `sandbox` is admitted only so transformTags can set it; whatever the
+    // author wrote is overwritten there.
+    iframe: ['src', 'width', 'height', 'frameborder', 'allowfullscreen', 'title', 'loading', 'sandbox'],
     a: ['href', 'name', 'target', 'rel', 'title'],
     code: ['class'],
     pre: ['class'],
@@ -118,6 +148,12 @@ const SANITIZE_OPTIONS: sanitize.IOptions = {
   // Same-origin project embeds: relative iframe srcs are let through here,
   // then the exclusiveFilter below restricts them to /projects/ pages.
   allowIframeRelativeUrls: true,
+  transformTags: {
+    iframe: (tagName, attribs) => ({
+      tagName,
+      attribs: { ...attribs, sandbox: IFRAME_SANDBOX },
+    }),
+  },
   exclusiveFilter: (frame) => {
     if (frame.tag !== 'iframe') return false;
     const src = frame.attribs?.src ?? '';
@@ -125,7 +161,7 @@ const SANITIZE_OPTIONS: sanitize.IOptions = {
     // drop the whole tag instead of leaving an empty frame.
     if (!src) return true;
     if (/^https?:\/\//i.test(src)) return false;
-    return !src.startsWith('/projects/');
+    return !isProjectEmbedPath(src);
   },
   allowedStyles: {
     '*': {

@@ -8,7 +8,8 @@
  * lesson by existing in three copies that drifted.
  *
  * Adding an entry here makes a route world-readable. Read-only endpoints only,
- * plus the write-only telemetry beacon which stores nothing.
+ * plus the write-only telemetry beacons (heartbeat renderer, CSP reports),
+ * which store nothing.
  */
 export const PUBLIC_API_PATHS = [
   '/api/vitals/state',
@@ -18,6 +19,8 @@ export const PUBLIC_API_PATHS = [
   '/api/version',
   // Wildmind's valley for the landing page: names, enums and counts, never free text.
   '/api/landing/wildmind',
+  // Write-only: browsers' report-only CSP violations, logged as one line each.
+  '/api/csp-report',
 ] as const;
 
 export function isPublicApiPath(pathname: string): boolean {

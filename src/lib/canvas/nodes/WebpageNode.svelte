@@ -9,6 +9,8 @@
 </script>
 
 <script lang="ts">
+  import { isFrameableUrl, webpageFrameSandbox } from './webpage-frame';
+
   type Props = {
     nodeId: string;
     config: WebpageConfig;
@@ -17,6 +19,9 @@
   };
 
   let { nodeId, config, onConfigChange, onOutput }: Props = $props();
+
+  // Empty during SSR: the frame check then simply runs again once hydrated.
+  const siteOrigin = typeof location === 'undefined' ? '' : location.origin;
 
   let urlDraft = $state(config.url ?? '');
   let iframeEl: HTMLIFrameElement | undefined = $state();
@@ -58,6 +63,10 @@
     if (!target) return;
     if (!isValidUrl(target)) {
       showStatus('Invalid URL — must start with http(s)://');
+      return;
+    }
+    if (!isFrameableUrl(target, siteOrigin)) {
+      showStatus("This site's own pages can't be framed here");
       return;
     }
     pongReceived = false;
@@ -221,7 +230,7 @@
       aria-label="URL"
     />
     <button class="webpage-btn" onclick={load} title="Load URL">Go</button>
-    {#if config.url}
+    {#if config.url && isValidUrl(config.url)}
       <a class="webpage-btn" href={config.url} target="_blank" rel="noopener" title="Open in new tab">↗</a>
     {/if}
     <button class="webpage-btn" onclick={toggleFullscreen} title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
@@ -233,14 +242,17 @@
   </div>
 
   <div class="webpage-viewport">
-    {#if config.url}
+    {#if config.url && config.mode !== 'proxied' && !isFrameableUrl(config.url, siteOrigin)}
+      <!-- A URL can also arrive from an upstream node, so check it here too. -->
+      <div class="webpage-empty">This site's own pages can't be framed here.</div>
+    {:else if config.url}
       {@const iframeSrc = config.mode === 'proxied'
         ? `/api/webframe/render?url=${encodeURIComponent(config.url)}&session=${encodeURIComponent(nodeId)}`
         : config.url}
       <iframe
         bind:this={iframeEl}
         src={iframeSrc}
-        sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+        sandbox={webpageFrameSandbox(config.mode)}
         title="Webpage node {nodeId}"
       ></iframe>
     {:else}

@@ -7,7 +7,6 @@ const ALLOWED_DOMAINS = [
   'api.open-meteo.com',
   'restcountries.com',
   'api.frankfurter.app',
-  'api.coindesk.com',
   'api.coingecko.com',
   'api.genderize.io',
   'api.nationalize.io',
@@ -18,13 +17,11 @@ const ALLOWED_DOMAINS = [
   'api.spacexdata.com',
   'api.exchangerate-api.com',
   'api.openweathermap.org',
-  'api.publicapis.org',
   'catfact.ninja',
   'dog.ceo',
   'pokeapi.co',
   'swapi.dev',
   'api.dictionaryapi.dev',
-  'api.quotable.io',
   'zenquotes.io',
   'official-joke-api.appspot.com',
   'collectionapi.metmuseum.org',
@@ -110,16 +107,33 @@ export const GET: RequestHandler = async (event) => {
 
     return new Response(resp.body, {
       status: resp.status,
-      headers: {
-        'Content-Type': resp.headers.get('content-type') || 'application/octet-stream',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=300',
-      },
+      headers: proxiedResponseHeaders(resp.headers.get('content-type')),
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: `Proxy fetch failed: ${err}` }), {
+    console.error(`[jkai-cors] fetch failed for ${new URL(fullUrl).hostname}:`, err);
+    return new Response(JSON.stringify({ error: 'Proxy fetch failed' }), {
       status: 502,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 };
+
+/**
+ * The proxy answers on this site's origin with bytes chosen by a third party,
+ * so it never lets them become a document here: JSON stays JSON, everything
+ * else is plain text offered as a download, and a sandboxed, resource-less
+ * policy covers the case where a browser opens it anyway. `fetch()` callers
+ * read the body exactly as before.
+ */
+function proxiedResponseHeaders(upstreamType: string | null): Headers {
+  const isJson = /^\s*application\/([\w.+-]+\+)?json\b/i.test(upstreamType ?? '');
+  const headers = new Headers({
+    'Content-Type': isJson ? 'application/json; charset=utf-8' : 'text/plain; charset=utf-8',
+    'Content-Security-Policy': "sandbox; default-src 'none'",
+    'X-Content-Type-Options': 'nosniff',
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': 'public, max-age=300',
+  });
+  if (!isJson) headers.set('Content-Disposition', 'attachment');
+  return headers;
+}
