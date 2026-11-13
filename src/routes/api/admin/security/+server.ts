@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { serviceBridgeSecret } from '$lib/config/service-secret';
+import { hasBearerSecret } from '$lib/server/service-auth';
 import { isOwnerEmail } from '$lib/server/access';
 import { localPosture, unbanIp } from '$lib/server/security-posture';
 
@@ -32,12 +33,9 @@ function hasBridgeSecret(request: Request): boolean {
   // Read through the accessor, not process.env — the .env file is loaded by
   // SvelteKit, so a raw process.env read is empty in dev and the peer card
   // silently never authenticates.
-  const expected = serviceBridgeSecret();
-  if (!expected) return false;
-  const got = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  // Length check first so a mismatched length can't be distinguished by timing
-  // any more precisely than it already is by the response.
-  return got.length === expected.length && got === expected;
+  // Constant-time, over fixed-width digests: a plain `===` leaks how much of
+  // the secret matched.
+  return hasBearerSecret(request, serviceBridgeSecret());
 }
 
 export const GET: RequestHandler = async ({ request, locals }) => {

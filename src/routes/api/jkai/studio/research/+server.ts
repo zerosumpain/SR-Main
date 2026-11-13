@@ -1,5 +1,5 @@
 import { json, error } from '@sveltejs/kit';
-import { verifyBridgeToken } from '$lib/jkai/bridge-token';
+import { runningBridgeBuild } from '$lib/jkai/bridge-auth.server';
 import { searchResearch } from '$lib/deepdive/research-search';
 import type { RequestHandler } from './$types';
 
@@ -22,9 +22,9 @@ import type { RequestHandler } from './$types';
  * own path made the same choice for the same reason.
  */
 export const POST: RequestHandler = async ({ request }) => {
-  const auth = request.headers.get('authorization') ?? '';
-  const buildId = verifyBridgeToken(auth.replace(/^Bearer\s+/i, ''));
-  if (!buildId) throw error(401, 'invalid token');
+  // Only a build that is still running may spend model budget here.
+  const build = await runningBridgeBuild(request.headers.get('authorization'));
+  if (!build) throw error(401, 'invalid token');
 
   let body: { query?: unknown; limit?: unknown };
   try {

@@ -12,6 +12,7 @@ src/lib/access/showcase-routes.test.ts
 src/lib/auth.test.ts
 src/lib/capabilities/manifest.test.ts
 src/lib/capabilities/surface-guard.test.ts
+src/lib/capture/capture-sw.test.ts
 src/lib/costs/ledger.test.ts
 src/lib/daydream/budget.test.ts
 src/lib/daydream/think/tools.test.ts

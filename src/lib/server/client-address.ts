@@ -22,7 +22,7 @@
 // the mapped form (`::ffff:8.8.8.8`) normalises to `8.8.8.8` and is still
 // refused by both.
 
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import { isBlockedIP, unwrapMappedIPv4 } from './ssrf-guard';
 
 /**
@@ -56,4 +56,60 @@ export function isLoopbackAddress(addr: string): boolean {
  */
 export function isPrivateAddress(addr: string): boolean {
   return isBlockedIP(addr);
+}
+
+/**
+ * True when the request was made ON this machine, not merely delivered by it.
+ *
+ * In production cloudflared terminates every internet request and re-issues
+ * it from loopback, so `isLoopbackAddress` alone says yes to the whole world.
+ * Cloudflare always stamps `cf-connecting-ip` on what it forwards (and
+ * overwrites any value a client sent), while the box's own callers — the
+ * systemd watchdog's curl, a maintenance run — never set it. So "local" is
+ * loopback with no edge header; a tunnelled request carrying the header is an
+ * internet request whatever the socket says.
+ */
+export function isLocalRequest(request: Request, addr: string): boolean {
+  return isLoopbackAddress(addr) && !request.headers.has('cf-connecting-ip');
+}
+
+/** `getClientAddress()` without the throw it raises in some adapters/tests. */
+export function clientAddressOf(event: { getClientAddress?: () => string }): string {
+  try {
+    return event.getClientAddress?.() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Who the DEVELOPMENT sign-in bypass admits: this machine, plus the addresses
+ * named in `AUTH_BYPASS_ALLOW` (comma-separated IPs or CIDRs — the owner's
+ * own devices). It used to be every private address, which made any other
+ * server on the LAN or tailnet the owner of a dev server it could reach.
+ * Malformed entries are ignored rather than widening anything.
+ */
+export function isDevBypassAddress(addr: string, allow: string | undefined): boolean {
+  if (isLoopbackAddress(addr)) return true;
+  if (!addr || !allow) return false;
+  const ip = unwrapMappedIPv4(addr).split('%')[0];
+  const family = isIP(ip);
+  if (!family) return false;
+  const list = new BlockList();
+  for (const raw of allow.split(',')) {
+    const entry = raw.trim();
+    if (!entry) continue;
+    const [base, bits] = entry.split('/');
+    const baseFamily = isIP(base);
+    if (!baseFamily) continue;
+    const type = baseFamily === 4 ? 'ipv4' : 'ipv6';
+    if (bits === undefined) {
+      list.addAddress(base, type);
+      continue;
+    }
+    const prefix = Number(bits);
+    if (!/^\d+$/.test(bits) || prefix > (baseFamily === 4 ? 32 : 128)) continue;
+    list.addSubnet(base, prefix, type);
+  }
+  return list.check(ip, family === 4 ? 'ipv4' : 'ipv6');
 }

@@ -12,6 +12,7 @@ import { sources as sourcesTable } from '$lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
 import { classifyDomain } from './credibility';
 import { isRedirectCitation, type Citation } from './grounding';
+import { guardedPublicFetch } from '$lib/server/safe-fetch';
 
 const REDIRECT_TIMEOUT_MS = 8_000;
 
@@ -37,12 +38,18 @@ const CITED_CATEGORY = 'cited';
 export async function resolveCitationUrl(url: string): Promise<string> {
   if (!isRedirectCitation(url)) return url;
   try {
-    const res = await fetch(url, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(REDIRECT_TIMEOUT_MS),
+    // Through the SSRF guard, not plain fetch: the redirect's TARGET is
+    // whatever the citation says, and every hop is re-validated and pinned so
+    // a citation cannot walk this server into its own network. Only the final
+    // URL is wanted, so the destination's body is never read.
+    const res = await guardedPublicFetch(url, {
+      timeoutMs: REDIRECT_TIMEOUT_MS,
+      maxBytes: 0,
+      maxRedirects: 5,
+      readBody: () => false,
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; strangeramblings-research/1.0)' },
     });
-    return res.url && /^https?:\/\//i.test(res.url) ? res.url : url;
+    return res.finalUrl && /^https?:\/\//i.test(res.finalUrl) ? res.finalUrl : url;
   } catch {
     return url;
   }

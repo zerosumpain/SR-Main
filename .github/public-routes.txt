@@ -19,7 +19,6 @@
 /api/analytics-gate/enter
 /api/blog/images/[postId]/[filename]
 /api/claude-changelog/ingest
-/api/claude-changelog/session/[id]
 /api/csp-report
 /api/daydream/backfill
 /api/daydream/observe

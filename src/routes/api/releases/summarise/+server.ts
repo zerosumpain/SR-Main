@@ -16,13 +16,13 @@ import { json, error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { countPending, summarisePending, summariseRelease } from '$lib/releases/summarise';
 import { isOwnerRequest } from '$lib/server/owner';
+import { hasBearerSecret } from '$lib/server/service-auth';
 import type { RequestEvent, RequestHandler } from './$types';
 
 const MAX_BATCH = 25;
 
 async function authorize(event: RequestEvent): Promise<boolean> {
-  const secret = env.RELEASE_LOG_SECRET;
-  if (secret && (event.request.headers.get('authorization') ?? '') === `Bearer ${secret}`) return true;
+  if (hasBearerSecret(event.request, env.RELEASE_LOG_SECRET)) return true;
   return isOwnerRequest(event);
 }
 

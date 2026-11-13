@@ -25,6 +25,7 @@ import { emit as emitPlatformEvent } from '$lib/events/platform-bus';
 import { releaseLivePayload } from '$lib/events/payloads';
 import { nextVersionLabel, summariseRelease } from '$lib/releases/summarise';
 import { isOwnerRequest } from '$lib/server/owner';
+import { hasBearerSecret } from '$lib/server/service-auth';
 import { redactSensitive } from '$lib/security/sensitive';
 import { RELEASE_VIA, type CommitFact, type FileFact, type ReleaseIngestPayload, type ReleaseVia } from '$lib/releases/types';
 import type { RequestEvent, RequestHandler } from './$types';
@@ -33,8 +34,7 @@ import type { RequestEvent, RequestHandler } from './$types';
 const RELEASE_NEWS_MS = 24 * 60 * 60_000;
 
 async function authorized(event: RequestEvent): Promise<boolean> {
-  const secret = env.RELEASE_LOG_SECRET;
-  if (secret && (event.request.headers.get('authorization') ?? '') === `Bearer ${secret}`) return true;
+  if (hasBearerSecret(event.request, env.RELEASE_LOG_SECRET)) return true;
   return isOwnerRequest(event);
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isLoopbackAddress, isPrivateAddress } from './client-address';
+import { isDevBypassAddress, isLocalRequest, isLoopbackAddress, isPrivateAddress } from './client-address';
 import { unwrapMappedIPv4 } from './ssrf-guard';
 
 /**
@@ -100,5 +100,54 @@ describe('isPrivateAddress', () => {
   it('treats a LAN peer as private but not as loopback', () => {
     expect(isPrivateAddress('192.168.0.57')).toBe(true);
     expect(isLoopbackAddress('192.168.0.57')).toBe(false);
+  });
+});
+
+describe('isLocalRequest', () => {
+  const req = (headers: Record<string, string> = {}) => new Request('http://x/', { headers });
+
+  it('is the box calling itself: loopback with no edge header', () => {
+    expect(isLocalRequest(req(), '127.0.0.1')).toBe(true);
+    expect(isLocalRequest(req(), '::ffff:127.0.0.1')).toBe(true);
+  });
+
+  it('refuses a tunnelled internet request even though it arrives from loopback', () => {
+    expect(isLocalRequest(req({ 'cf-connecting-ip': '203.0.113.9' }), '127.0.0.1')).toBe(false);
+    // Any value at all marks it as edge traffic — the header's presence is the signal.
+    expect(isLocalRequest(req({ 'cf-connecting-ip': '127.0.0.1' }), '127.0.0.1')).toBe(false);
+  });
+
+  it('refuses anything not on loopback', () => {
+    expect(isLocalRequest(req(), '192.168.0.57')).toBe(false);
+    expect(isLocalRequest(req(), '')).toBe(false);
+  });
+});
+
+describe('isDevBypassAddress', () => {
+  it('always admits this machine', () => {
+    expect(isDevBypassAddress('127.0.0.1', undefined)).toBe(true);
+    expect(isDevBypassAddress('::ffff:127.0.0.1', '')).toBe(true);
+    expect(isDevBypassAddress('::1', undefined)).toBe(true);
+  });
+
+  it('no longer admits every private address', () => {
+    expect(isDevBypassAddress('192.168.0.57', undefined)).toBe(false);
+    expect(isDevBypassAddress('100.72.165.45', '')).toBe(false);
+    expect(isDevBypassAddress('172.17.0.2', '100.64.0.9')).toBe(false);
+  });
+
+  it('admits exactly the listed addresses and subnets', () => {
+    const allow = '100.64.0.9, 10.1.2.0/24,fd00::/8';
+    expect(isDevBypassAddress('100.64.0.9', allow)).toBe(true);
+    expect(isDevBypassAddress('::ffff:100.64.0.9', allow)).toBe(true);
+    expect(isDevBypassAddress('100.64.0.10', allow)).toBe(false);
+    expect(isDevBypassAddress('10.1.2.200', allow)).toBe(true);
+    expect(isDevBypassAddress('10.1.3.1', allow)).toBe(false);
+    expect(isDevBypassAddress('fd12::1', allow)).toBe(true);
+  });
+
+  it('ignores malformed entries rather than widening', () => {
+    expect(isDevBypassAddress('10.0.0.1', 'garbage, 10.0.0.0/99, *, 10.0.0.0/x')).toBe(false);
+    expect(isDevBypassAddress('not-an-ip', '0.0.0.0/0')).toBe(false);
   });
 });

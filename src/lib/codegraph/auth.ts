@@ -15,7 +15,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
-import { buildFromAuthHeader } from '$lib/jkai/bridge-token';
+import { runningBridgeBuild } from '$lib/jkai/bridge-auth.server';
 
 /** Constant-time compare over fixed-width digests (unequal lengths cannot short-circuit). */
 function safeEqual(a: string, b: string): boolean {
@@ -49,8 +49,9 @@ export function codegraphServiceAuthorized(request: Request): boolean {
  * to the build that actually made it instead of being taken on trust from the
  * request body.
  */
-export function codegraphBuildAuthorized(request: Request): string | null {
-  return buildFromAuthHeader(request.headers.get('authorization'));
+export async function codegraphBuildAuthorized(request: Request): Promise<string | null> {
+  // Running builds only, like every other bridge-token route.
+  return (await runningBridgeBuild(request.headers.get('authorization')))?.id ?? null;
 }
 
 /**

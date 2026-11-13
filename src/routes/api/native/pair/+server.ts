@@ -6,6 +6,7 @@ import { isOwnerEmail } from '$lib/server/native-handler';
 import { loadMember } from '$lib/server/grants';
 import { satisfies } from '$lib/access/catalogue';
 import { rateLimit } from '$lib/server/rate-limit';
+import { clientKey } from '$lib/server/public-request-guard';
 import { canonicalEmail, isRegistrant } from '$lib/server/registration';
 import { verifyPairIdentity } from '$lib/server/pair-identity';
 import { isJoinCode, verifyJoinCode } from '$lib/server/adhoc-install';
@@ -51,13 +52,9 @@ import { memberByEmail } from '$lib/home/presence/members';
  * connects a phone.
  */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-  let clientAddr = '';
-  try {
-    clientAddr = getClientAddress();
-  } catch {
-    clientAddr = 'unknown';
-  }
-  const limit = rateLimit(`native-pair:${clientAddr}`, { capacity: 10, refillPerSecond: 0.05 });
+  // Keyed on the visitor (`clientKey` reads the edge's address), not the socket:
+  // behind the tunnel every caller's socket is loopback, so one bucket was everyone's.
+  const limit = rateLimit(`native-pair:${clientKey({ request, getClientAddress })}`, { capacity: 10, refillPerSecond: 0.05 });
   if (!limit.allowed) {
     return json(
       { error: 'Too many attempts. Wait a minute and try again.' },

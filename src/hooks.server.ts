@@ -56,6 +56,7 @@ import { requiredFor, satisfies } from '$lib/access/catalogue';
 import { requestHost } from '$lib/request-host';
 import { resolveAdminRedirect } from '$lib/components/admin/admin-nav';
 import { isEmailAllowedToSignIn, isOwnerEmail } from '$lib/server/access';
+import { sessionStillAllowed } from '$lib/server/session-recheck';
 import { INVITE_COOKIE, signInWithInvite } from '$lib/server/invites';
 import { REGISTER_COOKIE, REGISTER_COOKIE_MAX_AGE_S, REGISTER_FINISH_PATH, isRegisterNonce } from '$lib/server/registration';
 import { viewerHolds, viewerOf } from '$lib/server/viewer';
@@ -74,7 +75,8 @@ import { isPublicApiPath } from '$lib/server/public-api-paths';
 import { hasStudioServiceToken } from '$lib/server/studio-auth';
 import { invokeLaneFor, hasJkaiServiceToken, presentsCommissionToken } from '$lib/server/invoke-auth';
 import { modelServiceAppFor } from '$lib/server/model-service-auth';
-import { isLoopbackAddress, isPrivateAddress } from '$lib/server/client-address';
+import { defaultsToNoStore } from '$lib/server/cache-defaults';
+import { clientAddressOf, isDevBypassAddress, isLocalRequest } from '$lib/server/client-address';
 import { SvelteKitAuth } from '@auth/sveltekit';
 import Google from '@auth/sveltekit/providers/google';
 import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
@@ -453,6 +455,16 @@ const { handle: authHandle } = SvelteKitAuth(async (event) => ({
           token.registerUntil = Date.now() + REGISTER_COOKIE_MAX_AGE_S * 1000;
           token.registrant = !(await isEmailAllowedToSignIn(email));
         }
+        return token;
+      }
+      // Every later read of the session: a guest removed from the allow-list
+      // loses it (null clears the cookie) within GUEST_RECHECK_MS. Owners are
+      // answered from env with no database read. A registration session is
+      // left alone — it is already nobody's session outside finish (see
+      // `session` below), and its holder is by definition not on the list.
+      if (!token.registrant && !(await sessionStillAllowed(token.email))) {
+        console.log(`[auth] Session ended: ${token.email} is no longer allowed`);
+        return null;
       }
       return token;
     },
@@ -624,14 +636,12 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   // environment toggle: a reverse tunnel makes internet clients appear to be
   // loopback, so address classification cannot safely authorise production.
   if (import.meta.env.DEV && !event.locals.viewingAs) {
-    let clientAddr = '';
-    try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
-    // `isPrivateAddress` rather than a list of prefixes written out here. The
-    // hand-written version compared against `'127.0.0.1'` and missed
-    // `::ffff:127.0.0.1`, which is what a dual-stack listener actually reports
-    // — so on `vite dev --host` the bypass never fired and every request from
-    // the box itself 401'd. See $lib/server/client-address.
-    if (isPrivateAddress(clientAddr)) {
+    // This machine plus the owner's own devices named in AUTH_BYPASS_ALLOW —
+    // not every private address. "Private" took in every other server on the
+    // LAN and tailnet, and a server that can reach the dev box is not the
+    // owner. The address helpers handle the `::ffff:127.0.0.1` spelling a
+    // dual-stack listener reports; see $lib/server/client-address.
+    if (isDevBypassAddress(clientAddressOf(event), env.AUTH_BYPASS_ALLOW)) {
       // Development identity is explicit; production never enters this branch.
       event.locals.auth = async () => ({ user: { email: env.AUTH_ALLOWED_EMAILS?.split(',')[0]?.trim() }, expires: new Date(Date.now()+60_000).toISOString() });
       event.locals.viewer = undefined;
@@ -771,14 +781,19 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     return resolve(event);
   }
 
-  // /api/releases/* POST is service-to-service: scripts/ci-deploy.sh records the
-  // deploy from the GitHub Actions runner and scripts/release-log/ingest.mjs
-  // drives the backfill from homeserv — neither has a user session. Both
-  // handlers self-authenticate via `Authorization: Bearer RELEASE_LOG_SECRET`
-  // (mirrors /api/claude-changelog above); /summarise additionally accepts an
-  // owner session and refuses to run unauthenticated. GET is deliberately NOT
-  // bypassed — it falls through to the owner gate below.
-  if (pathname.startsWith('/api/releases/') && event.request.method === 'POST') {
+  // /api/releases/{ingest,summarise} POST are service-to-service: the deploy
+  // records itself from the GitHub Actions runner and
+  // scripts/release-log/ingest.mjs drives the backfill from homeserv — neither
+  // has a user session. Both handlers self-authenticate via `Authorization:
+  // Bearer RELEASE_LOG_SECRET` (mirrors /api/claude-changelog above);
+  // /summarise additionally accepts an owner session and refuses to run
+  // unauthenticated. GET is deliberately NOT bypassed — it falls through to
+  // the owner gate below. Exact paths, not the /api/releases/ prefix, for the
+  // reason given at /api/claude-changelog/ingest.
+  if (
+    (pathname === '/api/releases/ingest' || pathname === '/api/releases/summarise') &&
+    event.request.method === 'POST'
+  ) {
     return resolve(event);
   }
 
@@ -803,17 +818,17 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
   }
 
   // The workflow-engine probe is consumed by the systemd watchdog timer (curl
-  // from 127.0.0.1) — no user session, no service token. Restrict to loopback to
-  // prevent it being scraped externally for run counts. Both paths are listed
+  // from 127.0.0.1) — no user session, no service token. Restrict to requests
+  // made ON the box to prevent it being scraped externally for run counts —
+  // `isLocalRequest`, not bare loopback, because the tunnel delivers every
+  // internet request from loopback too. Both paths are listed
   // while the watchdog unit is repointed off the /api/health prefix, which the
   // health application is due to take over.
   if (
     pathname === '/api/platform/workflow-engine' ||
     pathname === '/api/health/workflow-engine'
   ) {
-    let clientAddr = '';
-    try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
-    if (isLoopbackAddress(clientAddr)) {
+    if (isLocalRequest(event.request, clientAddressOf(event))) {
       return resolve(event);
     }
   }
@@ -833,9 +848,7 @@ const protectionHandle: Handle = async ({ event, resolve }) => {
     pathname === '/api/deepdive/reindex-facts' ||
     (pathname === '/api/trails/segments' && event.request.method === 'POST')
   ) {
-    let clientAddr = '';
-    try { clientAddr = event.getClientAddress?.() ?? ''; } catch { clientAddr = ''; }
-    if (isLoopbackAddress(clientAddr) && hasMaintenanceSecret(event.request)) {
+    if (isLocalRequest(event.request, clientAddressOf(event)) && hasMaintenanceSecret(event.request)) {
       return resolve(event);
     }
   }
@@ -1131,6 +1144,9 @@ const securityHeadersHandle: Handle = async ({ event, resolve }) => {
     });
   }
   response.headers.set('X-Content-Type-Options', 'nosniff');
+  if (defaultsToNoStore(event.url.pathname, response.headers)) {
+    response.headers.set('Cache-Control', 'private, no-store');
+  }
   if (event.url.pathname.startsWith('/api/native/') || event.url.pathname === '/api/internal/session') {
     response.headers.set('Cache-Control', 'private, no-store');
   }

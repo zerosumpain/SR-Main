@@ -14,7 +14,12 @@ interface PublicGuardOptions {
   global: RateLimitOptions;
 }
 
-function clientKey(ctx: RequestContext): string {
+/**
+ * A stable, hashed per-visitor key for rate limiting an anonymous endpoint.
+ * Use this, never `getClientAddress()` alone: behind the tunnel that is
+ * loopback for every visitor, so a per-address bucket is one global bucket.
+ */
+export function clientKey(ctx: RequestContext): string {
   // Production is loopback-bound behind Cloudflare Tunnel, which overwrites
   // CF-Connecting-IP. Never consume X-Forwarded-For: callers can append/spoof
   // entries and different proxies disagree about which side is authoritative.

@@ -41,7 +41,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
   // in its environment. Until this existed the pull channel returned 401 to
   // every build that ever tried it, because the script sends that token and
   // only the changelog secret was accepted — see `codegraphBuildAuthorized`.
-  const tokenBuildId = service ? null : codegraphBuildAuthorized(request);
+  const tokenBuildId = service ? null : await codegraphBuildAuthorized(request);
   if (!service && !tokenBuildId) {
     // Not a build: fall back to the owner session. `locals.session` is set by
     // the Auth.js handle; this route is NOT in the hooks bypass for anything

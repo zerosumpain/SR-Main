@@ -185,3 +185,23 @@ describe('an install link, opened in the installed app', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('the per-visitor ceiling', () => {
+  // Behind the tunnel every caller's socket is loopback; the ceiling has to
+  // key on the edge address or one guesser locks every phone out (and the
+  // ceiling stops being per guesser at all).
+  function tunnelled(edgeIp: string) {
+    const request = new Request('https://site.test/api/native/pair', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cf-connecting-ip': edgeIp },
+      body: '{',
+    });
+    return POST({ request, getClientAddress: () => '127.0.0.1' } as never) as Promise<Response>;
+  }
+
+  it('gives each visitor their own bucket even though the socket is shared', async () => {
+    for (let i = 0; i < 10; i++) expect((await tunnelled('203.0.113.7')).status).toBe(400);
+    expect((await tunnelled('203.0.113.7')).status).toBe(429);
+    expect((await tunnelled('203.0.113.8')).status).toBe(400);
+  });
+});
