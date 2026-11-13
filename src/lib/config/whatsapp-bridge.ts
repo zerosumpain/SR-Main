@@ -26,3 +26,17 @@ export function whatsappBridgeUrl(env: NodeJS.ProcessEnv = process.env): string 
   const raw = env.WHATSAPP_BRIDGE_URL ?? '';
   return raw ? raw.replace(/\/+$/, '') : null;
 }
+
+/**
+ * Headers every call to the worker carries. The worker requires
+ * `Authorization: Bearer $WA_WORKER_TOKEN` on its owner-acting routes once the
+ * variable is set; both read the same env file, so sending it whenever it is
+ * present keeps callers ahead of enforcement rather than behind it.
+ */
+export function whatsappBridgeHeaders(
+  env: NodeJS.ProcessEnv = process.env,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  const token = env.WA_WORKER_TOKEN;
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : { ...extra };
+}

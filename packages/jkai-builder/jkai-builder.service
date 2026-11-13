@@ -65,6 +65,12 @@ ProtectKernelLogs=true
 ProtectKernelModules=true
 ProtectKernelTunables=true
 ProtectHostname=true
+# Hides OTHER accounts' processes only. This account's own (the orchestrator
+# and every other service it runs) are hidden from build commands by the
+# Landlock domain each command and pi run inside — src/lib/jkai/build-confine.ts,
+# which also refuses connects to the unauthenticated loopback services.
+# IPAddressDeny= cannot do that here: it is per address, and the orchestrator
+# and the gate both need loopback.
 ProtectProc=invisible
 ProcSubset=pid
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

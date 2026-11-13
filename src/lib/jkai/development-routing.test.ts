@@ -1,6 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ exec: vi.fn(async (_command: string) => ({ stdout: '', stderr: '' })), broker: vi.fn(async () => ({})), delivery: vi.fn() }));
-vi.mock('child_process', () => ({ exec: Object.assign(() => {}, { [Symbol.for('nodejs.util.promisify.custom')]: mocks.exec }) }));
+// Host-mode commands go through execFile (argv, no outer shell); fold its argv
+// back into one string so both paths are asserted the same way.
+vi.mock('child_process', () => ({
+  exec: Object.assign(() => {}, { [Symbol.for('nodejs.util.promisify.custom')]: mocks.exec }),
+  execFile: Object.assign(() => {}, { [Symbol.for('nodejs.util.promisify.custom')]: (_file: string, args: string[]) => mocks.exec(args.join(' ')) }),
+}));
 vi.mock('./development-workspace.server', () => ({ workspaceBroker: mocks.broker }));
 vi.mock('./development-state.server', () => ({ loadDelivery: mocks.delivery }));
 vi.mock('./log-emitter', () => ({ emitLog: vi.fn(async () => {}) }));

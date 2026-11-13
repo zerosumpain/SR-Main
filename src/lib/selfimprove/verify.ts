@@ -4,11 +4,13 @@
 // automatically (owner decision, 2026-07-29) — which is only defensible because
 // nothing reaches the registry without clearing both checks here:
 //
-//   1. staticScan  — a deny-list over the handler source. The handler is compiled
-//                    with `new AsyncFunction(...)` in full Node scope, so the
-//                    only thing standing between an LLM-authored string and
-//                    `process.env` is this scan. Deny beats allow: an unknown
-//                    construct is refused, not permitted.
+//   1. staticScan  — a deny-list over the handler source. Handlers no longer
+//                    run in the web process: runAuthored
+//                    ($lib/jkai/grounding/authored.server) executes them in a
+//                    bubblewrap sandbox with an empty environment, no network
+//                    and only brokered capabilities. The scan is the first
+//                    layer in front of that, not the only one. Deny beats
+//                    allow: an unknown construct is refused, not permitted.
 //   2. smokeTest   — EVERY provided case must return success within a timeout.
 //                    The old code tested one `sample_args` and shipped on that;
 //                    a single happy path is not evidence a tool works.

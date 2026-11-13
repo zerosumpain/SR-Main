@@ -20,6 +20,7 @@ import { stripNulls } from './strip-nulls';
 import { describeDbError } from './db-error';
 import { ensurePiCodexAuth, isCodexAuthRejection } from './pi-codex-auth';
 import { buildChildEnvironment } from './sandbox';
+import { buildConfinementEnabled, CONFINE_INTERPRETER, confinedArgs } from './build-confine';
 
 /** pi's built-ins the agent always needs. Never narrowed at runtime. */
 export const BASE_PI_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'] as const;
@@ -57,6 +58,11 @@ export function buildToolAllowlist(bridgedToolNames?: readonly string[]): string
 }
 
 const CONTAINER_NAME = 'jkai-sandbox';
+
+/** `docker exec` argv for container-mode pi. Names only: values come from the client env. */
+export function dockerExecPiArgs(workdir: string, envNames: string[], piCmd: string): string[] {
+  return ['exec', '-i', '-w', workdir, ...envNames.flatMap((name) => ['-e', name]), CONTAINER_NAME, 'bash', '-c', piCmd];
+}
 const HOST_MODE = process.env.JKAI_BUILDS_HOSTMODE === '1';
 
 /**
@@ -486,20 +492,14 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
     // that was not, and its contents are partly LLM-authored.
     '--tools', sh(buildToolAllowlist(opts.bridgedToolNames)),
   ];
-  if (opts.extensions && opts.extensions.length > 0) {
-    for (const e of opts.extensions) {
-      piParts.push('--extension', sh(e));
-    }
-  } else {
-    piParts.push('--no-extensions');
-  }
-  if (opts.skillDirs && opts.skillDirs.length > 0) {
-    for (const s of opts.skillDirs) {
-      piParts.push('--skill', sh(s));
-    }
-  } else {
-    piParts.push('--no-skills');
-  }
+  // Discovery is ALWAYS off; only the explicit paths below load. `~/.pi` is
+  // writable to the build (pi locks beside its config), so with discovery on
+  // an agent could drop an extension or skill there — or add a package to
+  // settings.json — and have it load into every later build. pi keeps explicit
+  // `--extension` / `--skill` paths under both flags.
+  piParts.push('--no-extensions', '--no-skills');
+  for (const e of opts.extensions ?? []) piParts.push('--extension', sh(e));
+  for (const s of opts.skillDirs ?? []) piParts.push('--skill', sh(s));
   const thinkingLevel = piThinkingLevel(provider, opts.thinkingLevel);
   if (thinkingLevel) {
     piParts.push('--thinking', thinkingLevel);
@@ -527,8 +527,12 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
   let spawnArgs: string[];
   let spawnOpts: Parameters<typeof spawn>[2];
   if (HOST_MODE) {
-    spawnCmd = 'bash';
-    spawnArgs = ['-c', piCmd];
+    // In the builder sidecar pi and everything its bash tool runs live inside
+    // the Landlock confinement (build-confine.ts). The interpreter execs bash
+    // in place, so the child pid and its signals are unchanged.
+    const confined = buildConfinementEnabled();
+    spawnCmd = confined ? CONFINE_INTERPRETER : 'bash';
+    spawnArgs = confined ? confinedArgs(['bash', '-c', piCmd]) : ['-c', piCmd];
     spawnOpts = {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: workdir,
@@ -542,23 +546,17 @@ export async function runPi(opts: PiRunOptions): Promise<PiRunResult> {
       }),
     };
   } else {
-    const dockerArgs = [
-      'exec',
-      '-i',
-      '-w', workdir,
-      ...(auth ? ['-e', `${auth.envVar}=${auth.value}`] : []),
-      '-e', 'PI_OFFLINE=1',
-      '-e', 'PI_TELEMETRY=0',
-    ];
+    // `-e NAME` without a value: docker reads it from the client's own
+    // environment. `-e NAME=value` put the provider key on the docker command
+    // line, where every process on the host can read it from /proc.
+    const passEnv: Record<string, string> = { PI_OFFLINE: '1', PI_TELEMETRY: '0' };
+    if (auth) passEnv[auth.envVar] = auth.value;
     for (const [k, v] of Object.entries(opts.extraEnv ?? {})) {
-      if (typeof v === 'string') {
-        dockerArgs.push('-e', `${k}=${v}`);
-      }
+      if (typeof v === 'string') passEnv[k] = v;
     }
-    dockerArgs.push(CONTAINER_NAME, 'bash', '-c', piCmd);
     spawnCmd = 'docker';
-    spawnArgs = dockerArgs;
-    spawnOpts = { stdio: ['pipe', 'pipe', 'pipe'] };
+    spawnArgs = dockerExecPiArgs(workdir, Object.keys(passEnv), piCmd);
+    spawnOpts = { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...passEnv } };
   }
 
   await emitLog(
