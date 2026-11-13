@@ -32,9 +32,13 @@
 // per page hash at /projects/hometowns/<PAGE_HASH>/mobile.html, loaded by
 // the iPhone app (games/hometowns-view, scripts/hometowns/deploy-page.sh). It
 // has no card and holds no data, so it defaults public. Being a static key is
-// also what gives it FIRST_PARTY_BUNDLE_CSP (no sandbox): the page's forecast
+// also what gives it the first-party bundle CSP (no sandbox): the page's forecast
 // runs in a module Web Worker, which an opaque-origin sandboxed document
 // cannot start from its own files.
+//
+// A key that serves a bundle also wants a `BUNDLE_PROFILES` entry in
+// $lib/server/generated-content (eval, fonts, extra connect origins); without
+// one the bundle gets the strictest first-party policy.
 export const STATIC_PROJECT_KEYS = [
   'hex',
   'engine-room',

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * Browser boundary for applications served out of `data/jkai-projects`.
  *
@@ -35,8 +37,9 @@ export const GENERATED_CONTENT_CSP = [
 
 /**
  * Hand-built bundles the owner wrote and published from his own repositories —
- * the `STATIC_PROJECT_KEYS` half of /projects (scs-earnings, terminal-descent,
- * archetype…). Same hardening, no sandbox.
+ * the `STATIC_PROJECT_KEYS` half of /projects (scs-earnings, marbler,
+ * archetype…). Same hardening, no sandbox, and a policy cut to what each
+ * bundle actually loads.
  *
  * The sandbox is not free, and on first-party content it buys nothing while
  * costing the page its origin. An opaque origin means the browser treats every
@@ -55,8 +58,132 @@ export const GENERATED_CONTENT_CSP = [
  * GENERATED app cannot be handed its origin back, so the studio proxy mints a
  * capability instead. A bundle written by hand does not need that dance — it is
  * first-party code and always was.
+ *
+ * Keeping the origin is exactly why the policy has to be tight: these pages run
+ * with the owner's session, so a DOM injection or a compromised CDN inside one
+ * of them would too. The generated policy's `https:` / `'unsafe-inline'` /
+ * `'unsafe-eval'` would let either execute. So a first-party bundle gets:
+ *
+ *  - scripts from its own files only — no third-party script host at all;
+ *  - inline `<script>` blocks and `on*=` attributes allowed by the hash of the
+ *    exact text in the file it was served from (`inlineScriptHashes`), never by
+ *    `'unsafe-inline'`. Hashes are derived at serve time, so redeploying a
+ *    bundle by hand cannot leave its CSP behind;
+ *  - eval only where the bundle needs it (`BUNDLE_PROFILES`), and the narrow
+ *    `'wasm-unsafe-eval'` where WebAssembly is all it needs;
+ *  - network, images and fonts from `'self'` plus the hosts the profile names.
+ *
+ * A static key with no profile gets the strictest policy. Publishing a new
+ * bundle under a static key means checking its console for CSP violations and
+ * adding the profile it needs here.
  */
-export const FIRST_PARTY_BUNDLE_CSP = BUNDLE_CSP_DIRECTIVES.join('; ');
+export interface BundleProfile {
+  /**
+   * `'js'`: the bundle compiles code at runtime (`new Function` — PixiJS v8
+   * builds its shader uniform sync this way and refuses to start without it).
+   * `'wasm'`: WebAssembly only (physics engines, mesh decoders).
+   */
+  eval?: 'js' | 'wasm';
+  /** Loads its type from Google Fonts (stylesheet + font files). */
+  googleFonts?: boolean;
+  /** Extra origins the page calls with fetch/XHR/WebSocket. */
+  connect?: readonly string[];
+}
+
+export const BUNDLE_PROFILES: Readonly<Record<string, BundleProfile>> = {
+  // Balance lab: three.js + meshopt decoder (wasm); its optional bring-your-own
+  // key mode calls OpenRouter straight from the browser.
+  archetype: { eval: 'wasm', googleFonts: true, connect: ['https://openrouter.ai'] },
+  'scs-earnings': { googleFonts: true },
+  pulse: { googleFonts: true },
+  'field-study-8': {},
+  'field-study-9': { googleFonts: true },
+  // PixiJS v8 refuses to start its renderer without eval (it would need the
+  // bundle to import `pixi.js/unsafe-eval` instead); marbler also runs a wasm
+  // physics worker. Hometowns carries the same Pixi build.
+  marbler: { eval: 'js', googleFonts: true },
+  hometowns: { eval: 'js' },
+};
+
+const GOOGLE_FONTS_STYLES = 'https://fonts.googleapis.com';
+const GOOGLE_FONTS_FILES = 'https://fonts.gstatic.com';
+
+/** Script types a browser executes, and so the ones script-src governs. */
+const EXECUTABLE_SCRIPT_TYPE =
+  /^(|module|importmap|speculationrules|(text|application)\/(x-)?(java|ecma)script)$/i;
+
+function sha256Source(text: string): string {
+  return `'sha256-${createHash('sha256').update(text, 'utf8').digest('base64')}'`;
+}
+
+/**
+ * CSP hash sources for every inline script block and inline event-handler
+ * attribute in `html`, plus `'unsafe-hashes'` when there are handlers (CSP only
+ * honours a hash for an `on*=` attribute alongside that keyword). Over-matching
+ * is harmless — a hash only admits that exact text — so a plain scan is enough.
+ *
+ * The browser hashes what its parser produced, not the raw bytes: newlines
+ * are normalised to LF before anything else, and attribute values are
+ * entity-decoded. Both are mirrored here or the hash would never match.
+ */
+export function inlineScriptHashes(html: string): string[] {
+  const doc = html.replace(/\r\n?/g, '\n');
+  const sources = new Set<string>();
+  for (const m of doc.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    const attrs = m[1];
+    if (/\ssrc\s*=/i.test(attrs)) continue;
+    const type = /\stype\s*=\s*["']?([^"'\s>]*)/i.exec(attrs)?.[1] ?? '';
+    if (!EXECUTABLE_SCRIPT_TYPE.test(type.trim())) continue;
+    if (m[2].length) sources.add(sha256Source(m[2]));
+  }
+  // Handlers live in markup, so scan with every script body removed: a data
+  // block (`type="text/plain"`, JSON) can be megabytes of text that happens to
+  // contain `on…=`, and each false hit would grow the header.
+  const markup = doc.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '');
+  let handlers = false;
+  for (const m of markup.matchAll(/\son[a-z]+\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+    handlers = true;
+    sources.add(sha256Source(decodeAttributeEntities(m[1] ?? m[2] ?? '')));
+  }
+  return handlers ? ["'unsafe-hashes'", ...sources] : [...sources];
+}
+
+const NAMED_ENTITIES: Record<string, string> = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' };
+
+function decodeAttributeEntities(value: string): string {
+  return value.replace(/&(#x[0-9a-f]+|#[0-9]+|amp|quot|apos|lt|gt);/gi, (whole, ref: string) => {
+    const lower = ref.toLowerCase();
+    if (lower.startsWith('#x')) return String.fromCodePoint(parseInt(lower.slice(2), 16));
+    if (lower.startsWith('#')) return String.fromCodePoint(parseInt(lower.slice(1), 10));
+    return NAMED_ENTITIES[lower] ?? whole;
+  });
+}
+
+/**
+ * The policy for one first-party bundle document. `html` is the document being
+ * served, so its own inline scripts can be admitted by hash.
+ */
+export function firstPartyBundleCsp(slug: string, html = ''): string {
+  const profile = BUNDLE_PROFILES[slug] ?? {};
+  const fonts = profile.googleFonts === true;
+  const script = ["'self'", ...inlineScriptHashes(html)];
+  if (profile.eval === 'js') script.push("'unsafe-eval'", "'wasm-unsafe-eval'");
+  if (profile.eval === 'wasm') script.push("'wasm-unsafe-eval'");
+  return [
+    "default-src 'self'",
+    `script-src ${script.join(' ')}`,
+    `style-src 'self' 'unsafe-inline'${fonts ? ` ${GOOGLE_FONTS_STYLES}` : ''}`,
+    "img-src 'self' data: blob:",
+    `font-src 'self' data:${fonts ? ` ${GOOGLE_FONTS_FILES}` : ''}`,
+    "media-src 'self' data: blob:",
+    ["connect-src 'self'", ...(profile.connect ?? [])].join(' '),
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'none'",
+    "frame-ancestors 'self'",
+  ].join('; ');
+}
 
 /** Only response metadata that cannot set credentials or relax isolation. */
 const SAFE_UPSTREAM_RESPONSE_HEADERS = new Set([
@@ -72,7 +199,7 @@ const SAFE_UPSTREAM_RESPONSE_HEADERS = new Set([
 
 export function safeGeneratedResponseHeaders(
   source?: Headers,
-  options?: { firstParty?: boolean },
+  options?: { firstParty?: boolean; slug?: string; html?: string },
 ): Headers {
   const headers = new Headers();
   if (source) {
@@ -91,7 +218,9 @@ export function safeGeneratedResponseHeaders(
   if (contentType.toLowerCase().includes('text/html')) {
     headers.set(
       'Content-Security-Policy',
-      options?.firstParty ? FIRST_PARTY_BUNDLE_CSP : GENERATED_CONTENT_CSP,
+      options?.firstParty
+        ? firstPartyBundleCsp(options.slug ?? '', options.html)
+        : GENERATED_CONTENT_CSP,
     );
     headers.set('Cache-Control', 'no-store');
   }

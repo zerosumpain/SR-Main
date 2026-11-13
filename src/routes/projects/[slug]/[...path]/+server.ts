@@ -172,13 +172,18 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
   // in the opaque sandbox. A build is published under whatever its title
   // slugifies to, so a static key some build has CLAIMED is treated as a build
   // — the registry entry alone is not proof of who wrote the files on disk.
+  //
+  // A first-party document's policy admits its own inline scripts by hash, so
+  // it needs the text being served.
   let firstParty = false;
+  let firstPartyHtml: string | undefined;
   if (responseFile.mime.startsWith('text/html')) {
     const claims = await db
       .select({ origin: jkaiBuilds.origin })
       .from(jkaiBuilds)
       .where(eq(jkaiBuilds.publishedSlug, params.slug));
     firstParty = isStaticProjectKey(params.slug) && claims.length === 0;
+    if (firstParty) firstPartyHtml = new TextDecoder().decode(responseFile.data);
     if (claims.some((c) => c.origin === 'studio')) {
       const text = new TextDecoder().decode(responseFile.data);
       if (!/<base\s/i.test(text)) {
@@ -198,7 +203,7 @@ export const GET: RequestHandler = async ({ params, url, locals, cookies }) => {
 
   const headers = safeGeneratedResponseHeaders(
     new Headers({ 'Content-Type': responseFile.mime }),
-    { firstParty },
+    { firstParty, slug: params.slug, html: firstPartyHtml },
   );
   if (isPublic) {
     if (!responseFile.mime.startsWith('text/html')) headers.set('Cache-Control', 'public, max-age=3600');
