@@ -19,7 +19,7 @@ vi.mock('$lib/db', () => ({
   },
 }));
 
-const { sessionStillAllowed, resetGuestVerdicts, GUEST_RECHECK_MS } = await import('./access');
+const { sessionStillAllowed, resetGuestVerdicts, GUEST_RECHECK_MS } = await import('./session-recheck');
 
 beforeEach(() => {
   h.guests = new Set(['guest@example.test']);

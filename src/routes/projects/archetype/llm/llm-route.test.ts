@@ -15,28 +15,35 @@ vi.mock('$lib/llm/client', () => ({
 
 const { POST } = await import('./+server');
 
-function call(edgeIp: string) {
+type Outcome = { status: number; body?: { message?: string } };
+
+/** The handler's Response, or the HttpError it threw — both carry a status. */
+async function call(edgeIp: string): Promise<Outcome> {
   const request = new Request('https://site.test/projects/archetype/llm', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': edgeIp },
     body: JSON.stringify({ messages: [{ role: 'user', content: 'rank these' }] }),
   });
-  return POST({ request, getClientAddress: () => '127.0.0.1' } as never);
+  try {
+    return (await POST({ request, getClientAddress: () => '127.0.0.1' } as never)) as Outcome;
+  } catch (e) {
+    return e as Outcome;
+  }
 }
 
 describe('archetype adviser relay', () => {
   it('does not echo the upstream error to the visitor', async () => {
-    const failure = await call('203.0.113.20').catch((e) => e);
+    const failure = await call('203.0.113.20');
     expect(failure.status).toBe(502);
-    expect(failure.body.message).toBe('The adviser could not be reached. Try again in a moment.');
+    expect(failure.body?.message).toBe('The adviser could not be reached. Try again in a moment.');
     expect(JSON.stringify(failure.body)).not.toContain('sk-or');
   });
 
   it('gives each visitor their own ceiling behind the tunnel', async () => {
     const statuses: number[] = [];
-    for (let i = 0; i < 9; i++) statuses.push((await call('203.0.113.30').catch((e) => e)).status);
+    for (let i = 0; i < 9; i++) statuses.push((await call('203.0.113.30')).status);
     expect(statuses.slice(0, 8).every((s) => s === 502)).toBe(true);
     expect(statuses[8]).toBe(429);
-    expect((await call('203.0.113.31').catch((e) => e)).status).toBe(502);
+    expect((await call('203.0.113.31')).status).toBe(502);
   });
 });
