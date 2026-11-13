@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertBearerSecret, readLimitedJson, readLimitedText } from './service-auth';
+import { assertBearerSecret, hasBearerSecret, readLimitedJson, readLimitedText } from './service-auth';
 
 describe('service authentication', () => {
   it('fails closed when configuration is absent and rejects a wrong bearer', () => {
@@ -15,6 +15,24 @@ describe('service authentication', () => {
       headers: { authorization: 'Bearer configured' },
     });
     expect(() => assertBearerSecret(request, 'configured', 'TEST_TOKEN')).not.toThrow();
+  });
+});
+
+describe('hasBearerSecret', () => {
+  const withAuth = (value?: string) =>
+    new Request('https://example.test', value === undefined ? {} : { headers: { authorization: value } });
+
+  it('is true only for the exact configured bearer', () => {
+    expect(hasBearerSecret(withAuth('Bearer configured'), 'configured')).toBe(true);
+    expect(hasBearerSecret(withAuth('Bearer configure'), 'configured')).toBe(false);
+    expect(hasBearerSecret(withAuth('Bearer configuredX'), 'configured')).toBe(false);
+    expect(hasBearerSecret(withAuth('configured'), 'configured')).toBe(false);
+    expect(hasBearerSecret(withAuth(), 'configured')).toBe(false);
+  });
+
+  it('is false, not open, when nothing is configured', () => {
+    expect(hasBearerSecret(withAuth('Bearer '), undefined)).toBe(false);
+    expect(hasBearerSecret(withAuth('Bearer '), '')).toBe(false);
   });
 });
 

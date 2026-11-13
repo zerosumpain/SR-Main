@@ -2,20 +2,14 @@ import { discoverIntegrations } from '$lib/apis/integration-discovery';
 import { getActivePolicy } from '$lib/toolpolicy/policy';
 import { applyCapabilityPolicy } from '$lib/jkai/grounding/capabilities';
 import { json, error } from '@sveltejs/kit';
-import { db } from '$lib/db';
-import { jkaiBuilds } from '$lib/db/schema';
-import { eq } from 'drizzle-orm';
-import { verifyBridgeToken } from '$lib/jkai/bridge-token';
+import { runningBridgeBuild } from '$lib/jkai/bridge-auth.server';
 import { manifestForBuild, definitionsForBuild } from '$lib/jkai/tool-bridge';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ request, url }) => {
-  const auth = request.headers.get('authorization') ?? '';
-  const token = auth.replace(/^Bearer\s+/i, '');
-  const buildId = verifyBridgeToken(token);
-  if (!buildId) throw error(401, 'invalid token');
-  const [build] = await db.select().from(jkaiBuilds).where(eq(jkaiBuilds.id, buildId));
-  if (!build) throw error(404, 'build not found');
+  const build = await runningBridgeBuild(request.headers.get('authorization'));
+  if (!build) throw error(401, 'invalid token');
+  const buildId = build.id;
   const enabled = (build.enabledToolsets ?? ['all']) as string[];
   const manifest = await manifestForBuild(enabled);
   const policy = await getActivePolicy();

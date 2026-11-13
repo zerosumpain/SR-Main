@@ -1,6 +1,18 @@
 import { createHash } from 'node:crypto';
 
-const salt = process.env.PUBLIC_REQUEST_SALT || 'strange-ramblings-public-v1';
+// A secret salt, so a stored hash cannot be reversed by hashing the whole IPv4
+// space with a constant read out of this (public) repository.
+// `REQUEST_HASH_SALT` is the name: the `PUBLIC_` prefix reads as "exposed to
+// the browser" in SvelteKit terms, which a salt must never be. The old name
+// is still honoured so a host that set it keeps its hashes, and the constant
+// remains only as the last resort for a box with neither.
+//
+// Changing the salt changes every hash from then on. Nothing joins across
+// time beyond a day: the blog-comment daily ceiling counts rows by hash over
+// the last 24 hours (so a rotation resets it once), and access_request.ip_hash
+// is recorded, never looked up.
+const salt =
+  process.env.REQUEST_HASH_SALT || process.env.PUBLIC_REQUEST_SALT || 'strange-ramblings-public-v1';
 const hits = new Map<string, number[]>();
 const maxKeys = 20_000;
 

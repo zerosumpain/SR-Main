@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 import { rateLimit } from '$lib/server/rate-limit';
+import { clientKey } from '$lib/server/public-request-guard';
 
 /**
  * POST /api/native/review-demo { code } — the App Review demo switch.
@@ -36,13 +37,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   const expected = (env.APP_REVIEW_DEMO_CODE ?? '').trim();
   if (!expected) return json({ error: 'Not found' }, { status: 404 });
 
-  let addr = 'unknown';
-  try {
-    addr = getClientAddress();
-  } catch {
-    /* behind a proxy with no address: one shared bucket */
-  }
-  const limit = rateLimit(`native-review-demo:${addr}`, { capacity: 10, refillPerSecond: 0.05 });
+  // Per visitor, not per socket — see /api/native/pair.
+  const limit = rateLimit(`native-review-demo:${clientKey({ request, getClientAddress })}`, { capacity: 10, refillPerSecond: 0.05 });
   if (!limit.allowed) {
     return json(
       { error: 'Too many attempts. Wait a minute and try again.' },

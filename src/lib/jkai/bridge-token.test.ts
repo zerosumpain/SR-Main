@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { signBridgeToken, verifyBridgeToken, buildFromAuthHeader } from './bridge-token';
+import { signBridgeToken, verifyBridgeToken, buildFromAuthHeader, BRIDGE_TOKEN_MAX_AGE_MS } from './bridge-token';
 
 const SECRET = 'x'.repeat(48);
 let previous: string | undefined;
@@ -44,6 +44,25 @@ describe('the per-build credential', () => {
     // Verification must not throw its way into a 500 — it fails closed.
     expect(verifyBridgeToken('anything')).toBeNull();
     process.env.JKAI_BRIDGE_SECRET = SECRET;
+  });
+});
+
+describe('the credential expires', () => {
+  // Minted per iteration, and an iteration is capped at 30 minutes; eight
+  // hours is the margin, not the expected lifetime.
+  it('is accepted well inside its lifetime', () => {
+    const token = signBridgeToken('build-123');
+    expect(verifyBridgeToken(token, Date.now() + BRIDGE_TOKEN_MAX_AGE_MS - 60_000)).toBe('build-123');
+  });
+
+  it('is refused once older than the build budget', () => {
+    const token = signBridgeToken('build-123');
+    expect(verifyBridgeToken(token, Date.now() + BRIDGE_TOKEN_MAX_AGE_MS + 60_000)).toBeNull();
+  });
+
+  it('is refused when it claims to be issued in the future', () => {
+    const token = signBridgeToken('build-123');
+    expect(verifyBridgeToken(token, Date.now() - 60 * 60_000)).toBeNull();
   });
 });
 

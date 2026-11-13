@@ -5,6 +5,18 @@ function fixedDigest(value: string): Buffer {
   return createHash('sha256').update(value, 'utf8').digest();
 }
 
+/**
+ * True when the request carries `Bearer <configured>`, compared in constant
+ * time. False when nothing is configured — for a route with a second way in
+ * (an owner session); a route with no other way in uses `assertBearerSecret`.
+ */
+export function hasBearerSecret(request: Request, configured: string | undefined): boolean {
+  if (!configured) return false;
+  const auth = request.headers.get('authorization') ?? '';
+  const supplied = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  return Boolean(supplied) && timingSafeEqual(fixedDigest(configured), fixedDigest(supplied));
+}
+
 /** Require a configured bearer credential and compare it in constant time. */
 export function assertBearerSecret(
   request: Request,
@@ -12,9 +24,7 @@ export function assertBearerSecret(
   name: string,
 ): void {
   if (!configured) throw error(503, `${name} is not configured`);
-  const auth = request.headers.get('authorization') ?? '';
-  const supplied = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!supplied || !timingSafeEqual(fixedDigest(configured), fixedDigest(supplied))) {
+  if (!hasBearerSecret(request, configured)) {
     throw error(401, `Invalid or missing ${name}`);
   }
 }

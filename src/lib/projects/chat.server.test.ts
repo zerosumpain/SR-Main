@@ -65,7 +65,13 @@ describe('createProjectChatHandler', () => {
     }));
 
     expect(mocks.requireProjectPublic).toHaveBeenCalledWith('example', expect.anything());
-    expect(mocks.rateLimit).toHaveBeenCalledWith('project-chat:example:203.0.113.8', expect.anything());
+    // Per visitor, per project site-wide, and a daily pool — all three spent.
+    const keys = mocks.rateLimit.mock.calls.map((call) => (call as unknown[])[0]);
+    expect(keys).toEqual([
+      expect.stringMatching(/^public:client:project-chat:example:[0-9a-f]{24}$/),
+      'public:global:project-chat:example',
+      'public:daily:project-chat:example',
+    ]);
     // The request body travels with the question so a project can retrieve by
     // ids the page found rather than by searching server-side.
     expect(retrieve).toHaveBeenCalledWith('What changed?', 10, expect.objectContaining({ question: 'What changed?' }));
@@ -110,6 +116,34 @@ describe('createProjectChatHandler', () => {
     });
 
     await expect(handler(event({ question: 'Hello' }))).rejects.toMatchObject({ status: 429 });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it('keys the visitor on the edge address, never on X-Forwarded-For', async () => {
+    const handler = createProjectChatHandler({ slug: 'example', systemPrompt: 'x', retrieve: () => [{ title: 't', text: 'p' }] });
+    const keyFor = async (headers: Record<string, string>) => {
+      mocks.rateLimit.mockClear();
+      await handler({
+        request: new Request('http://localhost/projects/example/chat', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...headers },
+          body: JSON.stringify({ question: 'q' }),
+        }),
+        getClientAddress: () => '127.0.0.1',
+      } as RequestEvent);
+      return (mocks.rateLimit.mock.calls[0] as unknown[])[0];
+    };
+    const plain = await keyFor({ 'cf-connecting-ip': '203.0.113.8' });
+    const spoofed = await keyFor({ 'cf-connecting-ip': '203.0.113.8', 'x-forwarded-for': '198.51.100.1' });
+    expect(spoofed).toBe(plain);
+  });
+
+  it('refuses once the daily pool is spent', async () => {
+    mocks.rateLimit.mockImplementation(((key: string) => ({
+      allowed: !key.startsWith('public:daily:'), remaining: 0, retryAfterMs: 1000,
+    })) as never);
+    const handler = createProjectChatHandler({ slug: 'example', systemPrompt: 'x', retrieve: () => [{ title: 't', text: 'p' }] });
+    await expect(handler(event({ question: 'q' }))).rejects.toMatchObject({ status: 429 });
     expect(mocks.create).not.toHaveBeenCalled();
   });
 });

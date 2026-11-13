@@ -35,6 +35,7 @@ import { requireProjectPublic } from '$lib/projects/guard';
 import { getLLMClient } from '$lib/llm/client';
 import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
 import { withActivity } from '$lib/context/activity';
+import { clientKey } from '$lib/server/public-request-guard';
 
 // --- Limits -----------------------------------------------------------------
 // Sized for what the lab actually sends: one system prompt describing the objective and the
@@ -149,8 +150,8 @@ const handlePost: RequestHandler = async (event) => {
   // public exactly as its assets do.
   await requireProjectPublic('archetype', event);
 
-  const ip = event.getClientAddress?.() ?? 'unknown';
-  const limit = rateLimited(ip);
+  // Per visitor via the edge address; the socket is loopback for everyone.
+  const limit = rateLimited(clientKey(event));
   if (limit === 'ip') {
     throw error(429, 'Too many adviser calls from this address. Wait a few minutes and try again.');
   }
@@ -218,9 +219,10 @@ const handlePost: RequestHandler = async (event) => {
       choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: completion?.choices?.[0]?.finish_reason ?? 'stop' }],
     });
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
     // 502, not 500: the failure is upstream, and the bundle's own error text already says the
-    // engine's ranking still stands. Truncated because an upstream message is not ours to trust.
-    throw error(502, `The adviser could not be reached: ${detail.slice(0, 160)}`);
+    // engine's ranking still stands. The detail goes to the log, not the visitor: an upstream
+    // message can name the provider, the model route or our own configuration.
+    console.error('[archetype/llm] upstream failed:', e instanceof Error ? e.message : String(e));
+    throw error(502, 'The adviser could not be reached. Try again in a moment.');
   }
 };

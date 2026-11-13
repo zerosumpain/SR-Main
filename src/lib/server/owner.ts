@@ -9,7 +9,8 @@ import { isOwnerEmail } from './access';
 // inherited the same bug: neither spelled `::ffff:127.0.0.1`, the form a
 // dual-stack listener actually reports. "Mirrors the hook exactly" is only
 // true while both mirror ONE definition.
-import { isPrivateAddress } from './client-address';
+import { clientAddressOf, isDevBypassAddress } from './client-address';
+import { env } from '$env/dynamic/private';
 
 export interface OwnerCheckEvent {
   locals: App.Locals;
@@ -23,14 +24,10 @@ export async function isOwnerRequest(event: OwnerCheckEvent): Promise<boolean> {
   } catch {
     /* fall through to bypass check */
   }
-  if (import.meta.env.DEV) {
-    let addr = '';
-    try {
-      addr = event.getClientAddress?.() ?? '';
-    } catch {
-      addr = '';
-    }
-    if (isPrivateAddress(addr)) return true;
+  // Same admission rule as the hook's dev bypass: this machine plus
+  // AUTH_BYPASS_ALLOW, never "any private address".
+  if (import.meta.env.DEV && isDevBypassAddress(clientAddressOf(event), env.AUTH_BYPASS_ALLOW)) {
+    return true;
   }
   return false;
 }

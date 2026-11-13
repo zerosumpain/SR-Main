@@ -16,15 +16,13 @@
 
 import { json, error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
+import { assertBearerSecret } from '$lib/server/service-auth';
 import { interceptOwnerInbound } from '$lib/integrations/whatsapp/inbound-intercept';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
-  const secret = env.WHATSAPP_INBOUND_SECRET;
-  if (!secret) throw error(503, 'whatsapp inbound relay is not configured');
-  if ((request.headers.get('authorization') ?? '') !== `Bearer ${secret}`) {
-    throw error(401, 'unauthorized');
-  }
+  // 503 when unset, 401 on a mismatch, compared in constant time.
+  assertBearerSecret(request, env.WHATSAPP_INBOUND_SECRET, 'WHATSAPP_INBOUND_SECRET');
 
   const body = (await request.json().catch(() => ({}))) as { from?: unknown; text?: unknown };
   const from = typeof body.from === 'string' ? body.from : '';

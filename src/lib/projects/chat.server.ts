@@ -4,6 +4,7 @@ import { withActivity } from '$lib/context/activity';
 import { getLLMClient } from '$lib/llm/client';
 import { requireProjectPublic } from '$lib/projects/guard';
 import { rateLimit } from '$lib/server/rate-limit';
+import { assertPublicRequestBudget } from '$lib/server/public-request-guard';
 import { resolveProjectChatModel } from '$lib/server/models/workload-settings';
 import type { ModelContext } from '$lib/constants/model-context';
 
@@ -41,12 +42,16 @@ interface ProjectChatOptions {
   timeoutMs?: number;
 }
 
-function clientIp(event: Parameters<RequestHandler>[0]): string {
-  return event.request.headers.get('cf-connecting-ip')
-    ?? event.request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-    ?? event.getClientAddress?.()
-    ?? 'unknown';
-}
+/**
+ * The site-wide ceilings on a public project chat. Every call is a paid model
+ * call made for an anonymous visitor, so the per-visitor limit alone is not
+ * enough: it cannot bound the bill under traffic from many addresses. The
+ * hourly pool bounds a burst; the daily one bounds a slow, steady drain that
+ * stays under the hourly line all day.
+ */
+const PROJECT_CHAT_PER_CLIENT = { capacity: 20, refillPerSecond: 20 / 60 };
+const PROJECT_CHAT_HOURLY = { capacity: 120, refillPerSecond: 120 / 3600 };
+const PROJECT_CHAT_DAILY = { capacity: 600, refillPerSecond: 600 / 86_400 };
 
 function contextPassages(chunks: ProjectChatChunk[]): string {
   return chunks
@@ -65,11 +70,15 @@ export function createProjectChatCore(options: ProjectChatOptions): RequestHandl
   const handle: RequestHandler = async (event) => {
     await requireProjectPublic(options.slug, event);
 
-    const limit = rateLimit(`project-chat:${options.slug}:${clientIp(event)}`, {
-      capacity: 20,
-      refillPerSecond: 20 / 60,
+    // Per visitor (keyed on the edge address — never X-Forwarded-For, which a
+    // caller writes itself) and per project site-wide, then a daily pool.
+    assertPublicRequestBudget(event, {
+      scope: `project-chat:${options.slug}`,
+      perClient: PROJECT_CHAT_PER_CLIENT,
+      global: PROJECT_CHAT_HOURLY,
     });
-    if (!limit.allowed) throw error(429, 'Too many requests — please wait a moment.');
+    const daily = rateLimit(`public:daily:project-chat:${options.slug}`, PROJECT_CHAT_DAILY);
+    if (!daily.allowed) throw error(429, 'This project has answered all it can for today. Try again tomorrow.');
 
     const body = await event.request.json().catch(() => ({})) as Record<string, unknown>;
     const question = String(body.question ?? '').slice(0, 2000).trim();

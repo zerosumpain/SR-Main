@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { rateLimit } from '$lib/server/rate-limit';
+import { clientKey } from '$lib/server/public-request-guard';
 import { isPairCodeHash, mintPairIdentity } from '$lib/server/pair-identity';
 import { isOwnerEmail } from '$lib/server/access';
 import { createPairingCode } from '$lib/server/native-auth';
@@ -21,13 +22,8 @@ import { canonicalEmail, ensureAppRequest, verifyAppleIdentityToken } from '$lib
  * allowed is simply connected. Never the owner: see below.
  */
 export const POST: RequestHandler = async ({ request, getClientAddress }) => {
-  let addr = 'unknown';
-  try {
-    addr = getClientAddress();
-  } catch {
-    /* behind a proxy with no address: one shared bucket */
-  }
-  const limit = rateLimit(`native-register:${addr}`, { capacity: 6, refillPerSecond: 0.02 });
+  // Per visitor, not per socket — see /api/native/pair.
+  const limit = rateLimit(`native-register:${clientKey({ request, getClientAddress })}`, { capacity: 6, refillPerSecond: 0.02 });
   if (!limit.allowed) return json({ error: 'Too many attempts. Wait a minute and try again.' }, { status: 429 });
 
   let body: { identityToken?: unknown; name?: unknown; nonce?: unknown; confirm?: unknown };

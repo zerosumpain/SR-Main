@@ -42,8 +42,6 @@ export const HOOK_BYPASSES: string[] = [
   '/api/native',
   '/api/scraper/script', // SCRAPER_SERVICE_TOKEN
   '/api/mcp', // bridge token (tools/list + tools/call)
-  '/api/claude-changelog', // POST only, ingest secret
-  '/api/releases', // POST only, RELEASE_LOG_SECRET (summarise also accepts an owner session)
   '/api/whatsapp/inbound', // POST only, WHATSAPP_INBOUND_SECRET
   '/api/platform/workflow-engine', // watchdog probe
   '/api/health/workflow-engine', // watchdog probe (historical path, being retired)
@@ -157,6 +155,11 @@ export const HOOK_EXACT_BYPASSES: string[] = [
   // ($lib/server/analytics-gate). GET only, exact.
   '/api/analytics-gate/enter',
   '/api/analytics-gate/check',
+  // The two release-log writers. POST only, Bearer RELEASE_LOG_SECRET
+  // (summarise also takes an owner session). Matched with `===` in the hook,
+  // so they live here: /api/releases is NOT a tree.
+  '/api/releases/ingest',
+  '/api/releases/summarise',
 ];
 
 /** Prefix bypasses at the page level. `/tools` is a genuine tree (static/tools/*). */
@@ -202,10 +205,10 @@ export const BYPASS_GUARDS: Record<string, string> = {
   '/api/analytics-gate/check': 'GET only · yes/no on a 12 h host-only pass cookie (HMAC, AUTH_SECRET); returns no data',
   '/api/scraper/script': 'homeserv-only + SCRAPER_SERVICE_TOKEN',
   '/api/mcp': 'Bearer SERVICE_BRIDGE_SECRET',
-  '/api/claude-changelog': 'POST only · ingest secret',
   '/api/claude-changelog/ingest': 'POST only · Bearer CLAUDE_CHANGELOG_SECRET (fails closed)',
   '/api/daydream/backfill': 'POST only · Bearer DAYDREAM_MAINTENANCE_SECRET or owner session (fails closed)',
-  '/api/releases': 'POST only · RELEASE_LOG_SECRET',
+  '/api/releases/ingest': 'POST only · Bearer RELEASE_LOG_SECRET (constant-time)',
+  '/api/releases/summarise': 'POST only · Bearer RELEASE_LOG_SECRET or owner session',
   '/api/whatsapp/inbound': 'POST only · Bearer WHATSAPP_INBOUND_SECRET',
   '/api/platform/workflow-engine': 'loopback only · watchdog probe',
   '/api/health/workflow-engine': 'loopback only · watchdog probe (historical path, being retired)',
