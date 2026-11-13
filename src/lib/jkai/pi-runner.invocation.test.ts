@@ -12,7 +12,9 @@ import {
   PI_VERSION,
   assertPiVersion,
   readVersionFrom,
+  dockerExecPiArgs,
 } from './pi-runner';
+import { readFileSync } from 'fs';
 
 // pi's --tools is an allowlist applied to extension-registered tools as well
 // as built-ins, so the fixed list stripped all 167 bridged site tools before
@@ -295,5 +297,25 @@ describe('readVersionFrom', () => {
     await expect(
       readVersionFrom(process.execPath, ['-e', "console.error('9.9.9'); process.exit(1)"]),
     ).resolves.toBeNull();
+  });
+});
+
+// Container-mode pi used to get `-e OPENROUTER_API_KEY=<key>` on the docker
+// command line, readable by every process on the host via /proc.
+describe('dockerExecPiArgs', () => {
+  it('names environment variables without their values', () => {
+    const args = dockerExecPiArgs('/w', ['OPENROUTER_API_KEY', 'PI_OFFLINE'], 'pi --mode rpc');
+    expect(args).toEqual(['exec', '-i', '-w', '/w', '-e', 'OPENROUTER_API_KEY', '-e', 'PI_OFFLINE', 'jkai-sandbox', 'bash', '-c', 'pi --mode rpc']);
+    expect(args.some((a) => a.includes('='))).toBe(false);
+  });
+});
+
+// ~/.pi is writable to builds (pi locks beside its config), so discovery would
+// let one build plant an extension or skill that loads into every later one.
+describe('pi resource discovery', () => {
+  const src = readFileSync(join(process.cwd(), 'src/lib/jkai/pi-runner.ts'), 'utf8');
+  it('is switched off unconditionally, with explicit paths still passed', () => {
+    expect(src).toContain("piParts.push('--no-extensions', '--no-skills');");
+    expect(src).not.toMatch(/else\s*\{\s*piParts\.push\('--no-extensions'\)/);
   });
 });

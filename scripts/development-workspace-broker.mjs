@@ -1,4 +1,5 @@
 import { snapshotTree } from './lib/codegraph-snapshot.mjs';
+import { bearerMatches } from './lib/bearer.mjs';
 /** Trusted local broker. Docker points exclusively at the isolated DinD daemon. */
 import http from 'node:http';
 import { previewPlan, readPreviewManifest, parseCheckOutput, reviewScreenshotChoice } from './development-preview-check.mjs';
@@ -579,7 +580,7 @@ async function accept(id, revision, routes) {
 let lane = Promise.resolve();
 http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') { res.end('{"ok":true}'); return; }
-  if (req.headers.authorization !== `Bearer ${token}`) { res.writeHead(401); res.end(); return; }
+  if (!bearerMatches(req.headers.authorization, token)) { res.writeHead(401); res.end(); return; }
   const respond = (status, body) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
   try {
     let raw = '';
@@ -595,4 +596,7 @@ http.createServer(async (req, res) => {
     lane = work.catch(() => {});
     respond(200, { ...await work, timings });
   } catch (error) { respond(400, { error: String(error.message).slice(-2000), kind: error.kind ?? 'infrastructure' }); }
+// 0.0.0.0 is the CONTAINER's interface, which Docker's port publishing needs;
+// on the host the port is published to loopback only (deploy/development/
+// compose.yaml). Peers on the compose network still need the bearer token.
 }).listen(5280, '0.0.0.0');

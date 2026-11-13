@@ -37,6 +37,7 @@ import { criterionResult, releaseBlocker, type DeliveryState } from './developme
 import { SR_MAIN_GIT_TARGET } from './git-targets';
 import { openPullRequest, closePullRequest, repoSlugFromUrl } from '$lib/github/pr';
 import { redactGitHubSecrets } from '$lib/github/redact';
+import { githubGitAuthEnv, githubHttpsRemote } from '$lib/github/git-auth';
 
 /** `owner/repo` of the target, derived rather than restated so the release and
  *  the change-request lane cannot disagree about where the site lives. */
@@ -62,9 +63,8 @@ export function releaseBranchFor(buildId: string, revision: string, attempt = 0)
   return `${SR_MAIN_GIT_TARGET.branchPrefix}dev-${buildId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}-${revision.slice(0, 8)}${attempt ? `-r${attempt}` : ''}`;
 }
 
-function tokenRemote(token: string): string {
-  return `https://x-access-token:${token}@github.com/${REPO}.git`;
-}
+/** Token-free remote; the credential travels in the environment (githubGitAuthEnv). */
+const REMOTE = githubHttpsRemote(REPO);
 
 export function prBody(input: { outcome: string; criteria: Array<{ text: string; verdict: string; evidence: string }>; gateEvidence: string; buildId: string; independent: boolean; tier?: 'low' | 'high'; protectedPaths?: string[] }): string {
   return [
@@ -131,11 +131,12 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     const root = `/home/jkai/workspace/${buildId}/release`;
     const prepared = await execInSandbox(
       `rm -rf ${root} && mkdir -p ${root} && ` +
-        `git clone --depth 1 --branch ${SR_MAIN_GIT_TARGET.baseBranch} ${tokenRemote(token)} ${root}/repo 2>&1 && ` +
+        `git clone --depth 1 --branch ${SR_MAIN_GIT_TARGET.baseBranch} ${REMOTE} ${root}/repo 2>&1 && ` +
         `cd ${root}/repo && git remote set-url origin ${SR_MAIN_GIT_TARGET.repoUrl} && ` +
         `git config user.name "jkai develop" && git config user.email "builder@strangeramblings.com" && ` +
         `git checkout -b ${branch} 2>&1`,
       300_000,
+      { env: githubGitAuthEnv(token) },
     );
     if (prepared.exitCode !== 0) throw new Error(redactGitHubSecrets(`Could not prepare a master clone: ${prepared.stdout}\n${prepared.stderr}`, token).slice(0, 1200));
 
@@ -159,8 +160,9 @@ export async function releaseDevelopment(buildId: string, expectedRevision: numb
     const titleB64 = Buffer.from(title, 'utf8').toString('base64');
     const committed = await execInSandbox(
       `cd ${root}/repo && git commit -m "$(echo '${titleB64}' | base64 -d)" 2>&1 && ` +
-        `git push ${tokenRemote(token)} ${branch} 2>&1`,
+        `git push ${REMOTE} ${branch} 2>&1`,
       300_000,
+      { env: githubGitAuthEnv(token) },
     );
     if (committed.exitCode !== 0) throw new Error(redactGitHubSecrets(`Could not push the release branch: ${committed.stdout}\n${committed.stderr}`, token).slice(0, 1200));
 

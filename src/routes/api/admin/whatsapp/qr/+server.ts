@@ -2,7 +2,7 @@ import { json, type RequestHandler } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { getWhatsAppService } from '$lib/integrations/whatsapp/service';
 import { ownsWhatsAppSession } from '$lib/server/service-role';
-import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
+import { whatsappBridgeHeaders, whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 
 /**
  * WhatsApp pairing status, and the QR when one is waiting.
@@ -21,7 +21,7 @@ export const GET: RequestHandler = async () => {
   if (bridgeUrl) {
     const base = bridgeUrl.replace(/\/+$/, '');
     try {
-      const res = await fetch(`${base}/qr`, { signal: AbortSignal.timeout(5000) });
+      const res = await fetch(`${base}/qr`, { headers: whatsappBridgeHeaders(env), signal: AbortSignal.timeout(5000) });
       if (!res.ok) {
         // A bridge without /qr — fall back to its health so the page can still
         // say whether WhatsApp is up.

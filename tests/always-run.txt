@@ -10,6 +10,7 @@ src/lib/access/catalogue.test.ts
 src/lib/access/route-guards.test.ts
 src/lib/access/showcase-routes.test.ts
 src/lib/auth.test.ts
+src/lib/browser/session-url-guard.test.ts
 src/lib/capabilities/manifest.test.ts
 src/lib/capabilities/surface-guard.test.ts
 src/lib/capture/capture-sw.test.ts
@@ -24,6 +25,7 @@ src/lib/estate/estate.test.ts
 src/lib/games/hometowns/engine/banned.test.ts
 src/lib/games/hometowns/engine/copy.test.ts
 src/lib/games/hometowns/page-hash.test.ts
+src/lib/jkai/build-confine.test.ts
 src/lib/jkai/build-spend-attribution.test.ts
 src/lib/jkai/builder-guidance.test.ts
 src/lib/jkai/explainer-kit.test.ts
@@ -68,6 +70,7 @@ tests/lib/workflows-client/trigger-ownership.test.ts
 tests/routes/admin-stale-stamps.test.ts
 tests/routes/api/native/chat-attachments.test.ts
 tests/scripts/authored-runner-install.test.ts
+tests/scripts/bearer.test.ts
 tests/scripts/built-extract.test.ts
 tests/scripts/check-module-boundaries.test.ts
 tests/scripts/check-schema-drift.test.ts

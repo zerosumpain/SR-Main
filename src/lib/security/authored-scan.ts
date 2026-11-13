@@ -4,7 +4,25 @@ const FORBIDDEN: Array<{ pattern: RegExp; why: string }> = [
   { pattern: /\bimport\s*\(/, why: 'uses dynamic import()' },
   { pattern: /\beval\s*\(/, why: 'uses eval()' },
   { pattern: /\bFunction\s*\(/, why: 'constructs a Function from a string' },
-  { pattern: /\.constructor\s*[([]/, why: 'reaches for .constructor (sandbox escape)' },
+  // Property access to `constructor` in any spelling the scan can see: dotted
+  // (`x.constructor`, `x?.constructor`) or a quoted name (`x['constructor']`).
+  // A variable or object key that happens to be called `constructor` is fine
+  // and common (F1 data has them), so the bare word is not refused.
+  { pattern: /\.\s*constructor\b|['"`]constructor['"`]/, why: 'reaches for .constructor (sandbox escape)' },
+  // Computed property names assembled from strings — `x['constr' + 'uctor']`,
+  // `x[`${a}${b}`]` — are how the word above gets past a scan. Plain variable
+  // indexes (`row[key]`, `arr[i + 1]`) stay legal. A name assembled elsewhere
+  // and indexed by variable is not caught; that residue is acceptable only
+  // because handlers run in the isolated runner (authored.server.ts) with an
+  // empty environment and no network, not in the web process.
+  // (Member access only — `[` straight after a name, `)` or `]` — so array
+  // literals such as `['a' + b]` are not caught.)
+  { pattern: /[\w$)\]]\s*\[[^\]\n]*(?:['"`][^\]\n]*\+|\+\s*['"`])[^\]\n]*\]/, why: 'builds a property name from string pieces (obfuscation risk)' },
+  { pattern: /[\w$)\]]\s*\[\s*`/, why: 'uses a template literal as a property name (obfuscation risk)' },
+  { pattern: /[\w$)\]]\s*\[[^\]\n]*(?:fromCharCode|fromCodePoint|atob|decodeURI|unescape|join\s*\()/, why: 'computes a property name from decoded characters (obfuscation risk)' },
+  { pattern: /\.join\s*\(\s*(['"`])\1\s*\)\s*\]/, why: 'computes a property name by joining strings (obfuscation risk)' },
+  { pattern: /__proto__|\bgetPrototypeOf\b|\bReflect\s*\./, why: 'walks the prototype chain' },
+  { pattern: /\\x[0-9a-fA-F]{2}|\\u\{?[0-9a-fA-F]{2,}/, why: 'uses escaped characters in strings (obfuscation risk)' },
   { pattern: /\bglobalThis\b/, why: 'touches globalThis' },
   { pattern: /\bchild_process\b/, why: 'references child_process' },
   { pattern: /\bfs\s*\./, why: 'references the filesystem' },

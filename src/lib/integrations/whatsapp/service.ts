@@ -10,7 +10,7 @@ import { mkdirSync, renameSync } from 'fs';
 import { useAtomicMultiFileAuthState } from './auth-state';
 import { readBuffer } from '$lib/jkai/media/storage';
 import type { JkaiAttachment } from '$lib/db/schema';
-import { whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
+import { whatsappBridgeHeaders, whatsappBridgeUrl } from '$lib/config/whatsapp-bridge';
 import { ownsWhatsAppSession } from '$lib/server/service-role';
 import { isAllowedSender, normaliseAllowList, resolveSender } from './sender';
 import type {
@@ -331,7 +331,7 @@ export class WhatsAppService {
 			try {
 				await fetch(`${this.bridgeUrl}/typing`, {
 					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
+					headers: whatsappBridgeHeaders(process.env, { 'Content-Type': 'application/json' }),
 					body: JSON.stringify({ chatId: jid }),
 					signal: AbortSignal.timeout(3000),
 				});
@@ -362,7 +362,7 @@ export class WhatsAppService {
 			try {
 				const res = await fetch(`${this.bridgeUrl}/send`, {
 					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
+					headers: whatsappBridgeHeaders(process.env, { 'Content-Type': 'application/json' }),
 					body: JSON.stringify({ chatId: jid, message: text }),
 					signal: AbortSignal.timeout(15_000),
 				});
@@ -450,7 +450,7 @@ export class WhatsAppService {
 			try {
 				const res = await fetch(`${this.bridgeUrl}/send-media`, {
 					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
+					headers: whatsappBridgeHeaders(process.env, { 'Content-Type': 'application/json' }),
 					body: JSON.stringify({
 						chatId: jid,
 						filePath: att.diskPath,

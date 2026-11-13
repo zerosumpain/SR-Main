@@ -16,6 +16,7 @@
  * it is never itself "delegated", so it cannot forward its sends to itself.
  */
 import http from 'node:http';
+import { workerRequestAllowed } from '../src/auth';
 
 // Set before any import that reads it, so the role is in force during module
 // init rather than after it.
@@ -74,6 +75,9 @@ async function main(): Promise<void> {
 
   const server = http.createServer(async (req, res) => {
     const path = (req.url ?? '').split('?')[0];
+    if (!workerRequestAllowed(path, req.headers.authorization, process.env.WA_WORKER_TOKEN)) {
+      return json(res, 401, { error: 'unauthorized' });
+    }
     try {
       if (req.method === 'GET' && path === '/health') {
         const s = wa.getState();
@@ -133,6 +137,9 @@ async function main(): Promise<void> {
 
   server.listen(PORT, HOST, () => {
     console.log(`[wa-worker] listening on ${HOST}:${PORT} (role=${process.env.JKAI_SERVICE_ROLE})`);
+    if (!process.env.WA_WORKER_TOKEN) {
+      console.warn('[wa-worker] WA_WORKER_TOKEN is not set — /send, /send-media, /qr and /typing are open to any local process');
+    }
   });
 }
 

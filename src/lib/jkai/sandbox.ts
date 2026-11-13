@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { mkdirSync } from 'fs';
 import os from 'os';
 import { join } from 'path';
@@ -6,8 +6,11 @@ import { promisify } from 'util';
 import { emitLog } from './log-emitter';
 import { openPullRequest, repoSlugFromUrl } from '$lib/github/pr';
 import { redactGitHubSecrets } from '$lib/github/redact';
+import { githubGitAuthEnv, githubHttpsRemote } from '$lib/github/git-auth';
+import { buildConfinementEnabled, CONFINE_INTERPRETER, confinedArgs } from './build-confine';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const CONTAINER_NAME = 'jkai-sandbox';
 const IMAGE_NAME = 'jkai-sandbox:latest';
@@ -144,6 +147,10 @@ export async function ensureContainerRunning(): Promise<void> {
   await execAsync(
     `docker run -d --name ${CONTAINER_NAME} --restart unless-stopped ` +
     `--memory 2g --cpus 2 ` +
+    // It runs as an unprivileged user and Chromium is launched --no-sandbox,
+    // so nothing inside needs a capability or a setuid transition; the pid cap
+    // bounds a fork bomb from scraped or caller-supplied code.
+    `--cap-drop ALL --security-opt no-new-privileges --pids-limit 512 ` +
     `--network bridge -v jkai-workspace:/home/jkai/workspace ` +
     `-v ${SCRAPER_PROFILES_HOST}:/home/jkai/scraper-profiles ${IMAGE_NAME}`,
   );
@@ -189,19 +196,34 @@ export function clearContainerIpCache(): void {
 
 // --- Code Execution ---
 
+export interface SandboxExecOptions {
+  /**
+   * Extra environment for this one command. Values travel in the child's
+   * environment, never on its command line — that is the point of the option:
+   * argv is world-readable in /proc, and lands in error text and logs.
+   */
+  env?: Record<string, string>;
+}
+
 export async function execInSandbox(
   command: string,
   timeout = 120000,
+  opts: SandboxExecOptions = {},
 ): Promise<ExecResult> {
   // Host mode: run directly on the host shell. The base-64 envelope still
   // applies — agent-supplied commands have arbitrary newlines / quotes.
   if (BUILD_HOST_MODE) {
     try {
       const b64 = Buffer.from(command).toString('base64');
-      const { stdout, stderr } = await execAsync(
-        `bash -c "echo '${b64}' | base64 -d | bash"`,
-        { timeout, maxBuffer: 5 * 1024 * 1024, env: buildChildEnvironment() },
-      );
+      const shell = ['bash', '-c', `echo '${b64}' | base64 -d | bash`];
+      // In the builder sidecar every command runs under Landlock (see
+      // build-confine.ts): no reading other processes' environments, no
+      // connecting to the owner's unauthenticated loopback services.
+      const confined = buildConfinementEnabled();
+      const { stdout, stderr } = await execFileAsync(
+        confined ? CONFINE_INTERPRETER : shell[0], confined ? confinedArgs(shell) : shell.slice(1), {
+          timeout, maxBuffer: 5 * 1024 * 1024, env: buildChildEnvironment(opts.env),
+        });
       return { stdout, stderr, exitCode: 0 };
     } catch (err: any) {
       return {
@@ -214,9 +236,12 @@ export async function execInSandbox(
   try {
     // Base64-encode the command to preserve newlines and special characters
     const b64 = Buffer.from(command).toString('base64');
+    // `-e NAME` with no value makes docker copy it from the client's own
+    // environment, so the value never appears on the docker command line.
+    const envFlags = Object.keys(opts.env ?? {}).map((name) => `-e ${name} `).join('');
     const { stdout, stderr } = await execAsync(
-      `docker exec ${CONTAINER_NAME} bash -c "echo '${b64}' | base64 -d > /tmp/jkai-exec.sh && bash /tmp/jkai-exec.sh"`,
-      { timeout, maxBuffer: 5 * 1024 * 1024 },
+      `docker exec ${envFlags}${CONTAINER_NAME} bash -c "echo '${b64}' | base64 -d > /tmp/jkai-exec.sh && bash /tmp/jkai-exec.sh"`,
+      { timeout, maxBuffer: 5 * 1024 * 1024, ...(opts.env ? { env: { ...process.env, ...opts.env } } : {}) },
     );
     return { stdout, stderr, exitCode: 0 };
   } catch (err: any) {
@@ -416,16 +441,19 @@ export async function ensureGitWorkspace(buildId: string, cfg: GitTargetConfig):
   await execInSandbox(`mkdir -p ${base} && rm -rf ${dev} && mkdir -p ${base}/live`, 30000);
 
   // When a GitHub token is provided (the VPS has no `gh` and can't reach the
-  // private repo over SSH), clone over token-authenticated HTTPS. Otherwise
-  // fall back to the configured repoUrl (homeserv: SSH with the authed key).
+  // private repo over SSH), clone over HTTPS with the token in the child's
+  // environment (githubGitAuthEnv). Otherwise fall back to the configured
+  // repoUrl (homeserv: SSH with the authed key).
   const token = process.env.FORGE_GITHUB_TOKEN;
-  const effectiveRemote = token ? tokenRemoteUrl(cfg.repoUrl, token) : cfg.repoUrl;
+  const effectiveRemote = token ? githubHttpsRemote(repoSlugFromUrl(cfg.repoUrl)) : cfg.repoUrl;
   const cloneRes = await execInSandbox(
     `git clone --depth 50 --branch ${cfg.baseBranch} ${effectiveRemote} ${dev} 2>&1`,
     300000,
+    token ? { env: githubGitAuthEnv(token) } : {},
   );
   if (cloneRes.exitCode !== 0) {
-    // Redact the token from the command echo (effectiveRemote) and any output.
+    // Belt and braces: the token is no longer on the command line, but git's
+    // output is still scrubbed before it reaches a log.
     throw new Error(
       redactToken(`git clone failed: ${cloneRes.stdout}\n${cloneRes.stderr}`).slice(0, 2000),
     );
@@ -609,14 +637,16 @@ export async function publishViaGit(
     throw new Error(`git commit failed: ${commitRes.stdout}\n${commitRes.stderr}`.slice(0, 2000));
   }
 
-  // Push the branch. With a token, push to the explicit token-authenticated
-  // HTTPS URL (origin is pinned tokenless so nothing leaks into .git/config).
-  // Without a token, push to origin (homeserv: SSH with the authed key).
+  // Push the branch. With a token, push to the explicit HTTPS URL with the
+  // token in the environment and hooks off (githubGitAuthEnv); origin stays
+  // pinned tokenless. Without a token, push to origin (homeserv: SSH with the
+  // authed key).
   const token = process.env.FORGE_GITHUB_TOKEN;
-  const pushTarget = token ? tokenRemoteUrl(cfg.repoUrl, token) : 'origin';
+  const pushTarget = token ? githubHttpsRemote(repoSlugFromUrl(cfg.repoUrl)) : 'origin';
   const pushRes = await execInSandbox(
     `cd ${dev} && git push -u ${pushTarget} ${branch} --force-with-lease 2>&1`,
     180000,
+    token ? { env: githubGitAuthEnv(token) } : {},
   );
   if (pushRes.exitCode !== 0) {
     throw new Error(
@@ -626,9 +656,7 @@ export async function publishViaGit(
   await emitLog(
     buildId,
     'system',
-    `publishViaGit: pushed branch ${branch} to ${redactToken(
-      token ? tokenRemoteUrl(cfg.repoUrl, token) : tokenlessRemoteUrl(cfg.repoUrl),
-    )}`,
+    `publishViaGit: pushed branch ${branch} to ${tokenlessRemoteUrl(cfg.repoUrl)}`,
   );
 
   if (!cfg.openPr) {
@@ -693,18 +721,6 @@ export async function publishViaGit(
   const prUrl = urlMatch ? urlMatch[0] : prRes.stdout.trim();
   await emitLog(buildId, 'system', `publishViaGit: PR ready → ${prUrl}`);
   return { branch, prUrl };
-}
-
-/**
- * Build a token-authenticated HTTPS clone/push URL from any GitHub repo URL
- * (SSH or HTTPS). Used only when FORGE_GITHUB_TOKEN is set — lets clone/push
- * work on hosts (the VPS) that lack `gh` and can't reach the repo over SSH.
- * NEVER log the result directly; use `tokenlessRemoteUrl` / `redactToken` for
- * anything that reaches a log line.
- */
-function tokenRemoteUrl(repoUrl: string, token: string): string {
-  const slug = repoSlugFromUrl(repoUrl);
-  return `https://x-access-token:${token}@github.com/${slug}.git`;
 }
 
 /** SSH-style, token-free remote URL — safe to log. */

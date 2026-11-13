@@ -12,14 +12,15 @@ Protocol: POST /<verb> with a JSON body, returns JSON {ok, ...}. Bound to
 0.0.0.0 inside the container, which is reachable only on the docker bridge.
 """
 
+import ipaddress
 import json
 import os
+import socket
 import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-
-from playwright.sync_api import sync_playwright
+from urllib.parse import urlsplit
 
 IDLE_TIMEOUT_S = int(os.environ.get("BROWSER_IDLE_TIMEOUT", "900"))
 MAX_TEXT = 40000
@@ -39,8 +40,80 @@ def _record_console(msg) -> None:
         pass
 
 
+# Destinations the browser must never be pointed at. Mirrors
+# src/lib/server/ssrf-guard.ts: this runs beside the home network, the docker
+# bridge and the tailnet, and a model choosing the URL must not be able to read
+# any of them back through `snapshot`.
+_PRIVATE_SUFFIXES = (".internal", ".local", ".lan", ".home", ".intranet", ".ts.net")
+
+
+def _blocked_ip(addr: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(addr.split("%")[0])
+    except ValueError:
+        return True
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    if isinstance(ip, ipaddress.IPv4Address):
+        a, b = ip.packed[0], ip.packed[1]
+        return (
+            a in (0, 10, 127)
+            or (a == 169 and b == 254)
+            or (a == 172 and 16 <= b <= 31)
+            or (a == 192 and b == 168)
+            or (a == 100 and 64 <= b <= 127)
+            or a >= 224
+        )
+    return ip.is_loopback or ip.is_unspecified or ip.is_link_local or ip.is_private or ip.is_multicast
+
+
+def url_refusal(url: str, resolve=socket.getaddrinfo) -> str | None:
+    """Why `url` may not be opened, or None when it is a public http(s) URL."""
+    if url in ("about:blank",):
+        return None
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "not a valid URL"
+    if parts.scheme not in ("http", "https"):
+        return f"only http/https URLs are allowed (got {parts.scheme or 'none'})"
+    host = (parts.hostname or "").rstrip(".").lower()
+    if not host:
+        return "URL has no host"
+    if host == "localhost" or host.endswith(".localhost") or host.endswith(_PRIVATE_SUFFIXES):
+        return f"refusing private host {host}"
+    try:
+        ipaddress.ip_address(host.split("%")[0])
+        return f"refusing private address {host}" if _blocked_ip(host) else None
+    except ValueError:
+        pass
+    try:
+        addrs = {info[4][0] for info in resolve(host, None)}
+    except OSError:
+        return f"DNS lookup failed for {host}"
+    if not addrs:
+        return f"no DNS records for {host}"
+    for addr in addrs:
+        if _blocked_ip(addr):
+            return f"{host} resolves to private address {addr}"
+    return None
+
+
+def _refuse_if_private(b: "Browser") -> dict | None:
+    """After anything that can navigate: a redirect or a click may have landed
+    somewhere the URL check never saw. Blank the page before it can be read."""
+    why = url_refusal(b.page.url)
+    if why is None:
+        return None
+    b.page.goto("about:blank")
+    return {"ok": False, "error": f"navigation blocked: {why}"}
+
+
 class Browser:
     def __init__(self) -> None:
+        # Imported here so the URL guard above can be loaded and tested without Playwright.
+        from playwright.sync_api import sync_playwright
+
         self.pw = sync_playwright().start()
         profile = os.environ.get("BROWSER_PROFILE_DIR", "/home/jkai/browser-profile")
         os.makedirs(profile, exist_ok=True)
@@ -74,8 +147,14 @@ def verb_navigate(b: Browser, args: dict) -> dict:
     url = (args.get("url") or "").strip()
     if not url:
         return {"ok": False, "error": "url is required"}
+    why = url_refusal(url)
+    if why:
+        return {"ok": False, "error": f"navigation blocked: {why}"}
     _console.clear()  # a new page is a new console
     resp = b.page.goto(url, wait_until=args.get("waitUntil", "domcontentloaded"), timeout=45000)
+    blocked = _refuse_if_private(b)
+    if blocked:
+        return blocked
     return {
         "ok": True,
         "url": b.page.url,
@@ -110,6 +189,9 @@ def verb_click(b: Browser, args: dict) -> dict:
     before = b.page.url
     b.page.click(sel, timeout=int(args.get("timeoutMs", 10000)))
     _settle(b.page, before)
+    blocked = _refuse_if_private(b)
+    if blocked:
+        return blocked
     return {
         "ok": True,
         "url": b.page.url,
@@ -128,6 +210,9 @@ def verb_type(b: Browser, args: dict) -> dict:
     if args.get("submit"):
         b.page.keyboard.press("Enter")
         _settle(b.page, before)
+        blocked = _refuse_if_private(b)
+        if blocked:
+            return blocked
     return {"ok": True, "url": b.page.url, "navigated": b.page.url != before}
 
 
