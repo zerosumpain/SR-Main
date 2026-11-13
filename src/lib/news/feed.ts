@@ -81,6 +81,9 @@ export async function parseFeed(source: NewsSource, xml: string): Promise<NewsSt
       } catch {
         continue;
       }
+      // A source with no pinned origin still only yields web links: the URL is
+      // rendered as an href, and javascript:/data: there is script on our page.
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') continue;
       if (def.origin && url.origin !== def.origin) continue;
       if (url.username || url.password) continue;
 

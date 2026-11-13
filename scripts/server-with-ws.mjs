@@ -8,6 +8,9 @@
  * bypass was verified against production.
  */
 import http from 'node:http';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Policy documents allow 10 MB plus multipart metadata. Keep an operator's
 // explicit limit; adapter-node must read the default before its module loads.
 process.env.BODY_SIZE_LIMIT ??= '12M';
@@ -45,8 +48,70 @@ function oidcTokenRequest(req) {
   delete req.headers.cookie;
 }
 
+/**
+ * Files copied from static/ are answered by adapter-node's static handler
+ * before hooks.server.ts runs, so they never received the header layer every
+ * other response gets. Set the baseline here for exactly those paths, listed
+ * once at boot (static/ only changes with a release): `nosniff` and SAMEORIGIN
+ * framing for every file, and a baseline policy on the hand-written HTML tools.
+ * That policy allows what those pages use — inline script/style, Google Fonts,
+ * the Cloudflare analytics beacon — and closes plugins, foreign frames, base
+ * rewriting and cross-origin framing. SvelteKit responses are untouched; they
+ * get their own policy from svelte.config.js.
+ */
+const STATIC_HTML_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https://cloudflareinsights.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join('; ');
+
+const CLIENT_DIR = fileURLToPath(new URL('../build/client/', import.meta.url));
+
+function listStaticFiles(dir, prefix = '/') {
+  const files = new Set();
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return files; }
+  for (const entry of entries) {
+    // _app is the bundler's output, not static/ — and thousands of files.
+    if (prefix === '/' && entry.name === '_app') continue;
+    const path = prefix + entry.name;
+    if (entry.isDirectory()) for (const f of listStaticFiles(join(dir, entry.name), path + '/')) files.add(f);
+    else files.add(path);
+  }
+  return files;
+}
+const STATIC_FILES = listStaticFiles(CLIENT_DIR);
+
+/** The static file a request resolves to, using the static handler's own fallbacks. */
+function staticFileFor(rawUrl, files = STATIC_FILES) {
+  const q = rawUrl.indexOf('?');
+  let path;
+  try { path = decodeURIComponent(q === -1 ? rawUrl : rawUrl.slice(0, q)); } catch { return null; }
+  for (const candidate of [path, path + '.html', path.endsWith('/') ? path + 'index.html' : path + '/index.html']) {
+    if (files.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+function staticHeaders(req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return;
+  const file = staticFileFor(req.url ?? '/');
+  if (!file) return;
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  if (file.endsWith('.html')) res.setHeader('Content-Security-Policy', STATIC_HTML_CSP);
+}
+
 const server = http.createServer((req, res) => {
   oidcTokenRequest(req);
+  staticHeaders(req, res);
   return handler(req, res);
 });
 

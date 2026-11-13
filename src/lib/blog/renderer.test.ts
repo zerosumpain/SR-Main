@@ -47,6 +47,34 @@ describe('renderContent — sanitizer', () => {
     expect(out).not.toContain('<iframe');
   });
 
+  it('drops a /projects/ embed that climbs out of /projects', () => {
+    for (const src of [
+      '/projects/../admin',
+      '/projects/x/../../api/files',
+      '/projects/%2e%2e/admin',
+      '/projects/%2E%2E%2Fadmin',
+      '/projects/..%2fadmin',
+      '/projects/x\\..\\..\\admin',
+      '/projects/./x',
+    ]) {
+      expect(renderContent(`<iframe src="${src}"></iframe>`, 'html'), src).not.toContain('<iframe');
+    }
+  });
+
+  it('sandboxes every embed and overrides an author-written sandbox', () => {
+    const out = renderContent(
+      '<iframe src="/projects/terminal-descent" sandbox="allow-top-navigation allow-scripts"></iframe>' +
+        '<iframe src="https://www.youtube.com/embed/abc"></iframe>',
+      'html',
+    );
+    const sandboxes = [...out.matchAll(/sandbox="([^"]*)"/g)].map((m) => m[1]);
+    expect(sandboxes).toHaveLength(2);
+    for (const value of sandboxes) {
+      expect(value).toContain('allow-scripts');
+      expect(value).not.toContain('allow-top-navigation');
+    }
+  });
+
   it('still allows YouTube iframes', () => {
     const out = renderContent('<iframe src="https://www.youtube.com/embed/abc"></iframe>', 'html');
     expect(out).toContain('<iframe src="https://www.youtube.com/embed/abc"');

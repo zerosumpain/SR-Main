@@ -6,6 +6,7 @@ import {
   GENERATED_CONTENT_CSP,
   firstPartyBundleCsp,
   inlineScriptHashes,
+  rendersAsDocument,
   safeGeneratedRequestHeaders,
   safeGeneratedResponseHeaders,
 } from './generated-content';
@@ -101,11 +102,31 @@ describe('generated-content browser boundary', () => {
     ).toBe(firstPartyBundleCsp('pulse', page));
   });
 
-  it('never puts a policy on a non-HTML response, first-party or not', () => {
+  it('leaves a first-party non-HTML response without a policy', () => {
     const js = new Headers({ 'content-type': 'application/javascript' });
     expect(
       safeGeneratedResponseHeaders(js, { firstParty: true }).get('content-security-policy'),
     ).toBeNull();
+  });
+
+  it('sandboxes every generated response whatever its type', () => {
+    for (const type of ['image/svg+xml', 'application/xml', 'application/javascript', 'application/octet-stream']) {
+      const headers = safeGeneratedResponseHeaders(new Headers({ 'content-type': type }));
+      expect(headers.get('content-security-policy')).toBe(GENERATED_CONTENT_CSP);
+      // Only HTML is forced uncached; generated assets keep their cache policy.
+      expect(headers.get('cache-control')).toBeNull();
+    }
+    // No content-type at all is the riskiest case: the sandbox still applies.
+    expect(safeGeneratedResponseHeaders().get('content-security-policy')).toBe(GENERATED_CONTENT_CSP);
+  });
+
+  it('knows which types render as a scriptable document', () => {
+    expect(rendersAsDocument('text/html; charset=utf-8')).toBe(true);
+    expect(rendersAsDocument('image/svg+xml')).toBe(true);
+    expect(rendersAsDocument('application/xml; charset=utf-8')).toBe(true);
+    expect(rendersAsDocument('application/xhtml+xml')).toBe(true);
+    expect(rendersAsDocument('application/javascript')).toBe(false);
+    expect(rendersAsDocument('image/png')).toBe(false);
   });
 
   it('drops upstream credential and policy headers', () => {

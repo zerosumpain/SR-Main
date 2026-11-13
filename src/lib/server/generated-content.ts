@@ -214,17 +214,28 @@ export function safeGeneratedResponseHeaders(
   // Sandboxed documents have an opaque origin. Public generated assets and API
   // responses may be read by that origin, but credentials are never forwarded.
   headers.set('Access-Control-Allow-Origin', '*');
-  const contentType = headers.get('content-type') ?? '';
-  if (contentType.toLowerCase().includes('text/html')) {
-    headers.set(
-      'Content-Security-Policy',
-      options?.firstParty
-        ? firstPartyBundleCsp(options.slug ?? '', options.html)
-        : GENERATED_CONTENT_CSP,
-    );
-    headers.set('Cache-Control', 'no-store');
+  const isHtml = (headers.get('content-type') ?? '').toLowerCase().includes('text/html');
+  if (options?.firstParty) {
+    if (isHtml) headers.set('Content-Security-Policy', firstPartyBundleCsp(options.slug ?? '', options.html));
+  } else {
+    // Every untrusted response carries the sandbox, not just text/html. An SVG,
+    // XML or untyped file opened directly is a document too, and its <script>
+    // would otherwise run with the site's origin. On a subresource (JS, CSS,
+    // an <img>) the header is inert, so this costs the generated app nothing.
+    headers.set('Content-Security-Policy', GENERATED_CONTENT_CSP);
   }
+  if (isHtml) headers.set('Cache-Control', 'no-store');
   return headers;
+}
+
+/**
+ * Types a browser will render as a scriptable document when navigated to
+ * directly. Used to decide when a first-party claim needs checking at all.
+ */
+export function rendersAsDocument(contentType: string): boolean {
+  const type = contentType.toLowerCase().split(';')[0].trim();
+  return type === 'text/html' || type === 'image/svg+xml' || type === 'application/xhtml+xml' ||
+    type === 'text/xml' || type === 'application/xml' || type.endsWith('+xml');
 }
 
 /** Explicit request-header allowlist for the generated-app upstream. */
