@@ -96,7 +96,7 @@ describe('the two allow-lists', () => {
   });
 
   it('contain nothing that returns a stranger’s prose at length to a private cycle', () => {
-    const banned = ['mail_read', 'mail_search', 'session_search', 'gmail_get_message', 'gmail_get_thread', 'gmail_search', 'fetch_url'];
+    const banned = ['mail_read', 'mail_search', 'session_search', 'gmail_get_message', 'gmail_read_attachment', 'gmail_get_thread', 'gmail_search', 'fetch_url'];
     for (const t of PRIVATE_TOOLS) expect(banned).not.toContain(t);
   });
 

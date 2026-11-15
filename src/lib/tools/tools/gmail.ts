@@ -4,8 +4,11 @@ import { gmailAccounts, type GmailAccount } from '$lib/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { gmailService } from '$lib/integrations/gmail/service';
 import { ownerGmailWhere } from '$lib/integrations/gmail/owner-accounts';
+import type { GmailAttachmentRef } from '$lib/integrations/gmail/types';
+import { extractText, ExtractError, kindFromMime } from '$lib/jkai/extract';
 
 const MAX_BODY_CHARS = 4000;
+const MAX_ATTACHMENT_CHARS = 20_000;
 
 const IMMUTABLE_SYSTEM_LABELS = new Set(['SENT', 'DRAFT', 'CHAT']);
 
@@ -71,6 +74,24 @@ function isAuthExpiredError(err: unknown): boolean {
 function truncate(s: string, max = MAX_BODY_CHARS): string {
   if (!s) return '';
   return s.length > max ? `${s.slice(0, max)}\n…[truncated ${s.length - max} chars]` : s;
+}
+
+// Filename first (case-insensitive), then id, then the only attachment there is.
+export function pickAttachment(
+  attachments: GmailAttachmentRef[],
+  filename: string,
+  attachmentId: string,
+): GmailAttachmentRef | undefined {
+  if (filename) {
+    const named = attachments.filter((a) => a.filename.toLowerCase() === filename.toLowerCase());
+    if (named.length === 1) return named[0];
+    if (named.length > 1) return named.find((a) => a.attachmentId === attachmentId) ?? named[0];
+  }
+  if (attachmentId) {
+    const byId = attachments.find((a) => a.attachmentId === attachmentId);
+    if (byId) return byId;
+  }
+  return !filename && attachments.length === 1 ? attachments[0] : undefined;
 }
 
 register({
@@ -178,7 +199,7 @@ register({
   name: 'gmail_get_message',
   effect: 'read',
   description:
-    'Fetch a full Gmail message by id — headers, body text (truncated to ~4 KB), labels, and attachment metadata. bodyHtml is omitted to keep responses small.',
+    'Fetch a full Gmail message by id — headers, body text (truncated to ~4 KB), labels, and attachment metadata. bodyHtml is omitted to keep responses small. To read what an attachment says, call gmail_read_attachment.',
   parameters: {
     type: 'object',
     properties: {
@@ -217,6 +238,96 @@ register({
           bodyText: truncate(m.bodyText),
           bodyTextLength: m.bodyText.length,
           attachments: m.attachments,
+        },
+      };
+    } catch (err) {
+      if (isAuthExpiredError(err)) {
+        return {
+          success: false,
+          error: `Account ${acct.email} auth expired. Reconnect at /admin/connections/gmail.`,
+        };
+      }
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+});
+
+register({
+  name: 'gmail_read_attachment',
+  effect: 'read',
+  description:
+    'Download an attachment from a Gmail message and return its text — PDFs (vouchers, tickets, invoices, statements), Word, PowerPoint, spreadsheets and plain text. Use this whenever the answer is inside an attached file rather than the email body. Pass the messageId and the attachment filename from gmail_get_message; if the message has only one attachment the filename can be omitted.',
+  parameters: {
+    type: 'object',
+    properties: {
+      messageId: { type: 'string', description: 'Gmail message id (from gmail_search or gmail_get_message)' },
+      filename: { type: 'string', description: 'Attachment filename, e.g. "HotelVoucher.pdf" (from gmail_get_message attachments)' },
+      attachmentId: { type: 'string', description: 'Optional attachment id, used when the filename is ambiguous' },
+      maxChars: { type: 'number', description: `Truncate the returned text after this many characters (default ${MAX_ATTACHMENT_CHARS})` },
+      accountId: { type: 'number', description: 'Optional account id' },
+      email: { type: 'string', description: 'Optional account email' },
+    },
+    required: ['messageId'],
+  },
+  category: 'Gmail',
+  toolset: 'gmail',
+  handler: async (args) => {
+    const acct = await resolveAccount(args);
+    if ('error' in acct) return { success: false, error: acct.error };
+    if (acct.status === 'auth_expired') {
+      return {
+        success: false,
+        error: `Account ${acct.email} needs re-authentication at /admin/connections/gmail.`,
+      };
+    }
+
+    const messageId = String(args.messageId ?? '').trim();
+    if (!messageId) return { success: false, error: 'messageId is required' };
+    const filename = typeof args.filename === 'string' ? args.filename.trim() : '';
+    const attachmentId = typeof args.attachmentId === 'string' ? args.attachmentId.trim() : '';
+
+    try {
+      // Re-read the message rather than trusting a model-supplied attachment id:
+      // Gmail's attachment ids are long, opaque and not stable across fetches,
+      // so the filename is the reliable handle and the id is only a tie-break.
+      const m = await gmailService.fetchMessage(acct, messageId);
+      const ref = pickAttachment(m.attachments, filename, attachmentId);
+      if (!ref) {
+        const names = m.attachments.map((a) => a.filename);
+        return {
+          success: false,
+          error: names.length
+            ? `No matching attachment. This message has: ${names.join(', ')}. Pass one as filename.`
+            : 'This message has no attachments.',
+        };
+      }
+      if (!kindFromMime(ref.mimeType, ref.filename)) {
+        return { success: false, error: `cannot read ${ref.filename} (${ref.mimeType}) — no extractor available` };
+      }
+
+      const buf = await gmailService.fetchAttachment(acct, messageId, ref.attachmentId);
+      let result;
+      try {
+        result = await extractText(buf, ref.mimeType, ref.filename);
+      } catch (err) {
+        if (err instanceof ExtractError) {
+          return { success: false, error: `extract failed (${err.code}): ${err.message}` };
+        }
+        throw err;
+      }
+
+      const maxChars = Math.max(Number(args.maxChars) || MAX_ATTACHMENT_CHARS, 1000);
+      return {
+        success: true,
+        data: {
+          account: acct.email,
+          messageId,
+          filename: ref.filename,
+          mimeType: ref.mimeType,
+          sizeBytes: buf.byteLength,
+          text: truncate(result.text, maxChars),
+          textLength: result.text.length,
+          meta: result.meta,
         },
       };
     } catch (err) {
