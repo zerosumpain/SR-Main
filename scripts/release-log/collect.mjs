@@ -79,6 +79,18 @@ export function isReleaseBoundary(commit) {
 }
 
 /**
+ * A commit a deploy script makes about the release it has just landed, pushed
+ * straight to the branch seconds after the PR. It ships nothing of its own, so
+ * it belongs to that PR's release rather than standing as a second entry.
+ * (Wildmind: "Update the engine's release history for #153".)
+ * @param {{ subject: string, pr: number|null, parents?: string[] }} commit
+ * @returns {boolean}
+ */
+export function isReleaseBookkeeping(commit) {
+  return commit.pr === null && (commit.parents?.length ?? 1) <= 1 && /^Update the engine's release history\b/i.test(commit.subject || '');
+}
+
+/**
  * Group first-parent commits (ordered OLDEST → NEWEST) into releases.
  * Pure — the unit under test.
  * @param {FirstParentCommit[]} commits
@@ -94,6 +106,11 @@ export function clusterCommits(commits, gapSeconds = DEFAULT_GAP_SECONDS) {
   let previous = null;
 
   for (const c of commits) {
+    // Bookkeeping joins the release it records, PR boundary or not.
+    if (current !== null && previous !== null && isReleaseBookkeeping(c) && c.ts - previous.ts <= gapSeconds) {
+      current.push(c);
+      continue;
+    }
     const startNew =
       current === null ||
       previous === null ||
@@ -262,7 +279,8 @@ export function collectRelease(prevSha, headSha, cwd, opts = {}) {
 
   // Trim the detail (not the stats) for outsized ranges — a 900-file refactor
   // would otherwise put a megabyte of paths in a jsonb column for no gain.
-  const commits = allCommits.slice(0, MAX_COMMITS);
+  // Bookkeeping goes last, so the release is named for the change it carried.
+  const commits = [...allCommits.filter((c) => !isReleaseBookkeeping(c)), ...allCommits.filter(isReleaseBookkeeping)].slice(0, MAX_COMMITS);
   const files = [...allFiles]
     .sort((a, b) => b.insertions + b.deletions - (a.insertions + a.deletions))
     .slice(0, MAX_FILES);
