@@ -71,6 +71,22 @@ describe('clusterCommits', () => {
     expect(clusters).toHaveLength(3);
   });
 
+  it('folds a deploy script\'s bookkeeping commit into the PR it records', () => {
+    // Wildmind pushes "Update the engine's release history for #N" straight
+    // after each merge; on its own it read as a second release per PR.
+    const clusters = clusterCommits(
+      [
+        commit('a', 0, 'Make the links obvious (#154)'),
+        commit('b', 1, "Update the engine's release history for #154"),
+        commit('c', 20, 'Give the heading its own row (#155)'),
+        commit('d', 21, "Update the engine's release history for #155"),
+        commit('e', 23),
+      ],
+      DEFAULT_GAP_SECONDS,
+    );
+    expect(clusters.map((cl: C[]) => cl.map((c: C) => c.short))).toEqual([['a', 'b'], ['c', 'd'], ['e']]);
+  });
+
   it('does not let a PR squash absorb the ordinary commits that follow it', () => {
     const clusters = clusterCommits(
       [commit('a', 0, 'feat: one (#33)'), commit('b', 2), commit('c', 4)],
