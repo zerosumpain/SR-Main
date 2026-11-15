@@ -48,6 +48,7 @@ export const WHATSAPP_READ_TOOLS = [
 	'gmail_list_accounts',
 	'gmail_search',
 	'gmail_get_message',
+	'gmail_read_attachment',
 	'gmail_get_thread',
 	'gmail_list_labels',
 	'mail_search',

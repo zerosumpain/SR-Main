@@ -208,6 +208,17 @@ export class GmailService {
   }
 
   // -------------------------------------------------------------------------
+  // Download one attachment's bytes
+  // -------------------------------------------------------------------------
+
+  async fetchAttachment(account: GmailAccount, messageId: string, attachmentId: string): Promise<Buffer> {
+    const oauth = await this.getAuthenticatedClient(account);
+    const gmail = this.gmailClientFor(oauth);
+    const res = await gmail.users.messages.attachments.get({ userId: 'me', messageId, id: attachmentId });
+    return Buffer.from(res.data.data ?? '', 'base64url');
+  }
+
+  // -------------------------------------------------------------------------
   // List message ids matching a query
   // -------------------------------------------------------------------------
 

@@ -1,5 +1,5 @@
 {
-  "version": "c1-8450cd26",
+  "version": "c1-efa23959",
   "capabilities": [
     {
       "id": "discovery",
@@ -918,6 +918,7 @@
         "gmail_list_accounts",
         "gmail_search",
         "gmail_get_message",
+        "gmail_read_attachment",
         "gmail_get_thread",
         "gmail_list_labels",
         "gmail_send",

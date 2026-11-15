@@ -84,7 +84,7 @@ export const OWNER_ENTRIES: CapabilityEntry[] = [
     repo: 'SR-Main',
     status: 'live',
     toolsets: ['gmail'],
-    tools: ['gmail_list_accounts', 'gmail_search', 'gmail_get_message', 'gmail_get_thread', 'gmail_list_labels', 'gmail_send', 'gmail_reply', 'gmail_modify_labels'],
+    tools: ['gmail_list_accounts', 'gmail_search', 'gmail_get_message', 'gmail_read_attachment', 'gmail_get_thread', 'gmail_list_labels', 'gmail_send', 'gmail_reply', 'gmail_modify_labels'],
     alwaysOn: ['gmail_search'],
     keywords: [String.raw`gmail|\bemails?\b|\be-?mails?\b|inbox|reply\s+to\s+(?:the\s+)?(?:email|message|thread)|\bvouchers?\b|\b(?:promo|discount|voucher)\s*codes?\b|\bbooking\s+(?:confirmation|reference|details)\b|\bairbnb\b|\border\s+(?:update|status|confirmation)\b|\bdelivery\s+(?:update|date|status)\b`],
     pages: ['/jkai'],
