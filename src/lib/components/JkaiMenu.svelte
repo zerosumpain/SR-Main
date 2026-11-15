@@ -13,15 +13,23 @@
    * plain link. The menu below stays for an item that does carry children:
    * a mouse opens it by hovering, the caret opens it for a touch screen or a
    * keyboard, and Escape, a click elsewhere or a change of page closes it.
+   *
+   * `quiet` is that menu on an ordinary cell: the WildMind cell on the main
+   * bar (`WILDMIND_ITEM`), ink like its neighbours, with the two views of the
+   * valley under it.
    */
   import { isItemActive, type NavItem } from '$lib/nav/site-nav';
 
-  let { item, path }: { item: NavItem; path: string } = $props();
+  let { item, path, quiet = false }: { item: NavItem; path: string; quiet?: boolean } = $props();
 
   let open = $state(false);
   let caret = $state<HTMLButtonElement>();
+  let root = $state<HTMLElement>();
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
-  const menuId = $props.id();
+  // Named, not `$props.id()`: that writes a `$` marker into the page, and the
+  // public documents are checked for having no currency sign in them. One bar
+  // a page carries each cell, so the label is unique enough.
+  const menuId = $derived('nav-menu-' + item.label.toLowerCase());
 
   function hoverOpen(e: PointerEvent) {
     if (e.pointerType !== 'mouse') return;
@@ -49,7 +57,7 @@
   function onWindowPointer(e: PointerEvent) {
     if (!open) return;
     const t = e.target as Element | null;
-    if (!t?.closest('[data-jkai-menu]')) open = false;
+    if (t?.closest('[data-jkai-menu]') !== root) open = false;
   }
 </script>
 
@@ -58,14 +66,17 @@
 <nav
   class="jkai-menu"
   class:open
+  class:quiet
   class:here={isItemActive(item, path)}
-  aria-label="jkai"
+  aria-label={item.label}
   data-jkai-menu
+  bind:this={root}
   onpointerenter={hoverOpen}
   onpointerleave={hoverClose}
 >
   <a
     href={item.href}
+    data-sveltekit-reload={item.external ? true : undefined}
     class="menu-cell"
     class:solo={!item.children?.length}
     aria-current={path === item.href ? 'page' : undefined}
@@ -92,6 +103,7 @@
           <li>
             <a
               href={row.href}
+              data-sveltekit-reload={row.external ? true : undefined}
               class="menu-row"
               aria-current={isItemActive(row, path) ? 'page' : undefined}
               onclick={() => (open = false)}
@@ -230,7 +242,41 @@
     color: rgba(26, 16, 8, 0.6);
   }
 
+  /* Quiet: a cell like the strip's, not the filled one. Cream on the ink bar,
+     a hairline on its left where the strip ends. */
+  .jkai-menu.quiet {
+    background: none;
+    color: rgba(237, 228, 212, 0.62);
+    border-left: 1px solid rgba(237, 228, 212, 0.14);
+  }
+  .jkai-menu.quiet:hover,
+  .jkai-menu.quiet.open {
+    background: rgba(237, 228, 212, 0.07);
+    color: var(--chrome-ink, var(--bg));
+  }
+  .quiet .menu-cell {
+    padding-left: 15px;
+    font-family: var(--font-code);
+    font-weight: 500;
+    font-size: var(--fs-label-xs);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+  }
+  .quiet .menu-caret {
+    padding-right: 13px;
+  }
+  .quiet .menu-caret:focus-visible,
+  .quiet .menu-cell:focus-visible {
+    outline-color: var(--accent-on-dark);
+  }
+
   @media (max-width: 640px) {
+    .quiet .menu-cell {
+      padding-left: 10px;
+    }
+    .quiet .menu-caret {
+      padding-right: 9px;
+    }
     .menu-cell {
       padding: 0 4px 0 12px;
     }

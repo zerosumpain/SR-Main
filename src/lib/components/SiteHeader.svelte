@@ -45,6 +45,7 @@
     visibleItems,
     visibleRooms,
     wearsRooms,
+    WILDMIND_ITEM,
     type NavItem,
   } from '$lib/nav/site-nav';
 
@@ -206,6 +207,12 @@
     <div class="hdr-spacer"></div>
   {/if}
 
+  <!-- Open to everyone, signed in or not: two view-only windows on the valley.
+       A phone bar already full of room cells has no width left for it. -->
+  <span class="hdr-wild" class:crowded={roomCells.length > 0}>
+    <JkaiMenu item={WILDMIND_ITEM} {path} quiet />
+  </span>
+
   {#if jkaiCell}
     <JkaiMenu item={jkaiCell} {path} />
   {/if}
@@ -347,6 +354,13 @@
     box-shadow: inset 0 -2px 0 var(--accent);
   }
 
+  .hdr-wild {
+    display: flex;
+    align-items: stretch;
+    align-self: stretch;
+    flex: none;
+  }
+
   .hdr-right {
     display: inline-flex;
     align-items: center;
@@ -381,6 +395,9 @@
     }
     .hdr-right {
       padding: 0 12px;
+    }
+    .hdr-wild.crowded {
+      display: none;
     }
   }
 </style>

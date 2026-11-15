@@ -42,6 +42,8 @@ export type NavItem = {
   children?: NavItem[];
   /** A short line under the label in a menu ("Plan the days away"). */
   meta?: string;
+  /** Served by another app behind the same host: a full page load, not a client route. */
+  external?: boolean;
 };
 
 export type NavSection = {
@@ -127,6 +129,38 @@ export const JKAI_ITEM: NavItem = {
   href: '/jkai',
   ownerOnly: true,
   match: (p) => under('/jkai', p),
+};
+
+/**
+ * The WildMind cell: the valley simulation, open to anyone, on the main bar.
+ *
+ * WildMind is a separate app behind `/wildmind`, so none of this is a route
+ * here and every link is `external`. Both rows carry `?watch=1`, which that
+ * app serves as an observer's page whoever is signed in — the owner included.
+ * A link on a public bar must not be a way to steer the simulation, or to read
+ * what only the owner may; the app enforces that, the mark asks for it.
+ */
+export const WILDMIND_ITEM: NavItem = {
+  label: 'WildMind',
+  href: '/wildmind/brain?watch=1',
+  external: true,
+  match: () => false,
+  children: [
+    {
+      label: 'WildMind Engine',
+      href: '/wildmind/brain?watch=1',
+      meta: 'The game brain, working live',
+      external: true,
+      match: () => false,
+    },
+    {
+      label: 'WildMind Watcher',
+      href: '/wildmind/?watch=1',
+      meta: 'Watch the valley and its figures',
+      external: true,
+      match: () => false,
+    },
+  ],
 };
 
 /**

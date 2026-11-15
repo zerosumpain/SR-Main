@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   JKAI_ITEM,
+  WILDMIND_ITEM,
   ROOMS,
   SECTIONS,
   SITE_ITEMS,
@@ -229,6 +230,28 @@ describe('the jkai cell is the assistant, not a drawer', () => {
   it('gives a member the cell where their grants reach under it, and none to a visitor', () => {
     expect(visibleItems([JKAI_ITEM], false)).toEqual([]);
     expect(visibleItems([JKAI_ITEM], false, ['/jkai/daydreams/impact'])[0]?.href).toBe('/jkai/daydreams/impact');
+  });
+});
+
+describe('the WildMind cell is two view-only windows, open to anyone', () => {
+  const all = [WILDMIND_ITEM, ...(WILDMIND_ITEM.children ?? [])];
+
+  it('offers the engine and the watcher to a signed-out visitor', () => {
+    expect(WILDMIND_ITEM.children?.map((c) => c.label)).toEqual(['WildMind Engine', 'WildMind Watcher']);
+    expect(all.some((i) => i.ownerOnly)).toBe(false);
+  });
+
+  it('asks for the observer\'s view on every link, and leaves the site to get there', () => {
+    for (const i of all) {
+      expect(i.href.startsWith('/wildmind/')).toBe(true);
+      expect(new URL(i.href, 'https://x').searchParams.get('watch')).toBe('1');
+      expect(i.external).toBe(true);
+    }
+  });
+
+  it('is no room and no section: it never lights, and files nothing', () => {
+    expect(SITE_ITEMS.map((i) => i.href).some((h) => h.startsWith('/wildmind'))).toBe(false);
+    expect(isItemActive(WILDMIND_ITEM, '/')).toBe(false);
   });
 });
 
