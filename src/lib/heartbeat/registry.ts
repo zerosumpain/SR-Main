@@ -9,6 +9,7 @@ import { homePlaces } from './activities/home-places';
 import { daydreamBank } from './activities/daydream-bank';
 import { daydreamNotebook } from './activities/daydream-notebook';
 import { daydreamThink } from './activities/daydream-think';
+import { daydreamMail } from './activities/daydream-mail';
 import { daydreamStaleSweep } from './activities/daydream-stale-sweep';
 import { daydreamMemory } from './activities/daydream-memory';
 import { daydreamImprove } from './activities/daydream-improve';
@@ -41,6 +42,7 @@ const handlers: ActivityHandler[] = [
   daydreamBank,
   daydreamNotebook,
   daydreamThink,
+  daydreamMail,
   daydreamStaleSweep,
   daydreamMemory,
   daydreamImprove,

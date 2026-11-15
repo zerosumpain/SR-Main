@@ -3682,6 +3682,69 @@ export const mailAttachmentFiles = pgTable(
   ],
 );
 
+// One row per thing a connected Google account holds that daydream may think
+// about: a Gmail thread, a calendar event, a Drive document (spec
+// 2026-11-15-source-backlog). SR-Jkai-Core's intake writes the row and its
+// extractor fills `facts`; Main's daydream reads the facts and writes only the
+// three consideration columns. Content is never stored here: `title` and
+// `sender_domain` are the only fields other people wrote, and `facts` is the
+// extractor's schema-checked output. Created by
+// scripts/migrations/2026-11-15-source-backlog.sql, not by push.
+export const sourceBacklog = pgTable(
+  'source_backlog',
+  {
+    id: text('id').primaryKey().default(sql`gen_random_uuid()::text`),
+    spaceId: text('space_id').notNull(),
+    /** 'gmail' | 'gcal' | 'gdrive' */
+    source: text('source').notNull(),
+    /** `gmail:<thread>` | `gcal:<calendar>:<event>` | `gdrive:<file>` */
+    refId: text('ref_id').notNull(),
+    /** The account EMAIL, never the Gmail account id, which changes on re-link. */
+    accountEmail: text('account_email').notNull(),
+    /** When the thing happened, not when it was read. */
+    observedAt: timestamp('observed_at', { withTimezone: true }).notNull(),
+    /** Email kind (correspondence | notification | bulk) or a document kind. */
+    kind: text('kind'),
+    /** ≤300 chars. Written by someone else: data, never an instruction. */
+    title: text('title'),
+    senderDomain: text('sender_domain'),
+    /**
+     * Read order, set at intake from metadata: who it is from (a contact, an
+     * entity already in the graph), what kind it is, how recent. Higher first.
+     */
+    priority: integer('priority').notNull().default(0),
+    /** Messages only (`threadContentHash`); a changed hash re-queues the row. */
+    contentHash: text('content_hash'),
+    /** 'queued' | 'extracted' | 'skipped' | 'failed' */
+    state: text('state').notNull().default('queued'),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    facts: jsonb('facts').$type<Record<string, unknown>>(),
+    model: text('model'),
+    extractedAt: timestamp('extracted_at', { withTimezone: true }),
+    /** Lifted out of `facts` so "what needs doing" is an index scan. */
+    category: text('category'),
+    needsAction: boolean('needs_action').notNull().default(false),
+    actionBy: date('action_by'),
+    /** Daydream's side. 'note' | 'nothing' | 'aggregate' */
+    consideredAt: timestamp('considered_at', { withTimezone: true }),
+    consideration: text('consideration'),
+    thoughtId: text('thought_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('source_backlog_space_ref_key').on(t.spaceId, t.refId),
+    index('source_backlog_state_observed_idx').on(t.state, t.observedAt),
+    index('source_backlog_queue_idx').on(t.state, t.priority.desc(), t.observedAt.desc()),
+    index('source_backlog_considered_idx').on(t.spaceId, t.consideredAt, t.observedAt),
+    index('source_backlog_action_idx').on(t.spaceId, t.needsAction, t.actionBy),
+  ],
+);
+
+export type SourceBacklogRow = typeof sourceBacklog.$inferSelect;
+export type NewSourceBacklogRow = typeof sourceBacklog.$inferInsert;
+
 // One high-entropy capability, one drive file. Replaced `route_export_token`,
 // the GPX-only ancestor dropped in #311 — that table's `expires_at` was
 // nullable and never written, so every link it minted was a permanent,

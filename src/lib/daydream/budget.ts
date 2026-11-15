@@ -83,6 +83,9 @@ export const SPENDING_ACTIONS = [
   // cycle, every 45 minutes. In this list from its first commit — the
   // omission has happened twice before and the symptom is silence.
   'daydream-think',
+  // The mail backlog drain (spec 2026-11-15): a think cycle over backlog items,
+  // every 30 minutes while there is a queue.
+  'daydream-mail',
   'daydream-weekly',
   // Memory consolidation and the notebook reader both called budgetStatus and
   // wrote `details.quota` from their first commits, and neither was listed

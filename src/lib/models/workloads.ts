@@ -526,6 +526,18 @@ export const SITE_WORKLOADS: WorkloadDef[] = [
       'Unpinned, it follows RAG answering rather than the site default, because both read the same indexed document text; pin it here to split them.',
   },
   {
+    id: 'backlog-extract',
+    scope: 'site',
+    label: 'Source backlog reading',
+    blurb: 'Reading each Gmail thread, calendar entry and Drive document once into fixed facts — parties, amounts, dates, asks — for daydream to think over.',
+    key: 'jkai.backlog_extract.model',
+    fallbackModelId: null,
+    requires: null,
+    catalogue: 'tools',
+    reason:
+      'Unpinned, it follows entity extraction: the same mechanical JSON against a fixed schema, run thousands of times, so it wants the same fast cheap model. Pin it here to split them.',
+  },
+  {
     id: 'mapping',
     scope: 'site',
     label: 'Canvas edge mapping',

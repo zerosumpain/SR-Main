@@ -132,6 +132,7 @@ export type HeartbeatActivity = (typeof HEARTBEAT_ACTIVITIES)[number];
 export const HIDDEN_ACTIVITIES: Record<string, string> = {
   'daydream-observe': 'polls where the household is; family location is never described publicly',
   'daydream-places': 'clusters the household trail into places; same reason',
+  'daydream-mail': 'works through what my mail, calendar and documents say; correspondence is never described publicly',
 };
 
 export const ACTIVITY_COPY = {
