@@ -3708,6 +3708,11 @@ export const sourceBacklog = pgTable(
     /** ≤300 chars. Written by someone else: data, never an instruction. */
     title: text('title'),
     senderDomain: text('sender_domain'),
+    /**
+     * Read order, set at intake from metadata: who it is from (a contact, an
+     * entity already in the graph), what kind it is, how recent. Higher first.
+     */
+    priority: integer('priority').notNull().default(0),
     /** Messages only (`threadContentHash`); a changed hash re-queues the row. */
     contentHash: text('content_hash'),
     /** 'queued' | 'extracted' | 'skipped' | 'failed' */
@@ -3731,6 +3736,7 @@ export const sourceBacklog = pgTable(
   (t) => [
     uniqueIndex('source_backlog_space_ref_key').on(t.spaceId, t.refId),
     index('source_backlog_state_observed_idx').on(t.state, t.observedAt),
+    index('source_backlog_queue_idx').on(t.state, t.priority.desc(), t.observedAt.desc()),
     index('source_backlog_considered_idx').on(t.spaceId, t.consideredAt, t.observedAt),
     index('source_backlog_action_idx').on(t.spaceId, t.needsAction, t.actionBy),
   ],

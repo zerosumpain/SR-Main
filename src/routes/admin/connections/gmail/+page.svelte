@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import PageWrap from '$lib/components/admin/PageWrap.svelte';
   import PageHeader from '$lib/components/admin/PageHeader.svelte';
+  import { BACKLOG_SOURCES, SOURCE_LABEL, grantedSources } from '$lib/daydream/mail-room';
 
   let { data } = $props();
 
@@ -82,6 +83,8 @@
     <div class="account-list">
       {#each accounts as account}
         {@const isOpen = openAccountId === account.id}
+        {@const granted = grantedSources(account.scopes)}
+        {@const missing = BACKLOG_SOURCES.filter((s) => !granted.includes(s))}
         <section class="nm-sec account-card" class:open={isOpen}>
           <div class="account-row">
             <button class="account-summary" onclick={() => toggleAccount(account.id)}>
@@ -98,6 +101,13 @@
           {#if account.lastError}
             <div class="banner banner-error">{account.lastError}</div>
           {/if}
+          <p class="account-sources">
+            Reads {granted.map((s) => SOURCE_LABEL[s]).join(', ') || 'nothing'} into the <a href="/jkai/daydreams/mail">Mail room</a>.
+            {#if missing.length}
+              {missing.map((s) => SOURCE_LABEL[s]).join(' and ')} not granted —
+              <a href="/api/gmail/connect">reconnect</a> to add {missing.length === 1 ? 'it' : 'them'}.
+            {/if}
+          </p>
 
           {#if isOpen}
             <div class="account-body">
@@ -152,6 +162,7 @@
   }
   .caret { font-size: var(--fs-label-xs); color: var(--text-ghost); width: 0.8rem; }
   .account-email { font-size: 0.95rem; color: var(--text-primary); font-weight: 500; }
+  .account-sources { margin: 0; padding: 0 var(--space-4, 1rem) var(--space-3, 0.75rem); font-size: var(--fs-label-xs); color: var(--text-secondary); }
   .account-date { font-family: var(--font-mono); font-size: var(--fs-label-xs); color: var(--text-ghost); margin-left: auto; }
   .account-body { display: flex; flex-direction: column; gap: 0.9rem; padding-top: 0.6rem; }
   .account-section { display: flex; flex-direction: column; gap: 0.4rem; }

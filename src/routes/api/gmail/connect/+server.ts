@@ -4,11 +4,18 @@ import { env } from '$env/dynamic/private';
 import { viewerOf } from '$lib/server/viewer';
 import { signConnectState } from '$lib/integrations/gmail/oauth-state';
 
-/** The owner's mailbox is read, labelled and sent from by workflows and chat. */
+/**
+ * The owner's mailbox is read, labelled and sent from by workflows and chat.
+ * Calendar and Drive are read-only and feed the source backlog alone
+ * (SR-Jkai-Core reads them into `source_backlog`); an account connected before
+ * they were asked for keeps working on mail until it is reconnected.
+ */
 const OWNER_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/gmail.labels',
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/drive.readonly',
   'openid',
   'email',
 ];

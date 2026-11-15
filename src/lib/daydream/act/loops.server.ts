@@ -12,6 +12,7 @@ import { DEFAULT_SUBJECT } from '../types';
 import { DAILY_RAISE_CAP, DAYDREAM_CHANNELS, FEED_PATH, noteHref } from '../think/notes';
 import { countRaisedToday } from '../think/notes.server';
 import { localDayOf } from '../think/shelf';
+import { MAIL_ROOM_PATH, MAIL_ROOM_REASON } from '../mail-room';
 import { CHASES_PER_DAY, CHASE_MAX_AGE_DAYS, NO_STEP_REASON, chaseDue, chaseOrder, chaseText, digestDue, digestText, type LoopRow } from './loops';
 
 export const LOOPS_KEY = 'daydream.loops';
@@ -139,16 +140,29 @@ export async function sendWeeklyDigest(now = new Date()): Promise<boolean> {
     )
     .orderBy(desc(daydreamThoughts.createdAt))
     .limit(50);
-  if (!rows.length) {
+  const [mail] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(daydreamThoughts)
+    .where(
+      and(
+        THINK_KIND,
+        eq(daydreamThoughts.subject, DEFAULT_SUBJECT),
+        eq(daydreamThoughts.status, 'suppressed'),
+        eq(daydreamThoughts.suppressedReason, MAIL_ROOM_REASON),
+        gte(daydreamThoughts.createdAt, new Date(now.getTime() - 7 * 86_400_000)),
+      ),
+    );
+  const mailNotes = mail?.n ?? 0;
+  if (!rows.length && !mailNotes) {
     await change((s) => ({ ...s, digestWeek: week }));
     return false;
   }
-  const text = digestText(rows.map((r) => r.title), rows.length);
+  const text = digestText(rows.map((r) => r.title), rows.length, mailNotes);
   const res = await notifyOwner({
     category: 'daydream',
     title: text.title,
     body: text.body,
-    url: FEED_PATH,
+    url: rows.length ? FEED_PATH : MAIL_ROOM_PATH,
     dedupeKey: `daydream-digest:${week}`,
     channels: DAYDREAM_CHANNELS,
   }).catch(() => null);

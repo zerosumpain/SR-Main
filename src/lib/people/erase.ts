@@ -209,6 +209,12 @@ export const ACCOUNT_COLUMNS: Record<string, Record<string, Fate | `kept: ${stri
   // Attachments Core's mail rules filed: only ever from the owner's own Gmail
   // (owner-accounts), and Core's purgeMailbox clears them with the mailbox.
   mail_attachment_files: { account_email: 'kept: Core-owned; owner mailboxes only, purged by the mail-purge job queued here' },
+  // The source backlog is the same: Core reads owner mailboxes only into it,
+  // and Main holds SELECT and UPDATE on it, so it could not delete a row anyway.
+  source_backlog: {
+    space_id: 'kept: Core-owned; owner space only, a member is never read into it',
+    account_email: 'kept: Core-owned; owner mailboxes only, purged by the mail-purge job queued here',
+  },
   // Owner-only surfaces: a member can never write these, so the value is always the owner or an agent tag.
   activity_share_token: { created_by: 'kept: owner-only (health sharing)' },
   project_share: { created_by: 'kept: owner-only (projects)' },

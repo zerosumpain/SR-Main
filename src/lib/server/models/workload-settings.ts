@@ -50,6 +50,9 @@ export async function resolveWorkloadModel(def: WorkloadDef): Promise<ModelConte
   // follows that role (which in turn follows the site default). Same rule in
   // SR-Drive and SR-Jkai-Core, which make the calls; Main holds the picker.
   if (def.id === 'drive-analysis') return resolveRagModel();
+  // The backlog reader does the extraction role's job on a different input.
+  // SR-Jkai-Core makes the calls; Main holds the picker.
+  if (def.id === 'backlog-extract') return resolveExtractionModel();
   if (def.fallbackModelId) return coerceModelContext({ modelId: def.fallbackModelId });
   return resolveDefaultModel();
 }
@@ -400,6 +403,7 @@ export async function describeSiteWorkloads(): Promise<WorkloadState[]> {
   const chatDefault = await resolveChatTurnModel();
   // Drive analysis follows RAG answering when unpinned (`resolveWorkloadModel`).
   const ragDefault = await resolveRagModel();
+  const extractionDefault = await resolveExtractionModel();
   const stored = await Promise.all(
     SITE_WORKLOADS.map((w) =>
       getSetting<{ modelId?: string } | null>(w.key).then((v) => v?.modelId ?? null),
@@ -416,7 +420,9 @@ export async function describeSiteWorkloads(): Promise<WorkloadState[]> {
         ? chatDefault.modelId
         : def.id === 'drive-analysis'
           ? ragDefault.modelId
-          : def.fallbackModelId ?? siteDefault.modelId);
+          : def.id === 'backlog-extract'
+            ? extractionDefault.modelId
+            : def.fallbackModelId ?? siteDefault.modelId);
     return {
       id: def.id,
       scope: def.scope,

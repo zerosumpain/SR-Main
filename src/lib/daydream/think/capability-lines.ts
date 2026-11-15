@@ -17,7 +17,7 @@ export function sitePages(): Set<string> {
   const out = new Set<string>();
   for (const c of CAPABILITIES) if (c.status !== 'planned') for (const p of c.pages) out.add(p);
   // Daydream's own rooms, which the manifest does not list one by one.
-  for (const p of ['/jkai/daydreams', '/jkai/daydreams/watches', '/jkai/daydreams/solutions']) out.add(p);
+  for (const p of ['/jkai/daydreams', '/jkai/daydreams/mail', '/jkai/daydreams/watches', '/jkai/daydreams/solutions']) out.add(p);
   return out;
 }
 

@@ -94,11 +94,15 @@ export function digestDue(now: Date, lastWeek: string | null): { due: boolean; w
   return { due: get('weekday') === 'Sun' && Number(get('hour')) >= 18 && lastWeek !== week, week };
 }
 
-export function digestText(titles: readonly string[], count: number): { title: string; body: string } {
+export function digestText(titles: readonly string[], count: number, mail = 0): { title: string; body: string } {
   const shown = titles.slice(0, 3).map((t) => `• ${t}`);
   const more = count - shown.length;
+  // Notes from the mail backlog that could wait (`mail-room.ts`) are counted, not listed.
+  const mailLine = mail > 0 ? [`${count ? 'Also ' : ''}${mail} note${mail === 1 ? '' : 's'} from your mail, in the Mail room.`] : [];
   return {
-    title: `This week: ${count} thing${count === 1 ? '' : 's'} noticed, nothing to do`,
-    body: [...shown, ...(more > 0 ? [`…and ${more} more on the feed.`] : [])].join('\n'),
+    title: count
+      ? `This week: ${count} thing${count === 1 ? '' : 's'} noticed, nothing to do`
+      : `This week: ${mail} note${mail === 1 ? '' : 's'} from your mail`,
+    body: [...shown, ...(more > 0 ? [`…and ${more} more on the feed.`] : []), ...mailLine].join('\n'),
   };
 }

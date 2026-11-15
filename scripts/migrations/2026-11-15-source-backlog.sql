@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS "source_backlog" (
 	"kind" text,
 	"title" text,
 	"sender_domain" text,
+	"priority" integer DEFAULT 0 NOT NULL,
 	"content_hash" text,
 	"state" text DEFAULT 'queued' NOT NULL,
 	"attempts" integer DEFAULT 0 NOT NULL,
@@ -52,6 +53,7 @@ CREATE TABLE IF NOT EXISTS "source_backlog" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "source_backlog_space_ref_key" ON "source_backlog" USING btree ("space_id","ref_id");
 CREATE INDEX IF NOT EXISTS "source_backlog_state_observed_idx" ON "source_backlog" USING btree ("state","observed_at");
+CREATE INDEX IF NOT EXISTS "source_backlog_queue_idx" ON "source_backlog" USING btree ("state","priority" DESC NULLS LAST,"observed_at" DESC NULLS LAST);
 CREATE INDEX IF NOT EXISTS "source_backlog_considered_idx" ON "source_backlog" USING btree ("space_id","considered_at","observed_at");
 CREATE INDEX IF NOT EXISTS "source_backlog_action_idx" ON "source_backlog" USING btree ("space_id","needs_action","action_by");
 

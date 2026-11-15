@@ -51,6 +51,7 @@ import { NO_STEP_REASON, openStep } from '../act/loops';
 import { splitNarrative } from './explain';
 import { siteBlock, sitePages } from './capability-lines';
 import { loadTaste } from '../reasons.server';
+import { MAIL_ROOM_REASON, drainBrief } from '../mail-room';
 
 /** Tool rounds at full budget. The activity passes fewer when the budget is
  *  thin — a round is a model call. */
@@ -87,6 +88,17 @@ export interface ThinkResult {
   citationDrops: number;
   tokens: { prompt: number; completion: number };
   error: string | null;
+  /** A drain cycle only: each note stored, with the backlog rows it cited. */
+  drained?: Array<{ thoughtId: string; itemIds: string[] }>;
+}
+
+/**
+ * A cycle over the mail backlog instead of the rotation's question
+ * (`mail-room.ts`). The items arrive as cards code built from extracted facts;
+ * a note about one interrupts him only when the item is time-critical.
+ */
+export interface DrainInput {
+  items: Array<{ id: string; text: string; critical: boolean }>;
 }
 
 /** Outcomes a note may carry, by tool set. The research outcome needs the web;
@@ -260,11 +272,15 @@ export function systemPrompt(opts: {
 type ChatMessage = Record<string, unknown>;
 
 export async function runThink(
-  opts: { now?: Date; subject?: string; maxRounds?: number; backlog?: string[] } = {},
+  opts: { now?: Date; subject?: string; maxRounds?: number; backlog?: string[]; drain?: DrainInput } = {},
 ): Promise<ThinkResult> {
   const now = opts.now ?? new Date();
   const subject = opts.subject ?? DEFAULT_SUBJECT;
-  const question = questionAt(now);
+  const drain = opts.drain?.items.length ? opts.drain : null;
+  const slotQuestion = questionAt(now);
+  // The drain is a mail cycle whatever the clock says; a note may carry any
+  // private outcome, so the outcome here is only the pulse's label.
+  const question: Question = drain ? { channel: 'mail', outcome: 'efficiency', brief: drainBrief(drain.items.length), slot: slotQuestion.slot } : slotQuestion;
   const set = toolSetFor(question.channel);
   const rounds = Math.max(1, Math.min(MAX_ROUNDS, opts.maxRounds ?? MAX_ROUNDS));
   const result: ThinkResult = {
@@ -332,6 +348,15 @@ export async function runThink(
       const { movementCard } = await import('$lib/owner-data/household.server');
       const household = await movementCard(now).catch(() => null);
       if (household?.length) toolbox.seed('household', { at: today }, household.join('\n'));
+    }
+    // Card id → backlog row, so a note's citations say which rows it dealt with.
+    const drainCards = new Map<string, { id: string; critical: boolean }>();
+    if (drain) {
+      drain.items.forEach((item, i) => {
+        const card = toolbox.seed('backlog_item', { n: i + 1 }, item.text);
+        drainCards.set(card.id, { id: item.id, critical: item.critical });
+      });
+      result.focus = `mail backlog: ${drain.items.length} items`;
     }
 
     const [said, profile, definitions, lessons, taste, subjects, identity] = await Promise.all([
@@ -426,6 +451,19 @@ export async function runThink(
     }
     result.notes.proposed = kept.length;
     if (kept.length === 0) return result;
+    // A drain note that cites no item is not about the backlog: the cycle
+    // drifted, and the rotation's own mail cycles are where that belongs.
+    const drainOf = (n: (typeof kept)[number]) => n.citedCardIds.map((c) => drainCards.get(c)).filter((x): x is { id: string; critical: boolean } => !!x);
+    if (drain) {
+      for (let i = kept.length - 1; i >= 0; i--) {
+        if (drainOf(kept[i]).length) continue;
+        result.rejected.push(`note "${kept[i].title.slice(0, 40)}": cites no backlog item`);
+        kept.splice(i, 1);
+      }
+      result.notes.proposed = kept.length;
+      if (kept.length === 0) return result;
+    }
+    const critical = new Set(kept.filter((n) => drainOf(n).some((x) => x.critical)).map((n) => n.candidate.dedupeKey));
 
     // ── Notes → the thought ledger ──
     //
@@ -483,6 +521,18 @@ export async function runThink(
       return 0;
     });
 
+    if (drain) {
+      // Every stored note, new or folded into a live one, with its rows.
+      const stored = await db
+        .select({ id: daydreamThoughts.id, dedupeKey: daydreamThoughts.dedupeKey })
+        .from(daydreamThoughts)
+        .where(inArray(daydreamThoughts.dedupeKey, kept.map((n) => n.candidate.dedupeKey)));
+      const idOf = new Map(stored.map((s) => [s.dedupeKey, s.id]));
+      result.drained = kept
+        .map((n) => ({ thoughtId: idOf.get(n.candidate.dedupeKey) ?? '', itemIds: drainOf(n).map((x) => x.id) }))
+        .filter((d) => d.thoughtId);
+    }
+
     // ── New notes → the owner ──
     //
     // Three things can happen to a new note. One whose step is on the autonomy
@@ -514,6 +564,13 @@ export async function runThink(
           .set({ status: 'suppressed', channel: 'silent', suppressedReason: reason, updatedAt: now })
           .where(eq(daydreamThoughts.id, id));
       for (const row of rows) {
+        // A backlog note with time to spare waits in the Mail room and the
+        // digest: twelve months of mail must not become twelve months of pushes.
+        if (drain && !critical.has(row.dedupeKey)) {
+          await feedOnly(row.id, MAIL_ROOM_REASON);
+          result.quiet++;
+          continue;
+        }
         // Nothing to do, by tap or by itself: the feed, and the digest.
         if (!row.press && !row.next) {
           await feedOnly(row.id, NO_STEP_REASON);

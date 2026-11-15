@@ -76,13 +76,20 @@ throws, `last_run` record, kill switch `SOURCE_BACKLOG=0`).
   tick, position in `backlog.backfill[email]`. `-in:spam -in:trash`.
 - Calendar: `events.list` with a sync token, 365 days back to 365 ahead.
 - Drive: `changes.list` from a start page token, plus a one-off listing of
-  files modified in the last 365 days. Owned-by-me or shared-with-me, not
-  trashed.
+  files modified in the last 365 days. Owned by him only, not trashed: a file
+  somebody shared is somebody else's text arriving unasked.
 - A source whose scope is not on the account is skipped and reported, not an
   error.
 
-**Extract** (15 min). Newest first, so today's mail is never behind the
-backfill.
+**Rank** (at intake, no model). Every row gets a `priority`: correspondence
+over notifications over bulk; a sender who is a contact, starred, or matches an
+entity in the graph (a full name or an organisation read out of the sending
+domain, never a lone first name) is lifted; within a kind, newer first.
+Gmail's promotions tab is bulk unless the sender is known. Calendar entries
+still ahead outrank those behind.
+
+**Extract** (15 min). Highest priority first, so today's mail is never behind
+the backfill and last year's marketing is read last.
 - Text: `threadToNoteText` plus attachment text through `planAttachments` /
   `extractText` (documents; images only on non-bulk mail, through the existing
   vision describe). Bulk mail: 2,500 characters, no attachments. Google Docs,
@@ -90,7 +97,11 @@ backfill.
   through `extractText`. Attachment bytes are NOT kept: the VPS disk is at 83%
   and the filing rules already exist for files worth keeping.
 - One call on a new `backlog-extract` workload (follows `extraction` unless
-  pinned), `temperature 0`, JSON object, no tools.
+  pinned), `temperature 0.1`, JSON object, no tools.
+- Batching: bulk mail is read eight to a call and notifications four, grouped
+  by sender so one call sees one sender's run. Correspondence is always one
+  thread to a call. Each item in a batch is checked against its own text; an
+  item left out, misnumbered or repeated is that item's failed attempt only.
 - Output schema (zod, strict): `summary` ≤300, `category` (enum of 15),
   `parties` ≤5, `amounts` ≤6, `dates` ≤6 with a kind (`due`, `event`, `expiry`,
   `delivery`, `renewal`), `asks` ≤3 (who is waiting on whom),
@@ -103,11 +114,20 @@ backfill.
 - Calendar events need no model: title, start, end, place and attendee count
   are written by code. A description over 200 characters goes through the
   extractor.
-- Caps, because nothing in the estate caps model spend: 40 items a tick;
-  `backlog.daily_items` (default 1,500); `backlog.daily_usd` (default 3.00),
-  checked against today's `agent_actions` cost for the workload before each
-  tick. At about 63 threads a day the 12-month backfill is roughly 23,000
-  threads and drains in about 16 days.
+- Caps, because nothing in the estate caps model spend: 4,000 items and $3.00
+  a UTC day, counted in `backlog.today` and checked before each call. A run
+  that stops on one says so in `backlog.last_run.stopped`. At about 63 threads
+  a day the 12-month backfill is roughly 23,000 threads and drains in about a
+  week on the caps alone.
+- **Catch-up lane.** `scripts/backlog-catchup.mjs` lets a headless Sonnet on
+  John's subscription read the queue instead of the paid model: it claims
+  items from Core, replies with the same JSON, and Core runs the same parser
+  and checks on it. The endpoint hands out mail text, so it has its own token
+  (`BACKLOG_CATCHUP_TOKEN`, unset by default, which turns the endpoint off), is
+  not routed by the public gateway, and is reached over the tailnet or an SSH
+  tunnel. Set the token, run in sittings with `--max`, unset it.
+- The Mail room's "Read now" sets `backlog.run_requested`; Core polls it every
+  30 seconds.
 
 ## Daydream (SR-Main)
 
@@ -115,9 +135,9 @@ backfill.
   never content: `due` (what needs doing, by when), `search` (category, sender,
   words, dates) and `totals` (by sender or category per month: what recurs,
   what rose). Scoped to the owner's space in the query. `mail × suggest` and
-  `mail × correlate` leave the skip table; `tools.test.ts` pins are updated
-  deliberately.
-- **`daydream-backlog` heartbeat** (30 min, 07:00–23:00, idle 20 min, quota
+  `mail × correlate` stay in the skip table: the drain is its own cycle, not a
+  cell of the question grid. `tools.test.ts` pins are updated deliberately.
+- **`daydream-mail` heartbeat** (30 min, 07:00–23:00, idle 20 min, quota
   guarded). Takes up to 12 unconsidered rows that are worth a look one by one
   (an action, an ask, a date still ahead, a change, or anything from the last
   30 days that is not bulk), seeds them as cards, and asks for at most two
@@ -133,8 +153,9 @@ backfill.
 - **Mail room** `/jkai/daydreams/mail`: a deck (read, waiting, backfill
   position, today's spend), what needs doing, the notes raised from the
   backlog, and a searchable list of items with their facts and a link to the
-  thread, event or document. Pure `backlog.ts` plus `backlog.server.ts`, as
-  Impact and Solutions.
+  thread, event or document. Pure `mail-room.ts` plus `mail-room.server.ts`, as
+  Impact and Solutions. The card daydream sees carries the extracted facts and
+  not the subject line, which is the one field a stranger writes verbatim.
 - **Google connection.** `calendar.readonly` and `drive.readonly` join
   `OWNER_SCOPES`; `/admin/connections/gmail` shows which sources each account
   has granted. Members stay Gmail read-only and are not in the backlog.
@@ -182,6 +203,11 @@ already refuses the acts that matter.
 | Keep attachment bytes | No | Disk at 83%; filing rules exist | Yes |
 | New table vs datastore | Table | 23,000 rows a year, indexed reads by date and state, two apps | Hard |
 | Item-by-item for everything | Only where something is ahead | Cost: one chat-model cycle per 12 rows | Yes |
+| Pre-rank before reading | Yes, by kind, known sender and age | John, 2026-11-15: the graph already knows who matters | Yes |
+| Batch the low end | Bulk 8, notifications 4, per sender | A fifth of the calls for mail that rarely says anything | Yes |
+| Sonnet catch-up on subscription | Built, off by default | John: catch up without the bill. Hands out mail text, so own token and no public route | Yes: unset the token |
+| Drain as a grid cell | No, its own `daydream-mail` cycle | The grid picks a question; the drain is handed its evidence | Yes |
+| Drive files shared with him | Not read | Unasked third-party text | Yes |
 | Google Calendar into `diary` | Not yet | Risk of doubling events already synced to iCloud | Yes |
 
 ## Not in this release

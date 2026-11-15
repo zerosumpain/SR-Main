@@ -43,6 +43,7 @@ export const ROUTE_LEDGER: Record<string, LedgerEntry> = {
   '/jkai/daydreams': owner('daydream/inbox', 'The Inbox: every note as a decision, with whose move it is'),
   '/jkai/daydreams/impact': members('daydream/impact', 'Whether the notes helped, as totals; members see the totals only'),
   '/jkai/daydreams/solutions': owner('daydream/inbox', 'Every solution a note set going, its trackers, and how each turned out'),
+  '/jkai/daydreams/mail': owner('daydream/inbox', 'What needs doing from my mail, calendar and documents, read as extracted facts and never the messages'),
   '/jkai/daydreams/watches': owner('daydream/inbox', 'The few things worth interrupting me for'),
   '/jkai/daydreams/briefing': owner('daydream/inbox', 'The morning briefing’s daydream section and where it reads from'),
   '/jkai/daydreams/briefing/[day]': owner('daydream/inbox', 'One morning’s briefing, the page the morning message links to'),

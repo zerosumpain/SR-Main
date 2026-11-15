@@ -67,6 +67,7 @@ describe('the two allow-lists', () => {
       'correlate',
       'compare_days',
       'mail_facts',
+      'backlog',
       'diary',
       'spend',
       'chat_threads',
@@ -153,6 +154,22 @@ describe('mail stays the owner’s', () => {
     expect(scoped.length).toBe(reads.length);
     // And never the body.
     expect(src).not.toMatch(/rawContent|processedContent/);
+  });
+
+  it('scopes every backlog query to the owner, and keeps the backlog away from Gmail', () => {
+    const dir = join(THINK_DIR, '..');
+    const src = readFileSync(join(dir, 'mail-room.server.ts'), 'utf8');
+    // Every statement on the table goes through `owner()` or `read()`, which wraps it.
+    const statements = src.match(/\.(from|update)\(sourceBacklog\)/g) ?? [];
+    const scoped = src.match(/\.where\(\s*(and\(\s*)?(owner|read)\(\)|\.where\(where\)/g) ?? [];
+    expect(statements.length).toBeGreaterThan(0);
+    expect(scoped.length).toBe(statements.length);
+    expect(src).toMatch(/const owner = \(\) => spaceIn\(sourceBacklog\.spaceId, OWNER_INTEL_SCOPE\)/);
+    expect(src).toMatch(/const read = \(\) => and\(owner\(\)/);
+    expect(src).toMatch(/function searchWhere[\s\S]{0,200}return and\(\s*read\(\)/);
+    for (const f of ['mail-room.ts', 'mail-room.server.ts']) {
+      expect(readFileSync(join(dir, f), 'utf8'), f).not.toMatch(/\$lib\/workflows\/gmail|googleapis/);
+    }
   });
 });
 

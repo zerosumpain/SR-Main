@@ -79,7 +79,7 @@ export const SKIP: ReadonlyArray<readonly [Channel, Outcome, string]> = [
   ['home', 'suggest', 'an activity or reading suggestion does not start in the sensors'],
   ['mail', 'correlate', 'mail metadata is counts of other people, not his days'],
   ['mail', 'health_plan', 'a training week does not start in the inbox'],
-  ['mail', 'suggest', 'mail bodies are never read, so there is nothing to suggest from'],
+  ['mail', 'suggest', 'an activity or reading suggestion does not start in the inbox; what the mail says has its own cycle (`mail-room.ts`)'],
   ['money', 'health_plan', 'a training week does not start in spend rows'],
   ['money', 'suggest', 'a reading suggestion does not start in spend rows'],
 ] as const;
@@ -142,7 +142,7 @@ const CHANNEL_FOCUS: Record<Channel, string> = {
   home:
     'the house — the Home Assistant sensors, heating, lights, doors and presence, and what they were doing while nobody was looking',
   mail:
-    'his mail, as metadata and extracted facts only — who writes, how often, what dated obligations the ingest pulled out (renewals, appointments, deadlines)',
+    'his mail, as facts extracted from it and never the messages themselves — what each thread, attachment and document says (the backlog), who writes and how often, what is owed, due, renewing or waiting on him',
   chat:
     'what he has been asking jkai — the threads he opened, what they were about, when he was up asking them',
   diary:
