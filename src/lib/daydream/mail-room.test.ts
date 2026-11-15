@@ -20,6 +20,7 @@ import {
   type BacklogItem,
 } from './mail-room';
 import { digestText } from './act/loops';
+import { changes, recurring, spendByMonth, spendBySender, upcoming, waiting } from './mail-insights';
 
 const NOW = new Date('2026-11-15T10:00:00Z');
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86_400_000).toISOString();
@@ -228,5 +229,72 @@ describe('grantedSources', () => {
     ).toEqual(['gmail', 'gcal', 'gdrive']);
     expect(grantedSources('https://www.googleapis.com/auth/drive.file')).toEqual([]);
     expect(grantedSources(null)).toEqual([]);
+  });
+});
+
+describe('insights', () => {
+  const rows = [
+    { key: 'octopus.energy', month: '2026-08', items: 1, minor: 9000, currency: 'GBP' },
+    { key: 'octopus.energy', month: '2026-09', items: 1, minor: 10000, currency: 'GBP' },
+    { key: 'octopus.energy', month: '2026-10', items: 1, minor: 9500, currency: 'GBP' },
+    { key: 'octopus.energy', month: '2026-11', items: 2, minor: 12504, currency: 'GBP' },
+    { key: 'apple.com', month: '2026-11', items: 1, minor: 299, currency: 'GBP' },
+    { key: 'apple.com', month: '2026-11', items: 1, minor: 999, currency: 'USD' },
+    { key: 'sky.com', month: '2026-11', items: 3, minor: 0, currency: null },
+  ];
+
+  it('totals each sender per currency, biggest first, and leaves out mail with no money', () => {
+    const spend = spendBySender(rows);
+    expect(spend.map((s) => `${s.sender} ${s.currency}`)).toEqual(['octopus.energy GBP', 'apple.com USD', 'apple.com GBP']);
+    expect(spend[0]).toMatchObject({ total: 41004, items: 5, months: 4, lastMonth: '2026-11', typical: 9750, latest: 12504, before: 9500, rose: true });
+  });
+
+  it('calls a rise only against two or more earlier months, and only past a tenth', () => {
+    expect(spendBySender(rows.slice(0, 2))[0]).toMatchObject({ before: null, rose: false });
+    expect(spendBySender(rows.slice(0, 3))[0]).toMatchObject({ before: 9500, rose: false });
+  });
+
+  it('recurring means three months or more', () => {
+    expect(recurring(spendBySender(rows)).map((s) => s.sender)).toEqual(['octopus.energy']);
+  });
+
+  it('sums the months per currency, oldest first', () => {
+    expect(spendByMonth(rows).slice(-2)).toEqual([
+      { month: '2026-11', currency: 'GBP', minor: 12803, items: 3 },
+      { month: '2026-11', currency: 'USD', minor: 999, items: 1 },
+    ]);
+  });
+
+  it('lists what is dated inside the window, soonest first, and no marketing events', () => {
+    const list = upcoming(
+      [
+        item({ id: 'a' }, { dates: [{ label: 'Delivery', date: '2026-12-03', kind: 'delivery' }, { label: 'Old', date: '2026-10-01', kind: 'due' }] }),
+        item({ id: 'b' }),
+        item({ id: 'c', kind: 'bulk' }, { dates: [{ label: 'Sale ends', date: '2026-11-18', kind: 'event' }] }),
+        item({ id: 'd' }, { dates: [{ label: 'Far', date: '2027-06-01', kind: 'renewal' }] }),
+      ],
+      '2026-11-15',
+    );
+    expect(list.map((u) => `${u.day} ${u.label}`)).toEqual(['2026-11-20 Payment due', '2026-12-03 Delivery']);
+    expect(list[0].amount).toEqual({ minor: 125040, currency: 'GBP' });
+  });
+
+  it('splits who is waiting on whom, longest wait first, and ignores marketing', () => {
+    const w = waiting([
+      item({ id: 'a', kind: 'correspondence', observedAt: daysAgo(3) }, { asks: [{ waitingOn: 'me', what: 'Confirm Saturday' }, { waitingOn: 'them', what: 'Send the quote' }] }),
+      item({ id: 'b', kind: 'correspondence', observedAt: daysAgo(20) }, { asks: [{ waitingOn: 'me', what: 'Sign the form' }] }),
+      item({ id: 'c', kind: 'bulk' }, { asks: [{ waitingOn: 'me', what: 'Buy now' }] }),
+    ]);
+    expect(w.onMe.map((x) => x.what)).toEqual(['Sign the form', 'Confirm Saturday']);
+    expect(w.onThem.map((x) => x.what)).toEqual(['Send the quote']);
+  });
+
+  it('lists the changes, newest first', () => {
+    const list = changes([
+      item({ id: 'a', observedAt: daysAgo(30) }, { change: { what: 'Tariff', from: '£98', to: '£112' } }),
+      item({ id: 'b' }),
+      item({ id: 'c', observedAt: daysAgo(2) }, { change: { what: 'Price', from: '£10', to: '£12' } }),
+    ]);
+    expect(list.map((c) => `${c.what} ${c.was} ${c.now}`)).toEqual(['Price £10 £12', 'Tariff £98 £112']);
   });
 });

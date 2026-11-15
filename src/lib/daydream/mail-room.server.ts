@@ -36,9 +36,9 @@ import {
 } from './mail-room';
 
 const owner = () => spaceIn(sourceBacklog.spaceId, OWNER_INTEL_SCOPE);
-const read = () => and(owner(), eq(sourceBacklog.state, 'extracted'), isNotNull(sourceBacklog.facts));
+export const read = () => and(owner(), eq(sourceBacklog.state, 'extracted'), isNotNull(sourceBacklog.facts));
 
-const COLUMNS = {
+export const COLUMNS = {
   id: sourceBacklog.id,
   source: sourceBacklog.source,
   refId: sourceBacklog.refId,
@@ -57,7 +57,7 @@ const COLUMNS = {
 
 type Row = { [K in keyof typeof COLUMNS]: (typeof COLUMNS)[K]['_']['data'] | null };
 
-function toItem(r: Row): BacklogItem {
+export function toItem(r: Row): BacklogItem {
   const source = (BACKLOG_SOURCES as readonly string[]).includes(r.source ?? '') ? (r.source as BacklogSource) : 'gmail';
   return {
     id: r.id!,

@@ -48,6 +48,20 @@
     'model-down': 'stopped: the reading model was not answering',
   };
 
+  const ins = $derived(data.insights);
+  // The currency most of the money is in leads; the others are listed after it.
+  const months = $derived(ins?.byMonth ?? []);
+  const yearTotals = $derived.by(() => {
+    const t = new Map<string, number>();
+    for (const m of months) t.set(m.currency, (t.get(m.currency) ?? 0) + m.minor);
+    return [...t.entries()].sort((a, b) => b[1] - a[1]);
+  });
+
+  function monthName(ym: string): string {
+    const d = new Date(`${ym}-15T12:00:00Z`);
+    return Number.isNaN(d.getTime()) ? ym : d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+
   function day(iso: string): string {
     const d = new Date(`${iso}T12:00:00Z`);
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Europe/London' });
@@ -56,9 +70,199 @@
 
 <svelte:head><title>Mail room — Daydream</title></svelte:head>
 
-{#if data.error || !data.room || !deck}
+<nav class="band views" aria-label="Mail room views">
+  <div class="inner view-row">
+    <a href="/jkai/daydreams/mail" aria-current={data.view === 'room' ? 'page' : undefined}>To do and notes</a>
+    <a href="/jkai/daydreams/mail?view=insights" aria-current={data.view === 'insights' ? 'page' : undefined}>Insights</a>
+  </div>
+</nav>
+
+{#if data.error || (data.view === 'room' && (!data.room || !deck)) || (data.view === 'insights' && !ins)}
   <section class="band"><div class="inner"><LoadErrorCard kicker="The Mail room did not load" message={data.error ?? 'no data'} /></div></section>
-{:else}
+{:else if ins}
+  <section class="band">
+    <div class="inner">
+      <SectionHead
+        kicker="A / Money"
+        title={['What the mail', 'says you spend']}
+        strap="The first figure on each bill, receipt, renewal and subscription notice since {monthName(ins.window.from)}. A reading of your mail, not a reconciled account: a bill and its receipt both count."
+      />
+      {#if !months.length}
+        <p class="none">No amounts read yet.</p>
+      {:else}
+        <p class="meta">{#each yearTotals as [cur, total], i (cur)}{i ? ' · ' : ''}{money(total, cur)}{/each} across {ins.bySender.length} sender{ins.bySender.length === 1 ? '' : 's'}</p>
+        <table class="tbl">
+          <thead><tr><th>Month</th><th class="num">Amount</th><th class="num">Items</th></tr></thead>
+          <tbody>
+            {#each months as m (m.month + m.currency)}
+              <tr><td>{monthName(m.month)}</td><td class="num">{money(m.minor, m.currency)}</td><td class="num">{m.items}</td></tr>
+            {/each}
+          </tbody>
+        </table>
+        <h3 class="sub">By sender</h3>
+        <table class="tbl">
+          <thead><tr><th>Sender</th><th class="num">Total</th><th class="num">Months</th><th class="num">Typical month</th><th class="num">Latest</th></tr></thead>
+          <tbody>
+            {#each ins.bySender as s (s.sender + s.currency)}
+              <tr>
+                <td>{s.sender}</td>
+                <td class="num">{money(s.total, s.currency)}</td>
+                <td class="num">{s.months}</td>
+                <td class="num">{money(s.typical, s.currency)}</td>
+                <td class="num" class:up={s.rose}>{money(s.latest, s.currency)}{#if s.rose} up{/if}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="inner">
+      <SectionHead
+        kicker="B / Recurring"
+        title={['What you are', 'signed up to']}
+        strap="Senders that billed in three or more months of the last twelve, with what the year came to."
+      />
+      {#if !ins.recurring.length}
+        <p class="none">Nothing has billed three months running yet. This fills in as the history is read.</p>
+      {:else}
+        <table class="tbl">
+          <thead><tr><th>Sender</th><th class="num">Typical month</th><th class="num">Months</th><th class="num">This year</th><th>Last seen</th></tr></thead>
+          <tbody>
+            {#each ins.recurring as s (s.sender + s.currency)}
+              <tr>
+                <td>{s.sender}</td>
+                <td class="num">{money(s.typical, s.currency)}</td>
+                <td class="num">{s.months}</td>
+                <td class="num">{money(s.total, s.currency)}</td>
+                <td>{monthName(s.lastMonth)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="inner">
+      <SectionHead
+        kicker="C / What moved"
+        title={['Prices and', 'terms that changed']}
+        strap="Every change a message announced, and every sender whose latest month ran more than a tenth above the months before it."
+      />
+      {#if !ins.changes.length && !ins.rose.length}
+        <p class="none">No changes read yet.</p>
+      {:else}
+        <ol class="reg">
+          {#each ins.changes as c (c.id)}
+            <li class="row">
+              <span class="r-when">{day(c.day)}</span>
+              <span class="r-kind">{c.category}</span>
+              <span class="r-what">
+                <span class="r-todo">{c.what}: {c.was || 'not stated'} to {c.now || 'not stated'}</span>
+                <span class="r-note">{c.from} · {c.summary}</span>
+              </span>
+              <span class="r-state">{#if c.href}<a href={c.href} target="_blank" rel="noopener noreferrer">Open</a>{/if}</span>
+            </li>
+          {/each}
+          {#each ins.rose as s (s.sender + s.currency)}
+            <li class="row">
+              <span class="r-when">{monthName(s.lastMonth)}</span>
+              <span class="r-kind">rose</span>
+              <span class="r-what">
+                <span class="r-todo">{s.sender}: {money(s.latest, s.currency)} against {money(s.before ?? 0, s.currency)} before</span>
+                <span class="r-note">the mean of the {s.months - 1} months before it</span>
+              </span>
+              <span class="r-state"></span>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="inner">
+      <SectionHead
+        kicker="D / Coming up"
+        title={['The next', 'ninety days']}
+        strap="Payments, renewals, expiries, deliveries and dated events found in your mail, calendar and documents."
+      />
+      {#if !ins.upcoming.length}
+        <p class="none">Nothing dated in the next ninety days.</p>
+      {:else}
+        <ol class="reg">
+          {#each ins.upcoming as u (u.id)}
+            <li class="row">
+              <span class="r-when">{day(u.day)}</span>
+              <span class="r-kind">{u.kind}</span>
+              <span class="r-what">
+                <span class="r-todo">{u.label}{#if u.amount} · {money(u.amount.minor, u.amount.currency)}{/if}</span>
+                <span class="r-note">{u.from} · {u.summary}</span>
+              </span>
+              <span class="r-state">{#if u.href}<a href={u.href} target="_blank" rel="noopener noreferrer">Open</a>{/if}</span>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="inner">
+      <SectionHead
+        kicker="E / Waiting"
+        title={['Who is waiting', 'on whom']}
+        strap="Asks from the last sixty days, longest wait first. An ask stays here until it ages out: the reader does not yet know you replied."
+      />
+      {#each [{ title: 'Waiting on you', list: ins.onMe }, { title: 'You are waiting on them', list: ins.onThem }] as group (group.title)}
+        <h3 class="sub">{group.title}</h3>
+        {#if !group.list.length}
+          <p class="none">Nobody.</p>
+        {:else}
+          <ol class="reg">
+            {#each group.list as w (w.id)}
+              <li class="row">
+                <span class="r-when">{day(w.day)}</span>
+                <span class="r-kind">{w.category}</span>
+                <span class="r-what">
+                  <span class="r-todo">{w.what}</span>
+                  <span class="r-note">{w.from} · {w.summary}</span>
+                </span>
+                <span class="r-state">{#if w.href}<a href={w.href} target="_blank" rel="noopener noreferrer">Open</a>{/if}</span>
+              </li>
+            {/each}
+          </ol>
+        {/if}
+      {/each}
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="inner">
+      <SectionHead
+        kicker="F / Noise"
+        title={['Mail that never', 'asks anything']}
+        strap="Senders with six or more messages in ninety days and nothing to do in any of them. Candidates to unsubscribe from."
+      />
+      {#if !ins.noise.length}
+        <p class="none">No sender qualifies yet.</p>
+      {:else}
+        <table class="tbl">
+          <thead><tr><th>Sender</th><th class="num">Messages</th><th class="num">Marketing</th></tr></thead>
+          <tbody>
+            {#each ins.noise as n (n.sender)}
+              <tr><td>{n.sender}</td><td class="num">{n.items}</td><td class="num">{n.marketing}</td></tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </div>
+  </section>
+{:else if data.room && deck}
   <section class="band">
     <div class="inner">
       <SectionHead
@@ -186,6 +390,59 @@
 <style>
   .none {
     color: var(--text-muted);
+  }
+  .views {
+    padding-block: 12px;
+  }
+  .view-row {
+    display: flex;
+    gap: 20px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+  }
+  .view-row a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding-bottom: 2px;
+    border-bottom: 2px solid transparent;
+  }
+  .view-row a[aria-current='page'] {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent);
+  }
+  .sub {
+    margin: 24px 0 8px;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .tbl {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: var(--fs-body-sm);
+  }
+  .tbl th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: var(--fs-label-xs);
+    font-weight: 500;
+    color: var(--text-secondary);
+    padding: 6px 8px 6px 0;
+  }
+  .tbl td {
+    padding: 8px 8px 8px 0;
+    border-top: 1px solid var(--line-hair);
+    overflow-wrap: anywhere;
+  }
+  .tbl .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .tbl .up {
+    color: var(--accent);
   }
   .status {
     margin-top: 16px;

@@ -167,7 +167,11 @@ describe('mail stays the owner’s', () => {
     expect(src).toMatch(/const owner = \(\) => spaceIn\(sourceBacklog\.spaceId, OWNER_INTEL_SCOPE\)/);
     expect(src).toMatch(/const read = \(\) => and\(owner\(\)/);
     expect(src).toMatch(/function searchWhere[\s\S]{0,200}return and\(\s*read\(\)/);
-    for (const f of ['mail-room.ts', 'mail-room.server.ts']) {
+    // The insights view reads through the same wrapper, and nothing else.
+    const insights = readFileSync(join(dir, 'mail-insights.server.ts'), 'utf8');
+    expect((insights.match(/\.where\(\s*and\(\s*read\(\)/g) ?? []).length).toBe((insights.match(/\.(from|update)\(sourceBacklog\)/g) ?? []).length);
+    expect(insights).toMatch(/import \{ COLUMNS, read, toItem \} from '\.\/mail-room\.server'/);
+    for (const f of ['mail-room.ts', 'mail-room.server.ts', 'mail-insights.ts', 'mail-insights.server.ts']) {
       expect(readFileSync(join(dir, f), 'utf8'), f).not.toMatch(/\$lib\/workflows\/gmail|googleapis/);
     }
   });

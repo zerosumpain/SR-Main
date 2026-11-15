@@ -156,6 +156,15 @@ the backfill and last year's marketing is read last.
   thread, event or document. Pure `mail-room.ts` plus `mail-room.server.ts`, as
   Impact and Solutions. The card daydream sees carries the extracted facts and
   not the subject line, which is the one field a stranger writes verbatim.
+- **Insights** (`/jkai/daydreams/mail?view=insights`): arithmetic over the
+  facts, no model call. Money by month and by sender (the first figure on each
+  bill, receipt, renewal and subscription notice; a reading of the mail, not a
+  ledger), recurring senders (three or more months of twelve), changes
+  announced and senders whose latest month ran a tenth over the months before,
+  the next ninety days of dated things, who is waiting on whom, and senders
+  with six or more messages in ninety days and nothing to do in any. Pure
+  `mail-insights.ts` plus `mail-insights.server.ts`, scoped through the same
+  `read()`.
 - **Google connection.** `calendar.readonly` and `drive.readonly` join
   `OWNER_SCOPES`; `/admin/connections/gmail` shows which sources each account
   has granted. Members stay Gmail read-only and are not in the backlog.
