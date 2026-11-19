@@ -40,6 +40,12 @@ export interface ProjectCard {
    */
   ownerOnly?: true;
   /**
+   * Public view only: the card is private, so it shows but does not open —
+   * clicking it sends the rambler instead (src/routes/projects/PrivateTeaser).
+   * Set by the server; the owner never gets it, and no view draws it.
+   */
+  locked?: true;
+  /**
    * `href` leaves the site for a service that runs elsewhere (on the tailnet),
    * so the card has no /projects page of its own. Owner-only cards only:
    * `owner-cards.test.ts` holds every other card to its /projects address.

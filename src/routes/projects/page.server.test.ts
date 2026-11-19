@@ -50,20 +50,27 @@ describe('/projects index load', () => {
     headers = {};
   });
 
-  it('withholds a card toggled private from the public', async () => {
+  // A private card goes to the public LOCKED: the card shows, opening it does not.
+  const lockedKeys = (data: { cards: { key: string; locked?: true }[] }) => data.cards.filter((c) => c.locked).map((c) => c.key);
+
+  it('locks a card toggled private for the public', async () => {
     visRows = [{ projectKey: 'policy-engine', isPublic: false }];
     const data = await run();
-    const keys = data.cards.map((c: { key: string }) => c.key);
-    expect(keys).not.toContain('policy-engine');
-    expect(keys).toContain('engine-room');
+    expect(lockedKeys(data)).toContain('policy-engine');
+    expect(lockedKeys(data)).not.toContain('engine-room');
     expect(data.visibility).toEqual({});
   });
 
-  it('never shows a private-by-default card to the public', async () => {
+  it('locks a private-by-default card for the public', async () => {
     const data = await run();
-    const keys = data.cards.map((c: { key: string }) => c.key);
-    expect(keys).not.toContain('field-study-8');
-    expect(keys).not.toContain('field-study-9');
+    expect(lockedKeys(data)).toContain('field-study-8');
+  });
+
+  it('never locks anything for the owner, and never sends the public an owner-only card', async () => {
+    visRows = [{ projectKey: 'policy-engine', isPublic: false }];
+    expect((await run()).ownerCards).toEqual([]);
+    email = 'owner@example.com';
+    expect(lockedKeys(await run())).toEqual([]);
   });
 
   it('gives the owner every card', async () => {

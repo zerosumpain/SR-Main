@@ -86,15 +86,28 @@ export const load: PageServerLoad = async (event) => {
     ...p,
     isPublic: isProjectPublic(visibility, p.slug!),
   }));
-  const projects = authenticated ? withVis : withVis.filter((p) => p.isPublic);
+  // The public sees a build marked private as a LOCKED card: it exists, but
+  // opening it gets the rambler, not the page. Only a build with an explicit
+  // private row — one never promoted has no row, is not on the index, and
+  // stays unseen. Its prompt is blanked: a card without curated copy falls
+  // back to the prompt for its blurb, and a prompt is working notes.
+  const markedPrivate = new Set(visRows.filter((r) => !r.isPublic).map((r) => r.projectKey));
+  const projects = authenticated
+    ? withVis
+    : withVis
+        .filter((p) => p.isPublic || markedPrivate.has(p.slug!))
+        .map((p) => (p.isPublic ? p : { ...p, prompt: '', locked: true as const }));
 
   // The hand-built cards are filtered HERE, against the real visibility map.
   // The client must not decide: the public is sent an empty map (it names every
   // private slug), and reading an empty map client-side resolves every static
   // key to its default — public — so every private card rendered for anonymous
-  // visitors. Sending only the permitted cards also keeps private card copy out
-  // of the public page payload.
-  const cards = authenticated ? PROJECT_CARDS : PROJECT_CARDS.filter((c) => isProjectPublic(visibility, c.key));
+  // visitors. A private card now goes to the public LOCKED — the card shows, and
+  // opening it gets the rambler instead of the page — so `locked` is decided
+  // here too, never from the browser's empty map.
+  const cards = authenticated
+    ? PROJECT_CARDS
+    : PROJECT_CARDS.map((c) => (isProjectPublic(visibility, c.key) ? c : { ...c, locked: true as const }));
 
   // The visibility map names every private project's slug: the owner's toggles
   // only, never the public's.
