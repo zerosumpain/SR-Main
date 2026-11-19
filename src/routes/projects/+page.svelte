@@ -16,6 +16,7 @@
   import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import ShareModal from './ShareModal.svelte';
   import PrivateTeaser from './PrivateTeaser.svelte';
+  import { countLockedClick, pickLockedLine, type LockedSaying } from './locked-lines';
   import type { ProjectCard } from './cards';
   import type { SharePack } from '$lib/projects/share-pack';
   import { resolveProjectCard } from '$lib/jkai/project-card';
@@ -59,15 +60,19 @@
   // The public sees private cards LOCKED: every view draws them as ordinary
   // links, so one click listener here, ahead of the link, stops the visit and
   // sends the rambler instead. Keyed on href because that is all an anchor
-  // carries, in every view. `teaser` counts up so a second click replays him.
+  // carries, in every view. `teaser` counts up so a second click replays him;
+  // the click count (kept for the tab) sets how fed up he is.
   const lockedHrefs = $derived(new Set([...entries.hand, ...entries.agent].filter((e) => e.locked).map((e) => e.href)));
   let teaser = $state(0);
+  let saying = $state<LockedSaying | null>(null);
+  const recentLines: string[] = [];
 
   function stopLocked(ev: MouseEvent) {
     const a = (ev.target as Element | null)?.closest?.('a[href]');
     if (!a || !lockedHrefs.has(a.getAttribute('href') ?? '')) return;
     ev.preventDefault();
     ev.stopPropagation();
+    saying = pickLockedLine(countLockedClick(), recentLines);
     teaser++;
   }
 
@@ -224,7 +229,7 @@
 </HealthShell>
 
 {#key teaser}
-  {#if teaser}<PrivateTeaser onDone={() => (teaser = 0)} />{/if}
+  {#if teaser && saying}<PrivateTeaser {saying} onDone={() => (teaser = 0)} />{/if}
 {/key}
 
 {#if shareModal}

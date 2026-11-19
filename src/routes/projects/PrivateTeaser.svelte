@@ -8,25 +8,26 @@
   // Pointer events pass through the whole time: he is a joke, not a dialog,
   // and nothing on the page should wait for him.
   import { onMount } from 'svelte';
-  import { pixels } from '$lib/landing/ramblers/draw';
+  import { accents } from '$lib/landing/ramblers/accents';
+  import { ACCENT, paintAccent, pixels } from '$lib/landing/ramblers/draw';
   import { pose, render, type Pose } from '$lib/landing/ramblers/rig';
   import { readInk } from '$lib/components/rambler/ink';
-  import { pickLockedLine } from './locked-lines';
+  import type { LockedSaying } from './locked-lines';
 
-  let { onDone }: { onDone: () => void } = $props();
+  // What he says, and in what mood — the page counts the clicks and picks it.
+  let { saying: line, onDone }: { saying: LockedSaying; onDone: () => void } = $props();
 
   // Seconds. Side-on run to the middle, front-on run at the camera, the line.
   const RUN_IN = 0.65;
   const APPROACH = 1.15;
-  const SAID = 2;
-  const GONE = 3;
+  const SAID = 3;
+  const GONE = 4;
   // His height standing, in art pixels (rig.ts BUILD), and how much of the
   // screen he fills when he arrives.
   const TALL = 39;
   const NEAR = 0.6;
   const TAU = Math.PI * 2;
 
-  const line = pickLockedLine();
   let canvas: HTMLCanvasElement;
   let saying = $state(false);
   let fade = $state(1);
@@ -43,7 +44,8 @@
     p.armB = [22 + 30 * Math.max(0, s), 70];
     p.armAk = p.armBk = 0.85;
     p.dy = -Math.abs(s);
-    p.face = 'happy';
+    // He arrives already in the mood he is in.
+    p.face = line.mood === 'polite' ? 'happy' : line.face;
     return p;
   }
 
@@ -95,12 +97,22 @@
       } else {
         P = near;
         oy = floorNear;
-        // A wagging finger: the wave, quick, with the line's face.
-        p = pose('wave', t * 1.6, 'front');
+        // The mood's pose: a wagging finger (the wave, quick), arms folded,
+        // hands on his head, or stamping.
+        p = pose(line.mode, line.mode === 'wave' ? t * 1.6 : t, 'front');
         p.face = line.face;
       }
       const f = render(p, 1);
       pixels(ctx, f.px, ox, oy, P, ink);
+      const kind = t >= APPROACH ? ACCENT[line.mode] : undefined;
+      // Only the marks on his head (the vein, the sweat). Close up, the cloud
+      // of grawlix round it would be the size of the page; the bubble swears
+      // instead.
+      if (kind) {
+        const [hx, hy] = f.head;
+        const near = accents(kind, t, f.head, f.crown, 1).filter(([x, y]) => Math.abs(x - hx) <= 8 && Math.abs(y - hy) <= 8);
+        paintAccent(ctx, near, ox, oy, P, ink);
+      }
 
       if (t >= APPROACH && !saying) {
         saying = true;
@@ -116,7 +128,7 @@
 <div class="teaser" style:opacity={fade} role="status" aria-live="polite">
   <canvas bind:this={canvas} aria-hidden="true"></canvas>
   {#if saying}
-    <p class="bubble" style:left="{at.x}px" style:top="{at.y}px">{line.text}</p>
+    <p class="bubble" class:mad={line.mood === 'mad'} style:left="{at.x}px" style:top="{at.y}px">{#if line.mood === 'mad'}<span class="grawlix" aria-hidden="true">#@*%</span>{/if}{line.text}</p>
   {:else}
     <span class="sr-only">{line.text}</span>
   {/if}
@@ -165,6 +177,16 @@
     border-right: 2px solid var(--text-primary);
     border-bottom: 2px solid var(--text-primary);
     transform: translateX(-50%) rotate(45deg);
+  }
+  /* Cross: the rule goes red. */
+  .bubble.mad,
+  .bubble.mad::after {
+    border-color: var(--error);
+  }
+  .grawlix {
+    color: var(--error);
+    font-weight: 700;
+    margin-right: 0.6ch;
   }
   @keyframes pop {
     from {
