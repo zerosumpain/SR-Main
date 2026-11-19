@@ -15,6 +15,7 @@
   import type { PageData } from './$types';
   import HealthShell from '$lib/components/shell/HealthShell.svelte';
   import ShareModal from './ShareModal.svelte';
+  import PrivateTeaser from './PrivateTeaser.svelte';
   import type { ProjectCard } from './cards';
   import type { SharePack } from '$lib/projects/share-pack';
   import { resolveProjectCard } from '$lib/jkai/project-card';
@@ -54,6 +55,21 @@
   // The view on screen. Follows the route's data until the visitor picks.
   const view = new ProjectsView(() => ({ choice: data.view, component: data.viewComponent }));
   const View = $derived(view.component);
+
+  // The public sees private cards LOCKED: every view draws them as ordinary
+  // links, so one click listener here, ahead of the link, stops the visit and
+  // sends the rambler instead. Keyed on href because that is all an anchor
+  // carries, in every view. `teaser` counts up so a second click replays him.
+  const lockedHrefs = $derived(new Set([...entries.hand, ...entries.agent].filter((e) => e.locked).map((e) => e.href)));
+  let teaser = $state(0);
+
+  function stopLocked(ev: MouseEvent) {
+    const a = (ev.target as Element | null)?.closest?.('a[href]');
+    if (!a || !lockedHrefs.has(a.getAttribute('href') ?? '')) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    teaser++;
+  }
 
   async function toggleVisibility(key: string) {
     const next = !isPub(key);
@@ -98,6 +114,7 @@
       title: meta.heading,
       blurb: meta.blurb,
       chips: `${project.iterationsCompleted} iterations`,
+      ...('locked' in project && project.locked ? { locked: true as const } : {}),
     };
   }
 
@@ -189,7 +206,9 @@
 <!-- No footer strip from the shell: the page closes with the home page's
      footer, in the view on screen (ProjectsFoot). -->
 <HealthShell path="/projects" unifiedNav>
-  <div class="pv">
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions
+       (the click is the link's own; Enter on a link fires it too) -->
+  <div class="pv" onclickcapture={stopLocked}>
     <View
       hand={entries.hand}
       agent={entries.agent}
@@ -203,6 +222,10 @@
   </div>
   <ProjectsFoot view={view.view} owner={data.authenticated} />
 </HealthShell>
+
+{#key teaser}
+  {#if teaser}<PrivateTeaser onDone={() => (teaser = 0)} />{/if}
+{/key}
 
 {#if shareModal}
   <ShareModal
