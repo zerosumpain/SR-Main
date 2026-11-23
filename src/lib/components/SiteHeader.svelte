@@ -17,7 +17,7 @@
    *    "you are here" and "go up" — legible on /blog/[slug], not legible
    *    anywhere else. Where it points is `parentHref()`; nothing here decides.
    *  * ROOM is the second cell: which of the site's five rooms this page is in
-   *    (EVERYWHERE on a page in none, like `/`). It opens the site's one menu,
+   *    (NAVIGATION on a page in none, like `/`). It opens the site's one menu,
    *    the same block the home icon opens: every room side by side, yours
    *    marked. It is the one way to anywhere that every bar carries, which is
    *    what the site strip stopped being the moment a section put its own

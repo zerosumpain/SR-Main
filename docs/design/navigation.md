@@ -43,7 +43,7 @@ consequences:
 - **A page with no sub-nav of its own shows its room-mates** (Trips shows
   Health, House, Trips, Wish list), not the whole site.
 - **A page in no room** (`/`, jkai chat) wears the same single cell, labelled
-  EVERYWHERE.
+  NAVIGATION.
 - **A viewer who reaches fewer than six destinations wears no rooms.** A
   signed-out visitor gets Projects, Writing, Health as a flat strip.
 

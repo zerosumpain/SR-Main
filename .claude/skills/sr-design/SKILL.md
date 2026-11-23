@@ -47,7 +47,7 @@ Full principle: `docs/design/navigation.md`. The short version:
 ```
 
 The room cell (`RoomMenu`) names which of the five rooms the page is in (Show,
-Life, Know, Make, Run; `ROOMS` in the manifest; EVERYWHERE on `/`) and opens the
+Life, Know, Make, Run; `ROOMS` in the manifest; NAVIGATION on `/`) and opens the
 map. There is ONE cell and ONE menu: no per-room dropdowns (John, 2026-11-23).
 A new top-level destination is one row in one room; never a child of the jkai
 cell.

@@ -10,7 +10,7 @@
    * separate cells; John preferred the single block the home icon opened
    * (2026-11-23), so that block is now what every way in opens.
    *
-   * On a page in no room (`/`, jkai chat) the cell says EVERYWHERE. A bar that
+   * On a page in no room (`/`, jkai chat) the cell says NAVIGATION. A bar that
    * passes `only` names that room instead.
    *
    * It renders nothing for a viewer whose reach is too small for rooms (see
@@ -91,11 +91,11 @@
       class="room-cell"
       aria-expanded={navMap.open}
       aria-haspopup="dialog"
-      title={room ? `${room.label}: ${room.blurb}. Everywhere else is in the same menu.` : 'Everywhere on the site'}
+      title={room ? `${room.label}: ${room.blurb}. Everywhere else is in the same menu.` : 'The whole site'}
       data-map-trigger
       onclick={toggle}
     >
-      {room ? room.label : 'Everywhere'}
+      {room ? room.label : 'Navigation'}
       <svg viewBox="0 0 10 10" width="9" height="9" aria-hidden="true">
         <path d="M1.5 3.5 5 7l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" />
       </svg>
