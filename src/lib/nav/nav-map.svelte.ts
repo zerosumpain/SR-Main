@@ -1,10 +1,10 @@
 // Shared state for the site map (`NavMap.svelte`): the sheet under the home
 // icon that lists every room and holds the go-or-ask box.
 //
-// The sheet is drawn once per page, by whichever `RoomMenu` mounted first (the
-// main page has five). The triggers are elsewhere: the home icon on each bar
-// opens it on hover, `/` opens it from the keyboard, and a row at the foot of
-// every room menu opens it on a touch screen.
+// The sheet is the site's one menu. It is drawn once per page, by whichever
+// `RoomMenu` mounted first. The triggers are elsewhere: the home icon and the
+// room cell on each bar open it on hover, the room cell on a press (a touch
+// screen, a keyboard), and `/` from anywhere outside a field.
 import { browser } from '$app/environment';
 import { LATELY_KEPT, latelyWith } from './go';
 
@@ -17,15 +17,26 @@ export const navMap = $state({
 });
 
 let timer: ReturnType<typeof setTimeout> | undefined;
+/** What opened the sheet from the keyboard, so Escape can hand focus back. */
+let opener: HTMLElement | undefined;
 
-export function openNavMap(): void {
+export function openNavMap(from?: HTMLElement): void {
   clearTimeout(timer);
+  opener = from;
   navMap.hovered = false;
   navMap.open = true;
 }
 
+/** Escape: close, and put focus back on the cell that opened it. */
+export function dismissNavMap(): void {
+  const back = opener;
+  closeNavMap();
+  back?.focus();
+}
+
 export function closeNavMap(): void {
   clearTimeout(timer);
+  opener = undefined;
   navMap.open = false;
   navMap.hovered = false;
 }
@@ -41,13 +52,26 @@ export function pinNavMap(): void {
  * corner every pointer passes on its way somewhere else.
  */
 export function homeHoverOpen(e: PointerEvent): void {
+  hoverOpen(e, 320);
+}
+
+/**
+ * For the room cell's `onpointerenter`. Barely a pause: the cell says it opens
+ * something (it carries a caret), so arriving on it is the request.
+ */
+export function cellHoverOpen(e: PointerEvent): void {
+  hoverOpen(e, 90);
+}
+
+function hoverOpen(e: PointerEvent, wait: number): void {
   if (e.pointerType !== 'mouse' || !navMap.host) return;
   clearTimeout(timer);
   if (navMap.open) return;
   timer = setTimeout(() => {
+    opener = undefined;
     navMap.hovered = true;
     navMap.open = true;
-  }, 320);
+  }, wait);
 }
 
 /** For `onpointerleave`, on the home icon and on the sheet. */

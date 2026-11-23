@@ -14,7 +14,7 @@ a reader should never have to learn this page's particular answer.
 ```
 
 The order does not vary. The home icon is always first, always `/`. The room
-cell is second. The back cell is always one level up. The sub-nav is the
+cell is second, on every page, and there is only ever one. The back cell is always one level up. The sub-nav is the
 section's own siblings — the pattern `/jkai` and `/health` already used, now
 everywhere. The jkai cell is the assistant, one press from any page; it is a
 plain link and holds nothing.
@@ -33,14 +33,17 @@ Added 2026-11-10. Every destination on the site is filed in one of five rooms,
 | Run  | Admin, Sources, Activity, Shipped |
 
 A room is not a page and has no URL. The room cell (`RoomMenu.svelte`) is a
-button naming the room you are in; its menu lists that room and carries the
-other four across its top, so anywhere is one hover and one click from
-anywhere. Three consequences:
+button naming the room you are in, and it opens the map below: the one menu,
+with every room side by side and yours marked. Anywhere is one hover and one
+click from anywhere. There are no per-room dropdowns: until 2026-11-23 each room
+had its own list and `/` wore five separate room cells; John preferred the
+single block the home icon opened, so every way in now opens that. Three
+consequences:
 
 - **A page with no sub-nav of its own shows its room-mates** (Trips shows
   Health, House, Trips, Wish list), not the whole site.
-- **A page in no room** (`/`, jkai chat) has no strip; the bar wears one cell
-  per room instead.
+- **A page in no room** (`/`, jkai chat) wears the same single cell, labelled
+  NAVIGATION.
 - **A viewer who reaches fewer than six destinations wears no rooms.** A
   signed-out visitor gets Projects, Writing, Health as a flat strip.
 
@@ -50,15 +53,17 @@ destination under the jkai cell again: that drawer is what rooms replaced.
 
 ## The map, and go-or-ask
 
-Added 2026-11-10. Wherever the room cell is worn, the whole site is one sheet
-away (`NavMap.svelte`, drawn beside the room cell):
+Added 2026-11-10; the site's only menu since 2026-11-23. Wherever the room
+cell is worn, the whole site is one sheet away (`NavMap.svelte`, drawn beside
+the room cell):
 
-- **Three ways in.** Rest a mouse on the home icon, press `/` anywhere outside
-  a field, or take the last row of any room menu ("Everywhere, or ask"). The
-  home icon is still a link home: hovering shows the map, clicking goes.
+- **Three ways in.** Rest a mouse on the home icon or the room cell, press the
+  room cell (touch, keyboard), or press `/` anywhere outside a field. The home
+  icon is still a link home: hovering shows the map, clicking goes.
 - **Empty, it is the map**: the five rooms side by side (two abreast on a
-  phone), the current place cut out, and above them **Lately** — the last few
-  places this browser visited (`localStorage`, never sent anywhere).
+  phone), the room you are in marked, the current place cut out, every row with
+  its one-line description, and above them **Lately** — the last few places
+  this browser visited (`localStorage`, never sent anywhere).
 - **Typed in, it is go-or-ask.** Every word typed must begin a word of a
   place's label, its room or section, or its address (`placesFor` and
   `matchPlaces` in `src/lib/nav/go.ts`). Enter goes to the first match. For

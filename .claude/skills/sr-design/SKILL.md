@@ -47,12 +47,13 @@ Full principle: `docs/design/navigation.md`. The short version:
 ```
 
 The room cell (`RoomMenu`) names which of the five rooms the page is in (Show,
-Life, Know, Make, Run; `ROOMS` in the manifest) and opens that room with the
-other four across the top. A new top-level destination is one row in one room;
-never a child of the jkai cell.
+Life, Know, Make, Run; `ROOMS` in the manifest; NAVIGATION on `/`) and opens the
+map. There is ONE cell and ONE menu: no per-room dropdowns (John, 2026-11-23).
+A new top-level destination is one row in one room; never a child of the jkai
+cell.
 
-Beside it sits the map (`NavMap`): hover the home icon, press `/`, or take a
-room menu's last row. Empty it shows all five rooms and Lately; typed in, it
+The map (`NavMap`) is that menu: hover the home icon or the room cell, press
+the cell, or press `/`. Empty it shows all five rooms and Lately; typed in, it
 goes to a matching nav row or hands the line to jkai. It indexes the manifest
 only (`src/lib/nav/go.ts`), so a page is findable once it has a nav row. A new
 bar wires its home icon with `homeHoverOpen` / `mapHoverLeave` from

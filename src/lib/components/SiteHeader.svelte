@@ -16,12 +16,13 @@
    *    the title cell as a link (`titleHref`), which made one cell mean both
    *    "you are here" and "go up" — legible on /blog/[slug], not legible
    *    anywhere else. Where it points is `parentHref()`; nothing here decides.
-   *  * ROOM is the second cell: which of the site's five rooms this page is in,
-   *    and a menu of that room with the other four across its top. It is the
-   *    one way to anywhere that every bar carries, which is what the site strip
-   *    stopped being the moment a section put its own cells in its place. A
-   *    page in no room (`/`) wears all five room cells instead; a viewer with
-   *    too few pages for rooms wears neither, only the flat strip.
+   *  * ROOM is the second cell: which of the site's five rooms this page is in
+   *    (NAVIGATION on a page in none, like `/`). It opens the site's one menu,
+   *    the same block the home icon opens: every room side by side, yours
+   *    marked. It is the one way to anywhere that every bar carries, which is
+   *    what the site strip stopped being the moment a section put its own
+   *    cells in its place. A viewer with too few pages for rooms wears no room
+   *    cell, only the flat strip.
    *
    * Everything is on the INK ground (`.site-nav-bar` is `background:
    * var(--text-primary)`), so every colour in here is written for a dark
@@ -41,9 +42,7 @@
     navCellsFor,
     parentHref,
     parentLabel,
-    roomFor,
     visibleItems,
-    visibleRooms,
     wearsRooms,
     WILDMIND_ITEM,
     type NavItem,
@@ -89,14 +88,12 @@
     items ? visibleItems(items, isOwner, reach) : navCellsFor(path, isOwner, reach),
   );
   /**
-   * Rooms, for a viewer with enough of the site to need them. In a room the
-   * bar wears that room's cell; in none, with no cells of its own to show, it
-   * wears one cell per room. Both sit outside the strip's scroller, so their
-   * menus can drop below the bar.
+   * The room cell, for a viewer with enough of the site to need rooms. One
+   * cell on every page, never one per room: the rooms are side by side in the
+   * menu it opens, not spread along the bar. It sits outside the strip's
+   * scroller, which would clip what hangs below it.
    */
-  const rooms = $derived(wearsRooms(isOwner, reach) ? visibleRooms(isOwner, reach) : []);
-  const inRoom = $derived(rooms.length > 0 && !!roomFor(path));
-  const roomCells = $derived(!inRoom && !cells.length ? rooms : []);
+  const wearsRoomCell = $derived(wearsRooms(isOwner, reach));
   /**
    * The jkai cell is on every bar: the assistant is one press from anywhere.
    * It sits after the strip. Null for anyone who cannot open it.
@@ -162,7 +159,7 @@
     </a>
   {/if}
 
-  {#if inRoom}
+  {#if wearsRoomCell}
     <RoomMenu {path} {isOwner} {reach} />
   {/if}
 
@@ -201,15 +198,11 @@
       </div>
     </nav>
   {:else}
-    {#each roomCells as room (room.id)}
-      <RoomMenu {path} {isOwner} {reach} only={room.id} />
-    {/each}
     <div class="hdr-spacer"></div>
   {/if}
 
-  <!-- Open to everyone, signed in or not: two view-only windows on the valley.
-       A phone bar already full of room cells has no width left for it. -->
-  <span class="hdr-wild" class:crowded={roomCells.length > 0}>
+  <!-- Open to everyone, signed in or not: two view-only windows on the valley. -->
+  <span class="hdr-wild">
     <JkaiMenu item={WILDMIND_ITEM} {path} quiet />
   </span>
 
@@ -395,9 +388,6 @@
     }
     .hdr-right {
       padding: 0 12px;
-    }
-    .hdr-wild.crowded {
-      display: none;
     }
   }
 </style>

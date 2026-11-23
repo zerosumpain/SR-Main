@@ -1,11 +1,13 @@
 <script lang="ts">
   /**
-   * The site map: one sheet, hung under the bar from the home icon, holding
-   * every room at once and the box that either goes somewhere or asks jkai.
+   * The site's one menu: a sheet hung under the bar, holding every room at
+   * once and the box that either goes somewhere or asks jkai.
    *
-   *  * Rest on the home icon and it opens (the icon still goes home when
-   *    pressed). `/` opens it from the keyboard, and the last row of every room
-   *    menu opens it on a touch screen.
+   *  * Rest on the home icon or the room cell and it opens (the icon still
+   *    goes home when pressed). Pressing the room cell opens it on a touch
+   *    screen or a keyboard, and `/` opens it from anywhere outside a field.
+   *  * The room you are in is marked, and every row says in a line what is
+   *    behind it — the rooms used to have menus of their own for that.
    *  * Type a place and Enter goes there; the rows under the box say which.
    *    A line that names no place is a question, and Enter sends it to jkai.
    *  * With the box empty it shows Lately (the last few places this browser
@@ -17,6 +19,7 @@
   import { askHref, matchPlaces, placeAt, placesFor, type Place } from '$lib/nav/go';
   import {
     closeNavMap,
+    dismissNavMap,
     mapHoverLeave,
     mapHoverStay,
     navMap,
@@ -25,7 +28,7 @@
     readLately,
     recordVisit,
   } from '$lib/nav/nav-map.svelte';
-  import { isItemActive, visibleRooms } from '$lib/nav/site-nav';
+  import { isItemActive, roomFor, visibleRooms } from '$lib/nav/site-nav';
 
   let {
     path,
@@ -43,6 +46,7 @@
   const rooms = $derived(visibleRooms(isOwner, reach));
   const places = $derived(placesFor(isOwner, reach));
   const here = $derived(placeAt(path, places));
+  const hereRoom = $derived(roomFor(path)?.id);
 
   let query = $state('');
   let picked = $state(0);
@@ -92,7 +96,7 @@
     if (navMap.open) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        closeNavMap();
+        dismissNavMap();
       }
       return;
     }
@@ -102,8 +106,11 @@
   }
   function onWindowPointer(e: PointerEvent) {
     if (!navMap.open) return;
-    const t = e.target as Node | null;
+    const t = e.target as Element | null;
     if (t && sheet?.contains(t)) return pinNavMap();
+    // The room cell toggles the sheet itself; shutting it here first would
+    // turn its press into a reopen.
+    if (t?.closest?.('[data-map-trigger]')) return;
     closeNavMap();
   }
   function onFieldKey(e: KeyboardEvent) {
@@ -201,8 +208,11 @@
       {/if}
       <div class="rooms">
         {#each rooms as room (room.id)}
-          <section class="room" aria-label={room.label}>
-            <h2>{room.label}</h2>
+          <section class="room" class:here={room.id === hereRoom} aria-label={room.label}>
+            <h2>
+              {room.label}
+              {#if room.id === hereRoom}<span class="room-here">You are here</span>{/if}
+            </h2>
             <p>{room.blurb}</p>
             <ul>
               {#each room.items as item (item.href + item.label)}
@@ -210,8 +220,11 @@
                   <a
                     href={item.href}
                     aria-current={isItemActive(item, path) ? 'page' : undefined}
-                    onclick={closeNavMap}>{item.label}</a
+                    onclick={closeNavMap}
                   >
+                    <span class="item-label">{item.label}</span>
+                    {#if item.meta}<span class="item-meta">{item.meta}</span>{/if}
+                  </a>
                 </li>
               {/each}
             </ul>
@@ -229,7 +242,7 @@
     position: fixed;
     left: 0;
     z-index: 45;
-    width: min(760px, 100vw);
+    width: min(960px, 100vw);
     max-height: calc(100dvh - 64px);
     overflow-y: auto;
     background: #1a1008;
@@ -392,6 +405,18 @@
     padding: 14px 0 10px;
     border-right: 1px solid rgba(237, 228, 212, 0.14);
   }
+  /* The room you are in: a faint lift and the accent seam along its top. */
+  .room.here {
+    background: rgba(237, 228, 212, 0.04);
+    box-shadow: inset 0 2px 0 var(--accent-on-dark);
+  }
+  .room-here {
+    margin-left: 6px;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    color: rgba(237, 228, 212, 0.5);
+  }
   .room:last-child {
     border-right: 0;
   }
@@ -416,15 +441,27 @@
     color: rgba(237, 228, 212, 0.5);
   }
   .room a {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     padding: 7px 16px;
+    text-decoration: none;
+    color: rgba(237, 228, 212, 0.72);
+  }
+  .item-label {
     font-family: var(--font-code);
     font-size: var(--fs-label-xs);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: var(--tracking-label);
-    text-decoration: none;
-    color: rgba(237, 228, 212, 0.72);
+  }
+  /* What is behind the row, in a line: quiet enough that the labels still
+     read as the column. */
+  .item-meta {
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    line-height: 1.3;
+    color: rgba(237, 228, 212, 0.45);
   }
   .room a:hover,
   .room a:focus-visible {
@@ -432,10 +469,17 @@
     color: var(--accent-on-dark);
     background: rgba(237, 228, 212, 0.07);
   }
+  .room a:hover .item-meta,
+  .room a:focus-visible .item-meta {
+    color: rgba(237, 228, 212, 0.62);
+  }
   .room a[aria-current='page'] {
     color: #1a1008;
     background: #ede4d4;
     box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .room a[aria-current='page'] .item-meta {
+    color: rgba(26, 16, 8, 0.6);
   }
 
   /* Phone: the sheet is the width of the screen and the rooms run two abreast. */
