@@ -5569,6 +5569,10 @@ export const daydreamTrail = pgTable(
   (t) => [
     index('daydream_trail_ts_idx').on(t.ts),
     index('daydream_trail_subject_ts_idx').on(t.subject, t.ts),
+    // Each person's newest positioned fix (loadHousehold, every household-live
+    // push). Without the partial predicate the planner walks ts_idx backwards
+    // and, for a subject with no recent fix, filters most of the table.
+    index('daydream_trail_subject_fix_idx').on(t.subject, t.ts).where(sql`${t.lat} is not null`),
     index('daydream_trail_place_idx').on(t.placeId),
     index('daydream_trail_source_idx').on(t.source),
   ],

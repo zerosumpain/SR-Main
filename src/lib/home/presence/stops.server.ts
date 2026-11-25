@@ -19,28 +19,38 @@ export async function discoverRecentStops(): Promise<{ created: number; geocoded
     if (!stop) continue;
     const lat = stop.reduce((n, f) => n + f.lat, 0) / stop.length;
     const lon = stop.reduce((n, f) => n + f.lon, 0) / stop.length;
-    await db.transaction(async tx => {
+    // Only a write moves the trail generation: a person standing still is a
+    // qualifying stop on every 30 s tick, and bumping it regardless threw away
+    // the 28-day insights cache each time (household-live, 2026-11-25 review).
+    const changed = await db.transaction(async tx => {
       // One shared lock prevents two relatives creating two places for the same stop.
       await tx.execute(sql`select pg_advisory_xact_lock(7280929)`);
       const places = await tx.select().from(daydreamPlaces);
       const near = places.filter(p => p.status !== 'merged' && metresBetween(lat, lon, p.lat, p.lon) <= Math.max(100, p.radiusM))
         .sort((a, b) => metresBetween(lat, lon, a.lat, a.lon) - metresBetween(lat, lon, b.lat, b.lon))[0];
-      if (near && near.status !== 'active') return;
+      if (near && near.status !== 'active') return false;
+      let wrote = false;
       let id = near?.id;
       if (!id) {
         const [p] = await tx.insert(daydreamPlaces).values({ lat, lon, radiusM: 100, source: 'inferred', kind: 'unknown',
           firstSeenAt: stop[0].ts, lastSeenAt: stop.at(-1)!.ts, visitCount: 1, distinctDays: 1,
           medianDwellMins: Math.round((+stop.at(-1)!.ts - +stop[0].ts) / 60_000) }).returning({ id: daydreamPlaces.id });
-        id = p.id; created++;
+        id = p.id; created++; wrote = true;
       } else if (near && (!near.lastSeenAt || +near.lastSeenAt < +stop.at(-1)!.ts)) {
         // A returning stop should lead the lookup queue, ahead of older unnamed history.
         await tx.update(daydreamPlaces).set({ lastSeenAt: stop.at(-1)!.ts }).where(eq(daydreamPlaces.id, id));
+        wrote = true;
       }
-      const ids = rows.filter(r => +r.ts >= +stop[0].ts && +r.ts <= +stop.at(-1)!.ts).map(r => r.id);
-      if (ids.length) await tx.update(daydreamTrail).set({ placeId: id }).where(inArray(daydreamTrail.id, ids));
+      // Rows already filed under this place are left alone.
+      const ids = rows.filter(r => +r.ts >= +stop[0].ts && +r.ts <= +stop.at(-1)!.ts && r.placeId !== id).map(r => r.id);
+      if (ids.length) {
+        await tx.update(daydreamTrail).set({ placeId: id }).where(inArray(daydreamTrail.id, ids));
+        wrote = true;
+      }
+      return wrote;
     });
     // After the commit: a reader that re-reads now sees the new places.
-    trailChanged();
+    if (changed) trailChanged();
   }
   return { created, geocoded: await geocodePendingPlaces() };
 }

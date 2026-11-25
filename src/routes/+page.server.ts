@@ -65,7 +65,10 @@ export const load: PageServerLoad = async ({ fetch, locals, getClientAddress, co
     // behind a 5-minute memo. More to the point, SvelteKit serialises streamed
     // promises at the end of the body, so streamed data never lands in the SSR
     // HTML, and the sentence's ship and release words draw from it on first paint.
-    getReleaseShowcase(90),
+    // Only the totals and the per-day counts are read here (+page.svelte); the
+    // dense cadence and the item list are ~55 KB of serialised data the front
+    // door was shipping to every visitor and never drawing.
+    getReleaseShowcase(90).then((r) => r && { totals: r.totals, localCadence: r.localCadence }),
     // Cadences, the app's endpoint count and Daydream's hit rate: local reads,
     // memoised and timeboxed in the module, so they cost the front door nothing
     // noticeable and render server-side with everything else.
