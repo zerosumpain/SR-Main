@@ -7,16 +7,22 @@ import { analysePresence, type InsightFix, type PresenceInsights } from './insig
 import { mayOpenPerson, type PeopleViewer } from './viewer';
 import { trailGeneration } from './trail-generation';
 
-const cache = new Map<string, { expires: number; generation: number; value: Promise<PresenceInsights> }>();
+const cache = new Map<string, { at: number; expires: number; generation: number; value: Promise<PresenceInsights> }>();
 
 /**
  * The trail scan under the analysis, kept until the trail changes. Every writer
  * in this process moves `trailGeneration`; the time limit is for one that does
- * not (a script run by hand), and matches the two-minute observe cycle. The
- * analysis itself is redone with the caller's `now` past the 20-second answer
- * cache, as before — only the 28 days of rows under it are reused.
+ * not (a script run by hand), and matches the two-minute observe cycle.
  */
 const ROWS_TTL_MS = 120_000;
+/**
+ * The analysed answer: dropped as soon as the trail generation moves, and
+ * never handed to a caller asking about an earlier `now`; otherwise kept for
+ * three household-live ticks. It was 20 seconds, under that job's 30-second
+ * tick, so every tick re-ran the 28-day analysis even when nothing had been
+ * written (~2 s a run, ~2,800 runs a day). Past it, the rows above are reused.
+ */
+const ANSWER_TTL_MS = 90_000;
 /** Raw rows, not an answer: a few viewers' windows at most, and never the 90-day one. */
 const ROWS_KEPT = 4;
 const ROWS_MAX_DAYS = 28;
@@ -82,12 +88,12 @@ export async function loadPresenceInsights(viewer: PeopleViewer, days = 28, pers
   const key = JSON.stringify([days, members.map(m => [m.subject, m.displayName]), places.map(p => [p.id, +p.updatedAt])]);
   const generation = trailGeneration();
   const hit = cache.get(key);
-  if (hit && hit.expires > Date.now() && hit.generation === generation) return hit.value;
+  if (hit && hit.expires > Date.now() && hit.generation === generation && +now >= hit.at) return hit.value;
   const value = (async () => {
     const rows = await trailRows(key, members.map(m => m.subject), days, now);
     return analysePresence(rows, places, members, now, days);
   })();
   if (cache.size >= 16) cache.delete(cache.keys().next().value!);
-  cache.set(key, { expires: Date.now() + 20_000, generation, value });
+  cache.set(key, { at: +now, expires: Date.now() + ANSWER_TTL_MS, generation, value });
   try { return await value; } catch (error) { cache.delete(key); throw error; }
 }

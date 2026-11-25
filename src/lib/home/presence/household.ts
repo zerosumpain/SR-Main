@@ -87,17 +87,25 @@ export async function loadHousehold(): Promise<{ members: HouseholdPresence[] }>
   // loop ran 2–3 queries a subject and then a label lookup each — on every
   // arrival at the hub, for a tab most arrivals never opened.
   const [latestRows, todayAgg] = await Promise.all([
+    // Each person's newest positioned fix: one backward index probe per
+    // subject. The `distinct on` this replaces had no time bound, so it read
+    // the whole trail (~280k rows, ~570ms) on every household-live push —
+    // about 800 times a day. This is under a millisecond.
     db.execute(sql`
-      select distinct on (${daydreamTrail.subject})
-        ${daydreamTrail.subject} as subject,
-        ${daydreamTrail.ts} as ts,
-        ${daydreamTrail.isHome} as is_home,
-        ${daydreamTrail.placeId} as place_id,
-        ${daydreamTrail.distanceHomeKm} as distance_home_km,
-        ${daydreamTrail.batteryPct} as battery_pct
-      from ${daydreamTrail}
-      where ${daydreamTrail.lat} is not null and ${daydreamTrail.subject} in ${subjects}
-      order by ${daydreamTrail.subject}, ${daydreamTrail.ts} desc
+      select s.subject, t.ts, t.is_home, t.place_id, t.distance_home_km, t.battery_pct
+      from (values ${sql.join([...new Set(subjects)].map((s) => sql`(${s}::text)`), sql`, `)}) as s(subject)
+      cross join lateral (
+        select
+          ${daydreamTrail.ts} as ts,
+          ${daydreamTrail.isHome} as is_home,
+          ${daydreamTrail.placeId} as place_id,
+          ${daydreamTrail.distanceHomeKm} as distance_home_km,
+          ${daydreamTrail.batteryPct} as battery_pct
+        from ${daydreamTrail}
+        where ${daydreamTrail.subject} = s.subject and ${daydreamTrail.lat} is not null
+        order by ${daydreamTrail.ts} desc
+        limit 1
+      ) t
     `).then((r) => r.rows as Array<{
       subject: string;
       ts: Date | string;

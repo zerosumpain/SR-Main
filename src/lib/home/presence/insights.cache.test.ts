@@ -42,12 +42,27 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('loadPresenceInsights trail rows', () => {
-  it('reuses the scan past the 20-second answer while nothing is written', async () => {
+  it('keeps the answer across a 30-second tick while nothing is written', async () => {
     await load(T0);
     vi.setSystemTime(at(30_000));
     await load(at(30_000));
     expect(h.scans).toBe(1);
+    expect(h.analysed).toEqual([1]);
+  });
+
+  it('reuses the scan past the 90-second answer while nothing is written', async () => {
+    await load(T0);
+    vi.setSystemTime(at(100_000));
+    await load(at(100_000));
+    expect(h.scans).toBe(1);
     expect(h.analysed).toEqual([1, 1]);
+  });
+
+  it('never answers an earlier now from a later analysis', async () => {
+    vi.setSystemTime(at(30_000));
+    await load(at(30_000));
+    await load(T0);
+    expect(h.analysed).toHaveLength(2);
   });
 
   it('scans again after a trail write, after two minutes, and for an earlier now', async () => {
@@ -66,16 +81,16 @@ describe('loadPresenceInsights trail rows', () => {
   it('drops reused rows the later window no longer covers', async () => {
     h.rows = [{ subject: 'alex', ts: at(-28 * 86_400_000 + 10_000) }, { subject: 'alex', ts: at(-60_000) }];
     await load(T0);
-    vi.setSystemTime(at(30_000));
-    await load(at(30_000));
+    vi.setSystemTime(at(100_000));
+    await load(at(100_000));
     expect(h.scans).toBe(1);
     expect(h.analysed).toEqual([2, 1]);
   });
 
   it('never keeps the 90-day window', async () => {
     await load(T0, 90);
-    vi.setSystemTime(at(30_000));
-    await load(at(30_000), 90);
+    vi.setSystemTime(at(100_000));
+    await load(at(100_000), 90);
     expect(h.scans).toBe(2);
   });
 });
