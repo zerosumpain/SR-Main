@@ -124,6 +124,9 @@ rollback_web_release() {
   echo "==> Rolling web release back to $PREV_SHA..." >&2
   ln -sfn "releases/$PREV_SHA" "$VPS_DIR/build.rollback"
   mv -Tf "$VPS_DIR/build.rollback" "$VPS_DIR/build"
+  # A release older than the worker split runs every engine itself: the worker
+  # must stop first or everything runs twice.
+  ./scripts/main-worker.sh follow "$VPS_DIR/releases/$PREV_SHA" || true
   sudo systemctl restart "$SERVICE"
 
   if wait_for_public_release "$PREV_SHA" 60; then
@@ -253,6 +256,8 @@ rsync -a scripts/studio-research.mjs "$VPS_DIR/scripts/"
 # It ships every release so that the copy sitting next to a bad deploy is the
 # one written to roll that deploy back.
 rsync -a scripts/rollback.sh "$VPS_DIR/scripts/"
+# The worker's units, and what a rollback uses to stop or follow it.
+rsync -a scripts/main-worker.sh "$VPS_DIR/scripts/"
 
 rsync -a scripts/codegraph-query.mjs "$VPS_DIR/scripts/"
 rsync -a scripts/codegraph-tree-pass.mjs "$VPS_DIR/scripts/"
@@ -429,6 +434,11 @@ echo "==> Ensuring service entrypoint + support dirs..."
 sudo sed -i "s|ExecStart=.*index.js|ExecStart=/usr/bin/node $VPS_DIR/scripts/server-with-ws.mjs|" \
   "/etc/systemd/system/$SERVICE.service"
 sudo systemctl daemon-reload
+# The web app restarts below as JKAI_SERVICE_ROLE=http (no engines); the worker
+# takes them once this release is verified live. Marked so a later rollback to
+# this release knows it can run beside a worker (scripts/main-worker.sh).
+./scripts/main-worker.sh install
+./scripts/main-worker.sh mark "$RELEASE_DIR"
 sudo mkdir -p /opt/strange-rambling/static/images/blog
 sudo chown "$(id -un):$(id -gn)" /opt/strange-rambling/static/images/blog
 mkdir -p ~/.openclaw/workflow-files && chmod 700 ~/.openclaw/workflow-files
@@ -530,6 +540,13 @@ if wait_for_public_release "$SHA" 90; then
     FAILED_POSTLIVE="${FAILED_POSTLIVE}${label}, "
     return 0
   }
+
+  # First, because the engines run nowhere between the web restart above and
+  # this: the heartbeat, scheduled and forge engines and the pollers. If the
+  # worker does not stay up, main-worker.sh returns the web app to running
+  # everything itself.
+  echo "==> Starting the background worker..."
+  postlive "background worker" ./scripts/main-worker.sh follow "$RELEASE_DIR"
 
   # Apply sidecars only after the web candidate proves that its own commit is
   # publicly visible. A failed web candidate is rolled back without touching

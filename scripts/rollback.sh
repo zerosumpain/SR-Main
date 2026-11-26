@@ -172,6 +172,12 @@ mv -Tf "$VPS_DIR/build.rollback" "$VPS_DIR/build"
 echo "    build -> $(readlink "$VPS_DIR/build")"
 echo "$TARGET" > "$STATE_DIR/live.sha"
 
+# The background worker follows the target: stopped for a release older than
+# the split (which runs every engine itself), restarted on the target otherwise.
+if [ -x "$VPS_DIR/scripts/main-worker.sh" ]; then
+  "$VPS_DIR/scripts/main-worker.sh" follow "$VPS_DIR/releases/$TARGET" || true
+fi
+
 echo "==> Restarting $SERVICE..."
 sudo systemctl restart "$SERVICE"
 

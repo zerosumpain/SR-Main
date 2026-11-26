@@ -147,7 +147,9 @@ let off: (() => void) | null = null;
 
 /**
  * Subscribe once. Called at boot from src/hooks.server.ts, under the
- * `background` service only: one process listens, so one event notifies once.
+ * `events` service: the bus is in-process, so each process that emits events
+ * (the http web app and the worker on the VPS) hears its own, and one event
+ * still notifies once.
  * Never call it at module import (the tool registry imports this everywhere).
  */
 export function startEventMonitors(): void {
