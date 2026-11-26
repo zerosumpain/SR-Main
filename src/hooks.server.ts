@@ -83,12 +83,13 @@ import { isRedirect, redirect, type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env } from '$env/dynamic/private';
 import { runsService } from '$lib/server/service-role';
-import { initEventLoopMonitor, startBlockReporter } from '$lib/server/runtime-monitor';
+import { initEventLoopMonitor, startBlockReporter, startMemoryLog } from '$lib/server/runtime-monitor';
 
 // Main's watchdog measures this process, independently of Workflows ownership.
 if (!building) {
   initEventLoopMonitor();
   startBlockReporter();
+  startMemoryLog();
 }
 
 /**
