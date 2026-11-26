@@ -267,19 +267,20 @@ import { runResumeSweep, RESUME_SWEEP_INTERVAL_MS } from '$lib/deepdive/resume';
 // idle ones from memory and deletes rows past retention. Inert until a game
 // declares `durable` (spec 2026-10-22-family-games-durable-rooms.md).
 // Imported only where it runs: the registry pulls in every game module.
-if (runsService('background')) {
+if (runsService('rooms')) {
   void import('$lib/games/rooms.server')
     .then((m) => m.startGameRoomSweep())
     .catch((err) => console.error('[hooks.server] game room sweep:', err));
 }
-// Re-enabled custom tools (plan P2-0a): the web process only, and only the
+// Re-enabled custom tools (plan P2-0a): every site process (web, http and the
+// worker, whose daydreams call tools), and only the
 // reviewed allow-list in $lib/tools/custom-tools-enabled. JKAI_CUSTOM_TOOLS=off
 // is the kill switch; =on loads them whatever the role (the local preview,
 // whose Main runs as 'builder' so no WhatsApp or engines start).
-import { resolveServiceRole } from '$lib/server/service-role';
+import { servesSite } from '$lib/server/service-role';
 import { keepsOwnNativeCache } from '$lib/drive/native-preview-cache';
 const customToolsSwitch = (process.env.JKAI_CUSTOM_TOOLS ?? '').trim().toLowerCase();
-if (!building && customToolsSwitch !== 'off' && (customToolsSwitch === 'on' || resolveServiceRole() === 'web')) {
+if (!building && customToolsSwitch !== 'off' && (customToolsSwitch === 'on' || servesSite())) {
   void import('$lib/tools/custom-tool-loader')
     .then((m) => m.loadCustomTools())
     .catch((err) => console.error('[hooks.server] custom tools:', err));
@@ -378,7 +379,12 @@ if (runsService('background')) startWorkflowCompletionTail();
 // import, so every role (and every test) subscribed and one event could
 // notify more than once.
 import { startEventMonitors } from '$lib/monitors/event-monitors.server';
-if (runsService('background')) startEventMonitors();
+if (runsService('events')) startEventMonitors();
+
+// Hear the other process's trail writes (http <-> worker), so presence reads
+// drop their caches as promptly as they do for this process's own writes.
+import { startPeerSignals } from '$lib/home/presence/peer-signals.server';
+if (!building && runsService('peers')) startPeerSignals();
 
 // Sign-in gating (owners env + guest allow-list) lives in $lib/server/access.
 

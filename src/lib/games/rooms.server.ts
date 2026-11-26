@@ -927,7 +927,7 @@ export async function sweepRooms(now = Date.now()): Promise<{ woken: number; evi
 
 let sweeping: ReturnType<typeof setInterval> | null = null;
 
-/** Every five minutes, and once 30 s after boot. The web process only (`runsService('background')`). */
+/** Every five minutes, and once 30 s after boot. The process that holds the rooms (`runsService('rooms')`). */
 export function startGameRoomSweep(): void {
   if (sweeping) return;
   const run = () => void sweepRooms().catch((err) => console.error('[games] room sweep failed', (err as Error)?.message ?? err));
