@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { beginBatch, activeBatches, isBusyWithLiveBatch } from '$lib/server/runtime-monitor';
+import { beginBatch, activeBatches, isBusyWithLiveBatch, memoryLine } from '$lib/server/runtime-monitor';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -66,5 +66,13 @@ describe('batch liveness', () => {
     a.end();
     expect(activeBatches().map((x) => x.name)).toEqual(['intel:gmail-sweep']);
     c.end();
+  });
+});
+
+describe('memoryLine', () => {
+  it('reports each figure in whole megabytes', () => {
+    const MB = 1_048_576;
+    expect(memoryLine({ rss: 1900 * MB, heapUsed: 300.4 * MB, heapTotal: 360 * MB, external: 40 * MB, arrayBuffers: 12.6 * MB }))
+      .toBe('[runtime] memory rss=1900MB heapUsed=300MB heapTotal=360MB external=40MB arrayBuffers=13MB');
   });
 });

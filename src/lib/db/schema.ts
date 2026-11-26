@@ -692,7 +692,15 @@ export const appleHealthMetrics = pgTable(
     // Sync metadata
     syncedAt: integer('synced_at').default(sql`extract(epoch from now())::integer`),
   },
-  (table) => [uniqueIndex('idx_apple_health_metric_date').on(table.metricName, table.date)],
+  (table) => [
+    uniqueIndex('idx_apple_health_metric_date').on(table.metricName, table.date),
+    // `max(date)` across every metric (connector summary on the owner's front
+    // door, the Apple Health probe): a parallel scan of the whole table without it.
+    index('apple_health_metrics_date_idx').on(table.date),
+    // The highest heart rate ever seen (SR-Health resolveHrProfile, on every
+    // /health build and activity page): one index probe instead of a scan.
+    index('apple_health_metrics_hr_max_idx').on(table.maxValue).where(sql`${table.metricName} = 'heart_rate'`),
+  ],
 );
 
 export type AppleHealthMetricRecord = typeof appleHealthMetrics.$inferSelect;

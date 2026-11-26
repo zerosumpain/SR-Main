@@ -140,3 +140,27 @@ export function startBlockReporter(): void {
   }, SAMPLE_MS);
   sampler.unref?.();
 }
+
+// ---------------------------------------------------------------------------
+// Memory, every ten minutes
+// ---------------------------------------------------------------------------
+//
+// The web process sits near 1.9 GB RSS with peaks near 3 GB, and most of it is
+// native (malloc) memory rather than the JS heap (review 2026-11-25). Nothing
+// recorded it over time, so growth could not be told from a plateau. One line
+// per ten minutes in the journal settles that and sizes any heap cap.
+
+const MEMORY_LOG_MS = 10 * 60_000;
+let memoryTimer: ReturnType<typeof setInterval> | undefined;
+
+const mb = (bytes: number) => Math.round(bytes / 1_048_576);
+
+export function memoryLine(m: NodeJS.MemoryUsage = process.memoryUsage()): string {
+  return `[runtime] memory rss=${mb(m.rss)}MB heapUsed=${mb(m.heapUsed)}MB heapTotal=${mb(m.heapTotal)}MB external=${mb(m.external)}MB arrayBuffers=${mb(m.arrayBuffers)}MB`;
+}
+
+export function startMemoryLog(): void {
+  if (memoryTimer) return;
+  memoryTimer = setInterval(() => console.log(memoryLine()), MEMORY_LOG_MS);
+  memoryTimer.unref?.();
+}
